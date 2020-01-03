@@ -4,6 +4,9 @@
 
 #include "ash/assistant/test/assistant_ash_test_base.h"
 
+#include <string>
+#include <utility>
+
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/app_list/views/assistant/assistant_main_view.h"
 #include "ash/app_list/views/assistant/assistant_page_view.h"
@@ -40,6 +43,16 @@ bool CanProcessEvents(const views::View* view) {
   return true;
 }
 
+void CheckCanProcessEvents(const views::View* view) {
+  if (!view->IsDrawn()) {
+    ADD_FAILURE()
+        << view->GetClassName()
+        << " can not process events because it is not drawn on screen.";
+  } else if (!CanProcessEvents(view)) {
+    ADD_FAILURE() << view->GetClassName() << " can not process events.";
+  }
+}
+
 }  // namespace
 
 AssistantAshTestBase::AssistantAshTestBase()
@@ -61,7 +74,7 @@ void AssistantAshTestBase::SetUp() {
   UpdateDisplay("1024x768");
 
   // Enable Assistant in settings.
-  test_api_->EnableAssistant();
+  test_api_->SetAssistantEnabled(true);
 
   // Cache controller.
   controller_ = Shell::Get()->assistant_controller();
@@ -69,7 +82,8 @@ void AssistantAshTestBase::SetUp() {
 
   // At this point our Assistant service is ready for use.
   // Indicate this by changing status from NOT_READY to READY.
-  AssistantState::Get()->NotifyStatusChanged(mojom::AssistantState::READY);
+  test_api_->GetAssistantState()->NotifyStatusChanged(
+      mojom::AssistantState::READY);
 
   test_api_->DisableAnimations();
 
@@ -113,6 +127,10 @@ void AssistantAshTestBase::SetPreferVoice(bool prefer_voice) {
   test_api_->SetPreferVoice(prefer_voice);
 }
 
+bool AssistantAshTestBase::IsVisible() {
+  return test_api_->IsVisible();
+}
+
 views::View* AssistantAshTestBase::main_view() {
   return test_api_->main_view();
 }
@@ -121,16 +139,24 @@ views::View* AssistantAshTestBase::page_view() {
   return test_api_->page_view();
 }
 
+views::View* AssistantAshTestBase::app_list_view() {
+  return test_api_->app_list_view();
+}
+
 void AssistantAshTestBase::MockAssistantInteractionWithResponse(
     const std::string& response_text) {
-  const std::string query = std::string("input text");
+  MockAssistantInteractionWithQueryAndResponse(/*query=*/"input text",
+                                               response_text);
+}
 
+void AssistantAshTestBase::MockAssistantInteractionWithQueryAndResponse(
+    const std::string& query,
+    const std::string& response_text) {
   SendQueryThroughTextField(query);
-  assistant_service()->SetInteractionResponse(
-      InteractionResponse()
-          .AddTextResponse(response_text)
-          .AddResolution(InteractionResponse::Resolution::kNormal)
-          .Clone());
+  auto response = std::make_unique<InteractionResponse>();
+  response->AddTextResponse(response_text)
+      ->AddResolution(InteractionResponse::Resolution::kNormal);
+  assistant_service()->SetInteractionResponse(std::move(response));
 
   base::RunLoop().RunUntilIdle();
 }
@@ -139,11 +165,24 @@ void AssistantAshTestBase::SendQueryThroughTextField(const std::string& query) {
   test_api_->SendTextQuery(query);
 }
 
-void AssistantAshTestBase::TapOnTextField() {
-  if (!CanProcessEvents(input_text_field()))
-    ADD_FAILURE() << "TextField can not process tap events";
+void AssistantAshTestBase::TapOnAndWait(views::View* view) {
+  CheckCanProcessEvents(view);
+  GetEventGenerator()->GestureTapAt(GetPointInside(view));
 
-  GetEventGenerator()->GestureTapAt(GetPointInside(input_text_field()));
+  base::RunLoop().RunUntilIdle();
+}
+
+void AssistantAshTestBase::ClickOnAndWait(views::View* view) {
+  CheckCanProcessEvents(view);
+  GetEventGenerator()->MoveMouseTo(GetPointInside(view));
+  GetEventGenerator()->ClickLeftButton();
+
+  base::RunLoop().RunUntilIdle();
+}
+
+base::Optional<chromeos::assistant::mojom::AssistantInteractionMetadata>
+AssistantAshTestBase::current_interaction() {
+  return assistant_service()->current_interaction();
 }
 
 aura::Window* AssistantAshTestBase::SwitchToNewAppWindow() {
@@ -168,6 +207,14 @@ views::View* AssistantAshTestBase::mic_view() {
 
 views::View* AssistantAshTestBase::greeting_label() {
   return test_api_->greeting_label();
+}
+
+views::View* AssistantAshTestBase::voice_input_toggle() {
+  return test_api_->voice_input_toggle();
+}
+
+views::View* AssistantAshTestBase::keyboard_input_toggle() {
+  return test_api_->keyboard_input_toggle();
 }
 
 void AssistantAshTestBase::ShowKeyboard() {

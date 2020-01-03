@@ -202,16 +202,6 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   static std::string StatusToString(EmbeddedWorkerStatus status);
   static std::string StartingPhaseToString(StartingPhase phase);
 
-  using CreateNetworkFactoryCallback = base::RepeatingCallback<void(
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
-      int process_id,
-      mojo::PendingRemote<network::mojom::URLLoaderFactory> original_factory)>;
-  // Allows overriding the URLLoaderFactory creation for loading subresources
-  // from service workers (i.e., fetch()) and for loading non-installed service
-  // worker scripts.
-  static void SetNetworkFactoryForTesting(
-      const CreateNetworkFactoryCallback& url_loader_factory_callback);
-
   // Forces this instance into STOPPED status and releases any state about the
   // running worker. Called when connection with the renderer died or the
   // renderer is unresponsive.  Essentially, it throws away any information
@@ -227,14 +217,14 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // Pushes updated URL loader factories to the worker -- e.g. when DevTools
   // network interception is enabled.
   void UpdateLoaderFactories(
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo> script_bundle,
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo> subresource_bundle);
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> script_bundle,
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> subresource_bundle);
 
   base::WeakPtr<EmbeddedWorkerInstance> AsWeakPtr();
 
   // The below can only be called on the UI thread. The returned factory may be
   // later supplied to UpdateLoaderFactories().
-  static std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
+  static std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
   CreateFactoryBundleOnUI(
       RenderProcessHost* rph,
       int routing_id,
@@ -310,7 +300,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
 
   mojo::PendingRemote<network::mojom::URLLoaderFactory>
   MakeScriptLoaderFactoryRemote(
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo> script_bundle);
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> script_bundle);
 
   base::WeakPtr<ServiceWorkerContextCore> context_;
   ServiceWorkerVersion* owner_version_;

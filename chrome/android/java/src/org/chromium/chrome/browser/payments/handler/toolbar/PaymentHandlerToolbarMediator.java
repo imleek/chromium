@@ -9,7 +9,7 @@ import android.support.annotation.DrawableRes;
 
 import org.chromium.base.Log;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.payments.handler.toolbar.PaymentHandlerToolbarCoordinator.ErrorObserver;
+import org.chromium.chrome.browser.payments.handler.toolbar.PaymentHandlerToolbarCoordinator.PaymentHandlerToolbarObserver;
 import org.chromium.chrome.browser.ssl.SecurityStateModel;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.components.url_formatter.UrlFormatter;
@@ -30,9 +30,14 @@ import java.net.URISyntaxException;
     private static final String TAG = "PaymentHandlerTb";
     /** The delay (four video frames - for 60Hz) after which the hide progress will be hidden. */
     private static final long HIDE_PROGRESS_BAR_DELAY_MS = (1000 / 60) * 4;
+    /**
+     * The minimum load progress that can be shown when a page is loading.  This is not 0 so that
+     * it's obvious to the user that something is attempting to load.
+     */
+    /* package */ static final float MINIMUM_LOAD_PROGRESS = 0.05f;
 
     private final PropertyModel mModel;
-    private final ErrorObserver mErrorObserver;
+    private final PaymentHandlerToolbarObserver mObserver;
     /** The handler to delay hiding the progress bar. */
     private Handler mHideProgressBarHandler;
     /** Postfixed with "Ref" to distinguish from mWebContent in WebContentsObserver. */
@@ -42,16 +47,30 @@ import java.net.URISyntaxException;
      * Build a new mediator that handle events from outside the payment handler toolbar component.
      * @param model The {@link PaymentHandlerToolbarProperties} that holds all the view state for
      *         the payment handler toolbar component.
-     * @param hider The callback to clean up the {@link ErrorObserver} when the sheet is
-     *         hidden.
      * @param webContents The web-contents that loads the payment app.
+     * @param url The url of the payment handler app.
+     * @param observer The observer of this toolbar.
      */
-    /* package */ PaymentHandlerToolbarMediator(
-            PropertyModel model, WebContents webContents, ErrorObserver errorObserver) {
+    /* package */ PaymentHandlerToolbarMediator(PropertyModel model, WebContents webContents,
+            URI url, PaymentHandlerToolbarObserver observer) {
         super(webContents);
         mWebContentsRef = webContents;
         mModel = model;
-        mErrorObserver = errorObserver;
+        mObserver = observer;
+
+        formatUrlAndUpdateProperty(url.toString());
+    }
+
+    /** Format the url for displaying purpose and update the origin in the property model. */
+    private void formatUrlAndUpdateProperty(String url) {
+        String origin = UrlFormatter.formatUrlForSecurityDisplayOmitScheme(url);
+        try {
+            mModel.set(PaymentHandlerToolbarProperties.ORIGIN, new URI(origin));
+        } catch (URISyntaxException e) {
+            Log.e(TAG, "Failed to instantiate URI with the origin \"%s\", whose url is \"%s\".",
+                    origin, url);
+            mObserver.onToolbarError();
+        }
     }
 
     // WebContentsObserver:
@@ -76,17 +95,8 @@ import java.net.URISyntaxException;
     @Override
     public void didFinishNavigation(NavigationHandle navigation) {
         if (navigation.hasCommitted() && navigation.isInMainFrame()) {
-            String url = navigation.getUrl();
-            String origin = UrlFormatter.formatUrlForSecurityDisplayOmitScheme(url);
-            try {
-                mModel.set(PaymentHandlerToolbarProperties.PROGRESS_VISIBLE, false);
-                mModel.set(PaymentHandlerToolbarProperties.ORIGIN, new URI(origin));
-            } catch (URISyntaxException e) {
-                Log.e(TAG, "Failed to instantiate URI with the origin \"%s\", whose url is \"%s\".",
-                        origin, url);
-                mErrorObserver.onError();
-                return;
-            }
+            mModel.set(PaymentHandlerToolbarProperties.PROGRESS_VISIBLE, false);
+            formatUrlAndUpdateProperty(navigation.getUrl());
         }
     }
 
@@ -97,6 +107,7 @@ import java.net.URISyntaxException;
 
     @Override
     public void loadProgressChanged(float progress) {
+        assert progress <= 1.0;
         if (progress == 1.0) return;
         // If the load restarts when the progress bar is waiting to hide, cancel the handler
         // callbacks.
@@ -105,7 +116,8 @@ import java.net.URISyntaxException;
             mHideProgressBarHandler = null;
         }
         mModel.set(PaymentHandlerToolbarProperties.PROGRESS_VISIBLE, true);
-        mModel.set(PaymentHandlerToolbarProperties.LOAD_PROGRESS, progress);
+        mModel.set(PaymentHandlerToolbarProperties.LOAD_PROGRESS,
+                Math.max(progress, MINIMUM_LOAD_PROGRESS));
     }
 
     @DrawableRes

@@ -16,7 +16,7 @@
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
-#include "content/browser/web_package/bundled_exchanges_utils.h"
+#include "content/browser/web_package/web_bundle_utils.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/file_url_loader.h"
 #include "content/public/common/content_client.h"
@@ -30,8 +30,8 @@
 #include "net/http/http_byte_range.h"
 #include "net/http/http_util.h"
 #include "services/network/public/cpp/resource_request.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 
 // TODO(eroman): Add unit-tests for "X-Chrome-intent-type"
 //               (see url_request_content_job_unittest.cc).
@@ -124,8 +124,8 @@ class ContentURLLoader : public network::mojom::URLLoader {
       const network::ResourceRequest& request,
       mojo::PendingReceiver<network::mojom::URLLoader> loader,
       mojo::PendingRemote<network::mojom::URLLoaderClient> client_remote) {
-    network::ResourceResponseHead head;
-    head.request_start = head.response_start = base::TimeTicks::Now();
+    auto head = network::mojom::URLResponseHead::New();
+    head->request_start = head->response_start = base::TimeTicks::Now();
     receiver_.Bind(std::move(loader));
     receiver_.set_disconnect_handler(base::BindOnce(
         &ContentURLLoader::OnMojoDisconnect, base::Unretained(this)));
@@ -161,14 +161,14 @@ class ContentURLLoader : public network::mojom::URLLoader {
           std::move(client), net::FileErrorToNetError(file.error_details()));
     }
 
-    head.content_length = total_bytes_to_send;
+    head->content_length = total_bytes_to_send;
     total_bytes_written_ = total_bytes_to_send;
 
     // Set the mimetype of the response.
-    GetMimeType(request, path, &head.mime_type);
-    if (head.mime_type.empty() ||
-        head.mime_type == "application/octet-stream") {
-      // When a bundled exchanges file is downloaded with
+    GetMimeType(request, path, &head->mime_type);
+    if (head->mime_type.empty() ||
+        head->mime_type == "application/octet-stream") {
+      // When a Web Bundle file is downloaded with
       // "content-type: application/webbundle;v=b1" header, Chrome saves it as
       // "application/webbundle" MIME type. The MIME type is stored to Android's
       // DownloadManager. If the file is opened from a URI which is under
@@ -177,29 +177,29 @@ class ContentURLLoader : public network::mojom::URLLoader {
       // ContentResolver.getType() returns null or the default type
       // [1]"application/octet-stream" even if the file extension is ".wbn".
       // (eg: opening the file from "Internal Storage")
-      // This is because the Media type of BundledHTTPExchanges isn't registered
+      // This is because the Media type of Web Bundles isn't registered
       // to the IANA registry (https://www.iana.org/assignments/media-types/),
       // and it is not listed in the mime.types files [2][3] which was referd by
       // MimeTypeMap.getMimeTypeFromExtension().
       // So we set the MIME type if the file extension is ".wbn" by calling
-      // bundled_exchanges_utils::GetBundledExchangesFileMimeTypeFromFile().
+      // web_bundle_utils::GetWebBundleFileMimeTypeFromFile().
       // [1]
       // https://android.googlesource.com/platform/frameworks/base/+/1b817f6/core/java/android/content/ContentResolver.java#481
       // [2] https://android.googlesource.com/platform/external/mime-support/
       // [3]
       // https://android.googlesource.com/platform/libcore/+/master/luni/src/main/java/libcore/net/android.mime.types
-      bundled_exchanges_utils::GetBundledExchangesFileMimeTypeFromFile(
-          path, &head.mime_type);
+      web_bundle_utils::GetWebBundleFileMimeTypeFromFile(path,
+                                                         &head->mime_type);
     }
 
-    if (!head.mime_type.empty()) {
-      head.headers = base::MakeRefCounted<net::HttpResponseHeaders>("");
-      head.headers->AddHeader(
+    if (!head->mime_type.empty()) {
+      head->headers = base::MakeRefCounted<net::HttpResponseHeaders>("");
+      head->headers->AddHeader(
           base::StringPrintf("%s: %s", net::HttpRequestHeaders::kContentType,
-                             head.mime_type.c_str()));
+                             head->mime_type.c_str()));
     }
 
-    client->OnReceiveResponse(head);
+    client->OnReceiveResponse(std::move(head));
     client->OnStartLoadingResponseBody(std::move(pipe.consumer_handle));
     client_ = std::move(client);
 

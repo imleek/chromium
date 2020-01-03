@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "ash/display/screen_orientation_controller.h"
 #include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_switches.h"
@@ -44,12 +43,14 @@ namespace {
 
 // This function is called to check if window[i] is eligible to be carried over
 // to split view mode during clamshell <-> tablet mode transition or multi-user
-// switch transition. Returns true if windows[i] exists and can snap in split
-// view.
+// switch transition. Returns true if windows[i] exists, is on |root_window|,
+// and can snap in split view on |root_window|.
 bool IsCarryOverCandidateForSplitView(
     const MruWindowTracker::WindowList& windows,
-    size_t i) {
-  return windows.size() > i && CanSnapInSplitview(windows[i]);
+    size_t i,
+    aura::Window* root_window) {
+  return windows.size() > i && windows[i]->GetRootWindow() == root_window &&
+         SplitViewController::Get(root_window)->CanSnapWindow(windows[i]);
 }
 
 // Returns the windows that are going to be carried over to splitview during
@@ -69,11 +70,12 @@ GetCarryOverWindowsInSplitView() {
                        return window->GetProperty(kIsShowingInOverviewKey);
                      }),
       mru_windows.end());
-  if (IsCarryOverCandidateForSplitView(mru_windows, 0u)) {
+  aura::Window* root_window = Shell::GetPrimaryRootWindow();
+  if (IsCarryOverCandidateForSplitView(mru_windows, 0u, root_window)) {
     if (WindowState::Get(mru_windows[0])->GetStateType() ==
         WindowStateType::kLeftSnapped) {
       windows.emplace(mru_windows[0], WindowStateType::kLeftSnapped);
-      if (IsCarryOverCandidateForSplitView(mru_windows, 1u) &&
+      if (IsCarryOverCandidateForSplitView(mru_windows, 1u, root_window) &&
           WindowState::Get(mru_windows[1])->GetStateType() ==
               WindowStateType::kRightSnapped) {
         windows.emplace(mru_windows[1], WindowStateType::kRightSnapped);
@@ -81,7 +83,7 @@ GetCarryOverWindowsInSplitView() {
     } else if (WindowState::Get(mru_windows[0])->GetStateType() ==
                WindowStateType::kRightSnapped) {
       windows.emplace(mru_windows[0], WindowStateType::kRightSnapped);
-      if (IsCarryOverCandidateForSplitView(mru_windows, 1u) &&
+      if (IsCarryOverCandidateForSplitView(mru_windows, 1u, root_window) &&
           WindowState::Get(mru_windows[1])->GetStateType() ==
               WindowStateType::kLeftSnapped) {
         windows.emplace(mru_windows[1], WindowStateType::kLeftSnapped);
@@ -116,22 +118,22 @@ int CalculateCarryOverDividerPostion(
   gfx::Rect right_window_bounds =
       right_window ? right_window->GetBoundsInScreen() : gfx::Rect();
 
-  switch (GetCurrentScreenOrientation()) {
-    case OrientationLockType::kLandscapePrimary:
+  if (SplitViewController::IsLayoutHorizontal()) {
+    if (SplitViewController::IsLayoutRightSideUp()) {
       return left_window ? left_window_bounds.width()
                          : work_area.width() - right_window_bounds.width();
-    case OrientationLockType::kPortraitPrimary:
-      return left_window ? left_window_bounds.height()
-                         : work_area.height() - right_window_bounds.height();
-    case OrientationLockType::kLandscapeSecondary:
+    } else {
       return left_window ? work_area.width() - left_window_bounds.width()
                          : right_window_bounds.width();
-    case OrientationLockType::kPortraitSecondary:
+    }
+  } else {
+    if (SplitViewController::IsLayoutRightSideUp()) {
+      return left_window ? left_window_bounds.height()
+                         : work_area.height() - right_window_bounds.height();
+    } else {
       return left_window ? work_area.height() - left_window_bounds.height()
                          : right_window_bounds.height();
-    default:
-      return SplitViewController::Get(Shell::GetPrimaryRootWindow())
-          ->GetDefaultDividerPosition();
+    }
   }
 }
 
@@ -248,6 +250,14 @@ bool TabletModeWindowManager::ShouldMinimizeTopWindowOnBack() {
   if (!window)
     return false;
 
+  // Do not minimize the window if it is in overview. This can avoid unnecessary
+  // window minimize animation.
+  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  if (overview_controller->InOverviewSession() &&
+      overview_controller->overview_session()->IsWindowInOverview(window)) {
+    return false;
+  }
+
   const int app_type = window->GetProperty(aura::client::kAppType);
   if (app_type != static_cast<int>(AppType::BROWSER) &&
       app_type != static_cast<int>(AppType::CHROME_APP)) {
@@ -255,8 +265,10 @@ bool TabletModeWindowManager::ShouldMinimizeTopWindowOnBack() {
   }
 
   WindowState* window_state = WindowState::Get(window);
-  if (!window_state || !window_state->CanMinimize())
+  if (!window_state || !window_state->CanMinimize() ||
+      window_state->IsMinimized()) {
     return false;
+  }
 
   // Minimize the window if it is at the bottom page.
   return !shell->shell_delegate()->CanGoBack(window);

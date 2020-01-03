@@ -12,6 +12,7 @@
 #include "components/signin/internal/identity_manager/account_tracker_service.h"
 #include "components/signin/internal/identity_manager/gaia_cookie_manager_service.h"
 #include "components/signin/internal/identity_manager/ubertoken_fetcher_impl.h"
+#include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/identity_manager/accounts_cookie_mutator.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/accounts_mutator.h"
@@ -22,9 +23,11 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/jni_string.h"
-#include "components/signin/internal/identity_manager/android/jni_headers/IdentityManager_jni.h"
 #include "components/signin/internal/identity_manager/profile_oauth2_token_service_delegate.h"
-#elif !defined(OS_IOS)
+#include "components/signin/public/android/jni_headers/IdentityManager_jni.h"
+#endif
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
 #include "components/signin/internal/identity_manager/mutable_profile_oauth2_token_service_delegate.h"
 #endif
 
@@ -365,7 +368,7 @@ void IdentityManager::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   AccountFetcherService::RegisterPrefs(registry);
   AccountTrackerService::RegisterPrefs(registry);
   GaiaCookieManagerService::RegisterPrefs(registry);
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   MutableProfileOAuth2TokenServiceDelegate::RegisterProfilePrefs(registry);
 #endif
 }
@@ -433,8 +436,7 @@ IdentityManager::GetAccountsWithRefreshTokens(JNIEnv* env) const {
 
   base::android::ScopedJavaLocalRef<jclass> coreaccountinfo_clazz =
       base::android::GetClass(
-          env,
-          "org/chromium/components/signin/identitymanager/CoreAccountInfo");
+          env, "org/chromium/components/signin/base/CoreAccountInfo");
   base::android::ScopedJavaLocalRef<jobjectArray> array(
       env, env->NewObjectArray(accounts.size(), coreaccountinfo_clazz.obj(),
                                nullptr));
@@ -502,7 +504,7 @@ IdentityManager::ComputeUnconsentedPrimaryAccountInfo() const {
   // On ChromeOS and on mobile platforms, we support only the primary account as
   // the unconsented primary account. By this early return, we avoid an extra
   // request to GAIA that lists cookie accounts.
-  return base::nullopt;
+  return CoreAccountInfo();
 #else
   AccountsInCookieJarInfo cookie_info = GetAccountsInCookieJar();
 
@@ -522,6 +524,10 @@ IdentityManager::ComputeUnconsentedPrimaryAccountInfo() const {
     if (!current_account.empty()) {
       if (AreRefreshTokensLoaded() &&
           !HasAccountWithRefreshToken(current_account)) {
+        return CoreAccountInfo();
+      }
+      if (!AreRefreshTokensLoaded() &&
+          unconsented_primary_account_revoked_during_load_) {
         return CoreAccountInfo();
       }
       if (cookie_info.accounts_are_fresh &&
@@ -593,6 +599,11 @@ void IdentityManager::OnRefreshTokenAvailable(const CoreAccountId& account_id) {
 }
 
 void IdentityManager::OnRefreshTokenRevoked(const CoreAccountId& account_id) {
+  if (!AreRefreshTokensLoaded() && HasUnconsentedPrimaryAccount() &&
+      account_id == GetUnconsentedPrimaryAccountId()) {
+    unconsented_primary_account_revoked_during_load_ = true;
+  }
+
   UpdateUnconsentedPrimaryAccount();
   for (auto& observer : observer_list_) {
     observer.OnRefreshTokenRemovedForAccount(account_id);
@@ -698,9 +709,9 @@ void IdentityManager::OnAccountUpdated(const AccountInfo& info) {
 }
 
 void IdentityManager::OnAccountRemoved(const AccountInfo& info) {
+  UpdateUnconsentedPrimaryAccount();
   for (auto& observer : observer_list_)
     observer.OnExtendedAccountInfoRemoved(info);
-  UpdateUnconsentedPrimaryAccount();
 }
 
 }  // namespace signin

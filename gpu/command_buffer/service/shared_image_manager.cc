@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -46,15 +47,26 @@ bool operator<(const std::unique_ptr<SharedImageBacking>& lhs,
   return lhs->mailbox() < rhs;
 }
 
-class SharedImageManager::AutoLock {
+class SCOPED_LOCKABLE SharedImageManager::AutoLock {
  public:
   explicit AutoLock(SharedImageManager* manager)
-      : auto_lock_(manager->is_thread_safe() ? &manager->lock_.value()
-                                             : nullptr) {}
+      EXCLUSIVE_LOCK_FUNCTION(manager->lock_)
+      : start_time_(base::TimeTicks::Now()),
+        auto_lock_(manager->is_thread_safe() ? &manager->lock_.value()
+                                             : nullptr) {
+    if (manager->is_thread_safe()) {
+      UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+          "GPU.SharedImageManager.TimeToAcquireLock",
+          base::TimeTicks::Now() - start_time_,
+          base::TimeDelta::FromMicroseconds(1), base::TimeDelta::FromSeconds(1),
+          50);
+    }
+  }
 
-  ~AutoLock() = default;
+  ~AutoLock() UNLOCK_FUNCTION() = default;
 
  private:
+  base::TimeTicks start_time_;
   base::AutoLockMaybe auto_lock_;
 
   DISALLOW_COPY_AND_ASSIGN(AutoLock);
@@ -86,7 +98,6 @@ SharedImageManager::Register(std::unique_ptr<SharedImageBacking> backing,
       (*lower_bound)->mailbox() == backing->mailbox()) {
     LOG(ERROR) << "SharedImageManager::Register: Trying to register an "
                   "already registered mailbox.";
-    backing->Destroy();
     return nullptr;
   }
 

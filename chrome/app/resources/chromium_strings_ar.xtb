@@ -3,7 +3,6 @@
 <translationbundle lang="ar">
 <translation id="1065672644894730302">لا يمكن قراءة تفضيلاتك. قد تكون بعض الميزات غير متاحة، ولن يتم حفظ التغييرات في التفضيلات.</translation>
 <translation id="1104942323762546749">‏يرغب Chromium في تصدير كلمات المرور، لذا يُرجى كتابة كلمة مرور Windows للسماح بذلك.</translation>
-<translation id="1115445892567829615">‏تعذر على Chromium مزامنة البيانات. يُرجى تحديث عبارة مرور المزامنة.</translation>
 <translation id="113122355610423240">‏Chromium هو متصفحك التلقائي</translation>
 <translation id="1185134272377778587">‏حول Chromium</translation>
 <translation id="1396446129537741364">‏يحاول Chromium إظهار كلمات المرور.</translation>
@@ -20,7 +19,7 @@
 <translation id="1929939181775079593">‏لا يستجيب Chromium. هل تريد إعادة التشغيل الآن؟</translation>
 <translation id="1966382378801805537">‏يتعذَّر على Chromium تحديد المتصفح التلقائي أو تعيينه</translation>
 <translation id="2008474315282236005">‏سيعمل هذا على حذف عنصر واحد من هذا الجهاز. لاسترداد بياناتك لاحقًا، سجّل الدخول إلى Chromium كـ <ph name="USER_EMAIL" />.</translation>
-<translation id="2119636228670142020">‏حول ن&amp;ظام التشغيل Chromium</translation>
+<translation id="2147976119693222405">‏تعذر على نظام تشغيل Chromium مزامنة بياناتك. إصلاح المشكلة الآن.</translation>
 <translation id="2241627712206172106">‏إذا كنت تشارك الكمبيوتر مع أصدقائك وعائلتك، فبإمكانهم التصفح على حدة وإعداد Chromium على النحو الذي يريدونه.</translation>
 <translation id="2347108572062610441">‏غيّرت هذه الإضافة الصفحة التي تظهر عند بدء Chromium.</translation>
 <translation id="2396765026452590966">‏غيّرت الإضافة "<ph name="EXTENSION_NAME" />" الصفحة التي تظهر عند بدء Chromium.</translation>
@@ -36,6 +35,7 @@
 <translation id="2718390899429598676">‏لمزيد من الأمان، سيشفر Chromium بياناتك</translation>
 <translation id="2770231113462710648">تغيير المتصفح التلقائي إلى:</translation>
 <translation id="2799223571221894425">إعادة تشغيل</translation>
+<translation id="2805036593126168338">‏تعذّر على نظام تشغيل Chromium مزامنة كلمات المرور. إصلاح المشكلة الآن.</translation>
 <translation id="2838154144102149890">‏يجب إيقاف تشغيل Chromium على جهاز الكمبيوتر هذا لإجراء التحديث. وجرّاء ذلك، إنّ المستخدمين الآخرين الذين سجَّلوا الدخول إلى جهاز الكمبيوتر هذا قد يفقدون التغييرات غير المحفوظة.</translation>
 <translation id="2847479871509788944">‏إزالة من Chromium</translation>
 <translation id="2886012850691518054">‏اختياري: ساعد في تحسين Chromium عن طريق إرسال إحصائيات الاستخدام وتقارير الأعطال إلى Google تلقائيًا.</translation>
@@ -107,7 +107,6 @@
 <translation id="5631814766731275228">‏الاسم والصورة على Chromium</translation>
 <translation id="5634636535844844681">‏يتطلب Chromium نظام التشغيل Windows 7 أو إصدارًا أحدث.</translation>
 <translation id="5653831366781983928">‏يُرجى إعادة تشغيل Chromium الآن</translation>
-<translation id="5680901439334282664">‏تسجيل الدخول إلى Chromium</translation>
 <translation id="5698481217667032250">‏عرض Chromium بهذه اللغة</translation>
 <translation id="5820394555380036790">‏نظام التشغيل Chromium</translation>
 <translation id="5862307444128926510">‏مرحبًا بك في Chromium</translation>

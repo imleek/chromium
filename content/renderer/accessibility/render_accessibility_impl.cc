@@ -36,7 +36,6 @@
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_settings.h"
-#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/ax_enum_util.h"
@@ -92,6 +91,73 @@ namespace content {
 // usage.
 const size_t kMaxSnapshotNodeCount = 5000;
 
+AXTreeSnapshotterImpl::AXTreeSnapshotterImpl(RenderFrameImpl* render_frame)
+    : render_frame_(render_frame) {
+  DCHECK(render_frame->GetWebFrame());
+  blink::WebDocument document_ = render_frame->GetWebFrame()->GetDocument();
+  context_ = std::make_unique<WebAXContext>(document_);
+}
+
+AXTreeSnapshotterImpl::~AXTreeSnapshotterImpl() = default;
+
+void AXTreeSnapshotterImpl::Snapshot(ui::AXMode ax_mode,
+                                     size_t max_node_count,
+                                     ui::AXTreeUpdate* response) {
+  // Get a snapshot of the accessibility tree as an AXContentNodeData.
+  AXContentTreeUpdate content_tree;
+  SnapshotContentTree(ax_mode, max_node_count, &content_tree);
+
+  // As a sanity check, node_id_to_clear and event_from should be uninitialized
+  // if this is a full tree snapshot. They'd only be set to something if
+  // this was indeed a partial update to the tree (which we don't want).
+  DCHECK_EQ(0, content_tree.node_id_to_clear);
+  DCHECK_EQ(ax::mojom::EventFrom::kNone, content_tree.event_from);
+
+  // We now have a complete serialization of the accessibility tree, but it
+  // includes a few fields we don't want to export outside of content/,
+  // so copy it into a more generic ui::AXTreeUpdate instead.
+  response->root_id = content_tree.root_id;
+  response->nodes.resize(content_tree.nodes.size());
+  response->node_id_to_clear = content_tree.node_id_to_clear;
+  response->event_from = content_tree.event_from;
+  // AXNodeData is a superclass of AXContentNodeData, so we can convert
+  // just by assigning.
+  response->nodes.assign(content_tree.nodes.begin(), content_tree.nodes.end());
+}
+
+void AXTreeSnapshotterImpl::SnapshotContentTree(ui::AXMode ax_mode,
+                                                size_t max_node_count,
+                                                AXContentTreeUpdate* response) {
+  WebAXObject root = context_->Root();
+  if (!root.UpdateLayoutAndCheckValidity())
+    return;
+
+  BlinkAXTreeSource tree_source(render_frame_, ax_mode);
+  tree_source.SetRoot(root);
+  ScopedFreezeBlinkAXTreeSource freeze(&tree_source);
+
+  // The serializer returns an AXContentTreeUpdate, which can store a complete
+  // or a partial accessibility tree. AXTreeSerializer is stateful, but the
+  // first time you serialize from a brand-new tree you're guaranteed to get a
+  // complete tree.
+  BlinkAXTreeSerializer serializer(&tree_source);
+  if (max_node_count)
+    serializer.set_max_node_count(max_node_count);
+  if (serializer.SerializeChanges(root, response))
+    return;
+
+  // It's possible for the page to fail to serialize the first time due to
+  // aria-owns rearranging the page while it's being scanned. Try a second
+  // time.
+  *response = AXContentTreeUpdate();
+  if (serializer.SerializeChanges(root, response))
+    return;
+
+  // It failed again. Clear the response object because it might have errors.
+  *response = AXContentTreeUpdate();
+  LOG(WARNING) << "Unable to serialize accessibility tree.";
+}
+
 // static
 void RenderAccessibilityImpl::SnapshotAccessibilityTree(
     RenderFrameImpl* render_frame,
@@ -99,36 +165,13 @@ void RenderAccessibilityImpl::SnapshotAccessibilityTree(
     ui::AXMode ax_mode) {
   TRACE_EVENT0("accessibility",
                "RenderAccessibilityImpl::SnapshotAccessibilityTree");
-
   DCHECK(render_frame);
   DCHECK(response);
   if (!render_frame->GetWebFrame())
     return;
 
-  WebDocument document = render_frame->GetWebFrame()->GetDocument();
-  WebAXContext context(document);
-  WebAXObject root = context.Root();
-  if (!root.UpdateLayoutAndCheckValidity())
-    return;
-  BlinkAXTreeSource tree_source(render_frame, ax_mode);
-  tree_source.SetRoot(root);
-  ScopedFreezeBlinkAXTreeSource freeze(&tree_source);
-  BlinkAXTreeSerializer serializer(&tree_source);
-  serializer.set_max_node_count(kMaxSnapshotNodeCount);
-
-  if (serializer.SerializeChanges(context.Root(), response))
-    return;
-
-  // It's possible for the page to fail to serialize the first time due to
-  // aria-owns rearranging the page while it's being scanned. Try a second
-  // time.
-  *response = AXContentTreeUpdate();
-  if (serializer.SerializeChanges(context.Root(), response))
-    return;
-
-  // It failed again. Clear the response object because it might have errors.
-  *response = AXContentTreeUpdate();
-  LOG(WARNING) << "Unable to serialize accessibility tree.";
+  AXTreeSnapshotterImpl snapshotter(render_frame);
+  snapshotter.SnapshotContentTree(ax_mode, kMaxSnapshotNodeCount, response);
 }
 
 RenderAccessibilityImpl::RenderAccessibilityImpl(RenderFrameImpl* render_frame,
@@ -307,20 +350,6 @@ void RenderAccessibilityImpl::HandleAccessibilityFindInPageResult(
 
 void RenderAccessibilityImpl::HandleAccessibilityFindInPageTermination() {
   Send(new AccessibilityHostMsg_FindInPageTermination(routing_id()));
-}
-
-void RenderAccessibilityImpl::AccessibilityFocusedElementChanged(
-    const WebElement& element) {
-  const WebDocument& document = GetMainDocument();
-  if (document.IsNull())
-    return;
-
-  if (element.IsNull()) {
-    // When focus is cleared, implicitly focus the document.
-    // TODO(dmazzoni): Make Blink send this notification instead.
-    HandleAXEvent(WebAXObject::FromWebDocument(document),
-                  ax::mojom::Event::kBlur);
-  }
 }
 
 void RenderAccessibilityImpl::HandleAXEvent(const WebAXObject& obj,
@@ -774,9 +803,9 @@ void RenderAccessibilityImpl::OnPerformAction(
       target->Increment();
       break;
     case ax::mojom::Action::kScrollToMakeVisible:
-      target->ScrollToMakeVisibleWithSubFocus(data.target_rect,
-                                              data.horizontal_scroll_alignment,
-                                              data.vertical_scroll_alignment);
+      target->ScrollToMakeVisibleWithSubFocus(
+          data.target_rect, data.horizontal_scroll_alignment,
+          data.vertical_scroll_alignment, data.scroll_behavior);
       break;
     case ax::mojom::Action::kScrollToPoint:
       target->ScrollToGlobalPoint(data.target_point);
@@ -880,9 +909,7 @@ void RenderAccessibilityImpl::OnHitTest(const gfx::Point& point,
   AXContentNodeData data;
   ScopedFreezeBlinkAXTreeSource freeze(&tree_source_);
   tree_source_.SerializeNode(obj, &data);
-  if (data.HasContentIntAttribute(AX_CONTENT_ATTR_CHILD_ROUTING_ID) ||
-      data.HasContentIntAttribute(
-          AX_CONTENT_ATTR_CHILD_BROWSER_PLUGIN_INSTANCE_ID)) {
+  if (data.HasContentIntAttribute(AX_CONTENT_ATTR_CHILD_ROUTING_ID)) {
     gfx::Point transformed_point = point;
     bool is_remote_frame = RenderFrameProxy::FromRoutingID(
         data.GetContentIntAttribute(AX_CONTENT_ATTR_CHILD_ROUTING_ID));
@@ -895,15 +922,14 @@ void RenderAccessibilityImpl::OnHitTest(const gfx::Point& point,
       // fairly well. It will fail with CSS transforms that rotate or shear.
       // https://crbug.com/981959.
       WebView* web_view = render_frame_->GetRenderView()->GetWebView();
-      blink::WebFloatPoint viewport_offset = web_view->VisualViewportOffset();
-      transformed_point += gfx::Vector2d(viewport_offset.x, viewport_offset.y) -
-                           gfx::Rect(rect).OffsetFromOrigin();
+      gfx::PointF viewport_offset = web_view->VisualViewportOffset();
+      transformed_point +=
+          gfx::Vector2d(viewport_offset.x(), viewport_offset.y()) -
+          gfx::Rect(rect).OffsetFromOrigin();
     }
     Send(new AccessibilityHostMsg_ChildFrameHitTestResult(
         routing_id(), action_request_id, transformed_point,
-        data.GetContentIntAttribute(AX_CONTENT_ATTR_CHILD_ROUTING_ID),
-        data.GetContentIntAttribute(
-            AX_CONTENT_ATTR_CHILD_BROWSER_PLUGIN_INSTANCE_ID),
+        data.GetContentIntAttribute(AX_CONTENT_ATTR_CHILD_ROUTING_ID), 0,
         event_to_fire));
     return;
   }

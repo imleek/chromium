@@ -35,16 +35,16 @@ import org.chromium.chrome.browser.gesturenav.HistoryNavigationDelegate;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar.PrefObserver;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.privacy.ClearBrowsingDataTabsFragment;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.privacy.ClearBrowsingDataTabsFragment;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.browser.util.ConversionUtils;
 import org.chromium.chrome.browser.util.IntentUtils;
@@ -54,7 +54,6 @@ import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate.SelectionObserver;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.Clipboard;
-import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 
 import java.util.List;
@@ -194,7 +193,7 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
             }});
 
         // 9. Listen to changes in sign in state.
-        IdentityServicesProvider.getSigninManager().addSignInStateObserver(this);
+        IdentityServicesProvider.get().getSigninManager().addSignInStateObserver(this);
 
         // 10. Create PrefChangeRegistrar to receive notifications on preference changes.
         mPrefChangeRegistrar = new PrefChangeRegistrar();
@@ -293,7 +292,7 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
         mHistoryAdapter.onDestroyed();
         mLargeIconBridge.destroy();
         mLargeIconBridge = null;
-        IdentityServicesProvider.getSigninManager().removeSignInStateObserver(this);
+        IdentityServicesProvider.get().getSigninManager().removeSignInStateObserver(this);
         mPrefChangeRegistrar.destroy();
     }
 
@@ -375,11 +374,11 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
 
         // Determine component or class name.
         ComponentName component;
-        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)) {
-            component = mActivity.getComponentName();
-        } else {
+        if (mActivity instanceof HistoryActivity) { // phone
             component = IntentUtils.safeGetParcelableExtra(
                     mActivity.getIntent(), IntentHandler.EXTRA_PARENT_COMPONENT);
+        } else { // tablet
+            component = mActivity.getComponentName();
         }
         if (component != null) {
             ChromeTabbedActivity.setNonAliasedComponent(viewIntent, component);
@@ -402,7 +401,7 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
      */
     public void openClearBrowsingDataPreference() {
         recordUserAction("ClearBrowsingData");
-        PreferencesLauncher.launchSettingsPage(mActivity, ClearBrowsingDataTabsFragment.class);
+        SettingsLauncher.launchSettingsPage(mActivity, ClearBrowsingDataTabsFragment.class);
     }
 
     @Override

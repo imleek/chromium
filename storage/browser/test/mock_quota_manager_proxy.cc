@@ -18,9 +18,9 @@ MockQuotaManagerProxy::MockQuotaManagerProxy(
       last_notified_delta_(0),
       registered_client_(nullptr) {}
 
-void MockQuotaManagerProxy::RegisterClient(QuotaClient* client) {
+void MockQuotaManagerProxy::RegisterClient(scoped_refptr<QuotaClient> client) {
   DCHECK(!registered_client_);
-  registered_client_ = client;
+  registered_client_ = std::move(client);
 }
 
 void MockQuotaManagerProxy::SimulateQuotaManagerDestroyed() {
@@ -43,7 +43,6 @@ void MockQuotaManagerProxy::GetUsageAndQuota(
 }
 
 void MockQuotaManagerProxy::NotifyStorageAccessed(
-    QuotaClient::ID client_id,
     const url::Origin& origin,
     blink::mojom::StorageType type) {
   ++storage_accessed_count_;

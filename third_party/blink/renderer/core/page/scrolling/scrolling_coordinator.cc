@@ -31,6 +31,7 @@
 #include "build/build_config.h"
 #include "cc/animation/animation_host.h"
 #include "cc/input/main_thread_scrolling_reason.h"
+#include "cc/input/scroll_snap_data.h"
 #include "cc/layers/painted_overlay_scrollbar_layer.h"
 #include "cc/layers/painted_scrollbar_layer.h"
 #include "cc/layers/picture_layer.h"
@@ -75,7 +76,6 @@ void ScrollingCoordinator::Trace(blink::Visitor* visitor) {
 void ScrollingCoordinator::NotifyGeometryChanged(LocalFrameView* frame_view) {
   frame_view->GetScrollingContext()->SetScrollGestureRegionIsDirty(true);
   frame_view->GetScrollingContext()->SetTouchEventTargetRectsAreDirty(true);
-  frame_view->GetScrollingContext()->SetShouldScrollOnMainThreadIsDirty(true);
 }
 
 ScrollableArea*
@@ -98,18 +98,22 @@ ScrollingCoordinator::ScrollableAreaWithElementIdInAllLocalFrames(
   return nullptr;
 }
 
-void ScrollingCoordinator::DidScroll(CompositorElementId element_id,
-                                     const gfx::ScrollOffset& offset) {
+void ScrollingCoordinator::DidScroll(
+    CompositorElementId element_id,
+    const gfx::ScrollOffset& offset,
+    const base::Optional<cc::TargetSnapAreaElementIds>& snap_target_ids) {
   // Find the associated scrollable area using the element id and notify it of
   // the compositor-side scroll. We explicitly do not check the VisualViewport
   // which handles scroll offset differently (see: VisualViewport::didScroll).
   // Remote frames will receive DidScroll callbacks from their own compositor.
   // The ScrollableArea with matching ElementId may have been deleted and we can
   // safely ignore the DidScroll callback.
-  if (auto* scrollable =
-          ScrollableAreaWithElementIdInAllLocalFrames(element_id)) {
-    scrollable->DidScroll(FloatPoint(offset.x(), offset.y()));
-  }
+  auto* scrollable = ScrollableAreaWithElementIdInAllLocalFrames(element_id);
+  if (!scrollable)
+    return;
+  scrollable->DidScroll(FloatPoint(offset.x(), offset.y()));
+  if (snap_target_ids)
+    scrollable->SetTargetSnapAreaElementIds(snap_target_ids.value());
 }
 
 void ScrollingCoordinator::DidChangeScrollbarsHidden(
@@ -123,6 +127,8 @@ void ScrollingCoordinator::DidChangeScrollbarsHidden(
 }
 
 void ScrollingCoordinator::UpdateAfterPaint(LocalFrameView* frame_view) {
+  DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
+
   LocalFrame* frame = &frame_view->GetFrame();
   DCHECK(frame->IsLocalRoot());
 
@@ -130,14 +136,9 @@ void ScrollingCoordinator::UpdateAfterPaint(LocalFrameView* frame_view) {
       frame_view->GetScrollingContext()->ScrollGestureRegionIsDirty();
   bool touch_event_rects_dirty =
       frame_view->GetScrollingContext()->TouchEventTargetRectsAreDirty();
-  bool should_scroll_on_main_thread_dirty =
-      frame_view->GetScrollingContext()->ShouldScrollOnMainThreadIsDirty();
-  bool frame_scroller_dirty = FrameScrollerIsDirty(frame_view);
 
-  if (!(scroll_gesture_region_dirty || touch_event_rects_dirty ||
-        should_scroll_on_main_thread_dirty || frame_scroller_dirty)) {
+  if (!scroll_gesture_region_dirty && !touch_event_rects_dirty)
     return;
-  }
 
   SCOPED_UMA_AND_UKM_TIMER(frame_view->EnsureUkmAggregator(),
                            LocalFrameUkmAggregator::kScrollingCoordinator);
@@ -148,24 +149,10 @@ void ScrollingCoordinator::UpdateAfterPaint(LocalFrameView* frame_view) {
     frame_view->GetScrollingContext()->SetScrollGestureRegionIsDirty(false);
   }
 
-  if (!(touch_event_rects_dirty || should_scroll_on_main_thread_dirty ||
-        frame_scroller_dirty)) {
-    return;
-  }
-
   if (touch_event_rects_dirty) {
     UpdateTouchEventTargetRectsIfNeeded(frame);
     frame_view->GetScrollingContext()->SetTouchEventTargetRectsAreDirty(false);
   }
-
-  if (should_scroll_on_main_thread_dirty ||
-      frame_view->FrameIsScrollableDidChange()) {
-    // TODO(pdr): Now that BlinkGenPropertyTrees has launched, we should remove
-    // FrameIsScrollableDidChange.
-    frame_view->GetScrollingContext()->SetShouldScrollOnMainThreadIsDirty(
-        false);
-  }
-  frame_view->ClearFrameIsScrollableDidChange();
 }
 
 template <typename Function>
@@ -473,7 +460,6 @@ void ScrollingCoordinator::Reset(LocalFrame* frame) {
 
   horizontal_scrollbars_.clear();
   vertical_scrollbars_.clear();
-  frame->View()->ClearFrameIsScrollableDidChange();
 }
 
 void ScrollingCoordinator::TouchEventTargetRectsDidChange(LocalFrame* frame) {
@@ -560,29 +546,6 @@ bool ScrollingCoordinator::CoordinatesScrollingForFrameView(
   return layout_view->UsesCompositing();
 }
 
-void ScrollingCoordinator::
-    FrameViewHasBackgroundAttachmentFixedObjectsDidChange(
-        LocalFrameView* frame_view) {
-  DCHECK(IsMainThread());
-  DCHECK(frame_view);
-
-  if (!CoordinatesScrollingForFrameView(frame_view))
-    return;
-
-  frame_view->GetScrollingContext()->SetShouldScrollOnMainThreadIsDirty(true);
-}
-
-void ScrollingCoordinator::FrameViewFixedObjectsDidChange(
-    LocalFrameView* frame_view) {
-  DCHECK(IsMainThread());
-  DCHECK(frame_view);
-
-  if (!CoordinatesScrollingForFrameView(frame_view))
-    return;
-
-  frame_view->GetScrollingContext()->SetShouldScrollOnMainThreadIsDirty(true);
-}
-
 bool ScrollingCoordinator::IsForMainFrame(
     ScrollableArea* scrollable_area) const {
   if (!IsA<LocalFrame>(page_->MainFrame()))
@@ -602,23 +565,6 @@ void ScrollingCoordinator::FrameViewRootLayerDidChange(
     return;
 
   NotifyGeometryChanged(frame_view);
-}
-
-bool ScrollingCoordinator::FrameScrollerIsDirty(
-    LocalFrameView* frame_view) const {
-  DCHECK(frame_view);
-  // TODO(bokan): This should probably be checking the root scroller in the
-  // FrameView, rather than the frame_view.
-  if (frame_view->FrameIsScrollableDidChange())
-    return true;
-
-  if (cc::Layer* scroll_layer =
-          frame_view->LayoutViewport()->LayerForScrolling()) {
-    return static_cast<gfx::Size>(
-               frame_view->LayoutViewport()->ContentsSize()) !=
-           scroll_layer->bounds();
-  }
-  return false;
 }
 
 }  // namespace blink

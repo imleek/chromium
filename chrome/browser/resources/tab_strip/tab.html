@@ -3,6 +3,7 @@
     --tabstrip-tab-transition-duration: 250ms;
 
     height: var(--tabstrip-tab-height);
+    padding-inline-end: var(--tabstrip-tab-spacing);
     position: relative;
     transform-origin: top left;
     width: var(--tabstrip-tab-width);
@@ -25,15 +26,18 @@
   }
 
   #tab:focus {
-    box-shadow: 0 0 0 2px var(--tabstrip-focus-outline-color);
     outline: none;
+  }
+
+  :host-context(.focus-outline-visible) #tab:focus {
+    box-shadow: 0 0 0 2px var(--tabstrip-focus-outline-color);
   }
 
   :host([active]) #tab {
     box-shadow: 0 0 0 2px var(--tabstrip-tab-active-border-color);
   }
 
-  :host([active]) #tab:focus {
+  :host-context(.focus-outline-visible):host([active]) #tab:focus {
     box-shadow: 0 0 0 4px var(--tabstrip-focus-outline-color),
                 0 0 0 2px var(--tabstrip-tab-active-border-color);
   }
@@ -194,6 +198,7 @@
 
   #close {
     -webkit-appearance: none;
+    -webkit-tap-highlight-color: transparent;
     align-items: center;
     background-color: transparent;
     border: 0;
@@ -219,7 +224,7 @@
     width: 18px;
   }
 
-  #close:focus #closeIconFocus {
+  :host-context(.focus-outline-visible) #close:focus #closeIconFocus {
     background: currentColor;
     border-radius: 50%;
     height: 24px;
@@ -229,18 +234,20 @@
   }
 
   #thumbnail {
-    align-items: center;
+    align-items: flex-start;
     background: var(--tabstrip-tab-background-color);
     display: flex;
     flex: 1;
+    height: var(--tabstrip-tab-thumbnail-height);
     justify-content: center;
+    width: var(--tabstrip-tab-thumbnail-width);
   }
 
   #thumbnailImg {
-    height: calc(var(--tabstrip-tab-height) - var(--tabstrip-tab-title-height));
+    min-height: 100%;
     object-fit: cover;
     pointer-events: none;
-    width: var(--tabstrip-tab-width);
+    width: 100%;
   }
 
   #thumbnailImg:not([src]) {
@@ -280,33 +287,53 @@
 
   /* When being dragged, the contents of the drag image needs to be off-screen
    * with nothing else on top or below obscuring it. */
-  :host([dragging_]) #tab {
-    box-shadow: none;
+  :host([dragging_]) #dragImage {
+    align-items: center;
+    display: flex;
+    height: 100%;
+    justify-content: center;
+    /* Enough padding to not crop the box shadow set on #tab below. */
+    padding: 25px;
     position: absolute;
-    top: -999px;
+    top: 100vh;
+    width: 100%;
+  }
+
+  :host([dragging_]) #tab {
+    box-shadow: 0 4px 4px 0 rgba(var(--google-grey-800-rgb), .3),
+                0 8px 12px 6px rgba(var(--google-grey-800-rgb), .15);
   }
 </style>
 
 <div id="dragPlaceholder"></div>
 
-<div id="tab" role="tab" tabindex="0"
-    aria-labelledby="titleText alertIndicators">
-  <header id="title">
-    <div id="faviconContainer" aria-hidden="true">
-      <div id="progressSpinner"></div>
-      <div id="favicon"></div>
-      <div id="crashedIcon"></div>
-      <div id="blocked"></div>
-    </div>
-    <h2 id="titleText"></h2>
-    <tabstrip-alert-indicators id="alertIndicators"></tabstrip-alert-indicators>
-    <button id="close" aria-describedby="titleText">
-      <span id="closeIconFocus"></span>
-      <span id="closeIcon"></span>
-    </button>
-  </header>
+<!--
+  #dragImage is a wrapper that wraps the entire #tab contents so that #tab can
+  be styled with properties, such as box-shadow, that extend beyond #tab's
+  boundaries and #dragImage can add padding to itself to contain all of #tab's
+  styles. When the tab is not being dragged, the #dragImage parent has no use.
+-->
+<div id="dragImage">
+  <div id="tab" role="tab" tabindex="0"
+      aria-labelledby="titleText alertIndicators">
+    <header id="title">
+      <div id="faviconContainer" aria-hidden="true">
+        <div id="progressSpinner"></div>
+        <div id="favicon"></div>
+        <div id="crashedIcon"></div>
+        <div id="blocked"></div>
+      </div>
+      <h2 id="titleText"></h2>
+      <tabstrip-alert-indicators id="alertIndicators">
+      </tabstrip-alert-indicators>
+      <button id="close" aria-describedby="titleText">
+        <span id="closeIconFocus"></span>
+        <span id="closeIcon"></span>
+      </button>
+    </header>
 
-  <div id="thumbnail">
-    <img id="thumbnailImg">
+    <div id="thumbnail">
+      <img id="thumbnailImg">
+    </div>
   </div>
 </div>

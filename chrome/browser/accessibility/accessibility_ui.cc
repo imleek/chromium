@@ -22,7 +22,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
-#include "chrome/grit/browser_resources.h"
+#include "chrome/grit/dev_ui_browser_resources.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/accessibility_tree_formatter.h"
@@ -163,7 +163,7 @@ bool ShouldHandleAccessibilityRequestCallback(const std::string& path) {
 void HandleAccessibilityRequestCallback(
     content::BrowserContext* current_context,
     const std::string& path,
-    const content::WebUIDataSource::GotDataCallback& callback) {
+    content::WebUIDataSource::GotDataCallback callback) {
   DCHECK(ShouldHandleAccessibilityRequestCallback(path));
 
   base::DictionaryValue data;
@@ -250,7 +250,7 @@ void HandleAccessibilityRequestCallback(
   std::string json_string;
   base::JSONWriter::Write(data, &json_string);
 
-  callback.Run(base::RefCountedString::TakeString(&json_string));
+  std::move(callback).Run(base::RefCountedString::TakeString(&json_string));
 }
 
 bool MatchesPropertyFilters(

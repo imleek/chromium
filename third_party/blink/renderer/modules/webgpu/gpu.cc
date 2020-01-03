@@ -10,11 +10,13 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_adapter.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_request_adapter_options.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/dawn_control_client_holder.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -100,6 +102,14 @@ void GPU::ContextDestroyed(ExecutionContext* execution_context) {
   dawn_control_client_->Destroy();
 }
 
+void GPU::OnRequestAdapterCallback(ScriptPromiseResolver* resolver,
+                                   uint32_t adapter_server_id,
+                                   const WGPUDeviceProperties& properties) {
+  auto* adapter = MakeGarbageCollected<GPUAdapter>(
+      "Default", adapter_server_id, properties, dawn_control_client_);
+  resolver->Resolve(adapter);
+}
+
 ScriptPromise GPU::requestAdapter(ScriptState* script_state,
                                   const GPURequestAdapterOptions* options) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -111,10 +121,15 @@ ScriptPromise GPU::requestAdapter(ScriptState* script_state,
   if (options->powerPreference() == "low-power") {
     power_preference = gpu::webgpu::PowerPreference::kLowPower;
   }
-  GPUAdapter* adapter =
-      GPUAdapter::Create("Default", power_preference, dawn_control_client_);
 
-  resolver->Resolve(adapter);
+  if (!dawn_control_client_->GetInterface()->RequestAdapterAsync(
+          power_preference,
+          WTF::Bind(&GPU::OnRequestAdapterCallback, WrapPersistent(this),
+                    WrapPersistent(resolver)))) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kOperationError, "Fail to request GPUAdapter"));
+  }
+
   return promise;
 }
 

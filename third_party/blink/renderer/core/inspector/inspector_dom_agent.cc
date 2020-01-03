@@ -52,11 +52,13 @@
 #include "third_party/blink/renderer/core/dom/static_node_list.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/dom/v0_insertion_point.h"
+#include "third_party/blink/renderer/core/dom/xml_document.h"
 #include "third_party/blink/renderer/core/editing/serializers/serialization.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_link_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
@@ -173,6 +175,9 @@ bool InspectorDOMAgent::GetPseudoElementType(PseudoId pseudo_id,
     case kPseudoIdAfter:
       *type = protocol::DOM::PseudoTypeEnum::After;
       return true;
+    case kPseudoIdMarker:
+      *type = protocol::DOM::PseudoTypeEnum::Marker;
+      return RuntimeEnabledFeatures::CSSMarkerPseudoElementEnabled();
     case kPseudoIdBackdrop:
       *type = protocol::DOM::PseudoTypeEnum::Backdrop;
       return true;
@@ -330,8 +335,10 @@ void InspectorDOMAgent::Unbind(Node* node, NodeToIdMap* nodes_map) {
       Unbind(element->GetPseudoElement(kPseudoIdBefore), nodes_map);
     if (element->GetPseudoElement(kPseudoIdAfter))
       Unbind(element->GetPseudoElement(kPseudoIdAfter), nodes_map);
+    if (element->GetPseudoElement(kPseudoIdMarker))
+      Unbind(element->GetPseudoElement(kPseudoIdMarker), nodes_map);
 
-    if (auto* link_element = ToHTMLLinkElementOrNull(*element)) {
+    if (auto* link_element = DynamicTo<HTMLLinkElement>(*element)) {
       if (link_element->IsImport() && link_element->import())
         Unbind(link_element->import(), nodes_map);
     }
@@ -753,7 +760,7 @@ Response InspectorDOMAgent::setAttributesAsText(int element_id,
   DocumentFragment* fragment = element->GetDocument().createDocumentFragment();
 
   bool should_ignore_case =
-      element->GetDocument().IsHTMLDocument() && element->IsHTMLElement();
+      IsA<HTMLDocument>(element->GetDocument()) && element->IsHTMLElement();
   // Not all elements can represent the context (i.e. IFRAME), hence using
   // document.body.
   if (should_ignore_case && element->GetDocument().body()) {
@@ -894,7 +901,8 @@ Response InspectorDOMAgent::setOuterHTML(int node_id,
 
   Document* document =
       IsA<Document>(node) ? To<Document>(node) : node->ownerDocument();
-  if (!document || (!document->IsHTMLDocument() && !document->IsXMLDocument()))
+  if (!document ||
+      (!IsA<HTMLDocument>(document) && !IsA<XMLDocument>(document)))
     return Response::Error("Not an HTML/XML document");
 
   Node* new_node = nullptr;
@@ -1271,14 +1279,16 @@ Response InspectorDOMAgent::setFileInputFiles(
   Response response = AssertNode(node_id, backend_node_id, object_id, node);
   if (!response.isSuccess())
     return response;
-  if (!IsHTMLInputElement(*node) ||
-      ToHTMLInputElement(*node).type() != input_type_names::kFile)
+
+  auto* html_input_element = DynamicTo<HTMLInputElement>(node);
+  if (!html_input_element ||
+      html_input_element->type() != input_type_names::kFile)
     return Response::Error("Node is not a file input element");
 
   Vector<String> paths;
   for (const String& file : *files)
     paths.push_back(file);
-  ToHTMLInputElement(node)->SetFilesFromPaths(paths);
+  To<HTMLInputElement>(node)->SetFilesFromPaths(paths);
   return Response::OK();
 }
 
@@ -1526,7 +1536,7 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::BuildObjectForNode(
       force_push_children = true;
     }
 
-    if (auto* link_element = ToHTMLLinkElementOrNull(*element)) {
+    if (auto* link_element = DynamicTo<HTMLLinkElement>(*element)) {
       if (link_element->IsImport() && link_element->import() &&
           InnerParentNode(link_element->import()) == link_element) {
         value->setImportedDocument(BuildObjectForNode(
@@ -1667,7 +1677,8 @@ std::unique_ptr<protocol::Array<protocol::DOM::Node>>
 InspectorDOMAgent::BuildArrayForPseudoElements(Element* element,
                                                NodeToIdMap* nodes_map) {
   if (!element->GetPseudoElement(kPseudoIdBefore) &&
-      !element->GetPseudoElement(kPseudoIdAfter))
+      !element->GetPseudoElement(kPseudoIdAfter) &&
+      !element->GetPseudoElement(kPseudoIdMarker))
     return nullptr;
 
   auto pseudo_elements =
@@ -1679,6 +1690,10 @@ InspectorDOMAgent::BuildArrayForPseudoElements(Element* element,
   if (element->GetPseudoElement(kPseudoIdAfter)) {
     pseudo_elements->emplace_back(BuildObjectForNode(
         element->GetPseudoElement(kPseudoIdAfter), 0, false, nodes_map));
+  }
+  if (element->GetPseudoElement(kPseudoIdMarker)) {
+    pseudo_elements->emplace_back(BuildObjectForNode(
+        element->GetPseudoElement(kPseudoIdMarker), 0, false, nodes_map));
   }
   return pseudo_elements;
 }
@@ -1806,7 +1821,7 @@ void InspectorDOMAgent::CollectNodes(
     if (pierce && root)
       CollectNodes(root, depth, pierce, filter, result);
 
-    if (auto* link_element = ToHTMLLinkElementOrNull(*element)) {
+    if (auto* link_element = DynamicTo<HTMLLinkElement>(*element)) {
       if (link_element->IsImport() && link_element->import() &&
           InnerParentNode(link_element->import()) == link_element) {
         CollectNodes(link_element->import(), depth, pierce, filter, result);

@@ -3,14 +3,12 @@
 <translationbundle lang="ko">
 <translation id="1001534784610492198">설치 프로그램 보관 파일이 손상되었거나 올바르지 않습니다. Chrome을 다시 다운로드하세요.</translation>
 <translation id="102763973188675173">Chrome을 맞춤설정하고 제어하세요. 업데이트가 출시되었습니다.</translation>
-<translation id="1035334672863811645">Chrome에 로그인</translation>
 <translation id="1051826050538111504">컴퓨터에 유해한 소프트웨어가 있습니다. Chrome에서 유해한 소프트웨어를 삭제하고, 설정을 복원하고, 확장 프로그램을 사용 중지하여 브라우저가 다시 정상적으로 작동하도록 할 수 있습니다.</translation>
 <translation id="1065672644894730302">환경설정을 읽을 수 없습니다.
 
 일부 기능을 사용할 수 없으며 환경설정의 변경사항이 저장되지 않습니다.</translation>
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" />에서 이전에 Chrome을 사용한 적이 있음</translation>
 <translation id="1097330777386562916">Chrome을 종료할 때 쿠키 및 사이트 데이터 삭제</translation>
-<translation id="1104959162601287462">Chrome OS 정보(&amp;C)</translation>
 <translation id="110877069173485804">나만의 Chrome</translation>
 <translation id="1142745911746664600">Chrome을 업데이트할 수 없음</translation>
 <translation id="1154147086299354128">Chrome에서 열기(&amp;O)</translation>
@@ -54,6 +52,7 @@
 <translation id="2290014774651636340">Google API 키가 누락되었습니다. Chrome의 일부 기능이 사용 중지됩니다.</translation>
 <translation id="2290095356545025170">Chrome을 제거하시겠습니까?</translation>
 <translation id="2309047409763057870">Chrome의 보조 설치이며 기본 브라우저로 설정할 수 없습니다.</translation>
+<translation id="2341767445688917208">Chrome OS에서 비밀번호를 동기화할 수 없습니다. 지금 문제를 해결해 주세요.</translation>
 <translation id="2348335408836342058">이 사이트에서 카메라와 마이크에 액세스하려면 Chrome에 권한이 필요합니다</translation>
 <translation id="2429317896000329049">도메인에서 동기화를 사용할 수 없어 Chrome에서 데이터를 동기화하지 못했습니다.</translation>
 <translation id="2467438592969358367">Chrome에서 비밀번호를 내보내려고 합니다. 허용하려면 Windows 비밀번호를 입력하세요.</translation>
@@ -132,7 +131,6 @@
 <translation id="4953650215774548573">Chrome을 기본 브라우저로 설정</translation>
 <translation id="495931528404527476">Chrome</translation>
 <translation id="4990567037958725628">Chrome 카나리아</translation>
-<translation id="5028489144783860647">Chrome에서 데이터를 동기화하지 못했습니다. 동기화 암호를 업데이트하시기 바랍니다.</translation>
 <translation id="5062123544085870375">Chrome OS 다시 시작</translation>
 <translation id="5132929315877954718">Chrome에 사용할 유용한 애플리케이션, 게임, 확장 프로그램 및 테마를 찾아보세요.</translation>
 <translation id="5170938038195470297">최신 버전의 Chrome에서 가져온 사용자 프로필이기 때문에 사용할 수 없습니다.
@@ -216,6 +214,7 @@ Chrome에서 설정을 복구할 수 없습니다.</translation>
 <translation id="7855730255114109580">Chrome이 최신 버전입니다.</translation>
 <translation id="7890208801193284374">컴퓨터를 공유하는 경우 친구와 가족이 개별적으로 탐색하고 원하는 대로 Chrome을 설정할 수 있습니다.</translation>
 <translation id="7896673875602241923">다른 사용자가 이전에 이 컴퓨터에서 <ph name="ACCOUNT_EMAIL_LAST" />(으)로 Chrome에 로그인했습니다. 새 Chrome 사용자를 만들어 정보를 별도로 관리하세요.</translation>
+<translation id="7916016681687251387">Chrome OS에서 데이터를 동기화할 수 없습니다. 지금 문제를 해결해 주세요.</translation>
 <translation id="7962410387636238736">Windows XP와 Windows Vista가 더 이상 지원되지 않으므로 이 컴퓨터에서 Chrome 업데이트를 받을 수 없게 됩니다</translation>
 <translation id="8008534537613507642">Chrome 재설치</translation>
 <translation id="8013993649590906847">이미지에 유용한 설명이 없으면 Chrome에서 자동으로 설명을 제공하려고 시도합니다. 설명을 생성하기 위해 이미지가 Google로 전송됩니다.</translation>

@@ -18,9 +18,11 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
 #include "base/trace_event/memory_dump_provider.h"
+#include "media/gpu/chromeos/fourcc.h"
 #include "media/gpu/decode_surface_handler.h"
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
 #include "media/gpu/media_gpu_export.h"
@@ -46,7 +48,7 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
       public base::trace_event::MemoryDumpProvider {
  public:
   V4L2SliceVideoDecodeAccelerator(
-      const scoped_refptr<V4L2Device>& device,
+      scoped_refptr<V4L2Device> device,
       EGLDisplay egl_display,
       const BindGLImageCallback& bind_image_cb,
       const MakeGLContextCurrentCallback& make_context_current_cb);
@@ -143,15 +145,14 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
   scoped_refptr<V4L2DecodeSurface> CreateSurface() override;
   // SurfaceReady() uses |decoder_display_queue_| to guarantee that decoding
   // of |dec_surface| happens in order.
-  void SurfaceReady(const scoped_refptr<V4L2DecodeSurface>& dec_surface,
+  void SurfaceReady(scoped_refptr<V4L2DecodeSurface> dec_surface,
                     int32_t bitstream_id,
                     const gfx::Rect& visible_rect,
                     const VideoColorSpace& /* color_space */) override;
-  bool SubmitSlice(const scoped_refptr<V4L2DecodeSurface>& dec_surface,
+  bool SubmitSlice(V4L2DecodeSurface* dec_surface,
                    const uint8_t* data,
                    size_t size) override;
-  void DecodeSurface(
-      const scoped_refptr<V4L2DecodeSurface>& dec_surface) override;
+  void DecodeSurface(scoped_refptr<V4L2DecodeSurface> dec_surface) override;
 
   //
   // Internal methods of this class.
@@ -160,7 +161,7 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
   void ReuseOutputBuffer(V4L2ReadableBufferRef buffer);
 
   // Queue a |dec_surface| to device for decoding.
-  void Enqueue(const scoped_refptr<V4L2DecodeSurface>& dec_surface);
+  void Enqueue(scoped_refptr<V4L2DecodeSurface> dec_surface);
 
   // Dequeue any V4L2 buffers available and process.
   void Dequeue();
@@ -287,7 +288,7 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
                         GLuint client_texture_id,
                         GLuint texture_id,
                         const gfx::Size& size,
-                        uint32_t fourcc);
+                        const Fourcc fourcc);
 
   // Performed on decoder_thread_ as a consequence of poll() on decoder_thread_
   // returning an event. Typically this means that there are output or capture
@@ -332,7 +333,7 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
   // decoding the stream in |bitstream_id| - after it is decoded preserving
   // the order in which it was scheduled via SurfaceReady().
   void OutputSurface(int32_t bitstream_id,
-                     const scoped_refptr<V4L2DecodeSurface>& dec_surface);
+                     scoped_refptr<V4L2DecodeSurface> dec_surface);
 
   // Goes over the |decoder_display_queue_| and sends all buffers from the
   // front of the queue that are already decoded to the client, in order.
@@ -357,6 +358,12 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
   void FrameProcessed(scoped_refptr<V4L2DecodeSurface> surface,
                       size_t ip_buffer_index,
                       scoped_refptr<VideoFrame> frame);
+
+  // Returns whether |profile| is supported by a v4l2 decoder driver.
+  bool IsSupportedProfile(VideoCodecProfile profile);
+
+  // VideoCodecProfiles supported by a v4l2 decoder driver.
+  std::vector<VideoCodecProfile> supported_profiles_;
 
   size_t input_planes_count_;
   size_t output_planes_count_;
@@ -409,7 +416,7 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
 
   VideoCodecProfile video_profile_;
   uint32_t input_format_fourcc_;
-  uint32_t output_format_fourcc_;
+  base::Optional<Fourcc> output_format_fourcc_;
   gfx::Size coded_size_;
 
   struct BitstreamBufferRef;
@@ -494,11 +501,14 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecodeAccelerator
   // The V4L2Device GLImage is created from.
   scoped_refptr<V4L2Device> gl_image_device_;
   // The format of GLImage.
-  uint32_t gl_image_format_fourcc_;
+  base::Optional<Fourcc> gl_image_format_fourcc_;
   // The logical dimensions of GLImage buffer in pixels.
   gfx::Size gl_image_size_;
   // Number of planes for GLImage.
   size_t gl_image_planes_count_;
+
+  // Reference to request queue to get free requests.
+  V4L2RequestsQueue* requests_queue_;
 
   // The WeakPtrFactory for |weak_this_|.
   base::WeakPtrFactory<V4L2SliceVideoDecodeAccelerator> weak_this_factory_;

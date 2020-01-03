@@ -34,8 +34,8 @@
 #include "third_party/blink/renderer/core/aom/accessible_node_list.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
+#include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -103,7 +103,6 @@ const RoleEntry kRoles[] = {
     {"columnheader", ax::mojom::Role::kColumnHeader},
     {"combobox", ax::mojom::Role::kComboBoxGrouping},
     {"comment", ax::mojom::Role::kComment},
-    {"commentsection", ax::mojom::Role::kCommentSection},
     {"complementary", ax::mojom::Role::kComplementary},
     {"contentinfo", ax::mojom::Role::kContentInfo},
     {"definition", ax::mojom::Role::kDefinition},
@@ -201,8 +200,8 @@ const RoleEntry kRoles[] = {
     // TODO(accessibility) region should only be mapped
     // if name present. See http://crbug.com/840819.
     {"region", ax::mojom::Role::kRegion},
-    {"revision", ax::mojom::Role::kRevision},
     {"row", ax::mojom::Role::kRow},
+    {"rowgroup", ax::mojom::Role::kRowGroup},
     {"rowheader", ax::mojom::Role::kRowHeader},
     {"scrollbar", ax::mojom::Role::kScrollBar},
     {"search", ax::mojom::Role::kSearch},
@@ -241,7 +240,6 @@ const InternalRoleEntry kInternalRoles[] = {
     {ax::mojom::Role::kAlert, "Alert"},
     {ax::mojom::Role::kAnchor, "Anchor"},
     {ax::mojom::Role::kComment, "Comment"},
-    {ax::mojom::Role::kComment, "CommentSection"},
     {ax::mojom::Role::kApplication, "Application"},
     {ax::mojom::Role::kArticle, "Article"},
     {ax::mojom::Role::kAudio, "Audio"},
@@ -389,10 +387,10 @@ const InternalRoleEntry kInternalRoles[] = {
     {ax::mojom::Role::kRadioButton, "RadioButton"},
     {ax::mojom::Role::kRadioGroup, "RadioGroup"},
     {ax::mojom::Role::kRegion, "Region"},
-    {ax::mojom::Role::kRevision, "Revision"},
     {ax::mojom::Role::kRootWebArea, "WebArea"},
-    {ax::mojom::Role::kRowHeader, "RowHeader"},
     {ax::mojom::Role::kRow, "Row"},
+    {ax::mojom::Role::kRowGroup, "RowGroup"},
+    {ax::mojom::Role::kRowHeader, "RowHeader"},
     {ax::mojom::Role::kRuby, "Ruby"},
     {ax::mojom::Role::kRubyAnnotation, "RubyAnnotation"},
     {ax::mojom::Role::kSection, "Section"},
@@ -456,9 +454,6 @@ static ARIARoleMap* CreateARIARoleMap() {
 
   for (size_t i = 0; i < base::size(kRoles); ++i)
     role_map->Set(String(kRoles[i].aria_role), kRoles[i].webcore_role);
-
-  // Grids "ignore" their non-row children during computation of children.
-  role_map->Set(String("rowgroup"), ax::mojom::Role::kIgnored);
 
   return role_map;
 }
@@ -785,8 +780,8 @@ ax::mojom::CheckedState AXObject::CheckedState() const {
     if (IsNativeCheckboxInMixedState(node))
       return ax::mojom::CheckedState::kMixed;
 
-    if (IsHTMLInputElement(*node) &&
-        ToHTMLInputElement(*node).ShouldAppearChecked()) {
+    auto* html_input_element = DynamicTo<HTMLInputElement>(node);
+    if (html_input_element && html_input_element->ShouldAppearChecked()) {
       return ax::mojom::CheckedState::kTrue;
     }
   }
@@ -795,10 +790,10 @@ ax::mojom::CheckedState AXObject::CheckedState() const {
 }
 
 bool AXObject::IsNativeCheckboxInMixedState(const Node* node) {
-  if (!IsHTMLInputElement(node))
+  const auto* input = DynamicTo<HTMLInputElement>(node);
+  if (!input)
     return false;
 
-  const HTMLInputElement* input = ToHTMLInputElement(node);
   const auto inputType = input->type();
   if (inputType != input_type_names::kCheckbox)
     return false;
@@ -1521,6 +1516,7 @@ bool AXObject::IsSubWidget() const {
 bool AXObject::SupportsARIASetSizeAndPosInSet() const {
   switch (RoleValue()) {
     case ax::mojom::Role::kArticle:
+    case ax::mojom::Role::kComment:
     case ax::mojom::Role::kListBoxOption:
     case ax::mojom::Role::kListItem:
     case ax::mojom::Role::kMenuItem:
@@ -1690,33 +1686,40 @@ String AXObject::AriaTextAlternative(bool recursive,
       name_sources->back().type = name_from;
     }
 
-    const AtomicString& aria_labelledby = GetAttribute(attr);
-    if (!aria_labelledby.IsNull()) {
-      if (name_sources)
-        name_sources->back().attribute_value = aria_labelledby;
-
-      // Operate on a copy of |visited| so that if |nameSources| is not null,
-      // the set of visited objects is preserved unmodified for future
-      // calculations.
-      AXObjectSet visited_copy = visited;
+    Element* element = GetElement();
+    if (element) {
+      HeapVector<Member<Element>> elements_from_attribute;
       Vector<String> ids;
-      text_alternative =
-          TextFromAriaLabelledby(visited_copy, related_objects, ids);
-      if (!ids.IsEmpty())
-        AXObjectCache().UpdateReverseRelations(this, ids);
-      if (!text_alternative.IsNull()) {
-        if (name_sources) {
-          NameSource& source = name_sources->back();
-          source.type = name_from;
-          source.related_objects = *related_objects;
-          source.text = text_alternative;
-          *found_text_alternative = true;
-        } else {
-          *found_text_alternative = true;
-          return text_alternative;
+      ElementsFromAttribute(elements_from_attribute, attr, ids);
+
+      const AtomicString& aria_labelledby = GetAttribute(attr);
+
+      if (!aria_labelledby.IsNull()) {
+        if (name_sources)
+          name_sources->back().attribute_value = aria_labelledby;
+
+        // Operate on a copy of |visited| so that if |name_sources| is not
+        // null, the set of visited objects is preserved unmodified for future
+        // calculations.
+        AXObjectSet visited_copy = visited;
+        text_alternative = TextFromElements(
+            true, visited, elements_from_attribute, related_objects);
+        if (!ids.IsEmpty())
+          AXObjectCache().UpdateReverseRelations(this, ids);
+        if (!text_alternative.IsNull()) {
+          if (name_sources) {
+            NameSource& source = name_sources->back();
+            source.type = name_from;
+            source.related_objects = *related_objects;
+            source.text = text_alternative;
+            *found_text_alternative = true;
+          } else {
+            *found_text_alternative = true;
+            return text_alternative;
+          }
+        } else if (name_sources) {
+          name_sources->back().invalid = true;
         }
-      } else if (name_sources) {
-        name_sources->back().invalid = true;
       }
     }
   }
@@ -1798,15 +1801,22 @@ void AXObject::TokenVectorFromAttribute(Vector<String>& tokens,
 void AXObject::ElementsFromAttribute(HeapVector<Member<Element>>& elements,
                                      const QualifiedName& attribute,
                                      Vector<String>& ids) const {
+  // We compute the attr-associated elements, which are either explicitly set
+  // element references set via the IDL, or computed from the content attribute.
   TokenVectorFromAttribute(ids, attribute);
-  if (ids.IsEmpty())
+  Element* element = GetElement();
+  if (!element)
     return;
 
-  TreeScope& scope = GetNode()->GetTreeScope();
-  for (const auto& id : ids) {
-    if (Element* id_element = scope.getElementById(AtomicString(id)))
-      elements.push_back(id_element);
-  }
+  bool attr_associated_elements_are_null = true;
+  HeapVector<Member<Element>> attr_associated_elements =
+      element->GetElementArrayAttribute(attribute,
+                                        attr_associated_elements_are_null);
+  if (attr_associated_elements_are_null)
+    return;
+
+  for (const auto& element : attr_associated_elements)
+    elements.push_back(element);
 }
 
 void AXObject::AriaLabelledbyElementVector(
@@ -1866,6 +1876,17 @@ ax::mojom::DefaultActionVerb AXObject::Action() const {
     return CheckedState() != ax::mojom::CheckedState::kTrue
                ? ax::mojom::DefaultActionVerb::kCheck
                : ax::mojom::DefaultActionVerb::kUncheck;
+  }
+
+  // If this object cannot receive focus and has a button role, use click as
+  // the default action. On the AuraLinux platform, the press action is a
+  // signal to users that they can trigger the action using the keyboard, while
+  // a click action means the user should trigger the action via a simulated
+  // click. If this object cannot receive focus, it's impossible to trigger it
+  // with a key press.
+  if (RoleValue() == ax::mojom::Role::kButton &&
+      !CanReceiveAccessibilityFocus()) {
+    return ax::mojom::DefaultActionVerb::kClick;
   }
 
   switch (RoleValue()) {
@@ -2081,9 +2102,7 @@ ax::mojom::Role AXObject::DetermineAriaRoleAttribute() const {
 
   switch (role) {
     case ax::mojom::Role::kComment:
-    case ax::mojom::Role::kCommentSection:
     case ax::mojom::Role::kMark:
-    case ax::mojom::Role::kRevision:
     case ax::mojom::Role::kSuggestion:
       UseCounter::Count(GetDocument(), WebFeature::kARIAAnnotations);
       if (!RuntimeEnabledFeatures::AccessibilityExposeARIAAnnotationsEnabled(
@@ -2135,6 +2154,27 @@ ax::mojom::Role AXObject::RemapAriaRoleDueToParent(ax::mojom::Role role) const {
   // which can trigger a loop.  While inside the call stack of creating an
   // element, we need to avoid accessibilityIsIgnored().
   // https://bugs.webkit.org/show_bug.cgi?id=65174
+
+  // Don't return table roles unless inside a table-like container.
+  switch (role) {
+    case ax::mojom::Role::kRow:
+    case ax::mojom::Role::kRowGroup:
+    case ax::mojom::Role::kCell:
+    case ax::mojom::Role::kRowHeader:
+    case ax::mojom::Role::kColumnHeader:
+      for (AXObject* ancestor = ParentObjectUnignored(); ancestor;
+           ancestor = ancestor->ParentObjectUnignored()) {
+        ax::mojom::Role ancestor_aria_role = ancestor->AriaRoleAttribute();
+        if (ancestor_aria_role == ax::mojom::Role::kCell)
+          return ax::mojom::Role::kGenericContainer;  // In another cell,
+                                                      // illegal.
+        if (ancestor->IsTableLikeRole())
+          return role;  // Inside a table: ARIA role is legal.
+      }
+      return ax::mojom::Role::kGenericContainer;  // Not in a table.
+    default:
+      break;
+  }
 
   if (role != ax::mojom::Role::kListBoxOption &&
       role != ax::mojom::Role::kMenuItem)
@@ -2926,7 +2966,7 @@ AXObject::AXObjectVector AXObject::TableRowChildren() const {
   for (const auto& child : Children()) {
     if (child->IsTableRowLikeRole())
       result.push_back(child);
-    else if (child->RoleValue() == ax::mojom::Role::kGenericContainer)
+    else if (child->RoleValue() == ax::mojom::Role::kRowGroup)
       result.AppendVector(child->TableRowChildren());
   }
   return result;
@@ -2957,6 +2997,13 @@ const AXObject* AXObject::TableParent() const {
          table->RoleValue() == ax::mojom::Role::kGenericContainer)
     table = table->ParentObjectUnignored();
   return table;
+}
+
+int AXObject::GetDOMNodeId() const {
+  Node* node = GetNode();
+  if (node)
+    return DOMNodeIds::IdForNode(node);
+  return 0;
 }
 
 void AXObject::GetRelativeBounds(AXObject** out_container,
@@ -3121,8 +3168,7 @@ bool AXObject::OnNativeClickAction() {
   if (!document)
     return false;
 
-  std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::NotifyUserActivation(document->GetFrame());
+  LocalFrame::NotifyUserActivation(document->GetFrame());
 
   Element* element = GetElement();
   if (!element && GetNode())
@@ -3452,7 +3498,6 @@ bool AXObject::NameFromContents(bool recursive) const {
     case ax::mojom::Role::kColumn:
     case ax::mojom::Role::kComboBoxGrouping:
     case ax::mojom::Role::kComment:
-    case ax::mojom::Role::kCommentSection:
     case ax::mojom::Role::kComplementary:
     case ax::mojom::Role::kContentInfo:
     case ax::mojom::Role::kDate:
@@ -3528,8 +3573,8 @@ bool AXObject::NameFromContents(bool recursive) const {
     case ax::mojom::Role::kPane:
     case ax::mojom::Role::kProgressIndicator:
     case ax::mojom::Role::kRadioGroup:
-    case ax::mojom::Role::kRevision:
     case ax::mojom::Role::kRootWebArea:
+    case ax::mojom::Role::kRowGroup:
     case ax::mojom::Role::kScrollBar:
     case ax::mojom::Role::kScrollView:
     case ax::mojom::Role::kSearch:

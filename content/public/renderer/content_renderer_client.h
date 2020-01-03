@@ -46,7 +46,6 @@ class WebLocalFrame;
 class WebPlugin;
 class WebPrescientNetworking;
 class WebServiceWorkerContextProxy;
-class WebMediaStreamRendererFactory;
 class WebThemeEngine;
 class WebURL;
 class WebURLRequest;
@@ -221,16 +220,28 @@ class CONTENT_EXPORT ContentRendererClient {
                                 bool is_redirect);
 #endif
 
+  // Returns true if we should fork a new process for the given navigation.
+  virtual bool ShouldFork(blink::WebLocalFrame* frame,
+                          const GURL& url,
+                          const std::string& http_method,
+                          bool is_initial_navigation,
+                          bool is_server_redirect);
+
   // Notifies the embedder that the given frame is requesting the resource at
   // |url|. If the function returns a valid |new_url|, the request must be
   // updated to use it. The |attach_same_site_cookies| output parameter
   // determines whether SameSite cookies should be attached to the request.
+  // The |site_for_cookies| is the site_for_cookies of the request. (This is
+  // approximately the URL of the main frame. It is empty in the case of
+  // cross-site iframes.)
+  //
   // TODO(nasko): When moved over to Network Service, find a way to perform
   // this check on the browser side, so untrusted renderer processes cannot
   // influence whether SameSite cookies are attached.
   virtual void WillSendRequest(blink::WebLocalFrame* frame,
                                ui::PageTransition transition_type,
                                const blink::WebURL& url,
+                               const blink::WebURL& site_for_cookies,
                                const url::Origin* initiator_origin,
                                GURL* new_url,
                                bool* attach_same_site_cookies);
@@ -243,7 +254,11 @@ class CONTENT_EXPORT ContentRendererClient {
   // See blink::Platform.
   virtual uint64_t VisitedLinkHash(const char* canonical_url, size_t length);
   virtual bool IsLinkVisited(uint64_t link_hash);
-  virtual blink::WebPrescientNetworking* GetPrescientNetworking();
+
+  // Creates a WebPrescientNetworking instance for |render_frame|. The returned
+  // instance is owned by the frame. May return null.
+  virtual std::unique_ptr<blink::WebPrescientNetworking>
+  CreatePrescientNetworking(RenderFrame* render_frame);
 
   // Returns true if the given Pepper plugin is external (requiring special
   // startup steps).
@@ -254,10 +269,6 @@ class CONTENT_EXPORT ContentRendererClient {
   // worthwhile precaution when the plugin provides an active scripting
   // language.
   virtual bool IsOriginIsolatedPepperPlugin(const base::FilePath& plugin_path);
-
-  // Allows an embedder to provide a blink::WebMediaStreamRendererFactory.
-  virtual std::unique_ptr<blink::WebMediaStreamRendererFactory>
-  CreateMediaStreamRendererFactory();
 
   // Allows embedder to register the key system(s) it supports by populating
   // |key_systems|.

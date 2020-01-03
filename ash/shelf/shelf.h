@@ -199,9 +199,14 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   void OnWorkAreaInsetsChanged() override;
 
  private:
-  class AutoHideEventHandler;
   class AutoDimEventHandler;
+  class AutoHideEventHandler;
+  friend class DimShelfLayoutManagerTestBase;
   friend class ShelfLayoutManagerTest;
+
+  // Uses Auto Dim Event Handler to update the shelf dim state.
+  void DimShelf();
+  void UndimShelf();
 
   // Returns work area insets object for the window with this shelf.
   WorkAreaInsets* GetWorkAreaInsets() const;
@@ -215,8 +220,9 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   std::unique_ptr<ShelfWidget> shelf_widget_;
 
   // These initial values hide the shelf until user preferences are available.
-  ShelfAlignment alignment_ = SHELF_ALIGNMENT_BOTTOM_LOCKED;
-  ShelfAutoHideBehavior auto_hide_behavior_ = SHELF_AUTO_HIDE_ALWAYS_HIDDEN;
+  ShelfAlignment alignment_ = ShelfAlignment::kBottomLocked;
+  ShelfAutoHideBehavior auto_hide_behavior_ =
+      ShelfAutoHideBehavior::kAlwaysHidden;
 
   // Sets shelf alignment to bottom during login and screen lock.
   ShelfLockingManager shelf_locking_manager_;

@@ -37,7 +37,6 @@
 #include "cc/base/region.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/trees/transform_node.h"
-#include "third_party/blink/public/platform/web_float_point.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -84,6 +83,16 @@ static std::unique_ptr<protocol::DOM::Rect> BuildObjectForRect(
       .build();
 }
 
+static std::unique_ptr<protocol::DOM::Rect> BuildObjectForRect(
+    const gfx::RectF& rect) {
+  return protocol::DOM::Rect::create()
+      .setX(rect.x())
+      .setY(rect.y())
+      .setHeight(rect.height())
+      .setWidth(rect.width())
+      .build();
+}
+
 static std::unique_ptr<protocol::LayerTree::ScrollRect> BuildScrollRect(
     const gfx::Rect& rect,
     const String& type) {
@@ -117,9 +126,9 @@ BuildScrollRectsForLayer(const cc::Layer* layer, bool report_wheel_scrollers) {
   }
   if (report_wheel_scrollers) {
     scroll_rects->emplace_back(BuildScrollRect(
-        // TODO(yutak): This truncates the floating point position to integers.
-        gfx::Rect(layer->position().x(), layer->position().y(),
-                  layer->bounds().width(), layer->bounds().height()),
+        // TODO(pdr): Use the correct region for wheel event handlers, see
+        // https://crbug.com/841364.
+        gfx::Rect(0, 0, layer->bounds().width(), layer->bounds().height()),
         protocol::LayerTree::ScrollRect::TypeEnum::WheelEventHandler));
   }
   return scroll_rects->empty() ? nullptr : std::move(scroll_rects);

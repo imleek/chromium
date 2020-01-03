@@ -94,6 +94,11 @@ Polymer({
 
     hasError: Boolean,
 
+    disabled: {
+      type: Boolean,
+      value: false,
+    },
+
     /**
      * The password element the pin keyboard is associated with. If this is not
      * set, then a default input element is shown and used.
@@ -149,15 +154,6 @@ Polymer({
      * Enables letters to be displayed on the pin keyboard buttons.
      */
     enableLetters: {
-      type: Boolean,
-      value: false,
-    },
-
-    /**
-     * Turns on "incognito mode". (FIXME after https://crbug.com/900351 is
-     * fixed).
-     */
-    isIncognitoUi: {
       type: Boolean,
       value: false,
     },
@@ -417,8 +413,25 @@ Polymer({
       return true;
     }
 
+    // Valid if the key is CTRL+-, CTRL+=, or CTRL+0 to zoom in, zoom out, and
+    // zoom reset the screen.
+    if (event.ctrlKey && [48, 187, 189].includes(event.keyCode)) {
+      return true;
+    }
+
     // The rest of the keys are invalid.
     return false;
+  },
+
+  /**
+   * Called when the row container is pressed while the input element has focus.
+   * @param {Event} event The event object.
+   * @private
+   */
+  onRowContainerMousedown_: function(event) {
+    // Prevent the pin input from losing focus when extraneous areas of the
+    // row container are clicked.
+    event.preventDefault();
   },
 
   /**

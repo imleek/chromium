@@ -198,7 +198,7 @@ void MockRenderThread::RegisterExtension(
   blink::WebScriptController::RegisterExtension(std::move(extension));
 }
 
-int MockRenderThread::PostTaskToAllWebWorkers(const base::Closure& closure) {
+int MockRenderThread::PostTaskToAllWebWorkers(base::RepeatingClosure closure) {
   return 0;
 }
 
@@ -229,6 +229,10 @@ const blink::UserAgentMetadata& MockRenderThread::GetUserAgentMetadata() {
   return kUserAgentMetadata;
 }
 
+bool MockRenderThread::IsUseZoomForDSF() {
+  return zoom_for_dsf_;
+}
+
 #if defined(OS_WIN)
 void MockRenderThread::PreCacheFont(const LOGFONT& log_font) {
 }
@@ -240,6 +244,10 @@ void MockRenderThread::ReleaseCachedFonts() {
 void MockRenderThread::SetFieldTrialGroup(const std::string& trial_name,
                                           const std::string& group_name) {}
 
+void MockRenderThread::SetUseZoomForDSFEnabled(bool zoom_for_dsf) {
+  zoom_for_dsf_ = zoom_for_dsf;
+}
+
 int32_t MockRenderThread::GetNextRoutingID() {
   return next_routing_id_++;
 }
@@ -250,16 +258,16 @@ void MockRenderThread::OnCreateWidget(int opener_id,
   *route_id = GetNextRoutingID();
 }
 
-service_manager::mojom::InterfaceProviderRequest
+mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
 MockRenderThread::TakeInitialInterfaceProviderRequestForFrame(
     int32_t routing_id) {
-  auto it =
-      frame_routing_id_to_initial_interface_provider_requests_.find(routing_id);
-  if (it == frame_routing_id_to_initial_interface_provider_requests_.end())
-    return nullptr;
-  auto interface_provider_request = std::move(it->second);
-  frame_routing_id_to_initial_interface_provider_requests_.erase(it);
-  return interface_provider_request;
+  auto it = frame_routing_id_to_initial_interface_provider_receivers_.find(
+      routing_id);
+  if (it == frame_routing_id_to_initial_interface_provider_receivers_.end())
+    return mojo::NullReceiver();
+  auto interface_provider_receiver = std::move(it->second);
+  frame_routing_id_to_initial_interface_provider_receivers_.erase(it);
+  return interface_provider_receiver;
 }
 
 mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
@@ -274,14 +282,14 @@ MockRenderThread::TakeInitialBrowserInterfaceBrokerReceiverForFrame(
   return browser_broker_receiver;
 }
 
-void MockRenderThread::PassInitialInterfaceProviderRequestForFrame(
+void MockRenderThread::PassInitialInterfaceProviderReceiverForFrame(
     int32_t routing_id,
-    service_manager::mojom::InterfaceProviderRequest
-        interface_provider_request) {
+    mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
+        interface_provider_receiver) {
   bool did_insertion = false;
   std::tie(std::ignore, did_insertion) =
-      frame_routing_id_to_initial_interface_provider_requests_.emplace(
-          routing_id, std::move(interface_provider_request));
+      frame_routing_id_to_initial_interface_provider_receivers_.emplace(
+          routing_id, std::move(interface_provider_receiver));
   DCHECK(did_insertion);
 }
 
@@ -290,11 +298,13 @@ void MockRenderThread::OnCreateChildFrame(
     const FrameHostMsg_CreateChildFrame_Params& params,
     FrameHostMsg_CreateChildFrame_Params_Reply* params_reply) {
   params_reply->child_routing_id = GetNextRoutingID();
-  service_manager::mojom::InterfaceProviderPtr interface_provider;
-  frame_routing_id_to_initial_interface_provider_requests_.emplace(
-      params_reply->child_routing_id, mojo::MakeRequest(&interface_provider));
+  mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
+      interface_provider;
+  frame_routing_id_to_initial_interface_provider_receivers_.emplace(
+      params_reply->child_routing_id,
+      interface_provider.InitWithNewPipeAndPassReceiver());
   params_reply->new_interface_provider =
-      interface_provider.PassInterface().PassHandle().release();
+      interface_provider.PassPipe().release();
 
   mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
       browser_interface_broker;
@@ -335,10 +345,10 @@ void MockRenderThread::OnCreateWindow(
   reply->main_frame_route_id = GetNextRoutingID();
   reply->main_frame_interface_bundle =
       mojom::DocumentScopedInterfaceBundle::New();
-  frame_routing_id_to_initial_interface_provider_requests_.emplace(
+  frame_routing_id_to_initial_interface_provider_receivers_.emplace(
       reply->main_frame_route_id,
-      mojo::MakeRequest(
-          &reply->main_frame_interface_bundle->interface_provider));
+      reply->main_frame_interface_bundle->interface_provider
+          .InitWithNewPipeAndPassReceiver());
   mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
       browser_interface_broker;
   frame_routing_id_to_initial_browser_broker_receivers_.emplace(

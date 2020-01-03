@@ -18,6 +18,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/navigation_correction_tab_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
@@ -410,11 +411,14 @@ class DnsProbeBrowserTest : public InProcessBrowserTest {
 DnsProbeBrowserTest::DnsProbeBrowserTest()
     : helper_(new DnsProbeBrowserTestIOThreadHelper()),
       active_browser_(NULL),
-      monitored_tab_helper_(NULL) {}
+      monitored_tab_helper_(NULL) {
+  NavigationCorrectionTabObserver::SetAllowEnableCorrectionsForTesting(true);
+}
 
 DnsProbeBrowserTest::~DnsProbeBrowserTest() {
   // No tests should have any unconsumed probe statuses.
   EXPECT_EQ(0, pending_status_count());
+  NavigationCorrectionTabObserver::SetAllowEnableCorrectionsForTesting(false);
 }
 
 void DnsProbeBrowserTest::SetUpOnMainThread() {
@@ -630,9 +634,10 @@ DnsProbeBrowserTest::GetDnsConfigChangeManager() {
 // Test Fixture for tests where the DNS probes should succeed.
 class DnsProbeSuccessfulProbesTest : public DnsProbeBrowserTest {
   void SetUpOnMainThread() override {
-    SetFakeHostResolverResults(
-        {{net::OK, FakeHostResolver::kOneAddressResponse}},
-        {{net::OK, FakeHostResolver::kOneAddressResponse}});
+    SetFakeHostResolverResults({{net::OK, net::ResolveErrorInfo(net::OK),
+                                 FakeHostResolver::kOneAddressResponse}},
+                               {{net::OK, net::ResolveErrorInfo(net::OK),
+                                 FakeHostResolver::kOneAddressResponse}});
     DnsProbeBrowserTest::SetUpOnMainThread();
   }
 };
@@ -641,8 +646,12 @@ class DnsProbeSuccessfulProbesTest : public DnsProbeBrowserTest {
 class DnsProbeFailingProbesTest : public DnsProbeBrowserTest {
   void SetUpOnMainThread() override {
     SetFakeHostResolverResults(
-        {{net::ERR_NAME_NOT_RESOLVED, FakeHostResolver::kNoResponse}},
-        {{net::ERR_NAME_NOT_RESOLVED, FakeHostResolver::kNoResponse}});
+        {{net::ERR_NAME_NOT_RESOLVED,
+          net::ResolveErrorInfo(net::ERR_NAME_NOT_RESOLVED),
+          FakeHostResolver::kNoResponse}},
+        {{net::ERR_NAME_NOT_RESOLVED,
+          net::ResolveErrorInfo(net::ERR_NAME_NOT_RESOLVED),
+          FakeHostResolver::kNoResponse}});
     DnsProbeBrowserTest::SetUpOnMainThread();
   }
 };
@@ -651,9 +660,12 @@ class DnsProbeFailingProbesTest : public DnsProbeBrowserTest {
 // server (timeout or unreachable host).
 class DnsProbeUnreachableProbesTest : public DnsProbeBrowserTest {
   void SetUpOnMainThread() override {
-    SetFakeHostResolverResults(
-        {{net::ERR_DNS_TIMED_OUT, FakeHostResolver::kNoResponse}},
-        {{net::ERR_DNS_TIMED_OUT, FakeHostResolver::kNoResponse}});
+    SetFakeHostResolverResults({{net::ERR_NAME_NOT_RESOLVED,
+                                 net::ResolveErrorInfo(net::ERR_DNS_TIMED_OUT),
+                                 FakeHostResolver::kNoResponse}},
+                               {{net::ERR_NAME_NOT_RESOLVED,
+                                 net::ResolveErrorInfo(net::ERR_DNS_TIMED_OUT),
+                                 FakeHostResolver::kNoResponse}});
     DnsProbeBrowserTest::SetUpOnMainThread();
   }
 };

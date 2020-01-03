@@ -21,6 +21,7 @@
 #include "third_party/blink/renderer/core/loader/modulescript/module_script_fetch_request.h"
 #include "third_party/blink/renderer/core/testing/dummy_modulator.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_priority.h"
@@ -65,19 +66,10 @@ class NetworkHintsMock : public WebPrescientNetworking {
  public:
   NetworkHintsMock() = default;
 
-  void Reset() {
-    did_dns_prefetch_ = false;
-    did_preconnect_ = false;
-    is_https_ = false;
-    allow_credentials_ = false;
-  }
-
   void PrefetchDNS(const WebString& hostname) override {
     did_dns_prefetch_ = true;
   }
-  void Preconnect(WebLocalFrame* web_local_frame,
-                  const WebURL& url,
-                  const bool allow_credentials) override {
+  void Preconnect(const WebURL& url, bool allow_credentials) override {
     did_preconnect_ = true;
     is_https_ = url.ProtocolIs("https");
     allow_credentials_ = allow_credentials;
@@ -93,21 +85,6 @@ class NetworkHintsMock : public WebPrescientNetworking {
   mutable bool did_preconnect_ = false;
   mutable bool is_https_ = false;
   mutable bool allow_credentials_ = false;
-};
-
-class TestingPlatformSupportWithNetworkHintsMock
-    : public TestingPlatformSupport {
- public:
-  NetworkHintsMock& GetMockPrescientNetworking() {
-    return mock_prescient_networking_;
-  }
-
- private:
-  WebPrescientNetworking* PrescientNetworking() override {
-    return &mock_prescient_networking_;
-  }
-
-  NetworkHintsMock mock_prescient_networking_;
 };
 
 class LinkLoaderPreloadTestBase : public testing::Test {
@@ -137,7 +114,8 @@ class LinkLoaderPreloadTestBase : public testing::Test {
     Persistent<MockLinkLoaderClient> loader_client =
         MakeGarbageCollected<MockLinkLoaderClient>(
             expected.link_loader_should_load_value);
-    LinkLoader* loader = LinkLoader::Create(loader_client.Get());
+    auto* loader = MakeGarbageCollected<LinkLoader>(
+        loader_client.Get(), loader_client.Get()->GetLoadingTaskRunner());
     // TODO(crbug.com/751425): We should use the mock functionality
     // via |dummy_page_holder_|.
     url_test_helpers::RegisterMockedErrorURLLoad(params.href);
@@ -535,7 +513,8 @@ TEST_P(LinkLoaderModulePreloadTest, ModulePreload) {
       modulator);
   Persistent<MockLinkLoaderClient> loader_client =
       MakeGarbageCollected<MockLinkLoaderClient>(true);
-  LinkLoader* loader = LinkLoader::Create(loader_client.Get());
+  auto* loader = MakeGarbageCollected<LinkLoader>(
+      loader_client.Get(), loader_client.Get()->GetLoadingTaskRunner());
   KURL href_url = KURL(NullURL(), test_case.href);
   LinkLoadParameters params(
       LinkRelAttribute("modulepreload"), test_case.cross_origin,
@@ -551,7 +530,6 @@ INSTANTIATE_TEST_SUITE_P(LinkLoaderModulePreloadTest,
                          testing::ValuesIn(kModulePreloadTestParams));
 
 class LinkLoaderTestPrefetchPrivacyChanges
-
     : public testing::Test,
       public testing::WithParamInterface<bool> {
  public:
@@ -570,8 +548,7 @@ class LinkLoaderTestPrefetchPrivacyChanges
 
  protected:
   const bool privacy_changes_enabled_;
-  ScopedTestingPlatformSupport<TestingPlatformSupportWithNetworkHintsMock>
-      platform_;
+  ScopedTestingPlatformSupport<TestingPlatformSupport> platform_;
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -586,7 +563,8 @@ TEST_P(LinkLoaderTestPrefetchPrivacyChanges, PrefetchPrivacyChanges) {
   dummy_page_holder->GetFrame().GetSettings()->SetScriptEnabled(true);
   Persistent<MockLinkLoaderClient> loader_client =
       MakeGarbageCollected<MockLinkLoaderClient>(true);
-  LinkLoader* loader = LinkLoader::Create(loader_client.Get());
+  auto* loader = MakeGarbageCollected<LinkLoader>(
+      loader_client.Get(), loader_client.Get()->GetLoadingTaskRunner());
   KURL href_url = KURL(NullURL(), "http://example.test/cat.jpg");
   // TODO(crbug.com/751425): We should use the mock functionality
   // via |dummy_page_holder|.
@@ -617,8 +595,7 @@ TEST_P(LinkLoaderTestPrefetchPrivacyChanges, PrefetchPrivacyChanges) {
 
 class LinkLoaderTest : public testing::Test {
  protected:
-  ScopedTestingPlatformSupport<TestingPlatformSupportWithNetworkHintsMock>
-      platform_;
+  ScopedTestingPlatformSupport<TestingPlatformSupport> platform_;
 };
 
 TEST_F(LinkLoaderTest, Prefetch) {
@@ -652,7 +629,8 @@ TEST_F(LinkLoaderTest, Prefetch) {
     Persistent<MockLinkLoaderClient> loader_client =
         MakeGarbageCollected<MockLinkLoaderClient>(
             test_case.link_loader_should_load_value);
-    LinkLoader* loader = LinkLoader::Create(loader_client.Get());
+    auto* loader = MakeGarbageCollected<LinkLoader>(
+        loader_client.Get(), loader_client.Get()->GetLoadingTaskRunner());
     KURL href_url = KURL(NullURL(), test_case.href);
     // TODO(crbug.com/751425): We should use the mock functionality
     // via |dummy_page_holder|.
@@ -695,14 +673,18 @@ TEST_F(LinkLoaderTest, DNSPrefetch) {
 
   // Test the cases with a single header
   for (const auto& test_case : cases) {
-    platform_->GetMockPrescientNetworking().Reset();
     auto dummy_page_holder =
         std::make_unique<DummyPageHolder>(IntSize(500, 500));
     dummy_page_holder->GetDocument().GetSettings()->SetDNSPrefetchingEnabled(
         true);
+    dummy_page_holder->GetFrame().SetPrescientNetworkingForTesting(
+        std::make_unique<NetworkHintsMock>());
+    auto* mock_network_hints = static_cast<NetworkHintsMock*>(
+        dummy_page_holder->GetFrame().PrescientNetworking());
     Persistent<MockLinkLoaderClient> loader_client =
         MakeGarbageCollected<MockLinkLoaderClient>(test_case.should_load);
-    LinkLoader* loader = LinkLoader::Create(loader_client.Get());
+    auto* loader = MakeGarbageCollected<LinkLoader>(
+        loader_client.Get(), loader_client.Get()->GetLoadingTaskRunner());
     KURL href_url = KURL(KURL(String("http://example.com")), test_case.href);
     LinkLoadParameters params(
         LinkRelAttribute("dns-prefetch"), kCrossOriginAttributeNotSet, String(),
@@ -710,9 +692,8 @@ TEST_F(LinkLoaderTest, DNSPrefetch) {
         network::mojom::ReferrerPolicy::kDefault, href_url,
         String() /* image_srcset */, String() /* image_sizes */);
     loader->LoadLink(params, dummy_page_holder->GetDocument());
-    EXPECT_FALSE(platform_->GetMockPrescientNetworking().DidPreconnect());
-    EXPECT_EQ(test_case.should_load,
-              platform_->GetMockPrescientNetworking().DidDnsPrefetch());
+    EXPECT_FALSE(mock_network_hints->DidPreconnect());
+    EXPECT_EQ(test_case.should_load, mock_network_hints->DidDnsPrefetch());
   }
 }
 
@@ -734,12 +715,16 @@ TEST_F(LinkLoaderTest, Preconnect) {
 
   // Test the cases with a single header
   for (const auto& test_case : cases) {
-    platform_->GetMockPrescientNetworking().Reset();
     auto dummy_page_holder =
         std::make_unique<DummyPageHolder>(IntSize(500, 500));
+    dummy_page_holder->GetFrame().SetPrescientNetworkingForTesting(
+        std::make_unique<NetworkHintsMock>());
+    auto* mock_network_hints = static_cast<NetworkHintsMock*>(
+        dummy_page_holder->GetFrame().PrescientNetworking());
     Persistent<MockLinkLoaderClient> loader_client =
         MakeGarbageCollected<MockLinkLoaderClient>(test_case.should_load);
-    LinkLoader* loader = LinkLoader::Create(loader_client.Get());
+    auto* loader = MakeGarbageCollected<LinkLoader>(
+        loader_client.Get(), loader_client.Get()->GetLoadingTaskRunner());
     KURL href_url = KURL(KURL(String("http://example.com")), test_case.href);
     LinkLoadParameters params(
         LinkRelAttribute("preconnect"), test_case.cross_origin, String(),
@@ -747,16 +732,14 @@ TEST_F(LinkLoaderTest, Preconnect) {
         network::mojom::ReferrerPolicy::kDefault, href_url,
         String() /* image_srcset */, String() /* image_sizes */);
     loader->LoadLink(params, dummy_page_holder->GetDocument());
-    EXPECT_EQ(test_case.should_load,
-              platform_->GetMockPrescientNetworking().DidPreconnect());
-    EXPECT_EQ(test_case.is_https,
-              platform_->GetMockPrescientNetworking().IsHTTPS());
+    EXPECT_EQ(test_case.should_load, mock_network_hints->DidPreconnect());
+    EXPECT_EQ(test_case.is_https, mock_network_hints->IsHTTPS());
     if (test_case.should_load) {
       EXPECT_NE(test_case.is_cross_origin,
-                platform_->GetMockPrescientNetworking().AllowCredentials());
+                mock_network_hints->AllowCredentials());
     } else {
       EXPECT_EQ(test_case.is_cross_origin,
-                platform_->GetMockPrescientNetworking().AllowCredentials());
+                mock_network_hints->AllowCredentials());
     }
   }
 }
@@ -768,7 +751,8 @@ TEST_F(LinkLoaderTest, PreloadAndPrefetch) {
   dummy_page_holder->GetFrame().GetSettings()->SetScriptEnabled(true);
   Persistent<MockLinkLoaderClient> loader_client =
       MakeGarbageCollected<MockLinkLoaderClient>(true);
-  LinkLoader* loader = LinkLoader::Create(loader_client.Get());
+  auto* loader = MakeGarbageCollected<LinkLoader>(
+      loader_client.Get(), loader_client.Get()->GetLoadingTaskRunner());
   KURL href_url = KURL(KURL(), "https://www.example.com/");
   // TODO(crbug.com/751425): We should use the mock functionality
   // via |dummy_page_holder|.

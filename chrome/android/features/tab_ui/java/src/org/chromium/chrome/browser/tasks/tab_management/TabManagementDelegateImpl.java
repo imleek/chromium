@@ -7,8 +7,11 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import static org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvider.SYNTHETIC_TRIAL_POSTFIX;
 
 import android.content.Context;
+import android.view.View;
 import android.view.ViewGroup;
 
+import org.chromium.base.ObservableSupplier;
+import org.chromium.base.SysUtils;
 import org.chromium.base.annotations.UsedByReflection;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeFeatureList;
@@ -16,6 +19,7 @@ import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
+import org.chromium.chrome.browser.flags.FeatureUtilities;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.ntp.FakeboxDelegate;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -47,12 +51,16 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                     ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID + SYNTHETIC_TRIAL_POSTFIX,
                     "Downloaded_Enabled");
         }
+
         return new TabSwitcherCoordinator(activity, activity.getLifecycleDispatcher(),
                 activity.getTabModelSelector(), activity.getTabContentManager(),
                 activity.getCompositorViewHolder().getDynamicResourceLoader(),
                 activity.getFullscreenManager(), activity,
                 activity.getMenuOrKeyboardActionController(), activity, containerView,
-                TabListCoordinator.TabListMode.GRID);
+                FeatureUtilities.isTabGroupsAndroidContinuationEnabled()
+                                && SysUtils.isLowEndDevice()
+                        ? TabListCoordinator.TabListMode.LIST
+                        : TabListCoordinator.TabListMode.GRID);
     }
 
     @Override
@@ -91,5 +99,11 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
     public TabSuggestions createTabSuggestions(ChromeActivity activity) {
         return new TabSuggestionsOrchestrator(
                 activity.getTabModelSelector(), activity.getLifecycleDispatcher());
+    }
+
+    @Override
+    public TabGroupPopupUi createTabGroupPopUi(
+            ThemeColorProvider themeColorProvider, ObservableSupplier<View> parentViewSupplier) {
+        return new TabGroupPopupUiCoordinator(themeColorProvider, parentViewSupplier);
     }
 }

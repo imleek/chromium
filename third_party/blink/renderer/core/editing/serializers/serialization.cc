@@ -51,10 +51,12 @@
 #include "third_party/blink/renderer/core/editing/visible_selection.h"
 #include "third_party/blink/renderer/core/editing/visible_units.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/html/html_br_element.h"
 #include "third_party/blink/renderer/core/html/html_div_element.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_quote_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
@@ -62,6 +64,8 @@
 #include "third_party/blink/renderer/core/html/html_table_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/loader/empty_clients.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/runtime_call_stats.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
@@ -121,7 +125,8 @@ static void CompleteURLs(DocumentFragment& fragment, const String& base_url) {
 
 static bool IsHTMLBlockElement(const Node* node) {
   DCHECK(node);
-  return IsHTMLTableCellElement(*node) || IsNonTableCellHTMLBlockElement(node);
+  return IsA<HTMLTableCellElement>(*node) ||
+         IsNonTableCellHTMLBlockElement(node);
 }
 
 static HTMLElement* AncestorToRetainStructureAndAppearanceForBlock(
@@ -170,8 +175,7 @@ template <typename Strategy>
 static HTMLElement* HighestAncestorToWrapMarkup(
     const PositionTemplate<Strategy>& start_position,
     const PositionTemplate<Strategy>& end_position,
-    AnnotateForInterchange should_annotate,
-    Node* constraining_ancestor) {
+    const CreateMarkupOptions& options) {
   Node* first_node = start_position.NodeAsRangeFirstNode();
   // For compatibility reason, we use container node of start and end
   // positions rather than first node and last node in selection.
@@ -180,7 +184,7 @@ static HTMLElement* HighestAncestorToWrapMarkup(
                                *end_position.ComputeContainerNode());
   DCHECK(common_ancestor);
   HTMLElement* special_common_ancestor = nullptr;
-  if (should_annotate == kAnnotateForInterchange) {
+  if (options.ShouldAnnotateForInterchange()) {
     // Include ancestors that aren't completely inside the range but are
     // required to retain the structure and appearance of the copied markup.
     special_common_ancestor =
@@ -205,8 +209,8 @@ static HTMLElement* HighestAncestorToWrapMarkup(
 
       // Retain the Mail quote level by including all ancestor mail block
       // quotes.
-      if (HTMLQuoteElement* highest_mail_blockquote =
-              ToHTMLQuoteElement(HighestEnclosingNodeOfType(
+      if (auto* highest_mail_blockquote =
+              To<HTMLQuoteElement>(HighestEnclosingNodeOfType(
                   first_node_position, IsMailHTMLBlockquoteElement,
                   kCanCrossEditingBoundary))) {
         special_common_ancestor = highest_mail_blockquote;
@@ -221,9 +225,12 @@ static HTMLElement* HighestAncestorToWrapMarkup(
     // Ex: <b><p></p></b> is an ill-formed html and we don't want to return <b>
     // as the ancestor because paragraph element is the enclosing block of the
     // start and end positions provided to this API.
-    constraining_ancestor = constraining_ancestor
-                                ? constraining_ancestor
-                                : EnclosingBlock(check_ancestor);
+    // TODO(editing-dev): Make |HighestEnclosingNodeOfType| take const pointer
+    // to remove the |const_cast| below.
+    Node* constraining_ancestor =
+        options.ConstrainingAncestor()
+            ? const_cast<Node*>(options.ConstrainingAncestor())
+            : EnclosingBlock(check_ancestor);
     auto* new_special_common_ancestor =
         To<HTMLElement>(HighestEnclosingNodeOfType(
             Position::FirstPositionInNode(*check_ancestor),
@@ -261,10 +268,7 @@ class CreateMarkupAlgorithm {
   static String CreateMarkup(
       const PositionTemplate<Strategy>& start_position,
       const PositionTemplate<Strategy>& end_position,
-      AnnotateForInterchange should_annotate = kDoNotAnnotateForInterchange,
-      ConvertBlocksToInlines = ConvertBlocksToInlines::kNotConvert,
-      AbsoluteURLs should_resolve_urls = kDoNotResolveURLs,
-      Node* constraining_ancestor = nullptr);
+      const CreateMarkupOptions& options = CreateMarkupOptions());
 };
 
 // FIXME: Shouldn't we omit style info when annotate ==
@@ -275,10 +279,7 @@ template <typename Strategy>
 String CreateMarkupAlgorithm<Strategy>::CreateMarkup(
     const PositionTemplate<Strategy>& start_position,
     const PositionTemplate<Strategy>& end_position,
-    AnnotateForInterchange should_annotate,
-    ConvertBlocksToInlines convert_blocks_to_inlines,
-    AbsoluteURLs should_resolve_urls,
-    Node* constraining_ancestor) {
+    const CreateMarkupOptions& options) {
   if (start_position.IsNull() || end_position.IsNull())
     return g_empty_string;
 
@@ -300,33 +301,24 @@ String CreateMarkupAlgorithm<Strategy>::CreateMarkup(
       document->Lifecycle());
 
   HTMLElement* special_common_ancestor = HighestAncestorToWrapMarkup<Strategy>(
-      start_position, end_position, should_annotate, constraining_ancestor);
-  StyledMarkupSerializer<Strategy> serializer(
-      should_resolve_urls, should_annotate, start_position, end_position,
-      special_common_ancestor, convert_blocks_to_inlines);
+      start_position, end_position, options);
+  StyledMarkupSerializer<Strategy> serializer(start_position, end_position,
+                                              special_common_ancestor, options);
   return serializer.CreateMarkup();
 }
 
 String CreateMarkup(const Position& start_position,
                     const Position& end_position,
-                    AnnotateForInterchange should_annotate,
-                    ConvertBlocksToInlines convert_blocks_to_inlines,
-                    AbsoluteURLs should_resolve_urls,
-                    Node* constraining_ancestor) {
+                    const CreateMarkupOptions& options) {
   return CreateMarkupAlgorithm<EditingStrategy>::CreateMarkup(
-      start_position, end_position, should_annotate, convert_blocks_to_inlines,
-      should_resolve_urls, constraining_ancestor);
+      start_position, end_position, options);
 }
 
 String CreateMarkup(const PositionInFlatTree& start_position,
                     const PositionInFlatTree& end_position,
-                    AnnotateForInterchange should_annotate,
-                    ConvertBlocksToInlines convert_blocks_to_inlines,
-                    AbsoluteURLs should_resolve_urls,
-                    Node* constraining_ancestor) {
+                    const CreateMarkupOptions& options) {
   return CreateMarkupAlgorithm<EditingInFlatTreeStrategy>::CreateMarkup(
-      start_position, end_position, should_annotate, convert_blocks_to_inlines,
-      should_resolve_urls, constraining_ancestor);
+      start_position, end_position, options);
 }
 
 DocumentFragment* CreateFragmentFromMarkup(
@@ -424,7 +416,8 @@ DocumentFragment* CreateFragmentFromMarkupWithContext(
       MakeGarbageCollected<Document>(DocumentInit::Create());
   tagged_document->SetContextFeatures(document.GetContextFeatures());
 
-  Element* root = Element::Create(QualifiedName::Null(), tagged_document);
+  auto* root =
+      MakeGarbageCollected<Element>(QualifiedName::Null(), tagged_document);
   root->AppendChild(tagged_fragment);
   tagged_document->AppendChild(root);
 
@@ -459,7 +452,7 @@ String CreateMarkup(const Node* node,
     return "";
 
   MarkupAccumulator accumulator(should_resolve_urls,
-                                node->GetDocument().IsHTMLDocument()
+                                IsA<HTMLDocument>(node->GetDocument())
                                     ? SerializationType::kHTML
                                     : SerializationType::kXML);
   return accumulator.SerializeNodes<EditingStrategy>(*node, children_only);
@@ -510,20 +503,21 @@ static void FillContainerFromString(ContainerNode* paragraph,
 
 bool IsPlainTextMarkup(Node* node) {
   DCHECK(node);
-  if (!IsHTMLDivElement(*node))
+  auto* element = DynamicTo<HTMLDivElement>(*node);
+  if (!element)
     return false;
 
-  HTMLDivElement& element = ToHTMLDivElement(*node);
-  if (!element.hasAttributes())
+  if (!element->hasAttributes())
     return false;
 
-  if (element.HasOneChild())
-    return element.firstChild()->IsTextNode() ||
-           element.firstChild()->hasChildren();
+  if (element->HasOneChild()) {
+    return element->firstChild()->IsTextNode() ||
+           element->firstChild()->hasChildren();
+  }
 
-  return element.HasChildCount(2) &&
-         IsTabHTMLSpanElementTextNode(element.firstChild()->firstChild()) &&
-         element.lastChild()->IsTextNode();
+  return element->HasChildCount(2) &&
+         IsTabHTMLSpanElementTextNode(element->firstChild()->firstChild()) &&
+         element->lastChild()->IsTextNode();
 }
 
 static bool ShouldPreserveNewline(const EphemeralRange& range) {
@@ -616,7 +610,7 @@ DocumentFragment* CreateFragmentForInnerOuterHTML(
           : context_element->GetDocument();
   DocumentFragment* fragment = DocumentFragment::Create(document);
 
-  if (document.IsHTMLDocument()) {
+  if (IsA<HTMLDocument>(document)) {
     fragment->ParseHTML(markup, context_element, parser_content_policy);
     return fragment;
   }
@@ -765,6 +759,67 @@ void MergeWithNextTextNode(Text* text_node, ExceptionState& exception_state) {
   text_node->appendData(text_next->data());
   if (text_next->parentNode())  // Might have been removed by mutation event.
     text_next->remove(exception_state);
+}
+
+static Document* CreateStagingDocumentForMarkupSanitization() {
+  Page::PageClients page_clients;
+  FillWithEmptyClients(page_clients);
+  Page* page = Page::CreateNonOrdinary(page_clients);
+
+  page->GetSettings().SetScriptEnabled(false);
+  page->GetSettings().SetPluginsEnabled(false);
+  page->GetSettings().SetAcceleratedCompositingEnabled(false);
+
+  LocalFrame* frame = MakeGarbageCollected<LocalFrame>(
+      MakeGarbageCollected<EmptyLocalFrameClient>(), *page,
+      nullptr,  // FrameOwner*
+      nullptr,  // WindowAgentFactory*
+      nullptr   // InterfaceRegistry*
+  );
+  // Don't leak the actual viewport size to unsanitized markup
+  LocalFrameView* frame_view =
+      MakeGarbageCollected<LocalFrameView>(*frame, IntSize(800, 600));
+  frame->SetView(frame_view);
+  frame->Init();
+
+  Document* document = frame->GetDocument();
+  DCHECK(document);
+  DCHECK(IsA<HTMLDocument>(document));
+  DCHECK(document->body());
+
+  document->SetIsForMarkupSanitization(true);
+
+  return document;
+}
+
+String SanitizeMarkupWithContext(const String& raw_markup,
+                                 unsigned fragment_start,
+                                 unsigned fragment_end) {
+  if (raw_markup.IsEmpty())
+    return g_empty_string;
+
+  Document* staging_document = CreateStagingDocumentForMarkupSanitization();
+  Element* body = staging_document->body();
+
+  DocumentFragment* fragment = CreateFragmentFromMarkupWithContext(
+      *staging_document, raw_markup, fragment_start, fragment_end, KURL(),
+      kDisallowScriptingAndPluginContent);
+  if (!fragment)
+    return g_empty_string;
+
+  body->appendChild(fragment);
+  staging_document->UpdateStyleAndLayout();
+
+  // This sanitizes stylesheets in the markup into element inline styles
+  String result = CreateMarkup(Position::FirstPositionInNode(*body),
+                               Position::LastPositionInNode(*body),
+                               CreateMarkupOptions::Builder()
+                                   .SetShouldAnnotateForInterchange(true)
+                                   .SetIsForMarkupSanitization(true)
+                                   .Build());
+
+  staging_document->GetPage()->WillBeDestroyed();
+  return result;
 }
 
 template class CORE_TEMPLATE_EXPORT CreateMarkupAlgorithm<EditingStrategy>;

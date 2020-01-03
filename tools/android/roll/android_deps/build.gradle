@@ -134,7 +134,7 @@ dependencies {
     buildCompile "com.google.auto.service:auto-service-annotations:1.0-rc6"
     buildCompile "com.google.auto.service:auto-service:1.0-rc6"
 
-    buildCompile "com.google.errorprone:error_prone_core:2.3.1"
+    buildCompile "com.google.errorprone:error_prone_core:2.3.3"
 
     // testCompile targets have test_only = true.
     testCompile "androidx.test:core:1.0.0"
@@ -143,6 +143,7 @@ dependencies {
     testCompile "androidx.test:runner:1.1.0"
     testCompile "androidx.test.ext:junit:1.0.0"
     testCompile "androidx.test.uiautomator:uiautomator:2.2.0"
+    testCompile "com.googlecode.java-diff-utils:diffutils:1.3.0"
 }
 
 task setUpRepository(type: BuildConfigGenerator) {

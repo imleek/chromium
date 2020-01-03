@@ -13,8 +13,6 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/mojom/interface_provider.mojom.h"
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom-forward.h"
 #include "third_party/blink/public/mojom/idle/idle_manager.mojom-forward.h"
 #include "third_party/blink/public/mojom/payments/payment_app.mojom-forward.h"
@@ -49,12 +47,9 @@ void CreateDedicatedWorkerHostFactory(
     const url::Origin& origin,
     mojo::PendingReceiver<blink::mojom::DedicatedWorkerHostFactory> receiver);
 
-// A host for a single dedicated worker. Its lifetime is managed by the
-// DedicatedWorkerGlobalScope of the corresponding worker in the renderer via a
-// StrongBinding. This lives on the UI thread.
-class DedicatedWorkerHost final
-    : public service_manager::mojom::InterfaceProvider,
-      public blink::mojom::DedicatedWorkerHost {
+// A host for a single dedicated worker. It deletes itself upon Mojo
+// disconnection from the worker in the renderer. This lives on the UI thread.
+class DedicatedWorkerHost final : public blink::mojom::DedicatedWorkerHost {
  public:
   DedicatedWorkerHost(
       int worker_process_id,
@@ -75,12 +70,14 @@ class DedicatedWorkerHost final
 
   void CreateIdleManager(
       mojo::PendingReceiver<blink::mojom::IdleManager> receiver);
-  void CreateIDBFactory(
-      mojo::PendingReceiver<blink::mojom::IDBFactory> receiver);
+  void CreateNestedDedicatedWorker(
+      mojo::PendingReceiver<blink::mojom::DedicatedWorkerHostFactory> receiver);
   void BindSmsReceiverReceiver(
       mojo::PendingReceiver<blink::mojom::SmsReceiver> receiver);
   void CreateWebUsbService(
       mojo::PendingReceiver<blink::mojom::WebUsbService> receiver);
+  void CreateWebSocketConnector(
+      mojo::PendingReceiver<blink::mojom::WebSocketConnector> receiver);
   void CreateQuicTransportConnector(
       mojo::PendingReceiver<blink::mojom::QuicTransportConnector> receiver);
 
@@ -88,10 +85,6 @@ class DedicatedWorkerHost final
   void BindSerialService(
       mojo::PendingReceiver<blink::mojom::SerialService> receiver);
 #endif
-
-  // service_manager::mojom::InterfaceProvider:
-  void GetInterface(const std::string& interface_name,
-                    mojo::ScopedMessagePipeHandle interface_pipe) override;
 
   // blink::mojom::DedicatedWorkerHost:
   void LifecycleStateChanged(blink::mojom::FrameLifecycleState state) override;
@@ -112,8 +105,6 @@ class DedicatedWorkerHost final
       mojo::Remote<blink::mojom::DedicatedWorkerHostFactoryClient> client);
 
  private:
-  void RegisterMojoInterfaces();
-
   // Called from WorkerScriptFetchInitiator. Continues starting the dedicated
   // worker in the renderer process.
   //
@@ -129,7 +120,7 @@ class DedicatedWorkerHost final
   // a ServiceWorker object about the controller is prepared, it is registered
   // to |controller_service_worker_object_host|.
   void DidStartScriptLoad(
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
           subresource_loader_factories,
       blink::mojom::WorkerMainScriptLoadParamsPtr main_script_load_params,
       blink::mojom::ControllerServiceWorkerInfoPtr controller,
@@ -147,18 +138,14 @@ class DedicatedWorkerHost final
                                       RenderFrameHostImpl* render_frame_host,
                                       bool* bypass_redirect_checks);
 
-  void CreateWebSocketConnector(
-      mojo::PendingReceiver<blink::mojom::WebSocketConnector> receiver);
-
-  void CreateNestedDedicatedWorker(
-      mojo::PendingReceiver<blink::mojom::DedicatedWorkerHostFactory> receiver);
-
   // Updates subresource loader factories. This is supposed to be called when
   // out-of-process Network Service crashes.
   void UpdateSubresourceLoaderFactories();
 
   // May return a nullptr.
   RenderFrameHostImpl* GetAncestorRenderFrameHost();
+
+  void OnMojoDisconnect();
 
   // The ID of the render process host that hosts this worker.
   const int worker_process_id_;
@@ -184,8 +171,6 @@ class DedicatedWorkerHost final
   mojo::Remote<blink::mojom::DedicatedWorkerHostFactoryClient> client_;
 
   std::unique_ptr<ServiceWorkerNavigationHandle> service_worker_handle_;
-
-  service_manager::BinderRegistry registry_;
 
   BrowserInterfaceBrokerImpl<DedicatedWorkerHost, const url::Origin&> broker_{
       this};

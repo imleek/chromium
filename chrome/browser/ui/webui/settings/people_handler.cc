@@ -18,6 +18,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
@@ -51,21 +52,21 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/gfx/image/image.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/quick_unlock/pin_backend.h"
+#include "chromeos/constants/chromeos_features.h"
 #else
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/webui/profile_helper.h"
 #endif
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-#include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
-#include "third_party/skia/include/core/SkBitmap.h"
-#include "ui/gfx/image/image.h"
 #endif
 
 using content::WebContents;
@@ -88,11 +89,15 @@ struct SyncConfigInfo {
 };
 
 bool IsSyncSubpage(const GURL& current_url) {
-  return (current_url == chrome::GetSettingsUrl(chrome::kSyncSetupSubPage)
+  if (current_url == chrome::GetSettingsUrl(chrome::kSyncSetupSubPage))
+    return true;
 #if defined(OS_CHROMEOS)
-          || current_url == chrome::GetOSSettingsUrl(chrome::kSyncSetupSubPage)
+  if (!chromeos::features::IsSplitSettingsSyncEnabled() &&
+      current_url == chrome::GetOSSettingsUrl(chrome::kSyncSetupSubPage)) {
+    return true;
+  }
 #endif  // defined(OS_CHROMEOS)
-  );
+  return false;
 }
 
 SyncConfigInfo::SyncConfigInfo()
@@ -173,6 +178,8 @@ std::string GetSyncErrorAction(sync_ui_util::ActionType action_type) {
       return "upgradeClient";
     case sync_ui_util::ENTER_PASSPHRASE:
       return "enterPassphrase";
+    case sync_ui_util::RETRIEVE_TRUSTED_VAULT_KEYS:
+      return "retrieveTrustedVaultKeys";
     case sync_ui_util::CONFIRM_SYNC_SETTINGS:
       return "confirmSyncSettings";
     default:
@@ -180,7 +187,6 @@ std::string GetSyncErrorAction(sync_ui_util::ActionType action_type) {
   }
 }
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
 // Returns the base::Value associated with the account, to use in the stored
 // accounts list.
 base::Value GetAccountValue(const AccountInfo& account) {
@@ -196,7 +202,6 @@ base::Value GetAccountValue(const AccountInfo& account) {
   }
   return dictionary;
 }
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 base::string16 GetEnterPassphraseBody(syncer::PassphraseType passphrase_type,
                                       base::Time passphrase_time) {
@@ -321,7 +326,6 @@ void PeopleHandler::RegisterMessages() {
       base::BindRepeating(&PeopleHandler::HandleStartSignin,
                           base::Unretained(this)));
 #endif
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   web_ui()->RegisterMessageCallback(
       "SyncSetupGetStoredAccounts",
       base::BindRepeating(&PeopleHandler::HandleGetStoredAccounts,
@@ -330,7 +334,10 @@ void PeopleHandler::RegisterMessages() {
       "SyncSetupStartSyncingWithEmail",
       base::BindRepeating(&PeopleHandler::HandleStartSyncingWithEmail,
                           base::Unretained(this)));
-#endif
+  web_ui()->RegisterMessageCallback(
+      "SyncStartKeyRetrieval",
+      base::BindRepeating(&PeopleHandler::HandleStartKeyRetrieval,
+                          base::Unretained(this)));
 }
 
 void PeopleHandler::OnJavascriptAllowed() {
@@ -426,7 +433,7 @@ void PeopleHandler::OnDidClosePage(const base::ListValue* args) {
 }
 
 syncer::SyncService* PeopleHandler::GetSyncService() const {
-  return profile_->IsSyncAllowed()
+  return ProfileSyncServiceFactory::IsSyncAllowed(profile_)
              ? ProfileSyncServiceFactory::GetForProfile(profile_)
              : nullptr;
 }
@@ -451,6 +458,11 @@ void PeopleHandler::HandleSetDatatypes(const base::ListValue* args) {
     return;
   }
 
+  // Don't enable non-registered types (for example, kApps may not be registered
+  // on Chrome OS).
+  configuration.selected_types.RetainAll(
+      service->GetUserSettings()->GetRegisteredSelectableTypes());
+
   service->GetUserSettings()->SetSelectedTypes(configuration.sync_everything,
                                                configuration.selected_types);
 
@@ -462,7 +474,6 @@ void PeopleHandler::HandleSetDatatypes(const base::ListValue* args) {
     ProfileMetrics::LogProfileSyncInfo(ProfileMetrics::SYNC_CHOOSE);
 }
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
 void PeopleHandler::HandleGetStoredAccounts(const base::ListValue* args) {
   CHECK_EQ(1U, args->GetSize());
   const base::Value* callback_id;
@@ -481,30 +492,28 @@ void PeopleHandler::OnExtendedAccountInfoRemoved(const AccountInfo& info) {
 
 base::Value PeopleHandler::GetStoredAccountsList() {
   base::Value accounts(base::Value::Type::LIST);
-  const bool dice_enabled =
-      AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_);
-
-  if (dice_enabled) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  if (AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_)) {
     // If dice is enabled, show all the accounts.
     for (auto const& account :
          signin_ui_util::GetAccountsForDicePromos(profile_)) {
       accounts.Append(GetAccountValue(account));
     }
-  } else {
-    // If dice is disabled (and unified consent enabled), show only the primary
-    // account.
-    auto* identity_manager = IdentityManagerFactory::GetForProfile(profile_);
-    base::Optional<AccountInfo> primary_account_info =
-        identity_manager->FindExtendedAccountInfoForAccountWithRefreshToken(
-            identity_manager->GetPrimaryAccountInfo());
-    if (primary_account_info.has_value())
-      accounts.Append(GetAccountValue(primary_account_info.value()));
+    return accounts;
   }
-
+#endif
+  // If dice is disabled or unsupported, show only the primary account.
+  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile_);
+  base::Optional<AccountInfo> primary_account_info =
+      identity_manager->FindExtendedAccountInfoForAccountWithRefreshToken(
+          identity_manager->GetPrimaryAccountInfo());
+  if (primary_account_info.has_value())
+    accounts.Append(GetAccountValue(primary_account_info.value()));
   return accounts;
 }
 
 void PeopleHandler::HandleStartSyncingWithEmail(const base::ListValue* args) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   DCHECK(AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_));
   const base::Value* email;
   const base::Value* is_default_promo_account;
@@ -524,8 +533,11 @@ void PeopleHandler::HandleStartSyncingWithEmail(const base::ListValue* args) {
       maybe_account.has_value() ? maybe_account.value() : AccountInfo(),
       signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS,
       is_default_promo_account->GetBool());
-}
+#else
+  // TODO(jamescook): Enable sync on non-DICE platforms (e.g. Chrome OS).
+  NOTIMPLEMENTED();
 #endif
+}
 
 void PeopleHandler::HandleSetEncryption(const base::ListValue* args) {
   SyncConfigInfo configuration;
@@ -707,6 +719,15 @@ void PeopleHandler::HandlePauseSync(const base::ListValue* args) {
 }
 #endif
 
+void PeopleHandler::HandleStartKeyRetrieval(const base::ListValue* args) {
+  Browser* browser =
+      chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
+  if (!browser)
+    return;
+
+  sync_ui_util::OpenTabForSyncKeyRetrieval(browser);
+}
+
 void PeopleHandler::HandleGetSyncStatus(const base::ListValue* args) {
   AllowJavascript();
 
@@ -884,22 +905,31 @@ std::unique_ptr<base::DictionaryValue> PeopleHandler::GetSyncStatusDictionary()
           !service->GetUserSettings()->IsFirstSetupComplete() &&
           identity_manager->HasPrimaryAccount());
 
-  base::string16 status_label;
-  base::string16 link_label;
-  sync_ui_util::ActionType action_type = sync_ui_util::NO_ACTION;
-
-  bool status_has_error =
-      sync_ui_util::GetStatusLabels(profile_, &status_label, &link_label,
-                                    &action_type) == sync_ui_util::SYNC_ERROR;
-  sync_status->SetString("statusText", status_label);
-  sync_status->SetString("statusActionText", link_label);
-  sync_status->SetBoolean("hasError", status_has_error);
-  sync_status->SetString("statusAction", GetSyncErrorAction(action_type));
+  const sync_ui_util::StatusLabels status_labels =
+      sync_ui_util::GetStatusLabels(profile_);
+  // TODO(crbug.com/1027467): Consider unifying some of the fields below to
+  // avoid redundancy.
+  sync_status->SetString("statusText",
+                         GetStringUTF16(status_labels.status_label_string_id));
+  sync_status->SetString("statusActionText",
+                         GetStringUTF16(status_labels.link_label_string_id));
+  sync_status->SetBoolean(
+      "hasError", status_labels.message_type == sync_ui_util::SYNC_ERROR ||
+                      status_labels.message_type ==
+                          sync_ui_util::PASSWORDS_ONLY_SYNC_ERROR);
+  sync_status->SetBoolean(
+      "hasPasswordsOnlyError",
+      status_labels.message_type == sync_ui_util::PASSWORDS_ONLY_SYNC_ERROR);
+  sync_status->SetString("statusAction",
+                         GetSyncErrorAction(status_labels.action_type));
 
   sync_status->SetBoolean("managed", disallowed_by_policy);
   sync_status->SetBoolean(
       "disabled", !service || disallowed_by_policy ||
                       !service->GetUserSettings()->IsSyncAllowedByPlatform());
+  // TODO(jamescook): This is always true on Chrome OS, but the WebUI uses
+  // false to mean that the user has sync turned off. We need to distinguish
+  // between the two cases.
   sync_status->SetBoolean("signedIn", identity_manager->HasPrimaryAccount());
   sync_status->SetString("signedInUsername",
                          signin_ui_util::GetAuthenticatedUsername(profile_));
@@ -932,6 +962,8 @@ void PeopleHandler::PushSyncPrefs() {
   //   encryptAllData: true if user wants to encrypt all data (not just
   //       passwords)
   //   passphraseRequired: true if a passphrase is needed to start sync
+  //   trustedVaultKeysRequired: true if trusted vault keys are needed to start
+  //                             sync.
   //
   base::DictionaryValue args;
 
@@ -941,13 +973,10 @@ void PeopleHandler::PushSyncPrefs() {
       sync_user_settings->GetRegisteredSelectableTypes();
   const syncer::UserSelectableTypeSet selected_types =
       sync_user_settings->GetSelectedTypes();
-  const syncer::UserSelectableTypeSet enforced_types =
-      sync_user_settings->GetForcedTypes();
   for (syncer::UserSelectableType type : syncer::UserSelectableTypeSet::All()) {
     const std::string type_name = syncer::GetUserSelectableTypeName(type);
     args.SetBoolean(type_name + "Registered", registered_types.Has(type));
     args.SetBoolean(type_name + "Synced", selected_types.Has(type));
-    args.SetBoolean(type_name + "Enforced", enforced_types.Has(type));
   }
   args.SetBoolean("syncAllDataTypes",
                   sync_user_settings->IsSyncEverythingEnabled());
@@ -964,6 +993,10 @@ void PeopleHandler::PushSyncPrefs() {
   // passphrase UI even if no encrypted data types are enabled.
   args.SetBoolean("passphraseRequired",
                   sync_user_settings->IsPassphraseRequired());
+
+  args.SetBoolean(
+      "trustedVaultKeysRequired",
+      sync_user_settings->IsTrustedVaultKeyRequiredForPreferredDataTypes());
 
   syncer::PassphraseType passphrase_type =
       sync_user_settings->GetPassphraseType();

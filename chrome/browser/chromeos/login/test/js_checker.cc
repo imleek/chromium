@@ -124,7 +124,13 @@ std::unique_ptr<TestConditionWaiter> JSChecker::CreateWaiter(
 std::unique_ptr<TestConditionWaiter> JSChecker::CreateVisibilityWaiter(
     bool visibility,
     std::initializer_list<base::StringPiece> element_ids) {
-  std::string js_condition = GetOobeElementPath(element_ids) + ".hidden";
+  return CreateVisibilityWaiter(visibility, GetOobeElementPath(element_ids));
+}
+
+std::unique_ptr<TestConditionWaiter> JSChecker::CreateVisibilityWaiter(
+    bool visibility,
+    const std::string& element) {
+  std::string js_condition = element + ".hidden";
   if (visibility) {
     js_condition = "!(" + js_condition + ")";
   }
@@ -258,6 +264,14 @@ void JSChecker::TapOnPath(
 
 void JSChecker::TapOn(const std::string& element_id) {
   TapOnPath({element_id});
+}
+
+void JSChecker::TapLinkOnPath(
+    std::initializer_list<base::StringPiece> element_ids) {
+  ExpectVisiblePath(element_ids);
+  // Make sure this method is used only on <a> html elements.
+  ExpectEQ(GetOobeElementPath(element_ids) + ".tagName", std::string("A"));
+  Evaluate(GetOobeElementPath(element_ids) + ".click()");
 }
 
 void JSChecker::SelectRadioPath(

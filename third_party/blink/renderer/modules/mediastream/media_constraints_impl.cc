@@ -30,6 +30,7 @@
 
 #include "third_party/blink/renderer/modules/mediastream/media_constraints_impl.h"
 
+#include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/renderer/bindings/core/v8/array_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -455,14 +456,14 @@ static void ParseOldStyleNames(
   }
 }
 
-static WebMediaConstraints CreateFromNamedConstraints(
+static MediaConstraints CreateFromNamedConstraints(
     ExecutionContext* context,
     Vector<NameValueStringConstraint>& mandatory,
     const Vector<NameValueStringConstraint>& optional,
     MediaErrorState& error_state) {
   WebMediaTrackConstraintSet basic;
   WebMediaTrackConstraintSet advanced;
-  WebMediaConstraints constraints;
+  MediaConstraints constraints;
   ParseOldStyleNames(context, mandatory, true, basic, error_state);
   if (error_state.HadException())
     return constraints;
@@ -482,14 +483,14 @@ static WebMediaConstraints CreateFromNamedConstraints(
 }
 
 // Deprecated.
-WebMediaConstraints Create(ExecutionContext* context,
-                           const Dictionary& constraints_dictionary,
-                           MediaErrorState& error_state) {
+MediaConstraints Create(ExecutionContext* context,
+                        const Dictionary& constraints_dictionary,
+                        MediaErrorState& error_state) {
   Vector<NameValueStringConstraint> optional;
   Vector<NameValueStringConstraint> mandatory;
   if (!Parse(constraints_dictionary, optional, mandatory)) {
     error_state.ThrowTypeError("Malformed constraints object.");
-    return WebMediaConstraints();
+    return MediaConstraints();
   }
   UseCounter::Count(context, WebFeature::kMediaStreamConstraintsFromDictionary);
   return CreateFromNamedConstraints(context, mandatory, optional, error_state);
@@ -691,9 +692,9 @@ void CopyConstraintSet(const MediaTrackConstraintSet* constraints_in,
   }
 }
 
-WebMediaConstraints ConvertConstraintsToWeb(
+MediaConstraints ConvertTrackConstraintsToMediaConstraints(
     const MediaTrackConstraints* constraints_in) {
-  WebMediaConstraints constraints;
+  MediaConstraints constraints;
   WebMediaTrackConstraintSet constraint_buffer;
   Vector<WebMediaTrackConstraintSet> advanced_buffer;
   CopyConstraintSet(constraints_in, NakedValueDisposition::kTreatAsIdeal,
@@ -710,23 +711,24 @@ WebMediaConstraints ConvertConstraintsToWeb(
   return constraints;
 }
 
-WebMediaConstraints Create(ExecutionContext* context,
-                           const MediaTrackConstraints* constraints_in,
-                           MediaErrorState& error_state) {
-  WebMediaConstraints standard_form = ConvertConstraintsToWeb(constraints_in);
+MediaConstraints Create(ExecutionContext* context,
+                        const MediaTrackConstraints* constraints_in,
+                        MediaErrorState& error_state) {
+  MediaConstraints standard_form =
+      ConvertTrackConstraintsToMediaConstraints(constraints_in);
   if (constraints_in->hasOptional() || constraints_in->hasMandatory()) {
     if (!standard_form.IsEmpty()) {
       UseCounter::Count(context, WebFeature::kMediaStreamConstraintsOldAndNew);
       error_state.ThrowTypeError(
           "Malformed constraint: Cannot use both optional/mandatory and "
           "specific or advanced constraints.");
-      return WebMediaConstraints();
+      return MediaConstraints();
     }
     Vector<NameValueStringConstraint> optional;
     Vector<NameValueStringConstraint> mandatory;
     if (!Parse(constraints_in, optional, mandatory)) {
       error_state.ThrowTypeError("Malformed constraints object.");
-      return WebMediaConstraints();
+      return MediaConstraints();
     }
     UseCounter::Count(context, WebFeature::kMediaStreamConstraintsNameValue);
     return CreateFromNamedConstraints(context, mandatory, optional,
@@ -736,8 +738,8 @@ WebMediaConstraints Create(ExecutionContext* context,
   return standard_form;
 }
 
-WebMediaConstraints Create() {
-  WebMediaConstraints constraints;
+MediaConstraints Create() {
+  MediaConstraints constraints;
   constraints.Initialize();
   return constraints;
 }
@@ -931,7 +933,7 @@ void ConvertConstraintSet(const WebMediaTrackConstraintSet& input,
   // https://crbug.com/605673
 }
 
-MediaTrackConstraints* ConvertConstraints(const WebMediaConstraints& input) {
+MediaTrackConstraints* ConvertConstraints(const MediaConstraints& input) {
   MediaTrackConstraints* output = MediaTrackConstraints::Create();
   if (input.IsNull())
     return output;

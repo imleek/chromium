@@ -8,7 +8,7 @@ import {sendWithPromise} from 'chrome://resources/js/cr.m.js';
 import {Cdd, Destination} from './data/destination.js';
 import {PrinterType} from './data/destination_match.js';
 // <if expr="chromeos">
-import {Policies} from './data/destination_policies.js';
+import {DestinationPolicies} from './data/destination_policies.js';
 // </if>
 import {MeasurementSystemUnitType} from './data/measurement_system.js';
 
@@ -30,10 +30,38 @@ export let PreviewSettings;
  *   printerDescription: (string | undefined),
  *   cupsEnterprisePrinter: (boolean | undefined),
  *   printerOptions: (Object | undefined),
- *   policies: (Policies | undefined),
+ *   policies: (DestinationPolicies | undefined),
  * }}
  */
 export let LocalDestinationInfo;
+
+/**
+ * Enumeration of background graphics printing mode restrictions used by
+ * Chromium.
+ * This has to coincide with |printing::BackgroundGraphicsModeRestriction| as
+ * defined in printing/backend/printing_restrictions.h
+ * @enum {number}
+ */
+export const BackgroundGraphicsModeRestriction = {
+  UNSET: 0,
+  ENABLED: 1,
+  DISABLED: 2,
+};
+
+/**
+ * Policies affecting print settings values and availability.
+ * @typedef {{
+ *   headerFooter: ({
+ *     allowedMode: (boolean | undefined),
+ *     defaultMode: (boolean | undefined),
+ *   } | undefined),
+ *   cssBackground: ({
+ *     allowedMode: (BackgroundGraphicsModeRestriction | undefined),
+ *     defaultMode: (BackgroundGraphicsModeRestriction | undefined),
+ *   } | undefined)
+ * }}
+ */
+export let Policies;
 
 /**
  * @typedef {{
@@ -50,8 +78,7 @@ export let LocalDestinationInfo;
  *   documentHasSelection: boolean,
  *   shouldPrintSelectionOnly: boolean,
  *   printerName: string,
- *   headerFooter: (boolean | undefined),
- *   isHeaderFooterManaged: boolean,
+ *   policies: (Policies | undefined),
  *   serializedAppStateStr: ?string,
  *   serializedDefaultDestinationSelectionRulesStr: ?string,
  *   pdfPrinterDisabled: boolean,
@@ -92,7 +119,7 @@ export let CapabilitiesResponse;
  *   printerId: string,
  *   success: boolean,
  *   capabilities: !Cdd,
- *   policies: (Policies | undefined),
+ *   policies: (DestinationPolicies | undefined),
  * }}
  */
 export let PrinterSetupResponse;
@@ -117,7 +144,7 @@ export class NativeLayer {
    * @return {!NativeLayer} The singleton instance.
    */
   static getInstance() {
-    if (currentInstance == null) {
+    if (currentInstance === null) {
       currentInstance = new NativeLayer();
     }
     return assert(currentInstance);
@@ -171,12 +198,23 @@ export class NativeLayer {
   getPrinterCapabilities(destinationId, type) {
     return sendWithPromise(
         'getPrinterCapabilities', destinationId,
-        destinationId == Destination.GooglePromotedId.SAVE_AS_PDF ?
+        destinationId === Destination.GooglePromotedId.SAVE_AS_PDF ?
             PrinterType.PDF_PRINTER :
             type);
   }
 
   // <if expr="chromeos">
+  /**
+   * Requests the destination's end user license information. Returns a promise
+   * that will be resolved with the destination's EULA URL if obtained
+   * successfully.
+   * @param {!string} destinationId ID of the destination.
+   * @return {!Promise<string>}
+   */
+  getEulaUrl(destinationId) {
+    return sendWithPromise('getEulaUrl', destinationId);
+  }
+
   /**
    * Requests Chrome to resolve provisional extension destination by granting
    * the provider extension access to the printer.

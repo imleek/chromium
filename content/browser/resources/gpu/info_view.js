@@ -253,6 +253,7 @@ cr.define('gpu', function() {
         'video_decode': 'Video Decode',
         'rasterization': 'Rasterization',
         'oop_rasterization': 'Out-of-process Rasterization',
+        'opengl': 'OpenGL',
         'metal': 'Metal',
         'vulkan': 'Vulkan',
         'multiple_raster_threads': 'Multiple Raster Threads',
@@ -261,8 +262,6 @@ cr.define('gpu', function() {
         'surface_control': 'Surface Control',
         'vpx_decode': 'VPx Video Decode',
         'webgl2': 'WebGL2',
-        'viz_display_compositor': 'Viz Display Compositor',
-        'viz_hit_test_surface_layer': 'Viz Hit-test Surface Layer',
         'skia_renderer': 'Skia Renderer',
       };
 

@@ -11,9 +11,9 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/mime_util.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
+#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/mime/mime_registry.mojom-blink.h"
 #include "third_party/blink/public/platform/file_path_conversion.h"
-#include "third_party/blink/public/platform/interface_provider.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -25,7 +25,7 @@ namespace {
 struct MimeRegistryPtrHolder {
  public:
   MimeRegistryPtrHolder() {
-    Platform::Current()->GetInterfaceProvider()->GetInterface(
+    Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
         mime_registry.BindNewPipeAndPassReceiver());
   }
   ~MimeRegistryPtrHolder() = default;
@@ -112,6 +112,10 @@ bool MIMETypeRegistry::IsSupportedImageMIMETypeForEncoding(
 
 bool MIMETypeRegistry::IsSupportedJavaScriptMIMEType(const String& mime_type) {
   return blink::IsSupportedJavascriptMimeType(ToLowerASCIIOrEmpty(mime_type));
+}
+
+bool MIMETypeRegistry::IsJSONMimeType(const String& mime_type) {
+  return blink::IsJSONMimeType(ToLowerASCIIOrEmpty(mime_type));
 }
 
 bool MIMETypeRegistry::IsLegacySupportedJavaScriptLanguage(

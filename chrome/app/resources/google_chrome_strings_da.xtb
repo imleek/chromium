@@ -3,12 +3,10 @@
 <translationbundle lang="da">
 <translation id="1001534784610492198">Installationsarkivet er beskadiget eller ugyldigt. Download Google Chrome igen.</translation>
 <translation id="102763973188675173">Tilpas og administrer Google Chrome. Der er en tilgængelig opdatering.</translation>
-<translation id="1035334672863811645">log ind på Chrome</translation>
 <translation id="1051826050538111504">Der er skadelig software på din computer. Chrome kan fjerne den, gendanne dine indstillinger og deaktivere udgivelser, så din browser fungerer normalt igen.</translation>
 <translation id="1065672644894730302">Dine præferencer kan ikke læses. Visse funktioner er muligvis ikke tilgængelige, og ændringer af præferencer gemmes ikke.</translation>
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> brugte tidligere Chrome</translation>
 <translation id="1097330777386562916">Ryd cookies og websitedata, når du afslutter Chrome</translation>
-<translation id="1104959162601287462">Om &amp;Chrome OS</translation>
 <translation id="110877069173485804">Dette er din Chrome-browser</translation>
 <translation id="1142745911746664600">Chrome kan ikke opdateres</translation>
 <translation id="1154147086299354128">Åbn i Chr&amp;ome</translation>
@@ -50,6 +48,7 @@
 <translation id="2290014774651636340">Google API-nøgler mangler. Nogle funktioner i Google Chrome deaktiveres.</translation>
 <translation id="2290095356545025170">Er du sikker på, at du vil afinstallere Google Chrome?</translation>
 <translation id="2309047409763057870">Dette er en sekundær installation af Google Chrome, og den kan ikke gøres til din standardbrowser.</translation>
+<translation id="2341767445688917208">Chrome OS kunne ikke synkronisere dine adgangskoder. Løs problemet nu.</translation>
 <translation id="2348335408836342058">Chrome skal have tilladelse til at bruge dit kamera og din mikrofon på dette website</translation>
 <translation id="2429317896000329049">Google Chrome kunne ikke synkronisere dine data, fordi synkronisering ikke er tilgængelig for dit domæne.</translation>
 <translation id="2467438592969358367">Google Chrome anmoder om at eksportere dine adgangskoder. Angiv din Windows-adgangskode for at tillade dette.</translation>
@@ -128,7 +127,6 @@
 <translation id="4953650215774548573">Angiv Google Chrome som din standardbrowser</translation>
 <translation id="495931528404527476">I Chrome</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
-<translation id="5028489144783860647">Google Chrome kunne ikke synkronisere dine data. Opdater din adgangssætning til synkronisering.</translation>
 <translation id="5062123544085870375">Genstart Chrome OS</translation>
 <translation id="5132929315877954718">Find fantastiske apps, spil, udvidelser og temaer til Google Chrome.</translation>
 <translation id="5170938038195470297">Din profil kan ikke bruges, fordi den stammer fra en nyere version af Google Chrome. Nogle funktioner er muligvis ikke tilgængelige. Angiv en anden profilmappe, eller brug en nyere version af Chrome.</translation>
@@ -208,6 +206,7 @@
 <translation id="7855730255114109580">Google Chrome er opdateret</translation>
 <translation id="7890208801193284374">Hvis du deler en computer, kan venner og familie browse individuelt og konfigurere Chrome, som de ønsker hver især.</translation>
 <translation id="7896673875602241923">Nogen har tidligere logget ind på Chrome på denne computer som <ph name="ACCOUNT_EMAIL_LAST" />. Opret en ny Chrome-bruger for at holde dine oplysninger adskilt.</translation>
+<translation id="7916016681687251387">Chrome OS kunne ikke synkronisere dine data. Løs problemet nu.</translation>
 <translation id="7962410387636238736">Denne computer modtager ikke længere Google Chrome-opdateringer, da Windows XP og Windows Vista ikke længere understøttes.</translation>
 <translation id="8008534537613507642">Geninstaller Chrome</translation>
 <translation id="8013993649590906847">Hvis et billede ikke har en brugbar beskrivelse, forsøger Chrome at angive en for dig. Billederne sendes til Google, så der kan oprettes beskrivelser.</translation>

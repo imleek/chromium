@@ -82,8 +82,8 @@ class CONTENT_EXPORT ServiceWorkerUpdatedScriptLoader final
     // Creates a ThrottlingURLLoader and starts the request.
     // Called on the core thread.
     static std::unique_ptr<ThrottlingURLLoaderCoreWrapper> CreateLoaderAndStart(
-        std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-            loader_factory_info,
+        std::unique_ptr<network::PendingSharedURLLoaderFactory>
+            pending_loader_factory,
         BrowserContextGetter browser_context_getter,
         int32_t routing_id,
         int32_t request_id,
@@ -115,8 +115,8 @@ class CONTENT_EXPORT ServiceWorkerUpdatedScriptLoader final
     };
 
     static void StartInternalOnUI(
-        std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-            loader_factory_info,
+        std::unique_ptr<network::PendingSharedURLLoaderFactory>
+            pending_loader_factory,
         BrowserContextGetter browser_context_getter,
         int32_t routing_id,
         int32_t request_id,
@@ -208,7 +208,10 @@ class CONTENT_EXPORT ServiceWorkerUpdatedScriptLoader final
 
   // Called when ServiceWorkerCacheWriter::Resume() completes its work.
   // If not all data are received, it continues to download from network.
-  void OnCacheWriterResumed(net::Error error);
+  void OnCacheWriterResumed(
+      scoped_refptr<network::MojoToNetPendingBuffer> pending_network_buffer,
+      uint32_t consumed_bytes,
+      net::Error error);
 
 #if DCHECK_IS_ON()
   void CheckVersionStatusBeforeLoad();

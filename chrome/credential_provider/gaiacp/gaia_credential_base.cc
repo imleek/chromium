@@ -41,6 +41,7 @@
 #include "chrome/credential_provider/gaiacp/gaia_resources.h"
 #include "chrome/credential_provider/gaiacp/gcp_utils.h"
 #include "chrome/credential_provider/gaiacp/gcpw_strings.h"
+#include "chrome/credential_provider/gaiacp/gem_device_details_manager.h"
 #include "chrome/credential_provider/gaiacp/grit/gaia_static_resources.h"
 #include "chrome/credential_provider/gaiacp/internet_availability_checker.h"
 #include "chrome/credential_provider/gaiacp/logging.h"
@@ -97,6 +98,27 @@ base::string16 GetEmailDomains() {
     }
   }
   return base::string16(&email_domains[0]);
+}
+
+// Get a pretty-printed string of the list of email domains that we can display
+// to the end-user.
+base::string16 GetEmailDomainsPrintableString() {
+  base::string16 email_domains_reg = GetEmailDomains();
+  if (email_domains_reg.empty())
+    return email_domains_reg;
+
+  std::vector<base::string16> domains =
+      base::SplitString(base::ToLowerASCII(email_domains_reg),
+                        base::ASCIIToUTF16(kEmailDomainsSeparator),
+                        base::WhitespaceHandling::TRIM_WHITESPACE,
+                        base::SplitResult::SPLIT_WANT_NONEMPTY);
+  base::string16 email_domains_str;
+  for (size_t i = 0; i < domains.size(); ++i) {
+    email_domains_str += domains[i];
+    if (i < domains.size() - 1)
+      email_domains_str += L", ";
+  }
+  return email_domains_str;
 }
 
 // Use WinHttpUrlFetcher to communicate with the admin sdk and fetch the active
@@ -478,7 +500,7 @@ HRESULT ValidateResult(const base::Value& result, BSTR* status_text) {
         break;
       case kUiecInvalidEmailDomain:
         *status_text = CGaiaCredentialBase::AllocErrorString(
-            IDS_INVALID_EMAIL_DOMAIN_BASE);
+            IDS_INVALID_EMAIL_DOMAIN_BASE, {GetEmailDomainsPrintableString()});
         break;
       case kUiecMissingSigninData:
         *status_text =
@@ -1153,6 +1175,14 @@ BSTR CGaiaCredentialBase::AllocErrorString(UINT id) {
 }
 
 // static
+BSTR CGaiaCredentialBase::AllocErrorString(
+    UINT id,
+    const std::vector<base::string16>& replacements) {
+  CComBSTR str(GetStringResource(id, replacements).c_str());
+  return str.Detach();
+}
+
+// static
 HRESULT CGaiaCredentialBase::GetInstallDirectory(base::FilePath* path) {
   DCHECK(path);
 
@@ -1810,6 +1840,8 @@ HRESULT CGaiaCredentialBase::SaveAccountInfo(const base::Value& properties) {
     return E_INVALIDARG;
   }
 
+  base::string16 domain = GetDictString(properties, kKeyDomain);
+
   // TODO(crbug.com/976744): Use the down scoped kKeyMdmAccessToken instead
   // of login scoped token.
   std::string access_token = GetDictStringUTF8(properties, kKeyAccessToken);
@@ -1819,11 +1851,16 @@ HRESULT CGaiaCredentialBase::SaveAccountInfo(const base::Value& properties) {
         sid, access_token, password);
     if (FAILED(hr) && hr != E_NOTIMPL)
       LOGFN(ERROR) << "StoreWindowsPasswordIfNeeded hr=" << putHR(hr);
+
+    // Upload device details to gem database.
+    hr = GemDeviceDetailsManager::Get()->UploadDeviceDetails(access_token);
+    if (FAILED(hr) && hr != E_NOTIMPL)
+      LOGFN(ERROR) << "UploadDeviceDetails hr=" << putHR(hr);
+    // Below setter is only used for unit testing.
+    GemDeviceDetailsManager::Get()->SetUploadStatusForTesting(hr);
   } else {
     LOGFN(ERROR) << "Access token is empty. Cannot save Windows password.";
   }
-
-  base::string16 domain = GetDictString(properties, kKeyDomain);
 
   // Load the user's profile so that their registry hive is available.
   auto profile = ScopedUserProfile::Create(sid, domain, username, password);

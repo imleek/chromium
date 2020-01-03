@@ -9,7 +9,7 @@ namespace features {
 // Enables an animated avatar button (also called identity pill). See
 // https://crbug.com/967317
 const base::Feature kAnimatedAvatarButton{"AnimatedAvatarButton",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 // Enables an animated avatar button on the sign-in trigger. This feature is
 // guarded by kAnimatedAvatarButton and serves as a kill-switch. See
 // https://crbug.com/967317
@@ -43,7 +43,7 @@ const base::Feature kNewTabstripAnimation{"NewTabstripAnimation",
 // Enables the new version of the profile menu(aka user menu).
 // https://crbug.com/966388
 const base::Feature kProfileMenuRevamp{"ProfileMenuRevamp",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables a more prominent active tab title in dark mode to aid with
 // accessibility.
@@ -97,9 +97,8 @@ const base::Feature kUseTextForUpdateButton{"UseTextForUpdateButton",
 const base::Feature kWebFooterExperiment{"WebFooterExperiment",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
-#if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
-// Enables a web-based toolbar. See https://crbug.com/989131. Note this feature
-// only works when the ENABLE_WEBUI_TAB_STRIP buildflag is enabled.
+// Enables a web-based tab strip. See https://crbug.com/989131. Note this
+// feature only works when the ENABLE_WEBUI_TAB_STRIP buildflag is enabled.
 const base::Feature kWebUITabStrip{"WebUITabStrip",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -107,7 +106,6 @@ const base::Feature kWebUITabStrip{"WebUITabStrip",
 // if kWebUITabStrip is enabled.
 const base::Feature kWebUITabStripDemoOptions{
     "WebUITabStripDemoOptions", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
 
 #if defined(OS_CHROMEOS)
 // Enables a warning about connecting to hidden WiFi networks.

@@ -2,29 +2,32 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Polymer, html} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import 'chrome://resources/cr_components/managed_footnote/managed_footnote.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast_manager.m.js';
 import 'chrome://resources/cr_elements/cr_splitter/cr_splitter.m.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import './folder_node.js';
+import './list.js';
+import './router.js';
+import './shared_vars.js';
+import './strings.m.js';
+import './toolbar.js';
+
 import {FindShortcutBehavior} from 'chrome://resources/js/find_shortcut_behavior.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 import {setSearchResults} from './actions.js';
-import {init as initApiListener, destroy as destroyApiListener} from './api_listener.js';
+import {destroy as destroyApiListener, init as initApiListener} from './api_listener.js';
 import {CommandManager} from './command_manager.js';
 import {LOCAL_STORAGE_FOLDER_STATE_KEY, LOCAL_STORAGE_TREE_WIDTH_KEY, ROOT_NODE_ID} from './constants.js';
 import {DNDManager} from './dnd_manager.js';
-import './folder_node.js';
-import './list.js';
 import {MouseFocusBehavior} from './mouse_focus_behavior.js';
-import './router.js';
-import './shared_vars.js';
 import {Store} from './store.js';
 import {StoreClient} from './store_client.js';
-import './strings.m.js';
-import './toolbar.js';
-import {normalizeNodes, createEmptyState} from './util.js';
 import {FolderOpenState} from './types.js';
+import {createEmptyState, normalizeNodes} from './util.js';
 
 Polymer({
   is: 'bookmarks-app',
@@ -61,6 +64,17 @@ Polymer({
   dndManager_: null,
 
   /** @override */
+  created: function() {
+    // Regular expression that captures the leading slash, the content and the
+    // trailing slash in three different groups.
+    const CANONICAL_PATH_REGEX = /(^\/)([\/-\w]+)(\/$)/;
+    const path = location.pathname.replace(CANONICAL_PATH_REGEX, '$1$2');
+    if (path !== '/') {  // Only queries are supported, not subpages.
+      window.history.replaceState(undefined /* stateObject */, '', '/');
+    }
+  },
+
+  /** @override */
   attached: function() {
     document.documentElement.classList.remove('loading');
 
@@ -93,7 +107,6 @@ Polymer({
             'BookmarkManager.ResultsRenderedTime',
             Math.floor(window.performance.now()));
       });
-
     });
 
     this.boundUpdateSidebarWidth_ = this.updateSidebarWidth_.bind(this);
@@ -144,7 +157,7 @@ Polymer({
 
   /** @private */
   searchTermChanged_: function(newValue, oldValue) {
-    if (oldValue != undefined && !newValue) {
+    if (oldValue !== undefined && !newValue) {
       this.fire(
           'iron-announce', {text: loadTimeData.getString('searchCleared')});
     }

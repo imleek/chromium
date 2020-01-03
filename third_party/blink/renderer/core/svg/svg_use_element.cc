@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/id_target_observer.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
+#include "third_party/blink/renderer/core/dom/xml_document.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_transformable_container.h"
 #include "third_party/blink/renderer/core/svg/svg_g_element.h"
 #include "third_party/blink/renderer/core/svg/svg_length_context.h"
@@ -107,7 +108,7 @@ void SVGUseElement::Trace(blink::Visitor* visitor) {
 
 #if DCHECK_IS_ON()
 static inline bool IsWellFormedDocument(const Document& document) {
-  if (document.IsXMLDocument())
+  if (IsA<XMLDocument>(document))
     return static_cast<XMLDocumentParser*>(document.Parser())->WellFormed();
   return true;
 }
@@ -139,8 +140,8 @@ static void TransferUseWidthAndHeightIfNeeded(
     const SVGElement& original_element) {
   // Use |original_element| for checking the element type, because we will
   // have replaced a <symbol> with an <svg> in the instance tree.
-  if (!IsSVGSymbolElement(original_element) &&
-      !IsSVGSVGElement(original_element))
+  if (!IsA<SVGSymbolElement>(original_element) &&
+      !IsA<SVGSVGElement>(original_element))
     return;
 
   // "The width and height properties on the 'use' element override the values
@@ -206,7 +207,8 @@ void SVGUseElement::UpdateTargetReference() {
       network::mojom::RequestMode::kSameOrigin);
   ResourceFetcher* fetcher = GetDocument().Fetcher();
   if (base::FeatureList::IsEnabled(
-          features::kHtmlImportsRequestInitiatorLock)) {
+          features::kHtmlImportsRequestInitiatorLock) &&
+      GetDocument().ImportsController()) {
     // For @imports from HTML imported Documents, we use the
     // context document for getting origin and ResourceFetcher to use the
     // main Document's origin, while using the element document for
@@ -410,7 +412,7 @@ static void MoveChildrenToReplacementElement(ContainerNode& source_root,
 
 SVGElement* SVGUseElement::CreateInstanceTree(SVGElement& target_root) const {
   SVGElement* instance_root = &To<SVGElement>(target_root.CloneWithChildren());
-  if (IsSVGSymbolElement(target_root)) {
+  if (IsA<SVGSymbolElement>(target_root)) {
     // Spec: The referenced 'symbol' and its contents are deep-cloned into
     // the generated tree, with the exception that the 'symbol' is replaced
     // by an 'svg'. This generated 'svg' will always have explicit values
@@ -497,19 +499,20 @@ LayoutObject* SVGUseElement::CreateLayoutObject(const ComputedStyle& style,
 }
 
 static bool IsDirectReference(const SVGElement& element) {
-  return IsSVGPathElement(element) || IsSVGRectElement(element) ||
-         IsSVGCircleElement(element) || IsSVGEllipseElement(element) ||
-         IsSVGPolygonElement(element) || IsSVGPolylineElement(element) ||
-         IsSVGTextElement(element);
+  return IsA<SVGPathElement>(element) || IsA<SVGRectElement>(element) ||
+         IsA<SVGCircleElement>(element) || IsA<SVGEllipseElement>(element) ||
+         IsA<SVGPolygonElement>(element) || IsA<SVGPolylineElement>(element) ||
+         IsA<SVGTextElement>(element);
 }
 
 Path SVGUseElement::ToClipPath() const {
   const SVGGraphicsElement* element = VisibleTargetGraphicsElementForClipping();
-  if (!element || !element->IsSVGGeometryElement())
+  auto* geometry_element = DynamicTo<SVGGeometryElement>(element);
+  if (!geometry_element)
     return Path();
 
   DCHECK(GetLayoutObject());
-  Path path = ToSVGGeometryElement(*element).ToClipPath();
+  Path path = geometry_element->ToClipPath();
   AffineTransform transform = GetLayoutObject()->LocalSVGTransform();
   if (!transform.IsIdentity())
     path.Transform(transform);
@@ -543,8 +546,9 @@ void SVGUseElement::AddReferencesToFirstDegreeNestedUseElements(
   // references are handled as the invalidation bubbles up the dependency
   // chain.
   SVGUseElement* use_element =
-      IsSVGUseElement(target) ? ToSVGUseElement(&target)
-                              : Traversal<SVGUseElement>::FirstWithin(target);
+      IsA<SVGUseElement>(target)
+          ? To<SVGUseElement>(&target)
+          : Traversal<SVGUseElement>::FirstWithin(target);
   for (; use_element;
        use_element = Traversal<SVGUseElement>::NextSkippingChildren(
            *use_element, &target))
@@ -593,7 +597,7 @@ void SVGUseElement::ExpandUseElementsInShadowTree() {
   ShadowRoot& shadow_root = UseShadowRoot();
   for (SVGUseElement* use = Traversal<SVGUseElement>::FirstWithin(shadow_root);
        use;) {
-    SVGUseElement& original_use = ToSVGUseElement(*use->CorrespondingElement());
+    auto& original_use = To<SVGUseElement>(*use->CorrespondingElement());
     auto* target = DynamicTo<SVGElement>(
         original_use.ResolveTargetElement(kDontAddObserver));
     if (target) {
@@ -708,9 +712,20 @@ void SVGUseElement::NotifyFinished(Resource* resource) {
 }
 
 bool SVGUseElement::ResourceIsValid() const {
-  return GetResource() && GetResource()->IsLoaded() &&
-         !GetResource()->ErrorOccurred() &&
-         ToDocumentResource(GetResource())->GetDocument();
+  Resource* resource = GetResource();
+  if (!resource || resource->ErrorOccurred())
+    return false;
+  // If the resource has not yet finished loading but is revalidating, consider
+  // it to be valid if it actually carries a document. <use> elements that are
+  // in the process of "loading" the revalidated resource (performing the
+  // revalidation) will get a NotifyFinished() callback and invalidate as
+  // needed. <use> elements that have already finished loading (a potentially
+  // older version of the resource) will keep showing that until its shadow
+  // tree is invalidated.
+  // TODO(fs): Handle revalidations that return a new/different resource.
+  if (!resource->IsLoaded() && !resource->IsCacheValidator())
+    return false;
+  return ToDocumentResource(resource)->GetDocument();
 }
 
 }  // namespace blink

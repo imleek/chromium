@@ -29,8 +29,8 @@ import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.FeatureUtilities;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate;
@@ -95,9 +95,11 @@ public class LayoutManagerChrome extends LayoutManager implements OverviewModeCo
                 assert tabManagementDelegate != null;
                 startSurface.setStateChangeObserver(new StartSurface.StateObserver() {
                     @Override
-                    public void onStateChanged(boolean shouldShowTabSwitcherToolbar) {
+                    public void onStateChanged(@OverviewModeState int overviewModeState,
+                            boolean shouldShowTabSwitcherToolbar) {
                         for (OverviewModeObserver observer : mOverviewModeObservers) {
-                            observer.onOverviewModeStateChanged(shouldShowTabSwitcherToolbar);
+                            observer.onOverviewModeStateChanged(
+                                    overviewModeState, shouldShowTabSwitcherToolbar);
                         }
                     }
                 });

@@ -188,7 +188,8 @@ void PaymentRequest::Init(
       web_contents_, top_level_origin_, frame_origin_, spec_.get(),
       /*delegate=*/this, delegate_->GetApplicationLocale(),
       delegate_->GetPersonalDataManager(), delegate_.get(),
-      /*sw_identity_observer=*/weak_ptr_factory_.GetWeakPtr(),
+      base::BindRepeating(&PaymentRequest::SetInvokedServiceWorkerIdentity,
+                          weak_ptr_factory_.GetWeakPtr()),
       &journey_logger_);
 
   journey_logger_.SetRequestedInformation(
@@ -342,7 +343,7 @@ void PaymentRequest::UpdateWith(mojom::PaymentDetailsPtr details) {
   }
 
   if (state()->selected_app() && state()->IsPaymentAppInvoked() &&
-      payment_handler_host_.is_changing()) {
+      payment_handler_host_.is_waiting_for_payment_details_update()) {
     payment_handler_host_.UpdateWith(
         PaymentDetailsConverter::ConvertToPaymentRequestDetailsUpdate(
             details, state()->selected_app()->HandlesShippingAddress(),
@@ -367,7 +368,7 @@ void PaymentRequest::UpdateWith(mojom::PaymentDetailsPtr details) {
   }
 }
 
-void PaymentRequest::NoUpdatedPaymentDetails() {
+void PaymentRequest::OnPaymentDetailsNotUpdated() {
   // This Mojo call is triggered by the user of the API doing nothing in
   // response to a shipping address update event, so the error messages cannot
   // be more verbose.
@@ -385,8 +386,9 @@ void PaymentRequest::NoUpdatedPaymentDetails() {
 
   spec_->RecomputeSpecForDetails();
 
-  if (state()->IsPaymentAppInvoked() && payment_handler_host_.is_changing()) {
-    payment_handler_host_.NoUpdatedPaymentDetails();
+  if (state()->IsPaymentAppInvoked() &&
+      payment_handler_host_.is_waiting_for_payment_details_update()) {
+    payment_handler_host_.OnPaymentDetailsNotUpdated();
   }
 }
 
@@ -432,6 +434,10 @@ void PaymentRequest::Complete(mojom::PaymentComplete result) {
     log_.Error(errors::kCannotAbortWithoutShow);
     OnConnectionTerminated();
     return;
+  }
+
+  if (observer_for_testing_) {
+    observer_for_testing_->OnCompleteCalled();
   }
 
   // Failed transactions show an error. Successful and unknown-state
@@ -584,24 +590,46 @@ bool PaymentRequest::IsThisPaymentRequestShowing() const {
   return is_show_called_ && display_handle_ && spec_ && state_;
 }
 
+bool PaymentRequest::OnlySingleAppCanProvideAllRequiredInformation() const {
+  DCHECK(state()->IsInitialized());
+  DCHECK(spec()->IsInitialized());
+
+  if (!spec()->request_shipping() && !spec()->request_payer_name() &&
+      !spec()->request_payer_phone() && !spec()->request_payer_email()) {
+    return state()->available_apps().size() == 1 &&
+           state()->available_apps().at(0)->type() !=
+               PaymentApp::Type::AUTOFILL;
+  }
+
+  bool an_app_can_provide_all_info = false;
+  for (const auto& app : state()->available_apps()) {
+    if ((!spec()->request_shipping() || app->HandlesShippingAddress()) &&
+        (!spec()->request_payer_name() || app->HandlesPayerName()) &&
+        (!spec()->request_payer_phone() || app->HandlesPayerPhone()) &&
+        (!spec()->request_payer_email() || app->HandlesPayerEmail())) {
+      // There is another available app that can provide all merchant requested
+      // information information.
+      if (an_app_can_provide_all_info)
+        return false;
+
+      an_app_can_provide_all_info = true;
+    }
+  }
+  return an_app_can_provide_all_info;
+}
+
 bool PaymentRequest::SatisfiesSkipUIConstraints() {
   // Only allowing URL base payment apps to skip the payment sheet.
   skipped_payment_request_ui_ =
-      (spec()->url_payment_method_identifiers().size() == 1 ||
+      (spec()->url_payment_method_identifiers().size() > 0 ||
        delegate_->SkipUiForBasicCard()) &&
       base::FeatureList::IsEnabled(features::kWebPaymentsSingleAppUiSkip) &&
       base::FeatureList::IsEnabled(::features::kServiceWorkerPaymentApps) &&
       is_show_user_gesture_ && state()->IsInitialized() &&
-      spec()->IsInitialized() && state()->available_apps().size() == 1 &&
-      spec()->stringified_method_data().size() == 1 &&
-      (!spec()->request_shipping() ||
-       state()->available_apps().front()->HandlesShippingAddress()) &&
-      (!spec()->request_payer_name() ||
-       state()->available_apps().front()->HandlesPayerName()) &&
-      (!spec()->request_payer_phone() ||
-       state()->available_apps().front()->HandlesPayerPhone()) &&
-      (!spec()->request_payer_email() ||
-       state()->available_apps().front()->HandlesPayerEmail());
+      spec()->IsInitialized() &&
+      OnlySingleAppCanProvideAllRequiredInformation() &&
+      // The available app should be preselectable.
+      state()->selected_app() != nullptr;
   if (skipped_payment_request_ui_) {
     DCHECK(state()->IsInitialized() && spec()->IsInitialized());
     journey_logger_.SetEventOccurred(JourneyLogger::EVENT_SKIPPED_SHOW);

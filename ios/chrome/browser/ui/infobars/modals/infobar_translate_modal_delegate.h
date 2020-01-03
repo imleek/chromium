@@ -12,13 +12,39 @@
 // Delegate to handle Translate Infobar Modal actions.
 @protocol InfobarTranslateModalDelegate <InfobarModalDelegate>
 
+// Indicates the user chose to undo the translation (i.e. show the page in its
+// original language).
+- (void)showOriginalLanguage;
+
+// Indicates the user changed the source/target language and wishes to Translate
+// again.
+- (void)translateWithNewLanguages;
+
+// Indicates the user chose to show options to change the source target
+// language.
+- (void)showChangeSourceLanguageOptions;
+
+// Indicates the user chose to show options to change the source target
+// language.
+- (void)showChangeTargetLanguageOptions;
+
 // Indicates the user chose to always translate sites in the source language.
+// Triggers a translate as well.
 - (void)alwaysTranslateSourceLanguage;
+// Indicates the user chose to undo always translate sites in the source
+// language.
+- (void)undoAlwaysTranslateSourceLanguage;
 
 // Indicates the user chose to never translate sites in the source language.
 - (void)neverTranslateSourceLanguage;
+// Indicates the user chose to undo never translate sites in the source
+// language.
+- (void)undoNeverTranslateSourceLanguage;
 
-// TODO(crbug.com/1014959): Consider implementing neverTranslateSite.
+// Indicates the user chose to never translate for this site.
+- (void)neverTranslateSite;
+// Indicates the user chose to undo never translate for this site.
+- (void)undoNeverTranslateSite;
 
 @end
 

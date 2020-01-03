@@ -166,6 +166,17 @@ class DragWindowResizerTest : public AshTestBase {
 
 // Verifies a window can be moved from the primary display to another.
 TEST_F(DragWindowResizerTest, WindowDragWithMultiDisplays) {
+  // Prevent snapping |window_|. We will drag within 25px of a display edge, for
+  // the purpose of testing that a minimum visibility of 25px is enforced. When
+  // a drag ends at that distance (or up to 32px) from a left or right display
+  // edge, the dragged window is snapped. As that would only distract from the
+  // purposes of the test, we avoid it by making |window_| unsnappable.
+  // TODO: Remove this code after adding functionality where the mouse has to
+  // dwell in the snap region before the dragged window can get snapped.
+  window_->SetProperty(aura::client::kResizeBehaviorKey,
+                       aura::client::kResizeBehaviorNone);
+  ASSERT_FALSE(WindowState::Get(window_.get())->CanSnap());
+
   // The secondary display is logically on the right, but on the system (e.g. X)
   // layer, it's below the primary one. See UpdateDisplay() in ash_test_base.cc.
   UpdateDisplay("800x600,400x300");
@@ -198,7 +209,7 @@ TEST_F(DragWindowResizerTest, WindowDragWithMultiDisplays) {
                              display::Screen::GetScreen()->GetPrimaryDisplay());
   EXPECT_EQ(root_windows[0], window_->GetRootWindow());
   {
-    // Grab (0, 0) of the window and move the pointer to (775, 10).
+    // Grab (0, 0) of the window and move the pointer to (795, 10).
     std::unique_ptr<WindowResizer> resizer(
         CreateDragWindowResizer(window_.get(), gfx::Point(), HTCAPTION));
     ASSERT_TRUE(resizer.get());
@@ -340,6 +351,12 @@ TEST_F(DragWindowResizerTest, WindowDragWithMultiDisplaysActiveRoot) {
 
 // Verifies a window can be moved from the secondary display to primary.
 TEST_F(DragWindowResizerTest, WindowDragWithMultiDisplaysRightToLeft) {
+  // See comment on similar code at beginning of |WindowDragWithMultiDisplays|.
+  // TODO: Same TODO as with that other comment.
+  window_->SetProperty(aura::client::kResizeBehaviorKey,
+                       aura::client::kResizeBehaviorNone);
+  ASSERT_FALSE(WindowState::Get(window_.get())->CanSnap());
+
   UpdateDisplay("800x600,800x600");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   ASSERT_EQ(2U, root_windows.size());

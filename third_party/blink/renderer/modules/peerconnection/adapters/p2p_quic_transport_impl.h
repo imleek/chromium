@@ -100,7 +100,7 @@ class MODULES_EXPORT P2PQuicTransportImpl final
   bool CanSendDatagram();
 
   // quic::QuicSession override.
-  void OnMessageReceived(quic::QuicStringPiece message) override;
+  void OnMessageReceived(quiche::QuicheStringPiece message) override;
   void OnMessageLost(quic::QuicMessageId message_id) override;
   void OnCanWrite() override;
 
@@ -140,6 +140,7 @@ class MODULES_EXPORT P2PQuicTransportImpl final
   P2PQuicStreamImpl* CreateOutgoingBidirectionalStream();
 
   void OnCryptoHandshakeEvent(CryptoHandshakeEvent event) override;
+  void SetDefaultEncryptionLevel(quic::EncryptionLevel level) override;
 
  private:
   // This is for testing connection failures and handshake failures.

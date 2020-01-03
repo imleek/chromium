@@ -5,6 +5,9 @@
 #import "ios/chrome/browser/ui/overlays/overlay_coordinator_factory.h"
 
 #include "base/logging.h"
+#include "ios/chrome/browser/overlays/public/overlay_request_support.h"
+#import "ios/chrome/browser/ui/overlays/infobar_banner/infobar_banner_supported_overlay_coordinator_classes.h"
+#import "ios/chrome/browser/ui/overlays/infobar_modal/infobar_modal_supported_overlay_coordinator_classes.h"
 #import "ios/chrome/browser/ui/overlays/overlay_coordinator_factory+initialization.h"
 #import "ios/chrome/browser/ui/overlays/overlay_request_coordinator.h"
 #import "ios/chrome/browser/ui/overlays/web_content_area/web_content_area_supported_overlay_coordinator_classes.h"
@@ -32,6 +35,14 @@
     case OverlayModality::kWebContentArea:
       supportedCoordinatorClasses =
           web_content_area::GetSupportedOverlayCoordinatorClasses();
+      break;
+    case OverlayModality::kInfobarBanner:
+      supportedCoordinatorClasses =
+          infobar_banner::GetSupportedOverlayCoordinatorClasses();
+      break;
+    case OverlayModality::kInfobarModal:
+      supportedCoordinatorClasses =
+          infobar_modal::GetSupportedOverlayCoordinatorClasses();
       break;
   }
   return [[self alloc] initWithBrowser:browser
@@ -62,9 +73,8 @@
   NSArray<Class>* supportedClasses =
       self.supportedOverlayRequestCoordinatorClasses;
   for (Class coordinatorClass in supportedClasses) {
-    if ([coordinatorClass supportsRequest:request]) {
+    if ([coordinatorClass requestSupport]->IsRequestSupported(request))
       return coordinatorClass;
-    }
   }
   NOTREACHED() << "Received unsupported request type.";
   return nil;

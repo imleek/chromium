@@ -265,14 +265,10 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "HTML form for submit";
     case SavePasswordProgressLogger::STRING_CREATED_PASSWORD_FORM:
       return "Created PasswordForm";
-    case SavePasswordProgressLogger::STRING_SUBMITTED_PASSWORD_REPLACED:
-      return "Submitted password replaced with the provisionally saved one";
     case SavePasswordProgressLogger::STRING_DID_START_PROVISIONAL_LOAD_METHOD:
       return "PasswordAutofillAgent::DidStartProvisionalLoad";
     case SavePasswordProgressLogger::STRING_FRAME_NOT_MAIN_FRAME:
       return "|frame| is not the main frame";
-    case SavePasswordProgressLogger::STRING_PROVISIONALLY_SAVED_FORM_FOR_FRAME:
-      return "provisionally_saved_forms_[form_frame]";
     case SavePasswordProgressLogger::STRING_PROVISIONALLY_SAVE_FORM_METHOD:
       return "PasswordManager::ProvisionallySaveForm";
     case SavePasswordProgressLogger::STRING_EMPTY_PASSWORD:
@@ -313,9 +309,6 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "Show password prompt";
     case SavePasswordProgressLogger::STRING_PASSWORDMANAGER_AUTOFILL:
       return "PasswordManager::Autofill";
-    case SavePasswordProgressLogger::
-        STRING_PASSWORDMANAGER_SHOW_INITIAL_PASSWORD_ACCOUNT_SUGGESTIONS:
-      return "PasswordManager::ShowInitialPasswordAccountSuggestions";
     case SavePasswordProgressLogger::STRING_WAIT_FOR_USERNAME:
       return "wait_for_username";
     case SavePasswordProgressLogger::
@@ -352,19 +345,6 @@ std::string SavePasswordProgressLogger::GetStringFromID(
              "visible";
     case SavePasswordProgressLogger::STRING_ON_FILL_PASSWORD_FORM_METHOD:
       return "PasswordAutofillAgent::OnFillPasswordForm";
-    case SavePasswordProgressLogger::
-        STRING_ON_SHOW_INITIAL_PASSWORD_ACCOUNT_SUGGESTIONS:
-      return "AutofillAgent::OnShowInitialPasswordAccountSuggestions";
-    case SavePasswordProgressLogger::STRING_AMBIGUOUS_OR_EMPTY_NAMES:
-      return "ambiguous_or_empty_names";
-    case SavePasswordProgressLogger::STRING_NUMBER_OF_POTENTIAL_FORMS_TO_FILL:
-      return "Number of potential forms to fill";
-    case SavePasswordProgressLogger::STRING_CONTAINS_FILLABLE_USERNAME_FIELD:
-      return "form_contains_fillable_username_field";
-    case SavePasswordProgressLogger::STRING_USERNAME_FIELD_NAME_EMPTY:
-      return "username_field_name empty";
-    case SavePasswordProgressLogger::STRING_PASSWORD_FIELD_NAME_EMPTY:
-      return "password_field_name empty";
     case SavePasswordProgressLogger::STRING_FORM_DATA_WAIT:
       return "form_data's wait_for_username";
     case SavePasswordProgressLogger::STRING_FILL_USERNAME_AND_PASSWORD_METHOD:
@@ -428,14 +408,20 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "HttpAuthManager::DetachObserver";
     case SavePasswordProgressLogger::STRING_SHOW_ONBOARDING:
       return "Show onboarding experience and offer to save password";
+    case STRING_LEAK_DETECTION_DISABLED_FEATURE:
+      return "Leak detection disabled in settings";
+    case STRING_LEAK_DETECTION_DISABLED_SAFE_BROWSING:
+      return "Leak detection is off as the safe browsing is disabled";
     case STRING_LEAK_DETECTION_FINISHED:
       return "Leak detection finished with result";
+    case STRING_LEAK_DETECTION_HASH_ERROR:
+      return "Leak detection failed: hashing/encryption error";
+    case STRING_LEAK_DETECTION_INVALID_SERVER_RESPONSE_ERROR:
+      return "Leak detection failed: invalid server response";
     case STRING_LEAK_DETECTION_SIGNED_OUT_ERROR:
       return "Leak detection failed: signed out";
     case STRING_LEAK_DETECTION_TOKEN_REQUEST_ERROR:
       return "Leak detection failed: can't get a token";
-    case STRING_LEAK_DETECTION_INVALID_SERVER_RESPONSE_ERROR:
-      return "Leak detection failed: invalid server response";
     case SavePasswordProgressLogger::
         STRING_PASSWORD_REQUIREMENTS_VOTE_FOR_LOWERCASE:
       return "Uploading password requirements vote for using lowercase letters";

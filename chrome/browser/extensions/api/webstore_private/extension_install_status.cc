@@ -12,6 +12,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/crx_file/id_util.h"
 #include "components/prefs/pref_service.h"
+#include "extensions/browser/extension_prefs.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest_constants.h"
@@ -22,6 +23,11 @@ ExtensionInstallStatus GetWebstoreExtensionInstallStatus(
     const ExtensionId& extension_id,
     Profile* profile) {
   DCHECK(crx_file::id_util::IdIsValid(extension_id));
+
+  if (ExtensionPrefs::Get(profile)->HasDisableReason(
+          extension_id, disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED)) {
+    return kCustodianApprovalRequired;
+  }
 
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile);
   if (registry->enabled_extensions().Contains(extension_id))
@@ -59,12 +65,9 @@ ExtensionInstallStatus GetWebstoreExtensionInstallStatus(
   if (extension_management->IsInstallationExplicitlyBlocked(extension_id))
     return kBlockedByPolicy;
 
-  const auto pending_list =
-      profile->GetPrefs()->GetList(prefs::kCloudExtensionRequestIds)->GetList();
-  if (std::any_of(pending_list.begin(), pending_list.end(),
-                  [&extension_id](const base::Value& pending_id) {
-                    return pending_id.GetString() == extension_id;
-                  })) {
+  if (profile->GetPrefs()
+          ->GetDictionary(prefs::kCloudExtensionRequestIds)
+          ->FindKey(extension_id)) {
     return kRequestPending;
   }
 

@@ -476,7 +476,7 @@ protocol::Response OverlayAgentViews::HighlightNode(int node_id,
 
   if (!layer_for_highlighting_) {
     layer_for_highlighting_.reset(new ui::Layer(ui::LayerType::LAYER_TEXTURED));
-    layer_for_highlighting_->set_name("HighlightingLayer");
+    layer_for_highlighting_->SetName("HighlightingLayer");
     layer_for_highlighting_->set_delegate(this);
     layer_for_highlighting_->SetFillsBoundsOpaquely(false);
   }
@@ -578,7 +578,7 @@ void OverlayAgentViews::OnPaintLayer(const ui::PaintContext& context) {
   flags.setPathEffect(SkDashPathEffect::Make(intervals, 2, 0));
 
   if (!render_text_)
-    render_text_ = gfx::RenderText::CreateHarfBuzzInstance();
+    render_text_ = gfx::RenderText::CreateRenderText();
   DrawRulers(screen_bounds, canvas, render_text_.get());
 
   // Display guide lines if |highlight_rect_config_| is NO_DRAW.

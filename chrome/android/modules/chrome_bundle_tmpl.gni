@@ -52,18 +52,14 @@ template("chrome_bundle") {
   # Determine whether the bundle has native libraries for both the primary and
   # the secondary ABI. This is the case if we package WebView with the
   # complementary ABI of the browser.
-  _is_64_bit_browser =
-      defined(invoker.is_64_bit_browser) && invoker.is_64_bit_browser
-  _include_32_bit_webview =
-      defined(invoker.include_32_bit_webview) && invoker.include_32_bit_webview
-  _is_multi_abi = false
-  if (_is_64_bit_browser) {
-    _is_multi_abi = _include_32_bit_webview
+  if (android_64bit_target_cpu) {
+    if (invoker.is_64_bit_browser) {
+      _is_multi_abi = invoker.include_32_bit_webview
+    } else {
+      _is_multi_abi = invoker.include_64_bit_webview
+    }
   } else {
-    assert(!_include_32_bit_webview)
-
-    # WebView is included with 64bit ABI if |android_64bit_target_cpu| is true.
-    _is_multi_abi = android_64bit_target_cpu
+    _is_multi_abi = false
   }
 
   android_app_bundle(target_name) {
@@ -82,13 +78,14 @@ template("chrome_bundle") {
                              "sign_bundle",
                              "static_library_proguard_disabled",
                              "static_library_provider",
+                             "static_library_synchronized_proguard",
                              "verify_proguard_flags",
                            ])
     command_line_flags_file = "chrome-command-line"
     proguard_enabled = !is_java_debug
     enable_language_splits = true
     extra_modules = _extra_modules
-    system_image_locale_whitelist = locales - android_chrome_omitted_locales
+    system_image_locale_whitelist = android_apk_locales
     is_multi_abi = _is_multi_abi
 
     # NOTE: Only sign bundle for official builds since this is very slow.

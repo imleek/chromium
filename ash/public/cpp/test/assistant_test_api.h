@@ -6,6 +6,7 @@
 #define ASH_PUBLIC_CPP_TEST_ASSISTANT_TEST_API_H_
 
 #include <memory>
+#include <string>
 
 #include "ash/ash_export.h"
 
@@ -19,6 +20,8 @@ class View;
 }  // namespace views
 
 namespace ash {
+
+class AssistantState;
 
 // Public test API for the Assistant UI.
 // This API works both for ash and browser tests.
@@ -38,14 +41,19 @@ class ASH_EXPORT AssistantTestApi {
   // queries, i.e. the input text field must be visible and focussed.
   virtual void SendTextQuery(const std::string& query) = 0;
 
-  // Enables Assistant in settings.
-  virtual void EnableAssistant() = 0;
+  // Enables/Disables Assistant in settings.
+  // This will ensure the new value is propagated to the |AssistantState|.
+  virtual void SetAssistantEnabled(bool enabled) = 0;
 
   virtual void SetTabletMode(bool enable) = 0;
 
   // Changes the user setting controlling whether the user prefers voice or
-  // keyboard.
+  // keyboard (internally called |kAssistantLaunchWithMicOpen|).
+  // This will ensure the new value is propagated to the |AssistantState|.
   virtual void SetPreferVoice(bool value) = 0;
+
+  // Returns the interface to get/set Assistant related prefs and states.
+  virtual AssistantState* GetAssistantState() = 0;
 
   // Returns the top-level Assistant specific view.
   // Can only be used after the Assistant UI has been shown at least once.
@@ -54,6 +62,11 @@ class ASH_EXPORT AssistantTestApi {
   // Returns the Assistant main view.
   // Can only be used after the Assistant UI has been shown at least once.
   virtual views::View* main_view() = 0;
+
+  // Returns the Assistant UI element container view, which contains all the
+  // responses.
+  // Can only be used after the Assistant UI has been shown at least once.
+  virtual views::View* ui_element_container() = 0;
 
   // Returns the text field used for inputting new queries.
   // Can only be used after the Assistant UI has been shown at least once.
@@ -67,9 +80,26 @@ class ASH_EXPORT AssistantTestApi {
   // Can only be used after the Assistant UI has been shown at least once.
   virtual views::View* greeting_label() = 0;
 
+  // Returns the button to enable voice mode.
+  // Can only be used after the Assistant UI has been shown at least once.
+  virtual views::View* voice_input_toggle() = 0;
+
+  // Returns the button to enable text mode.
+  // Can only be used after the Assistant UI has been shown at least once.
+  virtual views::View* keyboard_input_toggle() = 0;
+
   // Returns the window containing the Assistant UI.
   // Note that this window is shared for all components of the |AppList|.
+  // Can only be used after the Assistant UI has been shown at least once.
   virtual aura::Window* window() = 0;
+
+  // Returns the app list view hosting the Assistant UI.
+  // Can only be used after the Assistant UI has been shown at least once.
+  virtual views::View* app_list_view() = 0;
+
+  // Returns the root window containing the Assistant UI (and the Ash shell).
+  // This can be used even when the Assistant UI has never been shown.
+  virtual aura::Window* root_window() = 0;
 };
 
 }  // namespace ash

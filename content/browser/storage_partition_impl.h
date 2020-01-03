@@ -84,12 +84,12 @@ class CONTENT_EXPORT StoragePartitionImpl
   // Passing a null callback will restore the default behavior.
   // This method must be called either on the UI thread or before threads start.
   // This callback is run on the UI thread.
-  using CreateNetworkFactoryCallback =
-      base::Callback<mojo::PendingRemote<network::mojom::URLLoaderFactory>(
+  using CreateNetworkFactoryCallback = base::RepeatingCallback<
+      mojo::PendingRemote<network::mojom::URLLoaderFactory>(
           mojo::PendingRemote<network::mojom::URLLoaderFactory>
               original_factory)>;
   static void SetGetURLLoaderFactoryForBrowserProcessCallbackForTesting(
-      const CreateNetworkFactoryCallback& url_loader_factory_callback);
+      CreateNetworkFactoryCallback url_loader_factory_callback);
 
   void OverrideQuotaManagerForTesting(
       storage::QuotaManager* quota_manager);
@@ -108,7 +108,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   GetURLLoaderFactoryForBrowserProcess() override;
   scoped_refptr<network::SharedURLLoaderFactory>
   GetURLLoaderFactoryForBrowserProcessWithCORBEnabled() override;
-  std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+  std::unique_ptr<network::PendingSharedURLLoaderFactory>
   GetURLLoaderFactoryForBrowserProcessIOThread() override;
   network::mojom::CookieManager* GetCookieManagerForBrowserProcess() override;
   void CreateRestrictedCookieManager(
@@ -159,7 +159,7 @@ class CONTENT_EXPORT StoragePartitionImpl
                  base::OnceClosure callback) override;
   void ClearData(uint32_t remove_mask,
                  uint32_t quota_storage_remove_mask,
-                 const OriginMatcherFunction& origin_matcher,
+                 OriginMatcherFunction origin_matcher,
                  network::mojom::CookieDeletionFilterPtr cookie_deletion_filter,
                  bool perform_storage_cleanup,
                  const base::Time begin,
@@ -197,8 +197,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   // network::mojom::NetworkContextClient interface.
   void OnAuthRequired(
       const base::Optional<base::UnguessableToken>& window_id,
-      uint32_t process_id,
-      uint32_t routing_id,
+      int32_t process_id,
+      int32_t routing_id,
       uint32_t request_id,
       const GURL& url,
       bool first_auth_attempt,
@@ -208,20 +208,20 @@ class CONTENT_EXPORT StoragePartitionImpl
           auth_challenge_responder) override;
   void OnCertificateRequested(
       const base::Optional<base::UnguessableToken>& window_id,
-      uint32_t process_id,
-      uint32_t routing_id,
+      int32_t process_id,
+      int32_t routing_id,
       uint32_t request_id,
       const scoped_refptr<net::SSLCertRequestInfo>& cert_info,
       mojo::PendingRemote<network::mojom::ClientCertificateResponder>
           cert_responder) override;
-  void OnSSLCertificateError(uint32_t process_id,
-                             uint32_t routing_id,
+  void OnSSLCertificateError(int32_t process_id,
+                             int32_t routing_id,
                              const GURL& url,
                              int net_error,
                              const net::SSLInfo& ssl_info,
                              bool fatal,
                              OnSSLCertificateErrorCallback response) override;
-  void OnFileUploadRequested(uint32_t process_id,
+  void OnFileUploadRequested(int32_t process_id,
                              bool async,
                              const std::vector<base::FilePath>& file_paths,
                              OnFileUploadRequestedCallback callback) override;
@@ -231,7 +231,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   void OnCanSendDomainReliabilityUpload(
       const GURL& origin,
       OnCanSendDomainReliabilityUploadCallback callback) override;
-  void OnClearSiteData(uint32_t process_id,
+  void OnClearSiteData(int32_t process_id,
                        int32_t routing_id,
                        const GURL& url,
                        const std::string& header_value,
@@ -271,13 +271,13 @@ class CONTENT_EXPORT StoragePartitionImpl
   BrowserContext* browser_context() const;
 
   // Called by each renderer process for each StoragePartitionService interface
-  // it binds in the renderer process. Returns the id of the created binding.
-  mojo::BindingId Bind(
+  // it binds in the renderer process. Returns the id of the created receiver.
+  mojo::ReceiverId Bind(
       int process_id,
       mojo::PendingReceiver<blink::mojom::StoragePartitionService> receiver);
 
-  // Remove a binding created by a previous Bind() call.
-  void Unbind(mojo::BindingId binding_id);
+  // Remove a receiver created by a previous Bind() call.
+  void Unbind(mojo::ReceiverId receiver_id);
 
   auto& receivers_for_testing() { return receivers_; }
 
@@ -285,14 +285,14 @@ class CONTENT_EXPORT StoragePartitionImpl
   // is the site URL to use when creating a SiteInstance for a service worker.
   // Typically one would use the script URL of the service worker (e.g.,
   // "https://example.com/sw.js"), but if this StoragePartition is for guests,
-  // one must use the "chrome-guest://blahblah" site URL to ensure that the
+  // one must use the <webview> guest site URL to ensure that the
   // service worker stays in this StoragePartition. This is an empty GURL if
   // this StoragePartition is not for guests.
-  void set_site_for_service_worker(const GURL& site_for_service_worker) {
-    site_for_service_worker_ = site_for_service_worker;
+  void set_site_for_guest_service_worker(const GURL& site_for_service_worker) {
+    site_for_guest_service_worker_ = site_for_service_worker;
   }
-  const GURL& site_for_service_worker() const {
-    return site_for_service_worker_;
+  const GURL& site_for_guest_service_worker() const {
+    return site_for_guest_service_worker_;
   }
 
   // Use the network context to retrieve the origin policy manager.
@@ -385,7 +385,7 @@ class CONTENT_EXPORT StoragePartitionImpl
       uint32_t remove_mask,
       uint32_t quota_storage_remove_mask,
       const GURL& remove_origin,
-      const OriginMatcherFunction& origin_matcher,
+      OriginMatcherFunction origin_matcher,
       network::mojom::CookieDeletionFilterPtr cookie_deletion_filter,
       bool perform_storage_cleanup,
       const base::Time begin,
@@ -493,8 +493,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   mojo::Remote<network::mojom::OriginPolicyManager>
       origin_policy_manager_for_browser_process_;
 
-  // See comments for site_for_service_worker().
-  GURL site_for_service_worker_;
+  // See comments for site_for_guest_service_worker().
+  GURL site_for_guest_service_worker_;
 
   // Track number of running deletion. For test use only.
   int deletion_helpers_running_;

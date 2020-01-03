@@ -96,6 +96,11 @@ ExpandArrowView::ExpandArrowView(ContentsView* contents_view,
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
+  // ExpandArrowView draws its own focus, removing FocusRing prevents double
+  // focus.
+  // TODO(pbos): Replace ::OnPaint focus painting with FocusRing +
+  // HighlightPathGenerator usage.
+  SetInstallFocusRingOnFocus(false);
   SetInkDropMode(InkDropMode::ON);
 
   SetAccessibleName(l10n_util::GetStringUTF16(IDS_APP_LIST_EXPAND_BUTTON));
@@ -345,12 +350,12 @@ void ExpandArrowView::AnimationEnded(const gfx::Animation* /*animation*/) {
 }
 
 void ExpandArrowView::TransitToFullscreenAllAppsState() {
-  UMA_HISTOGRAM_ENUMERATION(kPageOpenedHistogram, ash::AppListState::kStateApps,
-                            ash::AppListState::kStateLast);
+  UMA_HISTOGRAM_ENUMERATION(kPageOpenedHistogram, AppListState::kStateApps,
+                            AppListState::kStateLast);
   UMA_HISTOGRAM_ENUMERATION(kAppListPeekingToFullscreenHistogram, kExpandArrow,
                             kMaxPeekingToFullscreen);
-  contents_view_->SetActiveState(ash::AppListState::kStateApps);
-  app_list_view_->SetState(ash::AppListViewState::kFullscreenAllApps);
+  contents_view_->SetActiveState(AppListState::kStateApps);
+  app_list_view_->SetState(AppListViewState::kFullscreenAllApps);
 }
 
 void ExpandArrowView::MaybeEnableHintingAnimation(bool enabled) {

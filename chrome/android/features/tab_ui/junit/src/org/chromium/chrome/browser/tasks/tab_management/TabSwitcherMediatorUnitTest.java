@@ -50,13 +50,14 @@ import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.flags.FeatureUtilities;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
@@ -128,9 +129,9 @@ public class TabSwitcherMediatorUnitTest {
     @Captor
     ArgumentCaptor<ChromeFullscreenManager.FullscreenListener> mFullscreenListenerCaptor;
 
-    private Tab mTab1;
-    private Tab mTab2;
-    private Tab mTab3;
+    private TabImpl mTab1;
+    private TabImpl mTab2;
+    private TabImpl mTab3;
     private TabSwitcherMediator mMediator;
     private PropertyModel mModel;
 
@@ -184,7 +185,7 @@ public class TabSwitcherMediatorUnitTest {
         mModel = new PropertyModel(TabListContainerProperties.ALL_KEYS);
         mModel.addObserver(mPropertyObserver);
         mMediator = new TabSwitcherMediator(mResetHandler, mModel, mTabModelSelector,
-                mFullscreenManager, mCompositorViewHolder, null,
+                mFullscreenManager, mCompositorViewHolder, null, null,
                 TabListCoordinator.TabListMode.GRID);
         mMediator.addOverviewModeObserver(mOverviewModeObserver);
         mMediator.setOnTabSelectingListener(mLayout::onTabSelecting);
@@ -409,7 +410,8 @@ public class TabSwitcherMediatorUnitTest {
         assertThat(mModel.get(TabListContainerProperties.BOTTOM_CONTROLS_HEIGHT),
                 equalTo(CONTROL_HEIGHT_DEFAULT));
 
-        mFullscreenListenerCaptor.getValue().onBottomControlsHeightChanged(CONTROL_HEIGHT_MODIFIED);
+        mFullscreenListenerCaptor.getValue().onBottomControlsHeightChanged(
+                CONTROL_HEIGHT_MODIFIED, 0);
         assertThat(mModel.get(TabListContainerProperties.BOTTOM_CONTROLS_HEIGHT),
                 equalTo(CONTROL_HEIGHT_MODIFIED));
     }
@@ -536,7 +538,7 @@ public class TabSwitcherMediatorUnitTest {
     public void openDialogButton_FlagDisabled() {
         FeatureUtilities.setTabGroupsAndroidEnabledForTesting(false);
         // Set up a tab group.
-        Tab newTab = prepareTab(TAB4_ID, TAB4_TITLE);
+        TabImpl newTab = prepareTab(TAB4_ID, TAB4_TITLE);
         doReturn(new ArrayList<>(Arrays.asList(mTab1, newTab)))
                 .when(mTabModelFilter)
                 .getRelatedTabList(TAB1_ID);
@@ -562,7 +564,7 @@ public class TabSwitcherMediatorUnitTest {
         FeatureUtilities.setTabGroupsAndroidEnabledForTesting(true);
         mMediator.setTabGridDialogController(mTabGridDialogController);
         // Set up a tab group.
-        Tab newTab = prepareTab(TAB4_ID, TAB4_TITLE);
+        TabImpl newTab = prepareTab(TAB4_ID, TAB4_TITLE);
         List<Tab> tabs = new ArrayList<>(Arrays.asList(mTab1, newTab));
         doReturn(tabs).when(mTabModelFilter).getRelatedTabList(TAB1_ID);
 
@@ -602,8 +604,8 @@ public class TabSwitcherMediatorUnitTest {
                 equalTo(CONTROL_HEIGHT_DEFAULT));
     }
 
-    private Tab prepareTab(int id, String title) {
-        Tab tab = mock(Tab.class);
+    private TabImpl prepareTab(int id, String title) {
+        TabImpl tab = mock(TabImpl.class);
         when(tab.getView()).thenReturn(mock(View.class));
         when(tab.getUserDataHost()).thenReturn(new UserDataHost());
         doReturn(id).when(tab).getId();

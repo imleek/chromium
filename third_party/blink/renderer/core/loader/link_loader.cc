@@ -76,11 +76,6 @@ unsigned PrerenderRelTypesFromRelAttribute(
 
 }  // namespace
 
-LinkLoader* LinkLoader::Create(LinkLoaderClient* client) {
-  return MakeGarbageCollected<LinkLoader>(client,
-                                          client->GetLoadingTaskRunner());
-}
-
 class LinkLoader::FinishObserver final
     : public GarbageCollected<LinkLoader::FinishObserver>,
       public ResourceFinishObserver {
@@ -229,7 +224,8 @@ void LinkLoader::LoadStylesheet(const LinkLoadParameters& params,
                                 ResourceClient* link_client) {
   Document* document_for_origin = &document;
   if (base::FeatureList::IsEnabled(
-          features::kHtmlImportsRequestInitiatorLock)) {
+          features::kHtmlImportsRequestInitiatorLock) &&
+      document.ImportsController()) {
     // For stylesheets loaded from HTML imported Documents, we use
     // context document for getting origin and ResourceFetcher to use the main
     // Document's origin, while using element document for CompleteURL() to use

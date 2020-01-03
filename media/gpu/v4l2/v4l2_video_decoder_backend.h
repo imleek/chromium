@@ -8,10 +8,12 @@
 #include "base/memory/scoped_refptr.h"
 #include "media/base/decode_status.h"
 #include "media/base/video_decoder.h"
+#include "media/gpu/chromeos/dmabuf_video_frame_pool.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace media {
 
+class DmabufVideoFramePool;
 class V4L2Device;
 class V4L2Queue;
 class V4L2ReadableBuffer;
@@ -48,13 +50,15 @@ class V4L2VideoDecoderBackend {
     virtual void CompleteFlush() = 0;
     // Stop the stream to reallocate the CAPTURE buffers. Can only be done
     // between calls to |InitiateFlush| and |CompleteFlush|.
-    virtual bool ChangeResolution(gfx::Size pic_size,
+    virtual void ChangeResolution(gfx::Size pic_size,
                                   gfx::Rect visible_rect,
                                   size_t num_output_frames) = 0;
     // Convert the frame and call the output callback.
     virtual void OutputFrame(scoped_refptr<VideoFrame> frame,
                              const gfx::Rect& visible_rect,
                              base::TimeDelta timestamp) = 0;
+    // Get the video frame pool without passing the ownership.
+    virtual DmabufVideoFramePool* GetVideoFramePool() const = 0;
   };
 
   virtual ~V4L2VideoDecoderBackend();
@@ -71,6 +75,9 @@ class V4L2VideoDecoderBackend {
   // Called whenever the V4L2 stream is stopped (|Streamoff| called on both
   // |V4L2Queue|s).
   virtual void OnStreamStopped() = 0;
+  // Called when ChangeResolution is done. |success| indicates whether there is
+  // any error occurs during the resolution change.
+  virtual void OnChangeResolutionDone(bool success) = 0;
   // Clear all pending decoding tasks and call all pending decode callbacks
   // with |status| as argument.
   virtual void ClearPendingRequests(DecodeStatus status) = 0;

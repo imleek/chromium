@@ -42,9 +42,9 @@
 #include "mojo/public/cpp/bindings/remote_set.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
-#include "third_party/blink/public/platform/web_input_event.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/web/web_ax_object.h"
 #include "third_party/blink/public/web/web_console_message.h"
@@ -254,7 +254,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   void PageScaleFactorChanged(float page_scale_factor) override;
   void DidUpdateTextAutosizerPageInfo(
       const blink::WebTextAutosizerPageInfo& page_info) override;
-  void PageImportanceSignalsChanged() override;
   void DidAutoResize(const blink::WebSize& newSize) override;
   void DidFocus(blink::WebLocalFrame* calling_frame) override;
   bool CanHandleGestureEvent() override;
@@ -405,9 +404,7 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   void DidCompletePageScaleAnimationForWidget() override;
   void ResizeWebWidgetForWidget(
       const gfx::Size& widget_size,
-      float top_controls_height,
-      float bottom_controls_height,
-      bool browser_controls_shrink_blink_size) override;
+      cc::BrowserControlsParams browser_controls_params) override;
   void SetScreenMetricsEmulationParametersForWidget(
       bool enabled,
       const blink::WebDeviceEmulationParams& params) override;
@@ -420,10 +417,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   // WebLocalFrameClient methods still live here and are called from
   // RenderFrameImpl. These implementations are to be moved to RenderFrameImpl
   // <http://crbug.com/361761>.
-
-  static Referrer GetReferrerFromRequest(
-      blink::WebFrame* frame,
-      const blink::WebURLRequest& request);
 
   static WindowOpenDisposition NavigationPolicyToDisposition(
       blink::WebNavigationPolicy policy);
@@ -466,6 +459,7 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   void RestorePageFromBackForwardCache(base::TimeTicks navigation_start);
   void OnTextAutosizerPageInfoChanged(
       const blink::WebTextAutosizerPageInfo& page_info);
+  void OnSetInsidePortal(bool inside_portal);
 
   // Adding a new message handler? Please add it in alphabetical order above
   // and put it in the same position in the .cc file.

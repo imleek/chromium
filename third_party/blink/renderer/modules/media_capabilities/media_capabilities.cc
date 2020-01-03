@@ -31,12 +31,16 @@
 #include "third_party/blink/renderer/modules/encryptedmedia/media_key_system_configuration.h"
 #include "third_party/blink/renderer/modules/encryptedmedia/media_key_system_media_capability.h"
 #include "third_party/blink/renderer/modules/encryptedmedia/media_keys_controller.h"
+#include "third_party/blink/renderer/modules/media_capabilities/audio_configuration.h"
+#include "third_party/blink/renderer/modules/media_capabilities/key_system_track_configuration.h"
 #include "third_party/blink/renderer/modules/media_capabilities/media_capabilities_decoding_info.h"
 #include "third_party/blink/renderer/modules/media_capabilities/media_capabilities_info.h"
+#include "third_party/blink/renderer/modules/media_capabilities/media_capabilities_key_system_configuration.h"
 #include "third_party/blink/renderer/modules/media_capabilities/media_configuration.h"
 #include "third_party/blink/renderer/modules/media_capabilities/media_decoding_configuration.h"
 #include "third_party/blink/renderer/modules/media_capabilities/media_encoding_configuration.h"
 #include "third_party/blink/renderer/modules/mediarecorder/media_recorder_handler.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/to_v8.h"
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
@@ -50,8 +54,6 @@
 #include "third_party/blink/renderer/platform/peerconnection/transmission_encoding_info_handler.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
-
-#include "third_party/blink/renderer/modules/encryptedmedia/media_key_system_access_initializer_base.h"
 
 namespace blink {
 
@@ -135,29 +137,8 @@ class MediaCapabilitiesKeySystemAccessInitializer final
   DISALLOW_COPY_AND_ASSIGN(MediaCapabilitiesKeySystemAccessInitializer);
 };
 
-// Computes the effective framerate value based on the framerate field passed to
-// the VideoConfiguration. It will return the parsed string as a double or
-// compute the value in case of it is of the form "a/b".
-// If the value is not valid, it will return NaN.
-double ComputeFrameRate(const String& fps_str) {
-  double result = ParseToDoubleForNumberType(fps_str);
-  if (std::isfinite(result))
-    return result > 0 ? result : std::numeric_limits<double>::quiet_NaN();
-
-  wtf_size_t slash_position = fps_str.find('/');
-  if (slash_position == kNotFound)
-    return std::numeric_limits<double>::quiet_NaN();
-
-  double numerator =
-      ParseToDoubleForNumberType(fps_str.Substring(0, slash_position));
-  double denominator = ParseToDoubleForNumberType(fps_str.Substring(
-      slash_position + 1, fps_str.length() - slash_position - 1));
-  if (std::isfinite(numerator) && std::isfinite(denominator) && numerator > 0 &&
-      denominator > 0) {
-    return numerator / denominator;
-  }
-
-  return std::numeric_limits<double>::quiet_NaN();
+bool IsValidFrameRate(double framerate) {
+  return std::isfinite(framerate) && framerate > 0;
 }
 
 bool IsValidMimeType(const String& content_type, const String& prefix) {
@@ -196,21 +177,19 @@ bool IsValidMediaDecodingConfiguration(
   }
 
   if (configuration->hasKeySystemConfiguration()) {
-    if (configuration->keySystemConfiguration()->hasAudioRobustness() &&
+    if (configuration->keySystemConfiguration()->hasAudio() &&
         !configuration->hasAudio()) {
       *message =
-          "The keySystemConfiguration object contains an "
-          "audioRobustness property but the root configuration has no "
-          "audio configuration.";
+          "The keySystemConfiguration object contains an audio property but "
+          "the root configuration has no audio configuration.";
       return false;
     }
 
-    if (configuration->keySystemConfiguration()->hasVideoRobustness() &&
+    if (configuration->keySystemConfiguration()->hasVideo() &&
         !configuration->hasVideo()) {
       *message =
-          "The keySystemConfiguration object contains an "
-          "videoRobustness property but the root configuration has no "
-          "video configuration.";
+          "The keySystemConfiguration object contains a video property but the "
+          "root configuration has no video configuration.";
       return false;
     }
   }
@@ -225,7 +204,7 @@ bool IsValidVideoConfiguration(const VideoConfiguration* configuration) {
     return false;
 
   DCHECK(configuration->hasFramerate());
-  if (std::isnan(ComputeFrameRate(configuration->framerate())))
+  if (!IsValidFrameRate(configuration->framerate()))
     return false;
 
   return true;
@@ -292,9 +271,7 @@ WebVideoConfiguration ToWebVideoConfiguration(
   web_configuration.bitrate = configuration->bitrate();
 
   DCHECK(configuration->hasFramerate());
-  double computed_framerate = ComputeFrameRate(configuration->framerate());
-  DCHECK(!std::isnan(computed_framerate));
-  web_configuration.framerate = computed_framerate;
+  web_configuration.framerate = configuration->framerate();
 
   return web_configuration;
 }
@@ -420,6 +397,7 @@ bool IsAudioConfigurationSupported(
     const String& codec) {
   media::AudioCodec audio_codec = media::kUnknownAudioCodec;
   bool is_audio_codec_ambiguous = true;
+  bool is_spatial_rendering = false;
 
   // Must succeed as IsAudioCodecValid() should have been called before.
   bool parsed =
@@ -427,7 +405,10 @@ bool IsAudioConfigurationSupported(
                                    &is_audio_codec_ambiguous, &audio_codec);
   DCHECK(parsed && !is_audio_codec_ambiguous);
 
-  return media::IsSupportedAudioType({audio_codec});
+  if (audio_config->hasSpatialRendering())
+    is_spatial_rendering = audio_config->spatialRendering();
+
+  return media::IsSupportedAudioType({audio_codec, is_spatial_rendering});
 }
 
 // Returns whether the VideoConfiguration is supported.
@@ -492,44 +473,30 @@ MediaCapabilities::MediaCapabilities() = default;
 
 ScriptPromise MediaCapabilities::decodingInfo(
     ScriptState* script_state,
-    const MediaDecodingConfiguration* config) {
+    const MediaDecodingConfiguration* config,
+    ExceptionState& exception_state) {
   if (config->hasKeySystemConfiguration()) {
     UseCounter::Count(
         ExecutionContext::From(script_state),
         WebFeature::kMediaCapabilitiesDecodingInfoWithKeySystemConfig);
   }
-  if (config->hasVideo()) {
-    DCHECK(config->video()->hasFramerate());
-    if (!std::isnan(ComputeFrameRate(config->video()->framerate()))) {
-      if (config->video()->framerate().find('/') != kNotFound) {
-        UseCounter::Count(ExecutionContext::From(script_state),
-                          WebFeature::kMediaCapabilitiesFramerateRatio);
-      } else {
-        UseCounter::Count(ExecutionContext::From(script_state),
-                          WebFeature::kMediaCapabilitiesFramerateNumber);
-      }
-    }
-  }
 
   String message;
   if (!IsValidMediaDecodingConfiguration(config, &message)) {
-    return ScriptPromise::Reject(
-        script_state,
-        V8ThrowException::CreateTypeError(script_state->GetIsolate(), message));
+    exception_state.ThrowTypeError(message);
+    return ScriptPromise();
   }
 
   if (config->hasVideo() && !IsValidVideoConfiguration(config->video())) {
-    return ScriptPromise::Reject(
-        script_state, V8ThrowException::CreateTypeError(
-                          script_state->GetIsolate(),
-                          "The video configuration dictionary is not valid."));
+    exception_state.ThrowTypeError(
+        "The video configuration dictionary is not valid.");
+    return ScriptPromise();
   }
 
   if (config->hasAudio() && !IsValidAudioConfiguration(config->audio())) {
-    return ScriptPromise::Reject(
-        script_state, V8ThrowException::CreateTypeError(
-                          script_state->GetIsolate(),
-                          "The audio configuration dictionary is not valid."));
+    exception_state.ThrowTypeError(
+        "The audio configuration dictionary is not valid.");
+    return ScriptPromise();
   }
 
   // Validation errors should return above.
@@ -591,7 +558,7 @@ ScriptPromise MediaCapabilities::decodingInfo(
   if (config->hasKeySystemConfiguration()) {
     // GetEmeSupport() will call the VideoDecodePerfHistory service after
     // receiving info about support for the configuration for encrypted content.
-    return GetEmeSupport(script_state, video_profile, config);
+    return GetEmeSupport(script_state, video_profile, config, exception_state);
   }
 
   bool audio_supported = true;
@@ -679,7 +646,7 @@ ScriptPromise MediaCapabilities::encodingInfo(
   }
 
   if (configuration->type() == "record") {
-    if (auto* handler = MediaRecorderHandler::Create(
+    if (auto* handler = MakeGarbageCollected<MediaRecorderHandler>(
             ExecutionContext::From(script_state)
                 ->GetTaskRunner(TaskType::kInternalMediaRealTime))) {
       handler->EncodingInfo(ToWebMediaConfiguration(configuration),
@@ -718,7 +685,8 @@ bool MediaCapabilities::EnsureService(ExecutionContext* execution_context) {
 ScriptPromise MediaCapabilities::GetEmeSupport(
     ScriptState* script_state,
     media::VideoCodecProfile video_profile,
-    const MediaDecodingConfiguration* configuration) {
+    const MediaDecodingConfiguration* configuration,
+    ExceptionState& exception_state) {
   DVLOG(3) << __func__;
   DCHECK(configuration->hasKeySystemConfiguration());
 
@@ -736,47 +704,41 @@ ScriptPromise MediaCapabilities::GetEmeSupport(
         ConsoleMessage::Create(mojom::ConsoleMessageSource::kJavaScript,
                                mojom::ConsoleMessageLevel::kWarning,
                                kEncryptedMediaFeaturePolicyConsoleWarning));
-    return ScriptPromise::RejectWithDOMException(
-        script_state, MakeGarbageCollected<DOMException>(
-                          DOMExceptionCode::kSecurityError,
-                          "decodingInfo(): Creating MediaKeySystemAccess is "
-                          "disabled by feature policy."));
+    exception_state.ThrowSecurityError(
+        "decodingInfo(): Creating MediaKeySystemAccess is disabled by feature "
+        "policy.");
+    return ScriptPromise();
   }
 
   // Calling context must have a real Document bound to a Page. This check is
   // ported from rMKSA (see http://crbug.com/456720).
   if (!document->GetPage()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(
-            DOMExceptionCode::kInvalidStateError,
-            "The context provided is not associated with a page."));
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "The context provided is not associated with a page.");
+    return ScriptPromise();
   }
 
   if (execution_context->IsWorkerGlobalScope()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(
-            DOMExceptionCode::kInvalidStateError,
-            "Encrypted Media decoding info not available in Worker context."));
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "Encrypted Media decoding info not available in Worker context.");
+    return ScriptPromise();
   }
 
   if (!execution_context->IsSecureContext()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state, MakeGarbageCollected<DOMException>(
-                          DOMExceptionCode::kSecurityError,
-                          "Encrypted Media decoding info can only be "
-                          "queried in a secure context."));
+    exception_state.ThrowSecurityError(
+        "Encrypted Media decoding info can only be queried in a secure"
+        " context.");
+    return ScriptPromise();
   }
 
   MediaCapabilitiesKeySystemConfiguration* key_system_config =
       configuration->keySystemConfiguration();
   if (!key_system_config->hasKeySystem() ||
       key_system_config->keySystem().IsEmpty()) {
-    return ScriptPromise::Reject(
-        script_state,
-        V8ThrowException::CreateTypeError(
-            script_state->GetIsolate(), "The key system String is not valid."));
+    exception_state.ThrowTypeError("The key system String is not valid.");
+    return ScriptPromise();
   }
 
   MediaKeySystemConfiguration* eme_config =
@@ -814,9 +776,10 @@ ScriptPromise MediaCapabilities::GetEmeSupport(
         MediaKeySystemMediaCapability::Create();
     // Set the contentType attribute to config.audio.contentType.
     audio_capability->setContentType(configuration->audio()->contentType());
-    // Set the robustness attribute to
-    // config.keySystemConfiguration.audioRobustness.
-    audio_capability->setRobustness(key_system_config->audioRobustness());
+    // If config.keySystemConfiguration.audio is present, set the robustness
+    // attribute to config.keySystemConfiguration.audio.robustness.
+    if (key_system_config->hasAudio())
+      audio_capability->setRobustness(key_system_config->audio()->robustness());
 
     eme_config->setAudioCapabilities(
         HeapVector<Member<MediaKeySystemMediaCapability>>(1, audio_capability));
@@ -830,9 +793,10 @@ ScriptPromise MediaCapabilities::GetEmeSupport(
         MediaKeySystemMediaCapability::Create();
     // Set the contentType attribute to config.video.contentType.
     video_capability->setContentType(configuration->video()->contentType());
-    // Set the robustness attribute to
-    // config.keySystemConfiguration.videoRobustness.
-    video_capability->setRobustness(key_system_config->videoRobustness());
+    // If config.keySystemConfiguration.video is present, set the robustness
+    // attribute to config.keySystemConfiguration.video.robustness.
+    if (key_system_config->hasVideo())
+      video_capability->setRobustness(key_system_config->video()->robustness());
 
     eme_config->setVideoCapabilities(
         HeapVector<Member<MediaKeySystemMediaCapability>>(1, video_capability));
@@ -891,8 +855,7 @@ void MediaCapabilities::GetPerfInfo(media::VideoCodecProfile video_profile,
       media::mojom::blink::PredictionFeatures::New(
           static_cast<media::mojom::blink::VideoCodecProfile>(video_profile),
           WebSize(video_config->width(), video_config->height()),
-          ComputeFrameRate(video_config->framerate()), key_system,
-          use_hw_secure_codecs);
+          video_config->framerate(), key_system, use_hw_secure_codecs);
 
   decode_history_service_->GetPerfInfo(
       std::move(features),

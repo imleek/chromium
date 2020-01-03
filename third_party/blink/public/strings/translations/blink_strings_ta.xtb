@@ -82,7 +82,6 @@
 <translation id="3822383571486410024">இந்த உரையை <ph name="MIN_CHARACTERS" /> எழுத்துக்குறிகள் அல்லது அதற்கும் அதிகமாக (தற்போது <ph name="CURRENT_LENGTH" /> எழுத்துக்குறிகளைப் பயன்படுத்துகிறீர்கள்) நீட்டிக்கவும்.</translation>
 <translation id="383465348367842624">'<ph name="ATSIGN" />' ஐத் தொடர்ந்து வரும் பகுதியில் '<ph name="INVALIDCHARACTER" />' சின்னம் இருக்கக்கூடாது.</translation>
 <translation id="3846214748874656680">முழுத்திரை வேண்டாம்</translation>
-<translation id="3889183436948184105">மீள்திருத்தம்</translation>
 <translation id="3920932319529768807">முடிவு</translation>
 <translation id="3924558731517983934">ஆப்ஸ்</translation>
 <translation id="3944740393230681990">முன்னுரை</translation>
@@ -114,9 +113,11 @@
 <translation id="479989351350248267">தேடல்</translation>
 <translation id="4812940957355064477">எண்ணை உள்ளிடுக.</translation>
 <translation id="4912536737030637138">நூல்விவர அட்டவணை உள்ளீடு</translation>
+<translation id="492244087561876220">கருத்து</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> தேர்ந்தெடுக்கப்பட்டன</translation>
 <translation id="4992066212339426712">ஒலி இயக்கு</translation>
 <translation id="49969490063480558">'<ph name="ATSIGN" />' ஐத் தொடர்ந்து ஒரு பகுதியை உள்ளிடவும். '<ph name="INVALIDADDRESS" />' முழுமைப்பெறாமல் உள்ளது.</translation>
+<translation id="5022314756875057021">வரிசைக் குழு</translation>
 <translation id="5034860022980953847">செயல்நிலை காட்டி</translation>
 <translation id="5090250355906949916">வீடியோ நேர ஸ்க்ரப்பர்</translation>
 <translation id="5093189678851173835">கல்வெட்டு</translation>

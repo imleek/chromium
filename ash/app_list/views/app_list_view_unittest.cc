@@ -262,7 +262,7 @@ class AppListViewTest : public views::ViewsTestBase,
            view_->search_box_view()->GetWidget()->GetWindowBoundsInScreen();
   }
 
-  int ShelfHeight() const { return delegate_->GetShelfHeight(); }
+  int ShelfSize() const { return delegate_->GetShelfSize(); }
 
   // Gets the PaginationModel owned by |view_|.
   ash::PaginationModel* GetPaginationModel() const {
@@ -311,7 +311,7 @@ class AppListViewTest : public views::ViewsTestBase,
         container_size.width() - 2 * expected_horizontal_margin;
 
     const int search_box_and_suggestion_chip_height =
-        container_size.height() < 600 + ShelfHeight()
+        container_size.height() < 600 + ShelfSize()
             ? kSearchBoxAndSuggestionChipsHeightDense
             : kSearchBoxAndSuggestionChipsHeightDefault;
 
@@ -320,7 +320,7 @@ class AppListViewTest : public views::ViewsTestBase,
                                  kGridVerticalMargin;
     const int kExpectedGridHeight =
         container_size.height() - kExpectedGridTop -
-        (expected_vertical_margin - kGridVerticalInset) - ShelfHeight();
+        (expected_vertical_margin - kGridVerticalInset) - ShelfSize();
 
     EXPECT_EQ(gfx::Rect(expected_horizontal_margin, kExpectedGridTop,
                         kExpectedGridWidth, kExpectedGridHeight),
@@ -814,7 +814,7 @@ class AppListViewFocusTest : public views::ViewsTestBase,
   DISALLOW_COPY_AND_ASSIGN(AppListViewFocusTest);
 };
 
-INSTANTIATE_TEST_SUITE_P(, AppListViewFocusTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, AppListViewFocusTest, testing::Bool());
 
 }  // namespace
 
@@ -863,8 +863,8 @@ TEST_P(AppListViewFocusTest, LinearFocusTraversalInFullscreenAllAppsState) {
     forward_view_list.push_back(v);
   const views::ViewModelT<AppListItemView>* view_model =
       apps_grid_view()->view_model();
-  for (int i = 0; i < view_model->view_size(); ++i)
-    forward_view_list.push_back(view_model->view_at(i));
+  for (const auto& entry : view_model->entries())
+    forward_view_list.push_back(entry.view);
   forward_view_list.push_back(search_box_view()->search_box());
   std::vector<views::View*> backward_view_list = forward_view_list;
   std::reverse(backward_view_list.begin(), backward_view_list.end());
@@ -1006,8 +1006,8 @@ TEST_F(AppListViewFocusTest, CloseButtonClearsSearchOnEnter) {
   forward_view_list.push_back(search_box_view()->search_box());
   const views::ViewModelT<AppListItemView>* view_model =
       app_list_folder_view()->items_grid_view()->view_model();
-  for (int i = 0; i < view_model->view_size(); ++i)
-    forward_view_list.push_back(view_model->view_at(i));
+  for (const auto& entry : view_model->entries())
+    forward_view_list.push_back(entry.view);
   TestFocusTraversal(forward_view_list, ui::VKEY_TAB, false);
 }
 
@@ -1102,8 +1102,8 @@ TEST_P(AppListViewFocusTest, LinearFocusTraversalInFolder) {
   std::vector<views::View*> forward_view_list;
   const views::ViewModelT<AppListItemView>* view_model =
       app_list_folder_view()->items_grid_view()->view_model();
-  for (int i = 0; i < view_model->view_size(); ++i)
-    forward_view_list.push_back(view_model->view_at(i));
+  for (const auto& entry : view_model->entries())
+    forward_view_list.push_back(entry.view);
   forward_view_list.push_back(
       app_list_folder_view()->folder_header_view()->GetFolderNameViewForTest());
   forward_view_list.push_back(search_box_view()->search_box());
@@ -1937,7 +1937,7 @@ TEST_F(AppListViewTest, ShowFullscreenWhenInSideShelfMode) {
   EXPECT_EQ(ash::AppListViewState::kFullscreenAllApps, view_->app_list_state());
   // The rounded corners should be off screen in side shelf.
   gfx::Transform translation;
-  translation.Translate(0, -(delegate_->GetShelfHeight() / 2));
+  translation.Translate(0, -(delegate_->GetShelfSize() / 2));
   // The rounded corners should be off screen in side shelf.
   EXPECT_EQ(translation,
             view_->GetAppListBackgroundShieldForTest()->GetTransform());
@@ -2797,7 +2797,25 @@ TEST_F(AppListViewTest, ExpandArrowNotVisibleInEmbeddedAssistantUI) {
 
   contents_view()->ShowEmbeddedAssistantUI(true);
   EXPECT_TRUE(contents_view()->IsShowingEmbeddedAssistantUI());
-  EXPECT_TRUE(contents_view()->expand_arrow_view()->layer()->opacity() == 0.0f);
+  EXPECT_FALSE(contents_view()->expand_arrow_view()->GetVisible());
+}
+
+// Tests that search box is not visible when showing embedded Assistant UI.
+TEST_F(AppListViewTest, SearchBoxViewNotVisibleInEmbeddedAssistantUI) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {app_list_features::kEnableAssistantLauncherUI}, {});
+  ASSERT_TRUE(app_list_features::IsAssistantLauncherUIEnabled());
+
+  Initialize(false /*is_tablet_mode*/);
+  Show();
+
+  EXPECT_TRUE(search_box_view()->GetVisible());
+
+  contents_view()->ShowEmbeddedAssistantUI(true);
+
+  EXPECT_TRUE(contents_view()->IsShowingEmbeddedAssistantUI());
+  EXPECT_FALSE(search_box_view()->GetVisible());
 }
 
 // Tests fullscreen apps grid sizing and layout for small screens (width < 960)
@@ -2814,10 +2832,10 @@ TEST_F(AppListViewScalableLayoutTest,
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
 
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
+      (window_size.height() - ShelfSize()) / 16;
   VerifyAppsContainerLayout(
       window_size, 5 /*column_count*/, 4 /*row_count*/,
-      window_size.width() / 16 /*expected_horizontal_margin*/,
+      window_size.width() / 12 /*expected_horizontal_margin*/,
       expected_vertical_margin, 80 /*expected_item_size*/);
 }
 
@@ -2834,11 +2852,11 @@ TEST_F(AppListViewScalableLayoutTest, AppListViewLayoutForSmallPortraitScreen) {
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
 
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
-  VerifyAppsContainerLayout(
-      window_size, 4 /*column_count*/, 5 /*row_count*/,
-      window_size.width() / 12 /*expected_horizontal_margin*/,
-      expected_vertical_margin, 80 /*expected_item_size*/);
+      (window_size.height() - ShelfSize()) / 16;
+  VerifyAppsContainerLayout(window_size, 4 /*column_count*/, 5 /*row_count*/,
+                            56 /*expected_horizontal_margin*/,
+                            expected_vertical_margin,
+                            80 /*expected_item_size*/);
 }
 
 // Tests fullscreen apps grid sizing and layout for medium sized screens
@@ -2858,7 +2876,7 @@ TEST_F(AppListViewScalableLayoutTest,
   const int expected_horizontal_margin =
       (window_size.width() - GetItemGridSizeWithMaxItemMargins(88, 5)) / 2;
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
+      (window_size.height() - ShelfSize()) / 16;
   VerifyAppsContainerLayout(window_size, 5 /*column_count*/, 4 /*row_count*/,
                             expected_horizontal_margin,
                             expected_vertical_margin,
@@ -2879,10 +2897,10 @@ TEST_F(AppListViewScalableLayoutTest,
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
 
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
+      (window_size.height() - ShelfSize()) / 16;
   VerifyAppsContainerLayout(
       window_size, 4 /*column_count*/, 5 /*row_count*/,
-      window_size.width() / 16 /*expected_horizontal_margin*/,
+      window_size.width() / 12 /*expected_horizontal_margin*/,
       expected_vertical_margin, 88 /*expected_item_size*/);
 }
 
@@ -2903,7 +2921,7 @@ TEST_F(AppListViewScalableLayoutTest,
   const int expected_horizontal_margin =
       (window_size.width() - GetItemGridSizeWithMaxItemMargins(120, 5)) / 2;
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
+      (window_size.height() - ShelfSize()) / 16;
   VerifyAppsContainerLayout(window_size, 5 /*column_count*/, 4 /*row_count*/,
                             expected_horizontal_margin,
                             expected_vertical_margin,
@@ -2923,17 +2941,17 @@ TEST_F(AppListViewScalableLayoutTest, AppListViewLayoutForLargePortraitScreen) {
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
 
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
+      (window_size.height() - ShelfSize()) / 16;
   VerifyAppsContainerLayout(
       window_size, 4 /*column_count*/, 5 /*row_count*/,
-      window_size.width() / 16 /*expected_horizontal_margin*/,
+      window_size.width() / 12 /*expected_horizontal_margin*/,
       expected_vertical_margin, 120 /*expected_item_size*/);
 }
 
 // Tests that apps grid horizontal margin have minimum that ensures the page
 // switcher view can fit next to the apps grid.
 TEST_F(AppListViewScalableLayoutTest, EnsurePageSwitcherFitsAppsGridMargin) {
-  const gfx::Size window_size = gfx::Size(400, 800);
+  const gfx::Size window_size = gfx::Size(440, 800);
   gfx::NativeView parent = GetContext();
   parent->SetBounds(gfx::Rect(window_size));
 
@@ -2943,12 +2961,12 @@ TEST_F(AppListViewScalableLayoutTest, EnsurePageSwitcherFitsAppsGridMargin) {
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
 
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
+      (window_size.height() - ShelfSize()) / 16;
   // The horizontal margin is selected so the page switcher fits the margin
-  // space (note that 400 / 12, which is how the margin is normally calculated
+  // space (note that 440 / 12, which is how the margin is normally calculated
   // is smaller than the width required by page switcher).
   VerifyAppsContainerLayout(window_size, 4 /*column_count*/, 5 /*row_count*/,
-                            40 /*expected_horizontal_margin*/,
+                            56 /*expected_horizontal_margin*/,
                             expected_vertical_margin,
                             80 /*expected_item_size*/);
 }
@@ -2970,7 +2988,7 @@ TEST_F(AppListViewScalableLayoutTest, VerticalAppsGridItemSpacingIsBounded) {
   const int expected_horizontal_margin =
       (window_size.width() - GetItemGridSizeWithMaxItemMargins(120, 4)) / 2;
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight() - kGridVerticalInset -
+      (window_size.height() - ShelfSize() - kGridVerticalInset -
        kSearchBoxAndSuggestionChipsHeightDefault - kGridVerticalMargin -
        GetItemGridSizeWithMaxItemMargins(120, 5)) /
       2;
@@ -2993,9 +3011,12 @@ TEST_F(AppListViewScalableLayoutTest,
   Show();
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
 
+  // The horizontal margin is selected so the page switcher fits the margin
+  // space (note that 650 / 12, which is how the margin is normally calculated
+  // is smaller than the width required by page switcher).
   VerifyAppsContainerLayout(
       window_size, 5 /*column_count*/, 4 /*row_count*/,
-      window_size.width() / 16 /*expected_horizontal_margin*/,
+      56 /*expected_horizontal_margin*/,
       kGridVerticalInset + kGridVerticalMargin /*expected_vertical_margin*/,
       80 /*expected_item_size*/);
 }

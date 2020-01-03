@@ -89,8 +89,8 @@ def _ParseArgs(args):
       choices=['true', 'True', 'false', 'False'],
       help='Whether to uncompress native shared libraries. Argument must be '
            'a boolean value.')
-  parser.add_argument('--apksigner-path',
-                      help='Path to the apksigner executable.')
+  parser.add_argument(
+      '--apksigner-jar', help='Path to the apksigner executable.')
   parser.add_argument('--zipalign-path',
                       help='Path to the zipalign executable.')
   parser.add_argument('--key-path',
@@ -108,20 +108,16 @@ def _ParseArgs(args):
   options.secondary_native_lib_placeholders = build_utils.ParseGnList(
       options.secondary_native_lib_placeholders)
   options.java_resources = build_utils.ParseGnList(options.java_resources)
-  all_libs = []
-  for gyp_list in options.native_libs:
-    all_libs.extend(build_utils.ParseGnList(gyp_list))
-  options.native_libs = all_libs
-  secondary_libs = []
-  for gyp_list in options.secondary_native_libs:
-    secondary_libs.extend(build_utils.ParseGnList(gyp_list))
-  options.secondary_native_libs = secondary_libs
+  options.native_libs = build_utils.ParseGnList(options.native_libs)
+  options.secondary_native_libs = build_utils.ParseGnList(
+      options.secondary_native_libs)
 
-  # --apksigner-path, --zipalign-path, --key-xxx arguments are
+  # --apksigner-jar, --zipalign-path, --key-xxx arguments are
   # required when building an APK, but not a bundle module.
   if options.format == 'apk':
-    required_args = ['apksigner_path', 'zipalign_path', 'key_path',
-                     'key_passwd', 'key_name']
+    required_args = [
+        'apksigner_jar', 'zipalign_path', 'key_path', 'key_passwd', 'key_name'
+    ]
     for required in required_args:
       if not vars(options)[required]:
         raise Exception('Argument --%s is required for APKs.' % (
@@ -388,7 +384,7 @@ def main(args):
                 data=java_resource_jar.read(apk_path))
 
     if options.format == 'apk':
-      finalize_apk.FinalizeApk(options.apksigner_path, options.zipalign_path,
+      finalize_apk.FinalizeApk(options.apksigner_jar, options.zipalign_path,
                                f.name, f.name, options.key_path,
                                options.key_passwd, options.key_name)
 

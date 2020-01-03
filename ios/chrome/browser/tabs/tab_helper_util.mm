@@ -20,6 +20,8 @@
 #import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/complex_tasks/ios_task_tab_helper.h"
+#import "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_tab_helper.h"
+#import "ios/chrome/browser/crash_report/breadcrumbs/features.h"
 #import "ios/chrome/browser/download/ar_quick_look_tab_helper.h"
 #include "ios/chrome/browser/favicon/favicon_service_factory.h"
 #import "ios/chrome/browser/find_in_page/find_tab_helper.h"
@@ -28,12 +30,13 @@
 #include "ios/chrome/browser/history/top_sites_factory.h"
 #include "ios/chrome/browser/infobars/infobar_badge_tab_helper.h"
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
+#import "ios/chrome/browser/infobars/overlays/infobar_overlay_request_factory_impl.h"
+#import "ios/chrome/browser/infobars/overlays/infobar_overlay_tab_helper.h"
 #import "ios/chrome/browser/itunes_urls/itunes_urls_handler_tab_helper.h"
 #import "ios/chrome/browser/network_activity/network_activity_indicator_tab_helper.h"
 #import "ios/chrome/browser/open_in/open_in_tab_helper.h"
 #import "ios/chrome/browser/overscroll_actions/overscroll_actions_tab_helper.h"
 #import "ios/chrome/browser/passwords/password_tab_helper.h"
-#include "ios/chrome/browser/reading_list/features.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/reading_list/reading_list_web_state_observer.h"
 #import "ios/chrome/browser/search_engines/search_engine_tab_helper.h"
@@ -91,6 +94,11 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   OverscrollActionsTabHelper::CreateForWebState(web_state);
   IOSTaskTabHelper::CreateForWebState(web_state);
 
+  if (base::FeatureList::IsEnabled(kInfobarOverlayUI)) {
+    InfobarOverlayTabHelper::CreateForWebState(
+        web_state, std::make_unique<InfobarOverlayRequestFactoryImpl>());
+  }
+
   if (base::FeatureList::IsEnabled(kCaptivePortalMetrics)) {
     CaptivePortalMetricsTabHelper::CreateForWebState(web_state);
   }
@@ -99,13 +107,11 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
     FontSizeTabHelper::CreateForWebState(web_state);
   }
 
-  ImageFetchTabHelper::CreateForWebState(web_state);
-
-  if (!reading_list::IsOfflinePageWithoutNativeContentEnabled()) {
-    ReadingListModel* model =
-        ReadingListModelFactory::GetForBrowserState(browser_state);
-    ReadingListWebStateObserver::CreateForWebState(web_state, model);
+  if (base::FeatureList::IsEnabled(kLogBreadcrumbs)) {
+    BreadcrumbManagerTabHelper::CreateForWebState(web_state);
   }
+
+  ImageFetchTabHelper::CreateForWebState(web_state);
 
   OpenInTabHelper::CreateForWebState(web_state);
   ios::ChromeBrowserState* original_browser_state =

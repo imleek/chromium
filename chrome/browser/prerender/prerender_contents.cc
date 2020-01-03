@@ -134,15 +134,6 @@ class PrerenderContents::WebContentsDelegateImpl
     return false;
   }
 
-  bool ShouldSuppressDialogs(WebContents* source) override {
-    // We still want to show the user the message when they navigate to this
-    // page, so cancel this prerender.
-    prerender_contents_->Destroy(FINAL_STATUS_JAVASCRIPT_ALERT);
-    // Always suppress JavaScript messages if they're triggered by a page being
-    // prerendered.
-    return true;
-  }
-
   void RegisterProtocolHandler(WebContents* web_contents,
                                const std::string& protocol,
                                const GURL& url,
@@ -588,19 +579,6 @@ void PrerenderContents::DidFinishNavigation(
     return;
   }
 
-  // If the prerender made a second navigation entry, abort the prerender. This
-  // avoids having to correctly implement a complex history merging case (this
-  // interacts with location.replace) and correctly synchronize with the
-  // renderer. The final status may be monitored to see we need to revisit this
-  // decision. This does not affect client redirects as those do not push new
-  // history entries. (Calls to location.replace, navigations before onload, and
-  // <meta http-equiv=refresh> with timeouts under 1 second do not create
-  // entries in Blink.)
-  if (prerender_contents_->GetController().GetEntryCount() > 1) {
-    Destroy(FINAL_STATUS_NEW_NAVIGATION_ENTRY);
-    return;
-  }
-
   // Add each redirect as an alias. |navigation_handle->GetURL()| is included in
   // |navigation_handle->GetRedirectChain()|.
   //
@@ -730,10 +708,6 @@ void PrerenderContents::PrepareForUse() {
   }
 
   NotifyPrerenderStop();
-}
-
-void PrerenderContents::CancelPrerenderForPrinting() {
-  Destroy(FINAL_STATUS_WINDOW_PRINT);
 }
 
 void PrerenderContents::CancelPrerenderForUnsupportedMethod() {

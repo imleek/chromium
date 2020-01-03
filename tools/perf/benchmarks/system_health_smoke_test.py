@@ -41,24 +41,46 @@ _DISABLED_TESTS = frozenset({
 
   # crbug.com/878390 - These stories are already covered by their 2018 or
   # 2019 versions and will later be removed.
+  'system_health.memory_mobile/background:media:imgur',
+  'system_health.memory_mobile/background:news:nytimes',
+  'system_health.memory_mobile/background:social:facebook',
+  'system_health.memory_mobile/background:search:google',
+  'system_health.memory_mobile/browse:chrome:newtab',
+  'system_health.memory_mobile/browse:chrome:omnibox',
+  'system_health.memory_mobile/browse:media:flickr_infinite_scroll'
+  'system_health.memory_mobile/browse:media:imgur'
   'system_health.memory_mobile/browse:tech:discourse_infinite_scroll',
   'system_health.memory_mobile/browse:shopping:amazon',
+  'system_health.memory_mobile/browse:social:facebook',
   'system_health.memory_mobile/browse:social:facebook_infinite_scroll',
+  'system_health.memory_mobile/browse:social:pinterest_infinite_scroll',
+  'system_health.memory_mobile/browse:media:facebook_photos',
   'system_health.memory_mobile/browse:social:instagram',
   'system_health.memory_mobile/browse:news:reddit',
+  'system_health.memory_mobile/browse:news:qq',
+  'system_health.memory_mobile/browse:shopping:avito',
   'system_health.memory_mobile/browse:social:tumblr_infinite_scroll',
   'system_health.memory_mobile/browse:social:twitter',
   'system_health.memory_mobile/browse:tools:maps',
   'system_health.memory_mobile/browse:news:cnn',
+  'system_health.memory_mobile/browse:news:toi',
   'system_health.memory_mobile/browse:news:washingtonpost',
   'system_health.memory_mobile/browse:media:youtube',
+  'system_health.memory_mobile/browse:shopping:lazada',
   'system_health.memory_mobile/load:media:facebook_photos',
+  'system_health.memory_mobile/load:media:dailymotion',
   'system_health.memory_mobile/load:news:cnn',
   'system_health.memory_mobile/load:news:nytimes',
   'system_health.memory_mobile/load:news:qq',
   'system_health.memory_mobile/load:news:reddit',
   'system_health.memory_mobile/load:news:washingtonpost',
+  'system_health.memory_mobile/load:search:amazon',
+  'system_health.memory_mobile/load:search:taobao',
+  'system_health.memory_mobile/load:tools:docs',
+  'system_health.memory_mobile/load:social:pinterest',
+  'system_health.memory_mobile/load:tools:dropbox',
   'system_health.memory_mobile/load:tools:stackoverflow',
+  'system_health.memory_mobile/load:tools:weather',
   'system_health.memory_desktop/load_accessibility:shopping:amazon',
   'system_health.memory_desktop/browse_accessibility:tech:codesearch',
   'system_health.memory_desktop/load_accessibility:media:wikipedia',
@@ -70,11 +92,15 @@ _DISABLED_TESTS = frozenset({
   'system_health.memory_desktop/browse:search:google',
   'system_health.memory_desktop/browse:news:hackernews',
   'system_health.memory_desktop/load:search:amazon',
+  'system_health.memory_desktop/load:media:dailymotion',
   'system_health.memory_desktop/load:news:bbc',
   'system_health.memory_desktop/load:news:hackernews',
   'system_health.memory_desktop/load:social:instagram',
   'system_health.memory_desktop/load:news:reddit',
   'system_health.memory_desktop/load:search:taobao',
+  'system_health.memory_desktop/load:tools:docs',
+  'system_health.memory_desktop/load:social:pinterest',
+  'system_health.memory_desktop/load:tools:weather',
   'system_health.memory_desktop/multitab:misc:typical24',
   'system_health.memory_desktop/browse:news:reddit',
   'system_health.memory_desktop/browse:media:tumblr',
@@ -268,6 +294,7 @@ def _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test):
 def GenerateBenchmarkOptions(output_dir, benchmark_cls):
   options = testing.GetRunOptions(
       output_dir=output_dir, benchmark_cls=benchmark_cls,
+      overrides={'run_full_story_set': True},
       environment=chromium_config.GetDefaultChromiumConfig())
   options.pageset_repeat = 1  # For smoke testing only run each page once.
   options.output_formats = ['histograms']
@@ -279,41 +306,37 @@ def GenerateBenchmarkOptions(output_dir, benchmark_cls):
   options.browser_options.logging_verbosity = 'non-verbose'
   options.target_platforms = benchmark_cls.GetSupportedPlatformNames(
       benchmark_cls.SUPPORTED_PLATFORMS)
+  results_processor.ProcessOptions(options)
   return options
 
 
-def load_tests(loader, standard_tests, pattern):
-  del loader, standard_tests, pattern  # unused
-  suite = progress_reporter.TestSuite()
+def _create_story_set(benchmark_class):
+  # HACK: these options should be derived from GetRunOptions which are
+  # the resolved options from run_tests' arguments. However, options is only
+  # parsed during test time which happens after load_tests are called.
+  # Since none of our system health benchmarks creates stories based on
+  # command line options, it should be ok to pass options=None to
+  # CreateStorySet.
+  return benchmark_class().CreateStorySet(options=None)
+
+
+def _should_skip_story(benchmark_class, story):
+  # Per crbug.com/1019383 we don't have many device cycles to work with on
+  # Android, so let's just run the most important stories.
+  return (benchmark_class.Name() == 'system_health.memory_mobile' and
+      'health_check' not in story.tags)
+
+
+def validate_smoke_test_name_versions():
   benchmark_classes = GetSystemHealthBenchmarksToSmokeTest()
   assert benchmark_classes, 'This list should never be empty'
   names_stories_to_smoke_tests = []
   for benchmark_class in benchmark_classes:
-
-    # HACK: these options should be derived from GetRunOptions which are
-    # the resolved options from run_tests' arguments. However, options is only
-    # parsed during test time which happens after load_tests are called.
-    # Since none of our system health benchmarks creates stories based on
-    # command line options, it should be ok to pass options=None to
-    # CreateStorySet.
-    stories_set = benchmark_class().CreateStorySet(options=None)
-
-    # Prefetch WPR archive needed by the stories set to avoid race condition
-    # when feching them when tests are run in parallel.
-    # See crbug.com/700426 for more details.
-    story_names = [s.name for s in stories_set if not s.is_local]
-    stories_set.wpr_archive_info.DownloadArchivesIfNeeded(
-        story_names=story_names)
+    stories_set = _create_story_set(benchmark_class)
 
     for story_to_smoke_test in stories_set.stories:
-      # Per crbug.com/1019383 we don't have many device cycles to work with on
-      # Android, so let's just run the most important stories.
-      if (benchmark_class.Name() == 'system_health.memory_mobile' and
-          'health_check' not in story_to_smoke_test.tags):
+      if _should_skip_story(benchmark_class, story_to_smoke_test):
         continue
-      suite.addTest(
-          _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test))
-
       names_stories_to_smoke_tests.append(
           benchmark_class.Name() + '/' + story_to_smoke_test.name)
 
@@ -334,6 +357,32 @@ def load_tests(loader, standard_tests, pattern):
         'list or remove them to save CQ capacity (see crbug.com/893615)). '
         'You can use crbug.com/878390 for the disabling reference.'
         '[StoryName] : [StoryVersion1],[StoryVersion2]...\n%s' % (msg))
+
+  return
+
+
+def load_tests(loader, standard_tests, pattern):
+  del loader, standard_tests, pattern  # unused
+  suite = progress_reporter.TestSuite()
+  benchmark_classes = GetSystemHealthBenchmarksToSmokeTest()
+  assert benchmark_classes, 'This list should never be empty'
+  validate_smoke_test_name_versions()
+  for benchmark_class in benchmark_classes:
+    stories_set = _create_story_set(benchmark_class)
+
+    remote_story_names = []
+    for story_to_smoke_test in stories_set:
+      if _should_skip_story(benchmark_class, story_to_smoke_test):
+        continue
+      if not story_to_smoke_test.is_local:
+        remote_story_names.append(story_to_smoke_test)
+      suite.addTest(
+          _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test))
+    # Prefetch WPR archive needed by the stories set to avoid race condition
+    # when fetching them when tests are run in parallel.
+    # See crbug.com/700426 for more details.
+    stories_set.wpr_archive_info.DownloadArchivesIfNeeded(
+        story_names=remote_story_names)
 
   return suite
 

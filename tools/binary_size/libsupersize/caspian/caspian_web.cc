@@ -17,6 +17,7 @@
 #include "third_party/re2/src/re2/re2.h"
 #include "tools/binary_size/libsupersize/caspian/diff.h"
 #include "tools/binary_size/libsupersize/caspian/file_format.h"
+#include "tools/binary_size/libsupersize/caspian/lens.h"
 #include "tools/binary_size/libsupersize/caspian/model.h"
 #include "tools/binary_size/libsupersize/caspian/tree_builder.h"
 
@@ -40,10 +41,17 @@ std::string JsonSerialize(const Json::Value& value) {
 }  // namespace
 
 extern "C" {
-void LoadSizeFile(const char* compressed, size_t size) {
-  diff_info.reset(nullptr);
-  info = std::make_unique<SizeInfo>();
-  ParseSizeInfo(compressed, size, info.get());
+void LoadSizeFile(char* compressed, size_t size) {
+  if (IsDiffSizeInfo(compressed, size)) {
+    info = std::make_unique<SizeInfo>();
+    before_info = std::make_unique<SizeInfo>();
+    diff_info.reset(nullptr);
+    ParseDiffSizeInfo(compressed, size, before_info.get(), info.get());
+  } else {
+    diff_info.reset(nullptr);
+    info = std::make_unique<SizeInfo>();
+    ParseSizeInfo(compressed, size, info.get());
+  }
 }
 
 void LoadBeforeSizeFile(const char* compressed, size_t size) {
@@ -52,8 +60,11 @@ void LoadBeforeSizeFile(const char* compressed, size_t size) {
   ParseSizeInfo(compressed, size, before_info.get());
 }
 
-void BuildTree(bool group_by_component,
-               bool method_count_mode,
+// Updates |builder| with provided filters and constructs the new tree.
+// Typically called when the front-end form updates, to apply any new filters.
+// Returns: True if the resulting tree is a diff, false if it is a snapshot.
+bool BuildTree(bool method_count_mode,
+               const char* group_by,
                const char* include_regex_str,
                const char* exclude_regex_str,
                const char* include_sections,
@@ -129,7 +140,29 @@ void BuildTree(bool group_by_component,
   } else {
     builder.reset(new TreeBuilder(info.get()));
   }
-  builder->Build(group_by_component, method_count_mode, filters);
+
+  std::unique_ptr<BaseLens> lens;
+  char sep = '/';
+  std::cout << "group_by=" << group_by << std::endl;
+  if (!strcmp(group_by, "source_path")) {
+    lens = std::make_unique<IdPathLens>();
+  } else if (!strcmp(group_by, "component")) {
+    lens = std::make_unique<ComponentLens>();
+    sep = '>';
+  } else if (!strcmp(group_by, "template")) {
+    lens = std::make_unique<TemplateLens>();
+    filters.push_back([](const BaseSymbol& sym) -> bool {
+      return sym.IsTemplate() && sym.IsNative();
+    });
+  } else if (!strcmp(group_by, "generated_type")) {
+    lens = std::make_unique<GeneratedLens>();
+  } else {
+    std::cerr << "Unsupported group_by=" << group_by << std::endl;
+    exit(1);
+  }
+  builder->Build(std::move(lens), sep, method_count_mode, filters);
+
+  return bool(diff_info);
 }
 
 const char* Open(const char* path) {

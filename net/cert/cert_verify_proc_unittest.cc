@@ -34,11 +34,12 @@
 #include "net/cert/ev_root_ca_metadata.h"
 #include "net/cert/internal/parse_certificate.h"
 #include "net/cert/internal/signature_algorithm.h"
-#include "net/cert/pem_tokenizer.h"
+#include "net/cert/pem.h"
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
-#include "net/cert_net/cert_net_fetcher_impl.h"
+#include "net/cert_net/cert_net_fetcher_url_request.h"
+#include "net/cert_net/nss_ocsp_session_url_request.h"
 #include "net/der/input.h"
 #include "net/der/parser.h"
 #include "net/proxy_resolution/proxy_config.h"
@@ -449,7 +450,7 @@ class CertVerifyProcInternalTest
   scoped_refptr<CertVerifyProc> verify_proc_;
 };
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          CertVerifyProcInternalTest,
                          testing::ValuesIn(kAllCertVerifiers),
                          VerifyProcTypeToName);
@@ -2266,6 +2267,140 @@ TEST_P(CertVerifyProcInternalTest, CRLSetRevokedBySubject) {
   EXPECT_THAT(error, IsOk());
 }
 
+// Ensures that CRLSets can be used to block known interception roots on
+// platforms that support CRLSets, while otherwise detect known interception
+// on platforms that do not.
+TEST_P(CertVerifyProcInternalTest, BlockedInterceptionByRoot) {
+  scoped_refptr<X509Certificate> root =
+      ImportCertFromFile(GetTestCertsDirectory(), "root_ca_cert.pem");
+  ASSERT_TRUE(root);
+  ScopedTestRoot test_root(root.get());
+
+  scoped_refptr<X509Certificate> cert = CreateCertificateChainFromFile(
+      GetTestCertsDirectory(), "ok_cert_by_intermediate.pem",
+      X509Certificate::FORMAT_AUTO);
+  ASSERT_TRUE(cert);
+
+  // A default/built-in CRLSet should not block
+  scoped_refptr<CRLSet> crl_set = CRLSet::BuiltinCRLSet();
+  int flags = 0;
+  CertVerifyResult verify_result;
+  int error = Verify(cert.get(), "127.0.0.1", flags, crl_set.get(),
+                     CertificateList(), &verify_result);
+  EXPECT_THAT(error, IsOk());
+  EXPECT_EQ(0U, verify_result.cert_status);
+
+  // Read in a CRLSet that marks the root as blocked for interception.
+  std::string crl_set_bytes;
+  ASSERT_TRUE(
+      base::ReadFileToString(GetTestCertsDirectory().AppendASCII(
+                                 "crlset_blocked_interception_by_root.raw"),
+                             &crl_set_bytes));
+  ASSERT_TRUE(CRLSet::Parse(crl_set_bytes, &crl_set));
+
+  error = Verify(cert.get(), "127.0.0.1", flags, crl_set.get(),
+                 CertificateList(), &verify_result);
+  if (SupportsCRLSet()) {
+    EXPECT_THAT(error, IsError(ERR_CERT_KNOWN_INTERCEPTION_BLOCKED));
+    EXPECT_TRUE(verify_result.cert_status &
+                CERT_STATUS_KNOWN_INTERCEPTION_BLOCKED);
+  } else {
+    EXPECT_THAT(error, IsOk());
+    EXPECT_TRUE(verify_result.cert_status &
+                CERT_STATUS_KNOWN_INTERCEPTION_DETECTED);
+  }
+}
+
+// Ensures that CRLSets can be used to block known interception intermediates,
+// while still allowing other certificates from that root..
+TEST_P(CertVerifyProcInternalTest, BlockedInterceptionByIntermediate) {
+  scoped_refptr<X509Certificate> root =
+      ImportCertFromFile(GetTestCertsDirectory(), "root_ca_cert.pem");
+  ASSERT_TRUE(root);
+  ScopedTestRoot test_root(root.get());
+
+  scoped_refptr<X509Certificate> cert = CreateCertificateChainFromFile(
+      GetTestCertsDirectory(), "ok_cert_by_intermediate.pem",
+      X509Certificate::FORMAT_AUTO);
+  ASSERT_TRUE(cert);
+
+  // A default/built-in CRLSEt should not block
+  scoped_refptr<CRLSet> crl_set = CRLSet::BuiltinCRLSet();
+  int flags = 0;
+  CertVerifyResult verify_result;
+  int error = Verify(cert.get(), "127.0.0.1", flags, crl_set.get(),
+                     CertificateList(), &verify_result);
+  EXPECT_THAT(error, IsOk());
+  EXPECT_EQ(0U, verify_result.cert_status);
+
+  // Read in a CRLSet that marks the intermediate as blocked for interception.
+  std::string crl_set_bytes;
+  ASSERT_TRUE(base::ReadFileToString(
+      GetTestCertsDirectory().AppendASCII(
+          "crlset_blocked_interception_by_intermediate.raw"),
+      &crl_set_bytes));
+  ASSERT_TRUE(CRLSet::Parse(crl_set_bytes, &crl_set));
+
+  error = Verify(cert.get(), "127.0.0.1", flags, crl_set.get(),
+                 CertificateList(), &verify_result);
+  if (SupportsCRLSet()) {
+    EXPECT_THAT(error, IsError(ERR_CERT_KNOWN_INTERCEPTION_BLOCKED));
+    EXPECT_TRUE(verify_result.cert_status &
+                CERT_STATUS_KNOWN_INTERCEPTION_BLOCKED);
+  } else {
+    EXPECT_THAT(error, IsOk());
+    EXPECT_TRUE(verify_result.cert_status &
+                CERT_STATUS_KNOWN_INTERCEPTION_DETECTED);
+  }
+
+  // Load a different certificate from that root, which should be unaffected.
+  scoped_refptr<X509Certificate> second_cert = CreateCertificateChainFromFile(
+      GetTestCertsDirectory(), "ok_cert.pem", X509Certificate::FORMAT_AUTO);
+  ASSERT_TRUE(second_cert);
+
+  error = Verify(second_cert.get(), "127.0.0.1", flags, crl_set.get(),
+                 CertificateList(), &verify_result);
+  EXPECT_THAT(error, IsOk());
+  EXPECT_EQ(0U, verify_result.cert_status);
+}
+
+// Ensures that CRLSets can be used to flag known interception roots, even
+// when they are not blocked.
+TEST_P(CertVerifyProcInternalTest, DetectsInterceptionByRoot) {
+  scoped_refptr<X509Certificate> root =
+      ImportCertFromFile(GetTestCertsDirectory(), "root_ca_cert.pem");
+  ASSERT_TRUE(root);
+  ScopedTestRoot test_root(root.get());
+
+  scoped_refptr<X509Certificate> cert = CreateCertificateChainFromFile(
+      GetTestCertsDirectory(), "ok_cert_by_intermediate.pem",
+      X509Certificate::FORMAT_AUTO);
+  ASSERT_TRUE(cert);
+
+  // A default/built-in CRLSet should not block
+  scoped_refptr<CRLSet> crl_set = CRLSet::BuiltinCRLSet();
+  int flags = 0;
+  CertVerifyResult verify_result;
+  int error = Verify(cert.get(), "127.0.0.1", flags, crl_set.get(),
+                     CertificateList(), &verify_result);
+  EXPECT_THAT(error, IsOk());
+  EXPECT_EQ(0U, verify_result.cert_status);
+
+  // Read in a CRLSet that marks the root as blocked for interception.
+  std::string crl_set_bytes;
+  ASSERT_TRUE(
+      base::ReadFileToString(GetTestCertsDirectory().AppendASCII(
+                                 "crlset_known_interception_by_root.raw"),
+                             &crl_set_bytes));
+  ASSERT_TRUE(CRLSet::Parse(crl_set_bytes, &crl_set));
+
+  error = Verify(cert.get(), "127.0.0.1", flags, crl_set.get(),
+                 CertificateList(), &verify_result);
+  EXPECT_THAT(error, IsOk());
+  EXPECT_TRUE(verify_result.cert_status &
+              CERT_STATUS_KNOWN_INTERCEPTION_DETECTED);
+}
+
 // Tests that CRLSets participate in path building functions, and that as
 // long as a valid path exists within the verification graph, verification
 // succeeds.
@@ -2654,7 +2789,7 @@ class CertVerifyProcNameNormalizationTest : public CertVerifyProcInternalTest {
   base::HistogramTester histograms_;
 };
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          CertVerifyProcNameNormalizationTest,
                          testing::ValuesIn(kAllCertVerifiers),
                          VerifyProcTypeToName);
@@ -2903,7 +3038,7 @@ class CertVerifyProcInternalWithNetFetchingTest
 
   static void SetUpOnNetworkThread(
       std::unique_ptr<URLRequestContext>* context,
-      scoped_refptr<CertNetFetcherImpl>* cert_net_fetcher,
+      scoped_refptr<CertNetFetcherURLRequest>* cert_net_fetcher,
       base::WaitableEvent* initialization_complete_event) {
     URLRequestContextBuilder url_request_context_builder;
     url_request_context_builder.set_user_agent("cert_verify_proc_unittest/0.1");
@@ -2914,14 +3049,14 @@ class CertVerifyProcInternalWithNetFetchingTest
 #if defined(USE_NSS_CERTS)
     SetURLRequestContextForNSSHttpIO(context->get());
 #endif
-    *cert_net_fetcher = base::MakeRefCounted<net::CertNetFetcherImpl>();
+    *cert_net_fetcher = base::MakeRefCounted<net::CertNetFetcherURLRequest>();
     (*cert_net_fetcher)->SetURLRequestContext(context->get());
     initialization_complete_event->Signal();
   }
 
   static void ShutdownOnNetworkThread(
       std::unique_ptr<URLRequestContext>* context,
-      scoped_refptr<net::CertNetFetcherImpl>* cert_net_fetcher) {
+      scoped_refptr<net::CertNetFetcherURLRequest>* cert_net_fetcher) {
 #if defined(USE_NSS_CERTS)
     SetURLRequestContextForNSSHttpIO(nullptr);
 #endif
@@ -2937,7 +3072,7 @@ class CertVerifyProcInternalWithNetFetchingTest
   // Owned by this thread, but initialized, used, and shutdown on the network
   // thread.
   std::unique_ptr<URLRequestContext> context_;
-  scoped_refptr<CertNetFetcherImpl> cert_net_fetcher_;
+  scoped_refptr<CertNetFetcherURLRequest> cert_net_fetcher_;
 
   EmbeddedTestServer test_server_;
 
@@ -2949,7 +3084,7 @@ class CertVerifyProcInternalWithNetFetchingTest
       request_handlers_;
 };
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          CertVerifyProcInternalWithNetFetchingTest,
                          testing::ValuesIn(kAllCertVerifiers),
                          VerifyProcTypeToName);

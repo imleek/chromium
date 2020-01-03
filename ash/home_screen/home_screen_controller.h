@@ -18,6 +18,7 @@
 
 namespace ash {
 
+class FpsCounter;
 class HomeLauncherGestureHandler;
 class HomeScreenDelegate;
 
@@ -44,16 +45,22 @@ class ASH_EXPORT HomeScreenController : public OverviewObserver,
   // Called when a window starts/ends dragging. If the home screen is shown, we
   // should hide it during dragging a window and reshow it when the drag ends.
   void OnWindowDragStarted();
-  void OnWindowDragEnded();
+  // If |animate| is true, scale-in-to-show home screen if home screen should
+  // be shown after drag ends.
+  void OnWindowDragEnded(bool animate);
 
   // True if home screen is visible.
   bool IsHomeScreenVisible() const;
 
+  // Responsible to starting or stopping |fps_counter_|.
+  void StartTrackingAnimationSmoothness(int64_t display_id);
+  void RecordAnimationSmoothness();
+
+  HomeScreenDelegate* delegate() { return delegate_; }
+
   HomeLauncherGestureHandler* home_launcher_gesture_handler() {
     return home_launcher_gesture_handler_.get();
   }
-
-  HomeScreenDelegate* delegate() { return delegate_; }
 
  private:
   // OverviewObserver:
@@ -73,6 +80,10 @@ class ASH_EXPORT HomeScreenController : public OverviewObserver,
   // |shown| - whether the final home state was shown.
   // |display_id| - the home screen display ID.
   void NotifyHomeLauncherTransitionEnded(bool shown, int64_t display_id);
+
+  // Returns true if home screen should be shown based on the current
+  // configuration.
+  bool ShouldShowHomeScreen() const;
 
   // Whether the wallpaper is being previewed. The home screen should be hidden
   // during wallpaper preview.
@@ -96,6 +107,10 @@ class ASH_EXPORT HomeScreenController : public OverviewObserver,
   // animations are finished (at which point this information will not be
   // available).
   base::Optional<OverviewSession::EnterExitOverviewType> overview_exit_type_;
+
+  // Responsible for recording smoothness related UMA stats for homescreen
+  // animations.
+  std::unique_ptr<FpsCounter> fps_counter_;
 
   base::WeakPtrFactory<HomeScreenController> weak_ptr_factory_{this};
 

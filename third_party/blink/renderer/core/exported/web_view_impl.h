@@ -35,10 +35,9 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
-#include "third_party/blink/public/platform/web_float_size.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_input_event.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/public/platform/web_point.h"
 #include "third_party/blink/public/platform/web_rect.h"
@@ -46,7 +45,6 @@
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
-#include "third_party/blink/public/web/web_page_importance_signals.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/public/web/web_widget.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -137,12 +135,12 @@ class CORE_EXPORT WebViewImpl final : public WebView,
                                  float top_controls_height,
                                  float bottom_controls_height,
                                  bool browser_controls_shrink_layout) override;
+  void ResizeWithBrowserControls(const WebSize&,
+                                 cc::BrowserControlsParams) override;
   WebFrame* MainFrame() override;
   WebLocalFrame* FocusedFrame() override;
   void SetFocusedFrame(WebFrame*) override;
-  void FocusDocumentView(WebFrame*) override;
   void SetInitialFocus(bool reverse) override;
-  void ClearFocusedElement() override;
   void SmoothScroll(int target_x,
                     int target_y,
                     base::TimeDelta duration) override;
@@ -161,9 +159,9 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   void SetInitialPageScaleOverride(float) override;
   void SetMaximumLegibleScale(float) override;
   void SetPageScaleFactor(float) override;
-  void SetVisualViewportOffset(const WebFloatPoint&) override;
-  WebFloatPoint VisualViewportOffset() const override;
-  WebFloatSize VisualViewportSize() const override;
+  void SetVisualViewportOffset(const gfx::PointF&) override;
+  gfx::PointF VisualViewportOffset() const override;
+  gfx::SizeF VisualViewportSize() const override;
   void ResizeVisualViewport(const WebSize&) override;
   void Resize(const WebSize&) override;
   WebSize GetSize() override;
@@ -195,7 +193,6 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   void CancelPagePopup() override;
   WebPagePopupImpl* GetPagePopup() const override { return page_popup_.get(); }
   void SetMainFrameOverlayColor(SkColor) override;
-  WebPageImportanceSignals* PageImportanceSignals() override;
   void AcceptLanguagesChanged() override;
   void SetPageFrozen(bool frozen) override;
   void PutPageIntoBackForwardCache() override;
@@ -487,9 +484,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
 
   void UpdateBrowserControlsConstraint(cc::BrowserControlsState constraint);
   void UpdateICBAndResizeViewport();
-  void ResizeViewWhileAnchored(float top_controls_height,
-                               float bottom_controls_height,
-                               bool browser_controls_shrink_layout);
+  void ResizeViewWhileAnchored(cc::BrowserControlsParams params);
 
   void UpdateBaseBackgroundColor();
 
@@ -694,8 +689,6 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   // The WebWidget for the main frame. This is expected to be unset when the
   // WebWidget destroys itself.
   WebWidget* web_widget_ = nullptr;
-
-  WebPageImportanceSignals page_importance_signals_;
 
   // We defer commits when transitioning to a new page. ChromeClientImpl calls
   // StopDeferringCommits() to release this when a new page is loaded.

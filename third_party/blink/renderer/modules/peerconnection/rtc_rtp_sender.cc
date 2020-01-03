@@ -9,15 +9,19 @@
 #include <tuple>
 #include <utility>
 
-#include "third_party/blink/public/web/modules/peerconnection/peer_connection_dependency_factory.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_track.h"
+#include "third_party/blink/renderer/modules/peerconnection/peer_connection_dependency_factory.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_dtls_transport.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_dtmf_sender.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_error_util.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection.h"
+#include "third_party/blink/renderer/modules/peerconnection/rtc_rtcp_parameters.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_rtp_capabilities.h"
+#include "third_party/blink/renderer/modules/peerconnection/rtc_rtp_codec_parameters.h"
+#include "third_party/blink/renderer/modules/peerconnection/rtc_rtp_header_extension_capability.h"
+#include "third_party/blink/renderer/modules/peerconnection/rtc_rtp_header_extension_parameters.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_stats_report.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_void_request_script_promise_resolver_impl.h"
 #include "third_party/blink/renderer/modules/peerconnection/web_rtc_stats_report_callback_resolver.h"
@@ -548,7 +552,7 @@ void RTCRtpSender::setStreams(HeapVector<Member<MediaStream>> streams,
                                       kOnlySupportedInUnifiedPlanMessage);
     return;
   }
-  WebVector<WebString> stream_ids;
+  Vector<String> stream_ids;
   for (auto stream : streams)
     stream_ids.emplace_back(stream->id());
   sender_->SetStreams(stream_ids);

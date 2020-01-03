@@ -119,7 +119,6 @@ PasswordFormFillData GetTestPasswordFormFillData() {
   preferred_match.username_value = ASCIIToUTF16("test@gmail.com");
   preferred_match.password_element = ASCIIToUTF16("password");
   preferred_match.password_value = ASCIIToUTF16("test");
-  preferred_match.preferred = true;
 
   std::vector<const PasswordForm*> matches;
   PasswordForm non_preferred_match = preferred_match;
@@ -242,7 +241,7 @@ TEST_F(ContentPasswordManagerDriverTest, NotInformAboutBlacklistedForm) {
   driver->FillPasswordForm(fill_data);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          ContentPasswordManagerDriverTest,
                          testing::Values(true, false));
 

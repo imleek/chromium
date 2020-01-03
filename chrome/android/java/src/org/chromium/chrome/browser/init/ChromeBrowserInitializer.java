@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.init;
 
 import android.app.Activity;
-import android.content.Context;
 import android.os.Build;
 import android.os.Process;
 import android.os.StrictMode;
@@ -75,17 +74,6 @@ public class ChromeBrowserInitializer {
     private boolean mNetworkChangeNotifierInitializationComplete;
 
     /**
-     * A callback to be executed when there is a new version available in Play Store.
-     */
-    public interface OnNewVersionAvailableCallback extends Runnable {
-        /**
-         * Set the update url to get the new version available.
-         * @param updateUrl The url to be used.
-         */
-        void setUpdateUrl(String updateUrl);
-    }
-
-    /**
      * This class is an application specific object that orchestrates the app initialization.
      * @return The singleton instance of {@link ChromeBrowserInitializer}.
      */
@@ -94,16 +82,6 @@ public class ChromeBrowserInitializer {
             sChromeBrowserInitializer = new ChromeBrowserInitializer();
         }
         return sChromeBrowserInitializer;
-    }
-
-    /**
-     * This class is an application specific object that orchestrates the app initialization.
-     * @deprecated Use getInstance with no arguments instead.
-     * @param context The context to get the application context from.
-     * @return The singleton instance of {@link ChromeBrowserInitializer}.
-     */
-    public static ChromeBrowserInitializer getInstance(Context context) {
-        return getInstance();
     }
 
     /**
@@ -360,7 +338,7 @@ public class ChromeBrowserInitializer {
             TraceEvent.begin("ChromeBrowserInitializer.startChromeBrowserProcessesSync");
             ThreadUtils.assertOnUiThread();
             StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
-            LibraryLoader.getInstance().ensureInitialized(LibraryProcessType.PROCESS_BROWSER);
+            LibraryLoader.getInstance().ensureInitialized();
             StrictMode.setThreadPolicy(oldPolicy);
             LibraryPrefetcher.asyncPrefetchLibrariesToMemory();
             getBrowserStartupController().startBrowserProcessesSync(false);

@@ -300,13 +300,12 @@ void DisplayResourceProvider::WaitSyncToken(ResourceId id) {
 #endif
 }
 
-int DisplayResourceProvider::CreateChild(const ReturnCallback& return_callback,
-                                         bool needs_sync_tokens) {
+int DisplayResourceProvider::CreateChild(
+    const ReturnCallback& return_callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   Child child_info;
   child_info.return_callback = return_callback;
-  child_info.needs_sync_tokens = needs_sync_tokens;
   int child = next_child_++;
   children_[child] = child_info;
   return child;
@@ -399,7 +398,7 @@ DisplayResourceProvider::GetChildToParentMap(int child) const {
 
 bool DisplayResourceProvider::InUse(ResourceId id) {
   ChildResource* resource = GetResource(id);
-  return resource->lock_for_read_count > 0 || resource->locked_for_external_use;
+  return resource->InUse();
 }
 
 DisplayResourceProvider::ChildResource* DisplayResourceProvider::InsertResource(
@@ -559,8 +558,7 @@ void DisplayResourceProvider::UnlockForRead(ResourceId id) {
 
 void DisplayResourceProvider::TryReleaseResource(ResourceId id,
                                                  ChildResource* resource) {
-  if (resource->marked_for_deletion && !resource->lock_for_read_count &&
-      !resource->locked_for_external_use && !resource->lock_for_overlay_count) {
+  if (resource->marked_for_deletion && !resource->InUse()) {
     auto child_it = children_.find(resource->child_id);
     DeleteAndReturnUnusedResourcesToChild(child_it, NORMAL, {id});
   }
@@ -660,7 +658,7 @@ void DisplayResourceProvider::DeleteAndReturnUnusedResourcesToChild(
     DCHECK(child_info->child_to_parent_map.count(child_id));
 
     bool is_lost = (resource.is_gpu_resource_type() && lost_context_provider_);
-    if (resource.lock_for_read_count > 0 || resource.locked_for_external_use) {
+    if (resource.InUse()) {
       if (style != FOR_SHUTDOWN) {
         // Defer this resource deletion.
         resource.marked_for_deletion = true;
@@ -702,7 +700,7 @@ void DisplayResourceProvider::DeleteAndReturnUnusedResourcesToChild(
                            resource.imported_count, is_lost);
     auto& returned = to_return.back();
 
-    if (resource.is_gpu_resource_type() && child_info->needs_sync_tokens) {
+    if (resource.is_gpu_resource_type()) {
       if (resource.needs_sync_token()) {
         need_synchronization_resources.push_back(&returned);
       } else if (returned.sync_token.HasData() &&
@@ -721,14 +719,12 @@ void DisplayResourceProvider::DeleteAndReturnUnusedResourcesToChild(
 
   gpu::SyncToken new_sync_token;
   if (!need_synchronization_resources.empty()) {
-    DCHECK(child_info->needs_sync_tokens);
     DCHECK(gl);
     gl->GenUnverifiedSyncTokenCHROMIUM(new_sync_token.GetData());
     unverified_sync_tokens.push_back(new_sync_token.GetData());
   }
 
   if (!unverified_sync_tokens.empty()) {
-    DCHECK(child_info->needs_sync_tokens);
     DCHECK(gl);
     gl->VerifySyncTokensCHROMIUM(unverified_sync_tokens.data(),
                                  unverified_sync_tokens.size());
@@ -908,26 +904,37 @@ DisplayResourceProvider::ScopedReadLockSharedImage::ScopedReadLockSharedImage(
       resource_(resource_provider_->GetResource(resource_id_)) {
   DCHECK(resource_);
   DCHECK(resource_->is_gpu_resource_type());
+  // Remove this #if defined(OS_WIN), when shared image is used on Windows.
+#if !defined(OS_WIN)
   DCHECK(resource_->transferable.mailbox_holder.mailbox.IsSharedImage());
-
+#endif
   resource_->lock_for_overlay_count++;
 }
 
-gpu::Mailbox DisplayResourceProvider::ScopedReadLockSharedImage::mailbox()
-    const {
-  return resource_->transferable.mailbox_holder.mailbox;
-}
-
-gpu::SyncToken DisplayResourceProvider::ScopedReadLockSharedImage::sync_token()
-    const {
-  return resource_->transferable.mailbox_holder.sync_token;
+DisplayResourceProvider::ScopedReadLockSharedImage::ScopedReadLockSharedImage(
+    ScopedReadLockSharedImage&& other) {
+  *this = std::move(other);
 }
 
 DisplayResourceProvider::ScopedReadLockSharedImage::
     ~ScopedReadLockSharedImage() {
+  if (!resource_provider_)
+    return;
   DCHECK(resource_->lock_for_overlay_count);
   resource_->lock_for_overlay_count--;
   resource_provider_->TryReleaseResource(resource_id_, resource_);
+}
+
+DisplayResourceProvider::ScopedReadLockSharedImage&
+DisplayResourceProvider::ScopedReadLockSharedImage::operator=(
+    ScopedReadLockSharedImage&& other) {
+  resource_provider_ = other.resource_provider_;
+  resource_id_ = other.resource_id_;
+  resource_ = other.resource_;
+  other.resource_provider_ = nullptr;
+  other.resource_id_ = kInvalidResourceId;
+  other.resource_ = nullptr;
+  return *this;
 }
 
 DisplayResourceProvider::LockSetForExternalUse::LockSetForExternalUse(
@@ -945,7 +952,8 @@ DisplayResourceProvider::LockSetForExternalUse::~LockSetForExternalUse() {
 ExternalUseClient::ImageContext*
 DisplayResourceProvider::LockSetForExternalUse::LockResource(
     ResourceId id,
-    bool is_video_plane) {
+    bool is_video_plane,
+    float sdr_scale_factor) {
   auto it = resource_provider_->resources_.find(id);
   DCHECK(it != resource_provider_->resources_.end());
 
@@ -956,16 +964,43 @@ DisplayResourceProvider::LockSetForExternalUse::LockResource(
     DCHECK(!base::Contains(resources_, std::make_pair(id, &resource)));
     resources_.emplace_back(id, &resource);
 
+    // Ignore sdr_scale_factor for video planes, if the src color space
+    // is invalid, or if it's already HDR.
+    const gfx::ColorSpace& original_src = resource.transferable.color_space;
+    if (is_video_plane || !original_src.IsValid() || original_src.IsHDR()) {
+      sdr_scale_factor = 1.0f;
+    }
+
+    if (resource.image_context &&
+        resource.image_context->sdr_scale_factor() != sdr_scale_factor) {
+      // Must rebuild the image context with a new color space, which requires
+      // releasing the old image context on the GPU main thread.
+      std::vector<std::unique_ptr<ExternalUseClient::ImageContext>> to_release;
+      to_release.push_back(std::move(resource.image_context));
+      resource_provider_->external_use_client_->ReleaseImageContexts(
+          std::move(to_release));
+    }
+
     if (!resource.image_context) {
+      sk_sp<SkColorSpace> src_color_space;
+      if (!is_video_plane) {
+        if (sdr_scale_factor != 1.0f) {
+          src_color_space = original_src.GetScaledColorSpace(sdr_scale_factor)
+                                .ToSkColorSpace();
+        } else {
+          src_color_space = original_src.ToSkColorSpace();
+        }
+      }
+      // Else the resource |color_space| is handled externally in SkiaRenderer
+      // using a special color filter.
+
       resource.image_context =
           resource_provider_->external_use_client_->CreateImageContext(
               resource.transferable.mailbox_holder, resource.transferable.size,
               resource.transferable.format, resource.transferable.ycbcr_info,
-              // The resource |color_space| is ignored by SkiaRenderer for video
-              // planes and usually cannot be converted to SkColorSpace.
-              is_video_plane
-                  ? nullptr
-                  : resource.transferable.color_space.ToSkColorSpace());
+              std::move(src_color_space));
+      // Save the SDR scale, in order to cache the scaled SkColorSpace
+      resource.image_context->set_sdr_scale_factor(sdr_scale_factor);
     }
     resource.locked_for_external_use = true;
 

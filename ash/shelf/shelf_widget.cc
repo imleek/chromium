@@ -178,6 +178,9 @@ ShelfWidget::DelegateView::DelegateView(ShelfWidget* shelf_widget)
       focus_cycler_(nullptr),
       opaque_background_(ui::LAYER_SOLID_COLOR),
       animating_background_(ui::LAYER_SOLID_COLOR) {
+  opaque_background_.SetName("shelf/Background");
+  animating_background_.SetName("shelf/Animation");
+
   DCHECK(shelf_widget_);
   set_owned_by_client();  // Deleted by DeleteDelegate().
 
@@ -186,8 +189,7 @@ ShelfWidget::DelegateView::DelegateView(ShelfWidget* shelf_widget)
 
   // |animating_background_| will be made visible during hotseat animations.
   ShowAnimatingBackground(false);
-  if (features::IsBackgroundBlurEnabled())
-    animating_background_.SetBackdropFilterQuality(0.33f);
+  animating_background_.SetColor(ShelfConfig::Get()->GetMaximizedShelfColor());
 
   std::unique_ptr<views::View> drag_handle_ptr =
       std::make_unique<views::View>();
@@ -317,8 +319,9 @@ void ShelfWidget::DelegateView::UpdateOpaqueBackground() {
 
   // Show rounded corners except in maximized (which includes split view) mode,
   // or whenever we are "in app".
-  if (background_type == SHELF_BACKGROUND_MAXIMIZED ||
-      (tablet_mode && in_app)) {
+  if (background_type == ShelfBackgroundType::kMaximized ||
+      background_type == ShelfBackgroundType::kInApp ||
+      (tablet_mode && in_app && chromeos::switches::ShouldShowShelfHotseat())) {
     opaque_background_.SetRoundedCornerRadius({0, 0, 0, 0});
   } else {
     opaque_background_.SetRoundedCornerRadius({
@@ -354,7 +357,11 @@ void ShelfWidget::DelegateView::UpdateDragHandle() {
 
 void ShelfWidget::DelegateView::OnBoundsChanged(const gfx::Rect& old_bounds) {
   UpdateOpaqueBackground();
-  shelf_widget_->status_area_widget()->UpdateCollapseState();
+
+  // The StatusAreaWidget could be gone before this is called during display
+  // tear down.
+  if (shelf_widget_->status_area_widget())
+    shelf_widget_->status_area_widget()->UpdateCollapseState();
 }
 
 views::View* ShelfWidget::DelegateView::GetDefaultFocusableChild() {
@@ -396,11 +403,6 @@ void ShelfWidget::DelegateView::OnHotseatTransitionAnimationEnded(
 
 void ShelfWidget::DelegateView::ShowAnimatingBackground(bool show) {
   animating_background_.SetVisible(show);
-
-  // To ensure smooth scrollable shelf animations, we disable blur when the
-  // |animating_background_| is not visible.
-  if (features::IsBackgroundBlurEnabled())
-    animating_background_.SetBackgroundBlur(show ? 30 : 0);
 }
 
 SkColor ShelfWidget::DelegateView::GetShelfBackgroundColor() const {
@@ -494,7 +496,7 @@ void ShelfWidget::Initialize(aura::Window* shelf_container) {
   shelf_layout_manager_->AddObserver(this);
   shelf_container->SetLayoutManager(shelf_layout_manager_);
   shelf_layout_manager_->InitObservers();
-  background_animator_.Init(SHELF_BACKGROUND_DEFAULT);
+  background_animator_.Init(ShelfBackgroundType::kDefaultBg);
   background_animator_.PaintBackground(
       shelf_layout_manager_->GetShelfBackgroundType(),
       AnimationChangeType::IMMEDIATE);
@@ -511,8 +513,6 @@ void ShelfWidget::Initialize(aura::Window* shelf_container) {
 
 void ShelfWidget::Shutdown() {
   hotseat_transition_animator_->RemoveObserver(delegate_view_);
-  hotseat_transition_animator_->RemoveObserver(hotseat_widget_.get());
-  hotseat_transition_animator_.reset();
   // Shutting down the status area widget may cause some widgets (e.g. bubbles)
   // to close, so uninstall the ShelfLayoutManager event filters first. Don't
   // reset the pointer until later because other widgets (e.g. app list) may
@@ -558,7 +558,6 @@ void ShelfWidget::CreateHotseatWidget(aura::Window* container) {
   delegate_view_->set_context_menu_controller(hotseat_widget_->GetShelfView());
   hotseat_transition_animator_.reset(new HotseatTransitionAnimator(this));
   hotseat_transition_animator_->AddObserver(delegate_view_);
-  hotseat_transition_animator_->AddObserver(hotseat_widget_.get());
 }
 
 void ShelfWidget::CreateStatusAreaWidget(aura::Window* status_container) {

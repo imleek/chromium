@@ -11,9 +11,6 @@ group("closure_compile") {
     "cr:closure_compile",
     "cr/ui:closure_compile",
   ]
-  if (is_chromeos) {
-    deps += [ "chromeos:closure_compile" ]
-  }
 }
 
 js_type_check("js_resources") {
@@ -62,6 +59,7 @@ js_library("event_tracker") {
 
 js_library("search_highlight_utils") {
   deps = [
+    ":assert",
     ":cr",
   ]
 }
@@ -155,6 +153,7 @@ js_modulizer("modulize") {
     "web_ui_listener_behavior.js",
   ]
   namespace_rewrites = [
+    "cr.search_highlight_utils.Range|Range",
     "cr.ui.KeyboardShortcutList|KeyboardShortcutList",
     "Polymer.ArraySplice.calculateSplices|calculateSplices",
   ]

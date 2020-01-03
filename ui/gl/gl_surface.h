@@ -26,14 +26,15 @@
 #include "ui/gl/gl_surface_format.h"
 
 namespace gfx {
+class ColorSpace;
 class GpuFence;
 class VSyncProvider;
-}
+}  // namespace gfx
 
 namespace ui {
 struct CARendererLayerParams;
 struct DCRendererLayerParams;
-}
+}  // namespace ui
 
 namespace gl {
 
@@ -67,20 +68,11 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   // opportunity for this cleanup.
   virtual void PrepareToDestroy(bool have_context);
 
-  // Color spaces that can be dynamically specified to the surface when resized.
-  enum class ColorSpace {
-    UNSPECIFIED,
-    SRGB,
-    DISPLAY_P3,
-    SCRGB_LINEAR,
-    HDR10,
-  };
-
   // Resizes the surface, returning success. If failed, it is possible that the
   // context is no longer current.
   virtual bool Resize(const gfx::Size& size,
                       float scale_factor,
-                      ColorSpace color_space,
+                      const gfx::ColorSpace& color_space,
                       bool has_alpha);
 
   // Recreate the surface without changing the size, returning success. If
@@ -313,14 +305,17 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
 
   static GLSurface* GetCurrent();
 
+  virtual void SetCurrent();
+  virtual bool IsCurrent();
+
  protected:
   virtual ~GLSurface();
-
-  static void SetCurrent(GLSurface* surface);
 
   static bool ExtensionsContain(const char* extensions, const char* name);
 
  private:
+  static void ClearCurrent();
+
   friend class base::RefCounted<GLSurface>;
   friend class GLContext;
 
@@ -338,7 +333,7 @@ class GL_EXPORT GLSurfaceAdapter : public GLSurface {
   void Destroy() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
-              ColorSpace color_space,
+              const gfx::ColorSpace& color_space,
               bool has_alpha) override;
   bool Recreate() override;
   bool DeferDraws() override;
@@ -406,6 +401,8 @@ class GL_EXPORT GLSurfaceAdapter : public GLSurface {
   bool SupportsGpuVSync() const override;
   void SetGpuVSyncEnabled(bool enabled) override;
   void SetDisplayTransform(gfx::OverlayTransform transform) override;
+  void SetCurrent() override;
+  bool IsCurrent() override;
 
   GLSurface* surface() const { return surface_.get(); }
 

@@ -2841,14 +2841,17 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
 
   ComPtr<IRawElementProviderSimple> link_node_raw =
       QueryInterfaceFromNode<IRawElementProviderSimple>(link_node);
+  ComPtr<IRawElementProviderSimple> static_text_node_raw1 =
+      QueryInterfaceFromNode<IRawElementProviderSimple>(static_text_node1);
   ComPtr<IRawElementProviderSimple> inline_text_node_raw1 =
       QueryInterfaceFromNode<IRawElementProviderSimple>(inline_text_node1);
   ComPtr<IRawElementProviderSimple> inline_text_node_raw2 =
       QueryInterfaceFromNode<IRawElementProviderSimple>(inline_text_node2);
 
   // Test GetEnclosingElement for the two leaves text nodes. The enclosing
-  // element of the first one should be itself and the enclosing element for the
-  // text node that is grandchild of the link node should return the link node.
+  // element of the first one should be its static text parent (because inline
+  // text boxes shouldn't be exposed) and the enclosing element for the text
+  // node that is grandchild of the link node should return the link node.
   ComPtr<ITextProvider> text_provider;
   EXPECT_HRESULT_SUCCEEDED(inline_text_node_raw1->GetPatternProvider(
       UIA_TextPatternId, &text_provider));
@@ -2860,7 +2863,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
   ComPtr<IRawElementProviderSimple> enclosing_element;
   EXPECT_HRESULT_SUCCEEDED(
       text_range_provider->GetEnclosingElement(&enclosing_element));
-  EXPECT_EQ(inline_text_node_raw1.Get(), enclosing_element.Get());
+  EXPECT_EQ(static_text_node_raw1.Get(), enclosing_element.Get());
 
   EXPECT_HRESULT_SUCCEEDED(inline_text_node_raw2->GetPatternProvider(
       UIA_TextPatternId, &text_provider));
@@ -3925,10 +3928,20 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderSelect) {
     EXPECT_EQ(0, unignored_selection.anchor_offset);
     EXPECT_EQ(10, unignored_selection.focus_offset);
 
-    // When selection spans multiple nodes ITextProvider::GetSelection is not
-    // supported. But the text range is still selected.
+    // Verify the content of the selection.
     document_provider->GetSelection(selection.Receive());
-    ASSERT_EQ(nullptr, selection.Get());
+    ASSERT_NE(nullptr, selection.Get());
+
+    document_provider->GetSelection(selection.Receive());
+    EXPECT_HRESULT_SUCCEEDED(SafeArrayGetUBound(selection.Get(), 1, &ubound));
+    EXPECT_EQ(0, ubound);
+    EXPECT_HRESULT_SUCCEEDED(SafeArrayGetLBound(selection.Get(), 1, &lbound));
+    EXPECT_EQ(0, lbound);
+    EXPECT_HRESULT_SUCCEEDED(SafeArrayGetElement(
+        selection.Get(), &index,
+        static_cast<void**>(&selected_text_range_provider)));
+    EXPECT_UIA_TEXTRANGE_EQ(selected_text_range_provider,
+                            L"some textmore text2");
   }
 
   // A degenerate text range performs select.
@@ -4871,4 +4884,89 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
             *GetEnd(normalized_range_win.Get()));
 }
 
+TEST_F(AXPlatformNodeTextRangeProviderTest,
+       TestNormalizeTextRangeSpanIgnoredNodes) {
+  ui::AXNodeData root_data;
+  root_data.id = 1;
+  root_data.role = ax::mojom::Role::kRootWebArea;
+
+  ui::AXNodeData before_text;
+  before_text.id = 2;
+  before_text.role = ax::mojom::Role::kStaticText;
+  before_text.SetName("before");
+  root_data.child_ids.push_back(before_text.id);
+
+  ui::AXNodeData ignored_text1;
+  ignored_text1.id = 3;
+  ignored_text1.role = ax::mojom::Role::kStaticText;
+  ignored_text1.AddState(ax::mojom::State::kIgnored);
+  ignored_text1.SetName("ignored1");
+  root_data.child_ids.push_back(ignored_text1.id);
+
+  ui::AXNodeData ignored_text2;
+  ignored_text2.id = 4;
+  ignored_text2.role = ax::mojom::Role::kStaticText;
+  ignored_text2.AddState(ax::mojom::State::kIgnored);
+  ignored_text2.SetName("ignored2");
+  root_data.child_ids.push_back(ignored_text2.id);
+
+  ui::AXNodeData after_text;
+  after_text.id = 5;
+  after_text.role = ax::mojom::Role::kStaticText;
+  after_text.SetName("after");
+  root_data.child_ids.push_back(after_text.id);
+
+  ui::AXTreeUpdate update;
+  ui::AXTreeID tree_id = ui::AXTreeID::CreateNewAXTreeID();
+  update.root_id = root_data.id;
+  update.tree_data.tree_id = tree_id;
+  update.has_tree_data = true;
+  update.nodes = {root_data, before_text, ignored_text1, ignored_text2,
+                  after_text};
+  Init(update);
+  AXNodePosition::SetTree(tree_.get());
+
+  // Making |owner| AXID:1 so that |TestAXNodeWrapper::BuildAllWrappers|
+  // will build the entire tree.
+  AXPlatformNodeWin* owner = static_cast<AXPlatformNodeWin*>(
+      AXPlatformNodeFromNode(GetNodeFromTree(tree_id, 1)));
+
+  // TextPosition, anchor_id=2, text_offset=6, annotated_text=before<>
+  AXNodePosition::AXPositionInstance range_start =
+      AXNodePosition::CreateTextPosition(tree_id, /*anchor_id=*/2,
+                                         /*text_offset=*/6,
+                                         ax::mojom::TextAffinity::kDownstream);
+
+  // TextPosition, anchor_id=5, text_offset=0, annotated_text=<a>fter
+  AXNodePosition::AXPositionInstance range_end =
+      AXNodePosition::CreateTextPosition(tree_id, /*anchor_id=*/5,
+                                         /*text_offset=*/0,
+                                         ax::mojom::TextAffinity::kDownstream);
+
+  ComPtr<AXPlatformNodeTextRangeProviderWin> range_span_ignored_nodes;
+  // Text range before NormalizeTextRange()
+  // |before<>||ignored1||ignored2||<a>fter|
+  //         |-----------------------|
+  ComPtr<ITextRangeProvider> text_range_provider =
+      AXPlatformNodeTextRangeProviderWin::CreateTextRangeProvider(
+          owner, std::move(range_start), std::move(range_end));
+  text_range_provider->QueryInterface(IID_PPV_ARGS(&range_span_ignored_nodes));
+
+  // Text range after NormalizeTextRange()
+  // |before||ignored1||ignored2||<a>fter|
+  //                              |-|
+  NormalizeTextRange(range_span_ignored_nodes.Get());
+  EXPECT_EQ(*GetStart(range_span_ignored_nodes.Get()),
+            *GetEnd(range_span_ignored_nodes.Get()));
+
+  EXPECT_EQ(true, GetStart(range_span_ignored_nodes.Get())->IsTextPosition());
+  EXPECT_EQ(true, GetStart(range_span_ignored_nodes.Get())->AtStartOfAnchor());
+  EXPECT_EQ(5, GetStart(range_span_ignored_nodes.Get())->anchor_id());
+  EXPECT_EQ(0, GetStart(range_span_ignored_nodes.Get())->text_offset());
+
+  EXPECT_EQ(true, GetEnd(range_span_ignored_nodes.Get())->IsTextPosition());
+  EXPECT_EQ(true, GetEnd(range_span_ignored_nodes.Get())->AtStartOfAnchor());
+  EXPECT_EQ(5, GetEnd(range_span_ignored_nodes.Get())->anchor_id());
+  EXPECT_EQ(0, GetEnd(range_span_ignored_nodes.Get())->text_offset());
+}
 }  // namespace ui

@@ -8,4 +8,9 @@ mojom("mojo_bindings") {
   sources = [
     "new_tab_page.mojom",
   ]
+
+  public_deps = [
+    "//skia/public/mojom",
+    "//url/mojom:url_mojom_gurl",
+  ]
 }

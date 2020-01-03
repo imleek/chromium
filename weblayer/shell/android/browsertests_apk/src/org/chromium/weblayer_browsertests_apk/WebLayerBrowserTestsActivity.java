@@ -48,7 +48,7 @@ public class WebLayerBrowserTestsActivity extends NativeBrowserTestActivity {
                 });
 
         try {
-            WebLayer.create(getApplication()).addCallback((WebLayer webLayer) -> {
+            WebLayer.loadAsync(getApplication(), webLayer -> {
                 mWebLayer = webLayer;
                 createShell();
             });
@@ -77,7 +77,7 @@ public class WebLayerBrowserTestsActivity extends NativeBrowserTestActivity {
                 new RelativeLayout.LayoutParams(
                         LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
 
-        Fragment fragment = WebLayer.createBrowserFragment(null);
+        Fragment fragment = WebLayer.createBrowserFragment("BrowserTestProfile");
 
         FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
         transaction.add(viewId, fragment);
@@ -90,7 +90,7 @@ public class WebLayerBrowserTestsActivity extends NativeBrowserTestActivity {
         mTab = mBrowser.getActiveTab();
         mTab.registerTabCallback(new TabCallback() {
             @Override
-            public void onVisibleUrlChanged(Uri uri) {
+            public void onVisibleUriChanged(Uri uri) {
                 mUrlView.setText(uri.toString());
             }
         });

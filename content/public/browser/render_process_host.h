@@ -19,7 +19,6 @@
 #include "base/supports_user_data.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
-#include "content/public/common/bind_interface_helpers.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_sender.h"
 #include "media/media_buildflags.h"
@@ -28,15 +27,21 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/network_isolation_key.h"
+#include "services/network/public/mojom/cross_origin_embedder_policy.mojom-forward.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
+#include "services/network/public/mojom/restricted_cookie_manager.mojom-forward.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 #include "third_party/blink/public/mojom/appcache/appcache.mojom.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom-forward.h"
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom-forward.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-forward.h"
 #include "third_party/blink/public/mojom/locks/lock_manager.mojom-forward.h"
+#include "third_party/blink/public/mojom/native_file_system/native_file_system_manager.mojom-forward.h"
+#include "third_party/blink/public/mojom/notifications/notification_service.mojom-forward.h"
 #include "third_party/blink/public/mojom/payments/payment_app.mojom-forward.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom-forward.h"
+#include "third_party/blink/public/mojom/quota/quota_dispatcher_host.mojom-forward.h"
+#include "third_party/blink/public/mojom/websockets/websocket_connector.mojom-forward.h"
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_ANDROID)
@@ -51,10 +56,6 @@ class TimeDelta;
 class Token;
 }
 
-namespace service_manager {
-class Identity;
-}
-
 namespace url {
 class Origin;
 }
@@ -65,7 +66,6 @@ class BrowserMessageFilter;
 class IsolationContext;
 class RenderProcessHostObserver;
 class StoragePartition;
-struct WebPreferences;
 #if defined(OS_ANDROID)
 enum class ChildProcessImportance;
 #endif
@@ -325,31 +325,25 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void DisableAudioDebugRecordings() = 0;
 
   using WebRtcRtpPacketCallback =
-      base::Callback<void(std::unique_ptr<uint8_t[]> packet_header,
-                          size_t header_length,
-                          size_t packet_length,
-                          bool incoming)>;
+      base::RepeatingCallback<void(std::unique_ptr<uint8_t[]> packet_header,
+                                   size_t header_length,
+                                   size_t packet_length,
+                                   bool incoming)>;
 
   using WebRtcStopRtpDumpCallback =
-      base::Callback<void(bool incoming, bool outgoing)>;
+      base::OnceCallback<void(bool incoming, bool outgoing)>;
 
   // Starts passing RTP packets to |packet_callback| and returns the callback
   // used to stop dumping.
   virtual WebRtcStopRtpDumpCallback StartRtpDump(
       bool incoming,
       bool outgoing,
-      const WebRtcRtpPacketCallback& packet_callback) = 0;
+      WebRtcRtpPacketCallback packet_callback) = 0;
 
   // Start/stop event log output from WebRTC on this RPH for the peer connection
   // identified locally within the RPH using the ID |lid|.
   virtual void EnableWebRtcEventLogOutput(int lid, int output_period_ms) = 0;
   virtual void DisableWebRtcEventLogOutput(int lid) = 0;
-
-  // Binds interfaces exposed to the browser process from the renderer.
-  //
-  // DEPRECATED: Use |BindReceiver()| instead.
-  virtual void BindInterface(const std::string& interface_name,
-                             mojo::ScopedMessagePipeHandle interface_pipe) = 0;
 
   // Asks the renderer process to bind |receiver|. |receiver| arrives in the
   // renderer process and is carried through the following flow, stopping if any
@@ -360,9 +354,6 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   //   3. Main thread, |ChildThreadImpl::OnBindReceiver()| (virtual)
   //   4. Possibly more stpes, depending on the ChildThreadImpl subclass.
   virtual void BindReceiver(mojo::GenericPendingReceiver receiver) = 0;
-
-  // Can only be called when IsInitializedAndNotDead() is true.
-  virtual const service_manager::Identity& GetChildIdentity() = 0;
 
   // Extracts any persistent-memory-allocator used for renderer metrics.
   // Ownership is passed to the caller. To support sharing of histogram data
@@ -427,46 +418,15 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // MockRenderProcessHost usage in tests.
   virtual mojom::Renderer* GetRendererInterface() = 0;
 
-  // Create an URLLoaderFactory that can be used by |origin| being hosted in
-  // |this| process.
+  // Create an URLLoaderFactory from |this| renderer process.
   //
-  // |main_world_origin| specifies the origin of the main world that will use
-  // the URLLoaderFactory.  In most cases |main_world_origin| and |origin|
-  // should be the same, but they may differ if |origin| specifies an origin of
-  // an isolated world (e.g. a content script of a Chrome Extension - see also
-  // the doc comment for extensions::URLLoaderFactoryManager::CreateFactory).
-  // TODO(lukasza): Remove |main_world_origin| once there is no need for
-  // a separate URLLoaderFactory for allowlisted extensions (in all other cases
-  // |main_world_origin| should be the same as |origin|).  At the same time,
-  // consider renaming |origin| to |request_initiator|.
-  //
-  // When NetworkService is enabled, |receiver| will be bound with a new
-  // URLLoaderFactory created from the storage partition's Network Context. Note
-  // that the URLLoaderFactory returned by this method does NOT support
-  // auto-reconnect after a crash of Network Service.
-  // When NetworkService is not enabled, |receiver| will be bound with a
-  // URLLoaderFactory which routes requests to ResourceDispatcherHost.
-  //
-  // |preferences| is an optional argument that might be used to control some
-  // aspects of the URLLoaderFactory (e.g. via
-  // allow_universal_access_from_file_urls).
-  //
-  // |header_client| will be used in URLLoaderFactoryParams when creating the
-  // factory.
-  //
-  // |network_isolation_key| will be used in URLLoaderFactoryParams when
-  // creating the factory. All resource requests through this factory will
-  // propagate the key to the network stack so that resources with different
-  // keys do not share network resources like the http cache.
+  // This method will bind |receiver| with a new URLLoaderFactory created from
+  // the storage partition's Network Context. Note that the URLLoaderFactory
+  // returned by this method does NOT support auto-reconnect after a crash of
+  // Network Service.
   virtual void CreateURLLoaderFactory(
-      const url::Origin& origin,
-      const url::Origin& main_world_origin,
-      network::mojom::CrossOriginEmbedderPolicy embedder_policy,
-      const WebPreferences* preferences,
-      const net::NetworkIsolationKey& network_isolation_key,
-      mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
-          header_client,
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver) = 0;
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
+      network::mojom::URLLoaderFactoryParamsPtr params) = 0;
 
   // Whether this process is locked out from ever being reused for sites other
   // than the ones it currently has.
@@ -505,11 +465,16 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // The following several methods are for internal use only, and are only
   // exposed here to support MockRenderProcessHost usage in tests.
   virtual void BindCacheStorage(
-      mojo::PendingReceiver<blink::mojom::CacheStorage> receiver,
-      const url::Origin& origin) = 0;
+      network::mojom::CrossOriginEmbedderPolicy cross_origin_embedder_policy,
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) = 0;
   virtual void BindFileSystemManager(
       const url::Origin& origin,
       mojo::PendingReceiver<blink::mojom::FileSystemManager> receiver) = 0;
+  virtual void BindNativeFileSystemManager(
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::NativeFileSystemManager>
+          receiver) = 0;
 
   // |render_frame_id| is the frame associated with |receiver|, or
   // MSG_ROUTING_NONE if |receiver| is associated with a worker.
@@ -517,8 +482,16 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
       int render_frame_id,
       const url::Origin& origin,
       mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) = 0;
+  virtual void BindRestrictedCookieManagerForServiceWorker(
+      const url::Origin& origin,
+      mojo::PendingReceiver<network::mojom::RestrictedCookieManager>
+          receiver) = 0;
   virtual void BindVideoDecodePerfHistory(
       mojo::PendingReceiver<media::mojom::VideoDecodePerfHistory> receiver) = 0;
+  virtual void BindQuotaDispatcherHost(
+      int render_frame_id,
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::QuotaDispatcherHost> receiver) = 0;
   virtual void CreateLockManager(
       int render_frame_id,
       const url::Origin& origin,
@@ -529,6 +502,12 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void CreatePaymentManagerForOrigin(
       const url::Origin& origin,
       mojo::PendingReceiver<payments::mojom::PaymentManager> receiver) = 0;
+  virtual void CreateNotificationService(
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::NotificationService> receiver) = 0;
+  virtual void CreateWebSocketConnector(
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::WebSocketConnector> receiver) = 0;
 
   // Returns the current number of active views in this process.  Excludes
   // any RenderViewHosts that are swapped out.
@@ -574,6 +553,10 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // //content layer will maintain a warm spare process host at all times
   // (without a need for separate calls to WarmupSpareRenderProcessHost).
   static void WarmupSpareRenderProcessHost(BrowserContext* browser_context);
+
+  // Return the spare RenderProcessHost, if it exists. There is at most one
+  // globally-used spare RenderProcessHost at any time.
+  static RenderProcessHost* GetSpareRenderProcessHostForTesting();
 
   // Flag to run the renderer in process.  This is primarily
   // for debugging purposes.  When running "in process", the

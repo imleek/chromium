@@ -230,7 +230,8 @@ ThreadableLoader::ThreadableLoader(
 void ThreadableLoader::Start(const ResourceRequest& request) {
   original_security_origin_ = security_origin_ = request.RequestorOrigin();
   // Setting an outgoing referer is only supported in the async code path.
-  DCHECK(async_ || request.HttpReferrer().IsEmpty());
+  DCHECK(async_ ||
+         request.ReferrerString() == Referrer::ClientReferrerString());
 
   bool cors_enabled = cors::IsCorsEnabledRequestMode(request.GetMode());
 
@@ -661,7 +662,7 @@ bool ThreadableLoader::RedirectReceived(
           SecurityOrigin::Create(original_url);
       scoped_refptr<const SecurityOrigin> new_origin =
           SecurityOrigin::Create(new_url);
-      if (!original_origin->IsSameSchemeHostPort(new_origin.get()))
+      if (!original_origin->IsSameOriginWith(new_origin.get()))
         security_origin_ = SecurityOrigin::CreateUniqueOpaque();
     }
 
@@ -672,10 +673,8 @@ bool ThreadableLoader::RedirectReceived(
 
     // Save the referrer to use when following the redirect.
     override_referrer_ = true;
-    // TODO(domfarolino): Use ReferrerString() once https://crbug.com/850813 is
-    // closed and we stop storing the referrer string as a `Referer` header.
     referrer_after_redirect_ =
-        Referrer(new_request.HttpReferrer(), new_request.GetReferrerPolicy());
+        Referrer(new_request.ReferrerString(), new_request.GetReferrerPolicy());
   }
   // We're initiating a new request (for redirect), so update
   // |last_request_url_| by destroying |assign_on_scope_exit|.
@@ -685,7 +684,9 @@ bool ThreadableLoader::RedirectReceived(
 
   // Remove any headers that may have been added by the network layer that cause
   // access control to fail.
-  cross_origin_request.ClearHTTPReferrer();
+  cross_origin_request.SetReferrerString(Referrer::NoReferrer());
+  cross_origin_request.SetReferrerPolicy(
+      network::mojom::ReferrerPolicy::kDefault);
   cross_origin_request.ClearHTTPOrigin();
   cross_origin_request.ClearHTTPUserAgent();
   // Add any request headers which we previously saved from the
@@ -847,7 +848,7 @@ void ThreadableLoader::ResponseReceived(Resource* resource,
 
   // Even if the request met the conditions to get handled by a Service Worker
   // in the constructor of this class (and therefore
-  // |m_fallbackRequestForServiceWorker| is set), the Service Worker may skip
+  // |fallback_request_for_service_worker_| is set), the Service Worker may skip
   // processing the request. Only if the request is same origin, the skipped
   // response may come here (wasFetchedViaServiceWorker() returns false) since
   // such a request doesn't have to go through the CORS algorithm by calling
@@ -942,12 +943,12 @@ void ThreadableLoader::DidTimeout(TimerBase* timer) {
   DCHECK(async_);
   DCHECK_EQ(timer, &timeout_timer_);
   // clearResource() may be called in clear() and some other places. clear()
-  // calls stop() on |m_timeoutTimer|. In the other places, the resource is set
+  // calls stop() on |timeout_|. In the other places, the resource is set
   // again. If the creation fails, clear() is called. So, here, resource() is
   // always non-nullptr.
   DCHECK(GetResource());
-  // When |m_client| is set to nullptr only in clear() where |m_timeoutTimer|
-  // is stopped. So, |m_client| is always non-nullptr here.
+  // When |client_| is set to nullptr only in clear() where |timeout_|
+  // is stopped. So, |client_| is always non-nullptr here.
   DCHECK(client_);
 
   DispatchDidFail(ResourceError::TimeoutError(GetResource()->Url()));

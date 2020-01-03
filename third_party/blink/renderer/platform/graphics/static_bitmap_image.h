@@ -22,17 +22,8 @@ class GLES2Interface;
 
 namespace blink {
 
-class WebGraphicsContext3DProviderWrapper;
-
 class PLATFORM_EXPORT StaticBitmapImage : public Image {
  public:
-  // WebGraphicsContext3DProviderWrapper argument only needs to be provided if
-  // The SkImage is texture backed, in which case it must be a reference to the
-  // context provider that owns the GrContext with which the SkImage is
-  // associated.
-  static scoped_refptr<StaticBitmapImage> Create(
-      sk_sp<SkImage>,
-      base::WeakPtr<WebGraphicsContext3DProviderWrapper> = nullptr);
   static scoped_refptr<StaticBitmapImage> Create(PaintImage);
   static scoped_refptr<StaticBitmapImage> Create(sk_sp<SkData> data,
                                                  const SkImageInfo&);
@@ -41,11 +32,10 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
 
   // Methods overridden by all sub-classes
   ~StaticBitmapImage() override = default;
-  // Creates a gpu copy of the image using the given ContextProvider. Should
-  // not be called if IsTextureBacked() is already true. May return null if the
-  // conversion failed (for instance if the context had an error).
-  virtual scoped_refptr<StaticBitmapImage> MakeAccelerated(
-      base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_wrapper) = 0;
+
+  virtual scoped_refptr<StaticBitmapImage> ConvertToColorSpace(
+      sk_sp<SkColorSpace>,
+      SkColorType = kN32_SkColorType) = 0;
 
   // Methods have common implementation for all sub-classes
   bool CurrentFrameIsComplete() override { return true; }
@@ -56,6 +46,7 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
   virtual bool HasMailbox() const { return false; }
   virtual bool IsValid() const { return true; }
   virtual void Transfer() {}
+  virtual bool IsOriginTopLeft() const { return true; }
 
   // Creates a non-gpu copy of the image, or returns this if image is already
   // non-gpu.
@@ -103,12 +94,10 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
   // Methods have exactly the same implementation for all sub-classes
   bool OriginClean() const { return is_origin_clean_; }
   void SetOriginClean(bool flag) { is_origin_clean_ = flag; }
-  scoped_refptr<StaticBitmapImage> ConvertToColorSpace(
-      sk_sp<SkColorSpace>,
-      SkColorType = kN32_SkColorType);
 
-  static size_t GetSizeInBytes(const IntRect& rect,
-                               const CanvasColorParams& color_params);
+  static base::CheckedNumeric<size_t> GetSizeInBytes(
+      const IntRect& rect,
+      const CanvasColorParams& color_params);
 
   static bool MayHaveStrayArea(scoped_refptr<StaticBitmapImage> src_image,
                                const IntRect& rect);

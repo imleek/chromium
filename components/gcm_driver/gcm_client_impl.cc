@@ -14,6 +14,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
@@ -296,6 +297,7 @@ GCMClientImpl::~GCMClientImpl() {
 void GCMClientImpl::Initialize(
     const ChromeBuildInfo& chrome_build_info,
     const base::FilePath& path,
+    bool remove_account_mappings_with_email_key,
     const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
     scoped_refptr<base::SequencedTaskRunner> io_task_runner,
     base::RepeatingCallback<void(
@@ -315,7 +317,8 @@ void GCMClientImpl::Initialize(
   network_connection_tracker_ = network_connection_tracker;
   chrome_build_info_ = chrome_build_info;
   gcm_store_.reset(
-      new GCMStoreImpl(path, blocking_task_runner, std::move(encryptor)));
+      new GCMStoreImpl(path, remove_account_mappings_with_email_key,
+                       blocking_task_runner, std::move(encryptor)));
   delegate_ = delegate;
   io_task_runner_ = std::move(io_task_runner);
   recorder_.SetDelegate(this);
@@ -350,12 +353,10 @@ void GCMClientImpl::Start(StartMode start_mode) {
   // Once the loading is completed, the check-in will be initiated.
   // If we're in lazy start mode, don't create a new store since none is really
   // using GCM functionality yet.
-  gcm_store_->Load(
-      (start_mode == IMMEDIATE_START) ?
-          GCMStore::CREATE_IF_MISSING :
-          GCMStore::DO_NOT_CREATE,
-      base::Bind(&GCMClientImpl::OnLoadCompleted,
-                 weak_ptr_factory_.GetWeakPtr()));
+  gcm_store_->Load((start_mode == IMMEDIATE_START) ? GCMStore::CREATE_IF_MISSING
+                                                   : GCMStore::DO_NOT_CREATE,
+                   base::Bind(&GCMClientImpl::OnLoadCompleted,
+                              weak_ptr_factory_.GetWeakPtr()));
   state_ = LOADING;
 }
 
@@ -606,9 +607,9 @@ void GCMClientImpl::RemoveAccountMapping(const CoreAccountId& account_id) {
 void GCMClientImpl::SetLastTokenFetchTime(const base::Time& time) {
   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
   gcm_store_->SetLastTokenFetchTime(
-      time,
-      base::Bind(&GCMClientImpl::IgnoreWriteResultCallback,
-                 weak_ptr_factory_.GetWeakPtr()));
+      time, base::Bind(&GCMClientImpl::IgnoreWriteResultCallback,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       /*operation_suffix_for_uma=*/"SetLastTokenFetchTime"));
 }
 
 void GCMClientImpl::UpdateHeartbeatTimer(
@@ -623,20 +624,23 @@ void GCMClientImpl::AddInstanceIDData(const std::string& app_id,
                                       const std::string& extra_data) {
   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
   instance_id_data_[app_id] = std::make_pair(instance_id, extra_data);
+  // TODO(crbug/1028761): If this call fails, we likely leak a registration
+  // (the one stored in instance_id_data_ would be used for a registration but
+  // not persisted).
   gcm_store_->AddInstanceIDData(
-      app_id,
-      SerializeInstanceIDData(instance_id, extra_data),
+      app_id, SerializeInstanceIDData(instance_id, extra_data),
       base::Bind(&GCMClientImpl::IgnoreWriteResultCallback,
-                 weak_ptr_factory_.GetWeakPtr()));
+                 weak_ptr_factory_.GetWeakPtr(),
+                 /*operation_suffix_for_uma=*/"AddInstanceIDData"));
 }
 
 void GCMClientImpl::RemoveInstanceIDData(const std::string& app_id) {
   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
   instance_id_data_.erase(app_id);
   gcm_store_->RemoveInstanceIDData(
-      app_id,
-      base::Bind(&GCMClientImpl::IgnoreWriteResultCallback,
-                 weak_ptr_factory_.GetWeakPtr()));
+      app_id, base::Bind(&GCMClientImpl::IgnoreWriteResultCallback,
+                         weak_ptr_factory_.GetWeakPtr(),
+                         /*operation_suffix_for_uma=*/"RemoveInstanceIDData"));
 }
 
 void GCMClientImpl::GetInstanceIDData(const std::string& app_id,
@@ -789,9 +793,14 @@ void GCMClientImpl::DefaultStoreCallback(bool success) {
   DCHECK(success);
 }
 
-void GCMClientImpl::IgnoreWriteResultCallback(bool success) {
+void GCMClientImpl::IgnoreWriteResultCallback(
+    const std::string& operation_suffix_for_uma,
+    bool success) {
+  // TODO(tschumann): Implement proper error handling.
   // TODO(fgorski): Ignoring the write result for now to make sure
   // sync_intergration_tests are not broken.
+  base::UmaHistogramBoolean(
+      "GCM.IgnoredWriteResult." + operation_suffix_for_uma, success);
 }
 
 void GCMClientImpl::DestroyStoreCallback(bool success) {

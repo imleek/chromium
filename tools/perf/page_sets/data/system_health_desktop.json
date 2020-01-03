@@ -160,6 +160,9 @@
         "load:media:dailymotion": {
             "DEFAULT": "system_health_desktop_003.wprgo"
         },
+        "load:media:dailymotion:2019": {
+            "DEFAULT": "system_health_desktop_fb04043fc0.wprgo"
+        },
         "load:media:facebook_photos:2018": {
             "DEFAULT": "system_health_desktop_eba368f102.wprgo"
         },
@@ -298,6 +301,9 @@
         "load:social:pinterest": {
             "DEFAULT": "system_health_desktop_001.wprgo"
         },
+        "load:social:pinterest:2019": {
+            "DEFAULT": "system_health_desktop_f399a24dd4.wprgo"
+        },
         "load:social:tumblr": {
             "DEFAULT": "system_health_desktop_001.wprgo"
         },
@@ -313,8 +319,14 @@
         "load:tools:docs": {
             "DEFAULT": "system_health_desktop_004.wprgo"
         },
+        "load:tools:docs:2019": {
+            "DEFAULT": "system_health_desktop_5f62c3d808.wprgo"
+        },
         "load:tools:drive": {
             "DEFAULT": "system_health_desktop_004.wprgo"
+        },
+        "load:tools:drive:2019": {
+            "DEFAULT": "system_health_desktop_3f8ef10603.wprgo"
         },
         "load:tools:dropbox": {
             "DEFAULT": "system_health_desktop_004.wprgo"
@@ -333,6 +345,9 @@
         },
         "load:tools:weather": {
             "DEFAULT": "system_health_desktop_004.wprgo"
+        },
+        "load:tools:weather:2019": {
+            "DEFAULT": "system_health_desktop_70d821feeb.wprgo"
         },
         "load_accessibility:media:wikipedia": {
             "DEFAULT": "system_health_desktop_059.wprgo"

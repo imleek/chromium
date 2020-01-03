@@ -53,9 +53,9 @@ class SharedChangeProcessor
     : public base::RefCountedThreadSafe<SharedChangeProcessor> {
  public:
   using StartDoneCallback =
-      base::Callback<void(DataTypeController::ConfigureResult start_result,
-                          const SyncMergeResult& local_merge_result,
-                          const SyncMergeResult& syncer_merge_result)>;
+      base::OnceCallback<void(DataTypeController::ConfigureResult start_result,
+                              const SyncMergeResult& local_merge_result,
+                              const SyncMergeResult& syncer_merge_result)>;
 
   // Create an uninitialized SharedChangeProcessor.
   explicit SharedChangeProcessor(ModelType type);
@@ -123,9 +123,6 @@ class SharedChangeProcessor
   virtual ~SharedChangeProcessor();
 
  private:
-  // Record association time.
-  virtual void RecordAssociationTime(base::TimeDelta time);
-
   // Monitor lock for this object. All methods that interact with the change
   // processor must aquire this lock and check whether we're disconnected or
   // not. Once disconnected, all attempted changes to or loads from the change

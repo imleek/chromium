@@ -29,6 +29,7 @@
 #include "third_party/ocmock/OCMock/OCMock.h"
 #include "ui/base/page_transition_types.h"
 #include "url/scheme_host_port.h"
+#include "url/url_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -75,7 +76,6 @@ class MockNavigationManagerDelegate : public NavigationManagerDelegate {
   MOCK_METHOD0(RecordPageStateInNavigationItem, void());
   MOCK_METHOD2(OnGoToIndexSameDocumentNavigation,
                void(NavigationInitiationType type, bool has_user_gesture));
-  MOCK_METHOD0(WillChangeUserAgentType, void());
   MOCK_METHOD1(LoadCurrentItem, void(NavigationInitiationType type));
   MOCK_METHOD0(LoadIfNecessary, void());
   MOCK_METHOD0(Reload, void());

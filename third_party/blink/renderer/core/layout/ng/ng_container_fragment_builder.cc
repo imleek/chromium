@@ -193,24 +193,37 @@ LogicalOffset NGContainerFragmentBuilder::GetChildOffset(
 void NGContainerFragmentBuilder::AddOutOfFlowChildCandidate(
     NGBlockNode child,
     const LogicalOffset& child_offset,
-    base::Optional<TextDirection> container_direction) {
+    NGLogicalStaticPosition::InlineEdge inline_edge,
+    NGLogicalStaticPosition::BlockEdge block_edge) {
   DCHECK(child);
-  DCHECK(layout_object_ && !layout_object_->IsLayoutInline() ||
-         container_direction)
-      << "container_direction must only be set for inline-level OOF children.";
+
+  // If an OOF-positioned candidate has a static-position which uses a
+  // non-block-start edge, we need to adjust its static-position when the final
+  // block-size is known.
+  bool needs_block_offset_adjustment =
+      block_edge != NGLogicalStaticPosition::BlockEdge::kBlockStart;
+  has_oof_candidate_that_needs_block_offset_adjustment_ |=
+      needs_block_offset_adjustment;
+
+  oof_positioned_candidates_.emplace_back(
+      child, NGLogicalStaticPosition{child_offset, inline_edge, block_edge},
+      /* inline_container */ nullptr, needs_block_offset_adjustment);
+}
+
+void NGContainerFragmentBuilder::AddOutOfFlowInlineChildCandidate(
+    NGBlockNode child,
+    const LogicalOffset& child_offset,
+    TextDirection inline_container_direction) {
+  DCHECK(node_.IsInline() || layout_object_->IsLayoutInline());
 
   // As all inline-level fragments are built in the line-logical coordinate
   // system (Direction() is kLtr), we need to know the direction of the
   // parent element to correctly determine an OOF childs static position.
-  TextDirection direction = container_direction.value_or(TextDirection::kLtr);
-
-  oof_positioned_candidates_.emplace_back(
-      child,
-      NGLogicalStaticPosition{
-          child_offset,
-          IsLtr(direction) ? NGLogicalStaticPosition::InlineEdge::kInlineStart
-                           : NGLogicalStaticPosition::InlineEdge::kInlineEnd,
-          NGLogicalStaticPosition::BlockEdge::kBlockStart});
+  AddOutOfFlowChildCandidate(child, child_offset,
+                             IsLtr(inline_container_direction)
+                                 ? NGLogicalStaticPosition::kInlineStart
+                                 : NGLogicalStaticPosition::kInlineEnd,
+                             NGLogicalStaticPosition::kBlockStart);
 }
 
 void NGContainerFragmentBuilder::AddOutOfFlowDescendant(
@@ -219,17 +232,41 @@ void NGContainerFragmentBuilder::AddOutOfFlowDescendant(
 }
 
 void NGContainerFragmentBuilder::SwapOutOfFlowPositionedCandidates(
-    Vector<NGLogicalOutOfFlowPositionedNode>* candidates,
-    const LayoutObject* current_container) {
+    Vector<NGLogicalOutOfFlowPositionedNode>* candidates) {
   DCHECK(candidates->IsEmpty());
-
-  // The |oof_positioned_candidates_| list may get additional candidates, in the
-  // following case:
-  //  - If an absolute-positioned element gets added to the builder, and it has
-  //    a fixed-positioned descendant.
   std::swap(oof_positioned_candidates_, *candidates);
 
+  if (!has_oof_candidate_that_needs_block_offset_adjustment_)
+    return;
+
+  using BlockEdge = NGLogicalStaticPosition::BlockEdge;
+
+  // We might have an OOF-positioned candidate whose static-position depends on
+  // the final block-size of this fragment.
+  DCHECK_NE(BlockSize(), kIndefiniteSize);
   for (auto& candidate : *candidates) {
+    if (!candidate.needs_block_offset_adjustment)
+      continue;
+
+    if (candidate.static_position.block_edge == BlockEdge::kBlockCenter)
+      candidate.static_position.offset.block_offset += BlockSize() / 2;
+    else if (candidate.static_position.block_edge == BlockEdge::kBlockEnd)
+      candidate.static_position.offset.block_offset += BlockSize();
+    candidate.needs_block_offset_adjustment = false;
+  }
+
+  has_oof_candidate_that_needs_block_offset_adjustment_ = false;
+}
+
+void NGContainerFragmentBuilder::
+    MoveOutOfFlowDescendantCandidatesToDescendants() {
+  DCHECK(oof_positioned_descendants_.IsEmpty());
+  std::swap(oof_positioned_candidates_, oof_positioned_descendants_);
+
+  if (!layout_object_->IsInline())
+    return;
+
+  for (auto& candidate : oof_positioned_descendants_) {
     // If we are inside the inline algorithm, (and creating a fragment for a
     // <span> or similar), we may add a child (e.g. an atomic-inline) which has
     // OOF descandants.
@@ -245,13 +282,7 @@ void NGContainerFragmentBuilder::SwapOutOfFlowPositionedCandidates(
       candidate.inline_container =
           ToLayoutInline(candidate.inline_container->ContinuationRoot());
     }
-
-    // Copy-back the static-position for legacy.
-    candidate.node.SaveStaticOffsetForLegacy(candidate.static_position.offset,
-                                             current_container);
   }
-
-  DCHECK(oof_positioned_candidates_.IsEmpty());
 }
 
 #if DCHECK_IS_ON()

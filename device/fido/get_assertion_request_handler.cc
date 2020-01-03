@@ -220,14 +220,12 @@ void ReportGetAssertionResponseTransport(FidoAuthenticator* authenticator) {
 }  // namespace
 
 GetAssertionRequestHandler::GetAssertionRequestHandler(
-    service_manager::Connector* connector,
     FidoDiscoveryFactory* fido_discovery_factory,
     const base::flat_set<FidoTransportProtocol>& supported_transports,
     CtapGetAssertionRequest request,
     bool allow_skipping_pin_touch,
     CompletionCallback completion_callback)
     : FidoRequestHandlerBase(
-          connector,
           fido_discovery_factory,
           base::STLSetIntersection<base::flat_set<FidoTransportProtocol>>(
               supported_transports,
@@ -284,7 +282,7 @@ void GetAssertionRequestHandler::DispatchRequest(
                       << " cannot satisfy assertion request. Requesting "
                          "touch in order to handle error case.";
       authenticator->GetTouch(base::BindOnce(
-          &GetAssertionRequestHandler::HandleInapplicableAuthenticator,
+          &GetAssertionRequestHandler::HandleAuthenticatorMissingUV,
           weak_factory_.GetWeakPtr(), authenticator));
       return;
 
@@ -516,13 +514,13 @@ void GetAssertionRequestHandler::HandleTouch(FidoAuthenticator* authenticator) {
                      weak_factory_.GetWeakPtr()));
 }
 
-void GetAssertionRequestHandler::HandleInapplicableAuthenticator(
+void GetAssertionRequestHandler::HandleAuthenticatorMissingUV(
     FidoAuthenticator* authenticator) {
   // User touched an authenticator that cannot handle this request.
   state_ = State::kFinished;
   CancelActiveAuthenticators(authenticator->GetId());
   std::move(completion_callback_)
-      .Run(GetAssertionStatus::kUserConsentButCredentialNotRecognized,
+      .Run(GetAssertionStatus::kAuthenticatorMissingUserVerification,
            base::nullopt, nullptr);
 }
 
@@ -561,30 +559,9 @@ void GetAssertionRequestHandler::OnHavePIN(std::string pin) {
     return;
   }
 
-  state_ = State::kGetEphemeralKey;
-  authenticator_->GetEphemeralKey(
-      base::BindOnce(&GetAssertionRequestHandler::OnHaveEphemeralKey,
-                     weak_factory_.GetWeakPtr(), std::move(pin)));
-}
-
-void GetAssertionRequestHandler::OnHaveEphemeralKey(
-    std::string pin,
-    CtapDeviceResponseCode status,
-    base::Optional<pin::KeyAgreementResponse> response) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(my_sequence_checker_);
-  DCHECK_EQ(State::kGetEphemeralKey, state_);
-
-  if (status != CtapDeviceResponseCode::kSuccess) {
-    state_ = State::kFinished;
-    std::move(completion_callback_)
-        .Run(GetAssertionStatus::kAuthenticatorResponseInvalid, base::nullopt,
-             nullptr);
-    return;
-  }
-
   state_ = State::kRequestWithPIN;
   authenticator_->GetPINToken(
-      std::move(pin), *response,
+      std::move(pin),
       base::BindOnce(&GetAssertionRequestHandler::OnHavePINToken,
                      weak_factory_.GetWeakPtr()));
 }

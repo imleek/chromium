@@ -119,9 +119,9 @@ class DataReductionProxyService
   virtual void SetProxyPrefs(bool enabled, bool at_startup);
 
   void LoadHistoricalDataUsage(
-      const HistoricalDataUsageCallback& load_data_usage_callback);
+      HistoricalDataUsageCallback load_data_usage_callback);
   void LoadCurrentDataUsageBucket(
-      const LoadCurrentDataUsageCallback& load_current_data_usage_callback);
+      LoadCurrentDataUsageCallback load_current_data_usage_callback);
   void StoreCurrentDataUsageBucket(std::unique_ptr<DataUsageBucket> current);
   void DeleteHistoricalDataUsage();
   void DeleteBrowsingHistory(const base::Time& start, const base::Time& end);
@@ -169,8 +169,8 @@ class DataReductionProxyService
     return compression_stats_.get();
   }
 
-  std::unique_ptr<network::SharedURLLoaderFactoryInfo> url_loader_factory_info()
-      const {
+  std::unique_ptr<network::PendingSharedURLLoaderFactory>
+  pending_url_loader_factory() const {
     return url_loader_factory_->Clone();
   }
 

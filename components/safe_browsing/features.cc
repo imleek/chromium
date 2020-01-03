@@ -38,8 +38,11 @@ const base::Feature kCaptureSafetyNetId{"SafeBrowsingCaptureSafetyNetId",
 const base::Feature kCommittedSBInterstitials{
     "SafeBrowsingCommittedInterstitials", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kDeepScanningOfDownloads{
-    "SafeBrowsingDeepScanningOfDownloads", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kContentComplianceEnabled{
+    "ContentComplianceEnabled", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kMalwareScanEnabled{"MalwareScanEnabled",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPasswordProtectionForSavedPasswords{
     "SafeBrowsingPasswordProtectionForSavedPasswords",
@@ -96,6 +99,9 @@ const base::Feature kTriggerThrottlerDailyQuotaFeature{
 const base::Feature kUseLocalBlacklistsV2{"SafeBrowsingUseLocalBlacklistsV2",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kUseNewDownloadWarnings{"UseNewDownloadWarnings",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
 namespace {
 // List of Safe Browsing features. Boolean value for each list member should be
 // set to true if the experiment state should be listed on
@@ -111,6 +117,8 @@ constexpr struct {
     {&kCaptureInlineJavascriptForGoogleAds, true},
     {&kCaptureSafetyNetId, true},
     {&kCommittedSBInterstitials, true},
+    {&kContentComplianceEnabled, true},
+    {&kMalwareScanEnabled, true},
     {&kPasswordProtectionForSavedPasswords, true},
     {&kPasswordProtectionShowDomainsForSavedPasswords, true},
     {&kPasswordProtectionForSignedInUsers, true},

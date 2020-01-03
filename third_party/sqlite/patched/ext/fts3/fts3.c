@@ -308,18 +308,6 @@
   SQLITE_EXTENSION_INIT1
 #endif
 
-/*
-** The following are copied from sqliteInt.h.
-**
-** Constants for the largest and smallest possible 64-bit signed integers.
-** These macros are designed to work correctly on both 32-bit and 64-bit
-** compilers.
-*/
-#ifndef SQLITE_AMALGAMATION
-# define LARGEST_INT64  (0xffffffff|(((sqlite3_int64)0x7fffffff)<<32))
-# define SMALLEST_INT64 (((sqlite3_int64)-1) - LARGEST_INT64)
-#endif
-
 static int fts3EvalNext(Fts3Cursor *pCsr);
 static int fts3EvalStart(Fts3Cursor *pCsr);
 static int fts3TermSegReaderCursor(
@@ -364,12 +352,7 @@ int sqlite3Fts3PutVarint(char *p, sqlite_int64 v){
   v = (*ptr++);                                               \
   if( (v & mask2)==0 ){ var = v; return ret; }
 
-/*
-** Read a 64-bit variable-length integer from memory starting at p[0].
-** Return the number of bytes read, or 0 on error.
-** The value is stored in *v.
-*/
-int sqlite3Fts3GetVarint(const char *pBuf, sqlite_int64 *v){
+int sqlite3Fts3GetVarintU(const char *pBuf, sqlite_uint64 *v){
   const unsigned char *p = (const unsigned char*)pBuf;
   const unsigned char *pStart = p;
   u32 a;
@@ -384,6 +367,41 @@ int sqlite3Fts3GetVarint(const char *pBuf, sqlite_int64 *v){
 
   for(shift=28; shift<=63; shift+=7){
     u64 c = *p++;
+    b += (c&0x7F) << shift;
+    if( (c & 0x80)==0 ) break;
+  }
+  *v = b;
+  return (int)(p - pStart);
+}
+
+/*
+** Read a 64-bit variable-length integer from memory starting at p[0].
+** Return the number of bytes read, or 0 on error.
+** The value is stored in *v.
+*/
+int sqlite3Fts3GetVarint(const char *pBuf, sqlite_int64 *v){
+  return sqlite3Fts3GetVarintU(pBuf, (sqlite3_uint64*)v);
+}
+
+/*
+** Read a 64-bit variable-length integer from memory starting at p[0] and
+** not extending past pEnd[-1].
+** Return the number of bytes read, or 0 on error.
+** The value is stored in *v.
+*/
+int sqlite3Fts3GetVarintBounded(
+  const char *pBuf,
+  const char *pEnd,
+  sqlite_int64 *v
+){
+  const unsigned char *p = (const unsigned char*)pBuf;
+  const unsigned char *pStart = p;
+  const unsigned char *pX = (const unsigned char*)pEnd;
+  u64 b = 0;
+  int shift;
+  for(shift=0; shift<=63; shift+=7){
+    u64 c = p<pX ? *p : 0;
+    p++;
     b += (c&0x7F) << shift;
     if( (c & 0x80)==0 ) break;
   }
@@ -1486,6 +1504,10 @@ static int fts3InitVtab(
   fts3DatabasePageSize(&rc, p);
   p->nNodeSize = p->nPgsz-35;
 
+#if defined(SQLITE_DEBUG)||defined(SQLITE_TEST)
+  p->nMergeCount = FTS3_MERGE_COUNT;
+#endif
+
   /* Declare the table schema to SQLite. */
   fts3DeclareVtab(&rc, p);
 
@@ -1993,7 +2015,13 @@ static int fts3SelectLeaf(
       rc = sqlite3Fts3ReadBlock(p, piLeaf?*piLeaf:*piLeaf2, &zBlob, &nBlob, 0);
     }
     if( rc==SQLITE_OK ){
-      rc = fts3SelectLeaf(p, zTerm, nTerm, zBlob, nBlob, piLeaf, piLeaf2);
+      int iNewHeight = 0;
+      fts3GetVarint32(zBlob, &iNewHeight);
+      if( iNewHeight>=iHeight ){
+        rc = FTS_CORRUPT_VTAB;
+      }else{
+        rc = fts3SelectLeaf(p, zTerm, nTerm, zBlob, nBlob, piLeaf, piLeaf2);
+      }
     }
     sqlite3_free(zBlob);
   }
@@ -2448,12 +2476,12 @@ static void fts3GetDeltaVarint3(
   if( *pp>=pEnd ){
     *pp = 0;
   }else{
-    sqlite3_int64 iVal;
-    *pp += sqlite3Fts3GetVarint(*pp, &iVal);
+    u64 iVal;
+    *pp += sqlite3Fts3GetVarintU(*pp, &iVal);
     if( bDescIdx ){
-      *pVal -= iVal;
+      *pVal = (i64)((u64)*pVal - iVal);
     }else{
-      *pVal += iVal;
+      *pVal = (i64)((u64)*pVal + iVal);
     }
   }
 }
@@ -2482,9 +2510,9 @@ static void fts3PutDeltaVarint3(
 ){
   sqlite3_int64 iWrite;
   if( bDescIdx==0 || *pbFirst==0 ){
-    iWrite = iVal - *piPrev;
+    iWrite = (u64)iVal - (u64)*piPrev;
   }else{
-    iWrite = *piPrev - iVal;
+    iWrite = (u64)*piPrev - (u64)iVal;
   }
   assert( *pbFirst || *piPrev==0 );
   assert_fts3_nc( *pbFirst==0 || iWrite>0 );
@@ -2504,7 +2532,8 @@ static void fts3PutDeltaVarint3(
 ** Using this makes it easier to write code that can merge doclists that are
 ** sorted in either ascending or descending order.
 */
-#define DOCID_CMP(i1, i2) ((bDescDoclist?-1:1) * (i1-i2))
+// #define DOCID_CMP(i1, i2) ((bDescDoclist?-1:1) * (i64)((u64)i1-i2))
+#define DOCID_CMP(i1, i2) ((bDescDoclist?-1:1) * (i1>i2?1:((i1==i2)?0:-1)))
 
 /*
 ** This function does an "OR" merge of two doclists (output contains all
@@ -4336,7 +4365,7 @@ static int fts3EvalPhraseStart(Fts3Cursor *pCsr, int bOptOk, Fts3Phrase *p){
   int bIncrOk = (bOptOk
    && pCsr->bDesc==pTab->bDescIdx
    && p->nToken<=MAX_INCR_PHRASE_TOKENS && p->nToken>0
-#ifdef SQLITE_TEST
+#if defined(SQLITE_DEBUG) || defined(SQLITE_TEST)
    && pTab->bNoIncrDoclist==0
 #endif
   );
@@ -4478,15 +4507,16 @@ static void fts3EvalDlPhraseNext(
   u8 *pbEof
 ){
   char *pIter;                            /* Used to iterate through aAll */
-  char *pEnd = &pDL->aAll[pDL->nAll];     /* 1 byte past end of aAll */
+  char *pEnd;                             /* 1 byte past end of aAll */
 
   if( pDL->pNextDocid ){
     pIter = pDL->pNextDocid;
+    assert( pDL->aAll!=0 || pIter==0 );
   }else{
     pIter = pDL->aAll;
   }
 
-  if( pIter>=pEnd ){
+  if( pIter==0 || pIter>=(pEnd = pDL->aAll + pDL->nAll) ){
     /* We have already reached the end of this doclist. EOF. */
     *pbEof = 1;
   }else{

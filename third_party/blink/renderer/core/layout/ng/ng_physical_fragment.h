@@ -136,7 +136,12 @@ class CORE_EXPORT NGPhysicalFragment
   bool IsCSSBox() const { return !IsLineBox() && !IsColumnBox(); }
 
   bool IsBlockFlow() const;
-  bool IsListMarker() const;
+  bool IsAnonymousBlock() const {
+    return IsCSSBox() && layout_object_->IsAnonymousBlock();
+  }
+  bool IsListMarker() const {
+    return IsCSSBox() && layout_object_->IsLayoutNGListMarker();
+  }
 
   // Return true if this fragment is a container established by a fieldset
   // element. Such a fragment contains an optional rendered legend fragment and
@@ -146,6 +151,9 @@ class CORE_EXPORT NGPhysicalFragment
 
   // Returns whether the fragment is legacy layout root.
   bool IsLegacyLayoutRoot() const { return is_legacy_layout_root_; }
+
+  // Returns whether the fragment should be atomically painted.
+  bool IsPaintedAtomically() const { return is_painted_atomically_; }
 
   bool IsBlockFormattingContextRoot() const {
     return (IsBox() &&
@@ -186,7 +194,20 @@ class CORE_EXPORT NGPhysicalFragment
   const ComputedStyle& Style() const {
     return layout_object_->EffectiveStyle(StyleVariant());
   }
-  Node* GetNode() const;
+
+  const Document& GetDocument() const {
+    DCHECK(layout_object_);
+    return layout_object_->GetDocument();
+  }
+  Node* GetNode() const {
+    return IsCSSBox() ? layout_object_->GetNode() : nullptr;
+  }
+  Node* GeneratingNode() const {
+    return IsCSSBox() ? layout_object_->GeneratingNode() : nullptr;
+  }
+  // The node to return when hit-testing on this fragment. This can be different
+  // from GetNode() when this fragment is content of a pseudo node.
+  Node* NodeForHitTest() const { return layout_object_->NodeForHitTest(); }
 
   // Whether there is a PaintLayer associated with the fragment.
   bool HasLayer() const { return IsCSSBox() && layout_object_->HasLayer(); }
@@ -199,8 +220,13 @@ class CORE_EXPORT NGPhysicalFragment
 
   // True if overflow != 'visible', except for certain boxes that do not allow
   // overflow clip; i.e., AllowOverflowClip() returns false.
-  bool HasOverflowClip() const;
-  bool ShouldClipOverflow() const;
+  bool HasOverflowClip() const {
+    return IsCSSBox() && layout_object_->HasOverflowClip();
+  }
+
+  bool ShouldClipOverflow() const {
+    return IsCSSBox() && layout_object_->ShouldClipOverflow();
+  }
 
   // This fragment is hidden for paint purpose, but exists for querying layout
   // information. Used for `text-overflow: ellipsis`.
@@ -213,12 +239,12 @@ class CORE_EXPORT NGPhysicalFragment
   // returns |nullptr| for the historical reasons. TODO(kojii): We may change
   // this in future. Use |IsLineBox()| instead of testing this is |nullptr|.
   const LayoutObject* GetLayoutObject() const {
-    return !IsLineBox() ? layout_object_ : nullptr;
+    return IsCSSBox() ? layout_object_ : nullptr;
   }
   // TODO(kojii): We should not have mutable version at all, the use of this
   // function should be eliminiated over time.
   LayoutObject* GetMutableLayoutObject() const {
-    return !IsLineBox() ? layout_object_ : nullptr;
+    return IsCSSBox() ? layout_object_ : nullptr;
   }
 
   // |NGPhysicalFragment| may live longer than the corresponding |LayoutObject|.
@@ -243,7 +269,7 @@ class CORE_EXPORT NGPhysicalFragment
   // ScrollableOverflow(), with transforms applied wrt container if needed.
   // This does not include any offsets from the parent (including relpos).
   PhysicalRect ScrollableOverflowForPropagation(
-      const LayoutObject* container) const;
+      const NGPhysicalBoxFragment& container) const;
 
   // The allowed touch action is the union of the effective touch action
   // (from style) and blocking touch event handlers.
@@ -341,6 +367,7 @@ class CORE_EXPORT NGPhysicalFragment
   // for all types to allow methods using them to be inlined.
   unsigned is_fieldset_container_ : 1;
   unsigned is_legacy_layout_root_ : 1;
+  unsigned is_painted_atomically_ : 1;
 
   // The following bitfields are only to be used by NGPhysicalTextFragment
   // (it's defined here to save memory, since that class has no bitfields).

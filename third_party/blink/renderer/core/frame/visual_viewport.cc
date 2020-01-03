@@ -83,7 +83,7 @@ VisualViewport::VisualViewport(Page& owner)
       track_pinch_zoom_stats_for_page_(false),
       needs_paint_property_update_(true) {
   UniqueObjectId unique_id = NewUniqueObjectId();
-  element_id_ = CompositorElementIdFromUniqueObjectId(
+  page_scale_element_id_ = CompositorElementIdFromUniqueObjectId(
       unique_id, CompositorElementIdNamespace::kPrimary);
   scroll_element_id_ = CompositorElementIdFromUniqueObjectId(
       unique_id, CompositorElementIdNamespace::kScroll);
@@ -124,12 +124,15 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
 
   needs_paint_property_update_ = false;
 
-  parent_property_tree_state_ =
-      PropertyTreeState(*context.current.transform, *context.current.clip,
-                        *context.current_effect);
   auto* transform_parent = context.current.transform;
   auto* scroll_parent = context.current.scroll;
+  auto* clip_parent = context.current.clip;
+  auto* effect_parent = context.current_effect;
+
+  DCHECK(transform_parent);
   DCHECK(scroll_parent);
+  DCHECK(clip_parent);
+  DCHECK(effect_parent);
 
   {
     const auto& device_emulation_transform =
@@ -175,7 +178,7 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
         TransformationMatrix().Scale(Scale())};
     state.flags.in_subtree_of_page_scale = false;
     state.direct_compositing_reasons = CompositingReason::kWillChangeTransform;
-    state.compositor_element_id = GetCompositorElementId();
+    state.compositor_element_id = page_scale_element_id_;
 
     if (!page_scale_node_) {
       page_scale_node_ = TransformPaintPropertyNode::Create(
@@ -187,11 +190,8 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
       // As an optimization, attempt to directly update the compositor
       // scale translation node and return kChangedOnlyCompositedValues which
       // avoids an expensive PaintArtifactCompositor update.
-      // TODO(crbug.com/953322): We need to implement this optimization for
-      // CompositeAfterPaint as well.
-      if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
-          effective_change_type ==
-              PaintPropertyChangeType::kChangedOnlySimpleValues) {
+      if (effective_change_type ==
+          PaintPropertyChangeType::kChangedOnlySimpleValues) {
         if (auto* paint_artifact_compositor = GetPaintArtifactCompositor()) {
           bool updated =
               paint_artifact_compositor->DirectlyUpdatePageScaleTransform(
@@ -217,7 +217,7 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
     state.user_scrollable_vertical = UserInputScrollable(kVerticalScrollbar);
     state.scrolls_inner_viewport = true;
     state.max_scroll_offset_affected_by_page_scale = true;
-    state.compositor_element_id = GetCompositorScrollElementId();
+    state.compositor_element_id = GetScrollElementId();
 
     if (MainFrame() && MainFrame()->GetDocument()) {
       Document* document = MainFrame()->GetDocument();
@@ -270,11 +270,8 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
       // As an optimization, attempt to directly update the compositor
       // translation node and return kChangedOnlyCompositedValues which avoids
       // an expensive PaintArtifactCompositor update.
-      // TODO(crbug.com/953322): We need to implement this optimization for
-      // CompositeAfterPaint as well.
-      if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
-          effective_change_type ==
-              PaintPropertyChangeType::kChangedOnlySimpleValues) {
+      if (effective_change_type ==
+          PaintPropertyChangeType::kChangedOnlySimpleValues) {
         if (auto* paint_artifact_compositor = GetPaintArtifactCompositor()) {
           bool updated =
               paint_artifact_compositor->DirectlyUpdateScrollOffsetTransform(
@@ -298,13 +295,12 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
     state.compositor_element_id =
         GetScrollbarElementId(ScrollbarOrientation::kHorizontalScrollbar);
     if (!horizontal_scrollbar_effect_node_) {
-      horizontal_scrollbar_effect_node_ = EffectPaintPropertyNode::Create(
-          parent_property_tree_state_.Effect(), std::move(state));
+      horizontal_scrollbar_effect_node_ =
+          EffectPaintPropertyNode::Create(*effect_parent, std::move(state));
       change = PaintPropertyChangeType::kNodeAddedOrRemoved;
     } else {
-      change = std::max(
-          change, horizontal_scrollbar_effect_node_->Update(
-                      parent_property_tree_state_.Effect(), std::move(state)));
+      change = std::max(change, horizontal_scrollbar_effect_node_->Update(
+                                    *effect_parent, std::move(state)));
     }
   }
 
@@ -317,15 +313,20 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
     state.compositor_element_id =
         GetScrollbarElementId(ScrollbarOrientation::kVerticalScrollbar);
     if (!vertical_scrollbar_effect_node_) {
-      vertical_scrollbar_effect_node_ = EffectPaintPropertyNode::Create(
-          parent_property_tree_state_.Effect(), std::move(state));
+      vertical_scrollbar_effect_node_ =
+          EffectPaintPropertyNode::Create(*effect_parent, std::move(state));
       change = PaintPropertyChangeType::kNodeAddedOrRemoved;
     } else {
-      change = std::max(
-          change, vertical_scrollbar_effect_node_->Update(
-                      parent_property_tree_state_.Effect(), std::move(state)));
+      change = std::max(change, vertical_scrollbar_effect_node_->Update(
+                                    *effect_parent, std::move(state)));
     }
   }
+
+  parent_property_tree_state_ =
+      PropertyTreeState(*transform_parent, *clip_parent, *effect_parent);
+
+  if (change == PaintPropertyChangeType::kNodeAddedOrRemoved)
+    MainFrame()->View()->SetVisualViewportNeedsRepaint();
 
   return change;
 }
@@ -369,15 +370,16 @@ void VisualViewport::SetSize(const IntSize& size) {
   TRACE_EVENT_INSTANT1("loading", "viewport", TRACE_EVENT_SCOPE_THREAD, "data",
                        ViewportToTracedValue());
 
+  if (!MainFrame())
+    return;
+
   // Need to re-compute sizes for the overlay scrollbars.
   if (scrollbar_layer_horizontal_) {
     DCHECK(scrollbar_layer_vertical_);
     UpdateScrollbarLayer(kHorizontalScrollbar);
     UpdateScrollbarLayer(kVerticalScrollbar);
+    MainFrame()->View()->SetVisualViewportNeedsRepaint();
   }
-
-  if (!MainFrame())
-    return;
 
   EnqueueResizeEvent();
 }
@@ -582,7 +584,7 @@ void VisualViewport::CreateLayers() {
   scroll_layer_ = cc::Layer::Create();
   scroll_layer_->SetScrollable(gfx::Size(size_));
   scroll_layer_->SetBounds(gfx::Size(ContentsSize()));
-  scroll_layer_->SetElementId(GetCompositorScrollElementId());
+  scroll_layer_->SetElementId(GetScrollElementId());
 
   ScrollingCoordinator* coordinator = GetPage().GetScrollingCoordinator();
   DCHECK(coordinator);
@@ -645,6 +647,7 @@ void VisualViewport::UpdateScrollbarLayer(ScrollbarOrientation orientation) {
         orientation, thumb_thickness, scrollbar_margin, false,
         GetScrollbarElementId(orientation));
     scrollbar_layer->SetScrollElementId(scroll_layer_->element_id());
+    scrollbar_layer->SetIsDrawable(true);
   }
 
   scrollbar_layer->SetBounds(
@@ -663,11 +666,7 @@ const Document* VisualViewport::GetDocument() const {
   return MainFrame() ? MainFrame()->GetDocument() : nullptr;
 }
 
-CompositorElementId VisualViewport::GetCompositorElementId() const {
-  return element_id_;
-}
-
-CompositorElementId VisualViewport::GetCompositorScrollElementId() const {
+CompositorElementId VisualViewport::GetScrollElementId() const {
   return scroll_element_id_;
 }
 
@@ -700,6 +699,12 @@ void VisualViewport::SetScrollOffset(const ScrollOffset& offset,
   ScrollOffset new_scroll_offset = ClampScrollOffset(offset);
   ScrollableArea::SetScrollOffset(new_scroll_offset, scroll_type,
                                   scroll_behavior, std::move(on_finish));
+}
+
+void VisualViewport::SetScrollOffset(const ScrollOffset& offset,
+                                     ScrollType scroll_type,
+                                     ScrollBehavior scroll_behavior) {
+  SetScrollOffset(offset, scroll_type, scroll_behavior, ScrollCallback());
 }
 
 PhysicalRect VisualViewport::ScrollIntoView(

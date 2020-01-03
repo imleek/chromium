@@ -25,8 +25,8 @@
 #include "tools/binary_size/libsupersize/caspian/model.h"
 
 namespace {
-
-const char SERIALIZATION_VERSION[] = "Size File Format v1";
+const char kDiffHeader[] = "# Created by //tools/binary_size\nDIFF\n";
+const char kSerializationVersion[] = "Size File Format v1";
 
 int ReadLoneInt(char** rest) {
   char* token = strsep(rest, "\n");
@@ -50,9 +50,7 @@ void Decompress(const char* gzipped,
     uncompressed_size = __builtin_bswap32(uncompressed_size);
   }
 
-  // Using resize() instead of reserve() here is significantly slower when
-  // compiled to WebAssembly.
-  uncompressed->reserve(uncompressed_size + 1);
+  uncompressed->resize(uncompressed_size + 1);
   // Add terminating null for safety.
   (*uncompressed)[uncompressed_size] = '\0';
 
@@ -206,9 +204,7 @@ void CalculatePadding(std::vector<Symbol>* raw_symbols) {
   }
 }
 
-void ParseSizeInfo(const char* gzipped,
-                   unsigned long len,
-                   ::caspian::SizeInfo* info) {
+void ParseSizeInfo(const char* gzipped, unsigned long len, SizeInfo* info) {
   // To avoid memory allocations, all the char* in our final Symbol set will
   // be pointers into the region originally pointed to by |decompressed_start|.
   // Calls to strsep() replace delimiter characters with null terminators.
@@ -220,7 +216,7 @@ void ParseSizeInfo(const char* gzipped,
 
   // Serialization version
   line = strsep(&rest, "\n");
-  if (std::strcmp(line, SERIALIZATION_VERSION)) {
+  if (std::strcmp(line, kSerializationVersion)) {
     std::cerr << "Serialization version: '" << line << "' not recognized."
               << std::endl;
     exit(1);
@@ -229,6 +225,7 @@ void ParseSizeInfo(const char* gzipped,
   ReadJsonBlob(&rest, &info->metadata);
 
   const bool has_components = info->metadata["has_components"].asBool();
+  const bool has_padding = info->metadata["has_padding"].asBool();
 
   // List of paths: (object_path, [source_path])
   int n_paths = ReadLoneInt(&rest);
@@ -260,18 +257,20 @@ void ParseSizeInfo(const char* gzipped,
     }
   }
 
-  // List of component names
-  int n_components = ReadLoneInt(&rest);
-  if (n_components <= 0) {
-    std::cerr << "Unexpected non-positive components list length: "
-              << n_components << std::endl;
-    exit(1);
-  }
-  std::cout << "Reading " << n_components << " components" << std::endl;
+  if (has_components) {
+    // List of component names
+    int n_components = ReadLoneInt(&rest);
+    if (n_components < 0) {
+      std::cerr << "Unexpected negative components list length: "
+                << n_components << std::endl;
+      exit(1);
+    }
+    std::cout << "Reading " << n_components << " components" << std::endl;
 
-  info->components.reserve(n_components);
-  for (int i = 0; i < n_components; i++) {
-    info->components.push_back(strsep(&rest, "\n"));
+    info->components.reserve(n_components);
+    for (int i = 0; i < n_components; i++) {
+      info->components.push_back(strsep(&rest, "\n"));
+    }
   }
 
   // Section names
@@ -294,6 +293,12 @@ void ParseSizeInfo(const char* gzipped,
       ReadIntListForEachSection<int64_t>(&rest, section_counts, true);
   std::vector<std::vector<int32_t>> sizes =
       ReadIntListForEachSection<int32_t>(&rest, section_counts, false);
+  std::vector<std::vector<int32_t>> paddings;
+  if (has_padding) {
+    paddings = ReadIntListForEachSection<int32_t>(&rest, section_counts, false);
+  } else {
+    paddings.resize(addresses.size());
+  }
   std::vector<std::vector<int32_t>> path_indices =
       ReadIntListForEachSection<int32_t>(&rest, section_counts, true);
   std::vector<std::vector<int32_t>> component_indices;
@@ -313,6 +318,7 @@ void ParseSizeInfo(const char* gzipped,
     const int cur_section_count = section_counts[section_idx];
     const std::vector<int64_t>& cur_addresses = addresses[section_idx];
     const std::vector<int32_t>& cur_sizes = sizes[section_idx];
+    const std::vector<int32_t>& cur_paddings = paddings[section_idx];
     const std::vector<int32_t>& cur_path_indices = path_indices[section_idx];
     const std::vector<int32_t>& cur_component_indices =
         component_indices[section_idx];
@@ -351,6 +357,10 @@ void ParseSizeInfo(const char* gzipped,
       new_sym.section_id_ = cur_section_id;
       new_sym.address_ = cur_addresses[i];
       new_sym.size_ = cur_sizes[i];
+      if (has_padding) {
+        new_sym.padding_ = cur_paddings[i];
+        new_sym.size_ += new_sym.padding_;
+      }
       new_sym.section_name_ = cur_section_name;
       new_sym.object_path_ = info->object_paths[cur_path_indices[i]];
       new_sym.source_path_ = info->source_paths[cur_path_indices[i]];
@@ -375,12 +385,43 @@ void ParseSizeInfo(const char* gzipped,
     }
   }
 
-  CalculatePadding(&info->raw_symbols);
+  info->is_sparse = has_padding;
+  if (!has_padding) {
+    CalculatePadding(&info->raw_symbols);
+  }
 
   // If there are unparsed non-empty lines, something's gone wrong.
   CheckNoNonEmptyLinesRemain(rest);
 
   std::cout << "Parsed " << info->raw_symbols.size() << " symbols" << std::endl;
+}
+
+bool IsDiffSizeInfo(const char* file, unsigned long len) {
+  return !strncmp(file, kDiffHeader, 4);
+}
+
+void ParseDiffSizeInfo(char* file,
+                       unsigned long len,
+                       SizeInfo* before,
+                       SizeInfo* after) {
+  // Skip "DIFF" header.
+  char* rest = file;
+  rest += strlen(kDiffHeader);
+  Json::Value metadata;
+  ReadJsonBlob(&rest, &metadata);
+
+  if (metadata["version"].asInt() != 1) {
+    std::cerr << ".sizediff version mismatch, write some upgrade code. version="
+              << metadata["version"] << std::endl;
+    exit(1);
+  }
+
+  unsigned long header_len = rest - file;
+  unsigned long before_len = metadata["before_length"].asUInt();
+  unsigned long after_len = len - header_len - before_len;
+
+  ParseSizeInfo(rest, before_len, before);
+  ParseSizeInfo(rest + before_len, after_len, after);
 }
 
 }  // namespace caspian

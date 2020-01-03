@@ -17,11 +17,11 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/no_destructor.h"
 #include "base/numerics/ranges.h"
 #include "base/task/post_task.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "build/chromecast_buildflags.h"
 #include "components/network_session_configurator/common/network_features.h"
 #include "components/os_crypt/os_crypt.h"
 #include "mojo/core/embedder/embedder.h"
@@ -48,11 +48,11 @@
 #include "services/network/cross_origin_read_blocking.h"
 #include "services/network/dns_config_change_manager.h"
 #include "services/network/http_auth_cache_copier.h"
-#include "services/network/initiator_lock_compatibility.h"
 #include "services/network/net_log_exporter.h"
 #include "services/network/network_context.h"
 #include "services/network/network_usage_accumulator.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/initiator_lock_compatibility.h"
 #include "services/network/public/cpp/load_info_util.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "services/network/url_loader.h"
@@ -62,7 +62,7 @@
 #include "third_party/boringssl/src/include/openssl/cpu.h"
 #endif
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(IS_CHROMECAST)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && !BUILDFLAG(IS_CHROMECAST)
 #include "components/os_crypt/key_storage_config_linux.h"
 #endif
 
@@ -80,11 +80,6 @@ namespace network {
 namespace {
 
 NetworkService* g_network_service = nullptr;
-
-net::NetLog* GetNetLog() {
-  static base::NoDestructor<net::NetLog> instance;
-  return instance.get();
-}
 
 // The interval for calls to NetworkService::UpdateLoadStates
 constexpr auto kUpdateLoadStatesInterval =
@@ -249,7 +244,7 @@ NetworkService::NetworkService(
     std::unique_ptr<service_manager::BinderRegistry> registry,
     mojo::PendingReceiver<mojom::NetworkService> receiver,
     bool delay_initialization_until_set_client)
-    : net_log_(GetNetLog()), registry_(std::move(registry)) {
+    : net_log_(net::NetLog::Get()), registry_(std::move(registry)) {
   DCHECK(!g_network_service);
   g_network_service = this;
 
@@ -536,7 +531,7 @@ void NetworkService::ConfigureHttpAuthPrefs(
 }
 
 void NetworkService::SetRawHeadersAccess(
-    uint32_t process_id,
+    int32_t process_id,
     const std::vector<url::Origin>& origins) {
   DCHECK(process_id);
   if (!origins.size()) {
@@ -563,7 +558,7 @@ void NetworkService::SetMaxConnectionsPerProxy(int32_t max_connections) {
       net::HttpNetworkSession::NORMAL_SOCKET_POOL, new_limit);
 }
 
-bool NetworkService::HasRawHeadersAccess(uint32_t process_id,
+bool NetworkService::HasRawHeadersAccess(int32_t process_id,
                                          const GURL& resource_url) const {
   // Allow raw headers for browser-initiated requests.
   if (!process_id)
@@ -611,8 +606,10 @@ void NetworkService::GetNetworkList(
                      std::move(callback)));
 }
 
-void NetworkService::UpdateCRLSet(base::span<const uint8_t> crl_set) {
-  crl_set_distributor_->OnNewCRLSet(crl_set);
+void NetworkService::UpdateCRLSet(
+    base::span<const uint8_t> crl_set,
+    mojom::NetworkService::UpdateCRLSetCallback callback) {
+  crl_set_distributor_->OnNewCRLSet(crl_set, std::move(callback));
 }
 
 void NetworkService::OnCertDBChanged() {
@@ -621,7 +618,7 @@ void NetworkService::OnCertDBChanged() {
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 void NetworkService::SetCryptConfig(mojom::CryptConfigPtr crypt_config) {
-#if !defined(IS_CHROMECAST)
+#if !BUILDFLAG(IS_CHROMECAST)
   DCHECK(!os_crypt_config_set_);
   auto config = std::make_unique<os_crypt::Config>();
   config->store = crypt_config->store;
@@ -641,19 +638,14 @@ void NetworkService::SetEncryptionKey(const std::string& encryption_key) {
 }
 #endif
 
-void NetworkService::AddCorbExceptionForPlugin(uint32_t process_id) {
+void NetworkService::AddCorbExceptionForPlugin(int32_t process_id) {
   DCHECK_NE(mojom::kBrowserProcessId, process_id);
   CrossOriginReadBlocking::AddExceptionForPlugin(process_id);
 }
 
-void NetworkService::RemoveCorbExceptionForPlugin(uint32_t process_id) {
+void NetworkService::RemoveCorbExceptionForPlugin(int32_t process_id) {
   DCHECK_NE(mojom::kBrowserProcessId, process_id);
   CrossOriginReadBlocking::RemoveExceptionForPlugin(process_id);
-}
-
-void NetworkService::AddExtraMimeTypesForCorb(
-    const std::vector<std::string>& mime_types) {
-  CrossOriginReadBlocking::AddExtraMimeTypesForCorb(mime_types);
 }
 
 void NetworkService::OnMemoryPressure(
@@ -781,7 +773,7 @@ void NetworkService::UpdateLoadInfo() {
   // For requests from the same {process_id, routing_id} pair, pick the most
   // important. For ones from the browser, return all of them.
   std::vector<mojom::LoadInfoPtr> infos;
-  std::map<std::pair<uint32_t, uint32_t>, mojom::LoadInfoPtr> frame_infos;
+  std::map<std::pair<int32_t, int32_t>, mojom::LoadInfoPtr> frame_infos;
 
   for (auto* network_context : network_contexts_) {
     for (auto* loader :
@@ -792,7 +784,7 @@ void NetworkService::UpdateLoadInfo() {
 
       auto process_id = url_loader->GetProcessId();
       auto routing_id = url_loader->GetRenderFrameId();
-      if (routing_id == static_cast<uint32_t>(MSG_ROUTING_NONE)) {
+      if (routing_id == MSG_ROUTING_NONE) {
         // If there is no routing_id, then the browser can't associate this with
         // a page so no need to send.
         continue;

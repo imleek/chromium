@@ -154,7 +154,7 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
   // Starts the request using |url_loader_factory|. The SimpleURLLoader will
   // accumulate all downloaded data in an in-memory string of bounded size. If
   // |max_body_size| is exceeded, the request will fail with
-  // net::ERR_INSUFFICIENT_RESOURCES. |max_body_size| must be no greater than 1
+  // net::ERR_INSUFFICIENT_RESOURCES. |max_body_size| must be no greater than 5
   // MiB. For anything larger, it's recommended to either save to a temp file,
   // or consume the data as it is received.
   //
@@ -326,6 +326,11 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
   // //network/public/mojom/url_loader_factory.mojom. This should be
   // called before the request is started.
   virtual void SetURLLoaderFactoryOptions(uint32_t options) = 0;
+
+  // Sets request_id for URLLoaderFactory::CreateLoaderAndStart. See
+  // network/public/mojom/url_loader_factory.mojom. This should be called before
+  // the request is started.
+  virtual void SetRequestID(int32_t request_id) = 0;
 
   // The amount of time to wait before giving up on a given network request and
   // considering it an error. If not set, then the request is allowed to take

@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
@@ -15,6 +16,8 @@
 #include "base/optional.h"
 #include "chromeos/components/multidevice/remote_device_ref.h"
 #include "chromeos/components/multidevice/software_feature.h"
+#include "chromeos/services/device_sync/feature_status_change.h"
+#include "chromeos/services/device_sync/proto/cryptauth_common.pb.h"
 #include "chromeos/services/device_sync/public/mojom/device_sync.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
@@ -85,9 +88,19 @@ class DeviceSyncClient {
       bool enabled,
       bool is_exclusive,
       mojom::DeviceSync::SetSoftwareFeatureStateCallback callback) = 0;
+  virtual void SetFeatureStatus(
+      const std::string& device_instance_id,
+      multidevice::SoftwareFeature feature,
+      FeatureStatusChange status_change,
+      mojom::DeviceSync::SetFeatureStatusCallback callback) = 0;
   virtual void FindEligibleDevices(
       multidevice::SoftwareFeature software_feature,
       FindEligibleDevicesCallback callback) = 0;
+  virtual void NotifyDevices(
+      const std::vector<std::string>& device_instance_ids,
+      cryptauthv2::TargetService target_service,
+      multidevice::SoftwareFeature feature,
+      mojom::DeviceSync::NotifyDevicesCallback callback) = 0;
   virtual void GetDevicesActivityStatus(
       mojom::DeviceSync::GetDevicesActivityStatusCallback callback) = 0;
   virtual void GetDebugInfo(

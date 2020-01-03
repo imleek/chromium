@@ -559,12 +559,12 @@ void VolumeManager::Initialize() {
   pref_change_registrar_.Init(profile_->GetPrefs());
   pref_change_registrar_.Add(
       prefs::kExternalStorageDisabled,
-      base::Bind(&VolumeManager::OnExternalStorageDisabledChanged,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&VolumeManager::OnExternalStorageDisabledChanged,
+                          weak_ptr_factory_.GetWeakPtr()));
   pref_change_registrar_.Add(
       prefs::kExternalStorageReadOnly,
-      base::Bind(&VolumeManager::OnExternalStorageReadOnlyChanged,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&VolumeManager::OnExternalStorageReadOnlyChanged,
+                          weak_ptr_factory_.GetWeakPtr()));
 
   // Subscribe to storage monitor for MTP notifications.
   if (storage_monitor::StorageMonitor::GetInstance()) {
@@ -925,7 +925,8 @@ void VolumeManager::OnMountEvent(
 void VolumeManager::OnFormatEvent(
     chromeos::disks::DiskMountManager::FormatEvent event,
     chromeos::FormatError error_code,
-    const std::string& device_path) {
+    const std::string& device_path,
+    const std::string& device_label) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DVLOG(1) << "OnDeviceEvent: " << event << ", " << error_code
            << ", " << device_path;
@@ -933,7 +934,7 @@ void VolumeManager::OnFormatEvent(
   switch (event) {
     case chromeos::disks::DiskMountManager::FORMAT_STARTED:
       for (auto& observer : observers_) {
-        observer.OnFormatStarted(device_path,
+        observer.OnFormatStarted(device_path, device_label,
                                  error_code == chromeos::FORMAT_ERROR_NONE);
       }
       return;
@@ -948,7 +949,7 @@ void VolumeManager::OnFormatEvent(
                                      GetExternalStorageAccessMode(profile_));
 
       for (auto& observer : observers_) {
-        observer.OnFormatCompleted(device_path,
+        observer.OnFormatCompleted(device_path, device_label,
                                    error_code == chromeos::FORMAT_ERROR_NONE);
       }
 
@@ -960,7 +961,8 @@ void VolumeManager::OnFormatEvent(
 void VolumeManager::OnRenameEvent(
     chromeos::disks::DiskMountManager::RenameEvent event,
     chromeos::RenameError error_code,
-    const std::string& device_path) {
+    const std::string& device_path,
+    const std::string& device_label) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DVLOG(1) << "OnDeviceEvent: " << event << ", " << error_code << ", "
            << device_path;
@@ -968,7 +970,7 @@ void VolumeManager::OnRenameEvent(
   switch (event) {
     case chromeos::disks::DiskMountManager::RENAME_STARTED:
       for (auto& observer : observers_) {
-        observer.OnRenameStarted(device_path,
+        observer.OnRenameStarted(device_path, device_label,
                                  error_code == chromeos::RENAME_ERROR_NONE);
       }
       return;
@@ -993,7 +995,8 @@ void VolumeManager::OnRenameEvent(
 
       bool successfully_renamed = error_code == chromeos::RENAME_ERROR_NONE;
       for (auto& observer : observers_)
-        observer.OnRenameCompleted(device_path, successfully_renamed);
+        observer.OnRenameCompleted(device_path, device_label,
+                                   successfully_renamed);
 
       return;
   }

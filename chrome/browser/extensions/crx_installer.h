@@ -121,7 +121,8 @@ class CrxInstaller : public SandboxedUnpackerClient {
                          const GURL& download_url);
 
   // Convert the specified web app into an extension and install it.
-  void InstallWebApp(const WebApplicationInfo& web_app);
+  // Virtual for testing.
+  virtual void InstallWebApp(const WebApplicationInfo& web_app);
 
   // Update the extension |extension_id| with the unpacked crx in
   // |unpacked_dir|.
@@ -227,9 +228,8 @@ class CrxInstaller : public SandboxedUnpackerClient {
     set_install_flag(kInstallFlagDoNotSync, val);
   }
 
-  void set_installer_callback(InstallerResultCallback callback) {
-    installer_callback_ = std::move(callback);
-  }
+  // Virtual for testing.
+  virtual void set_installer_callback(InstallerResultCallback callback);
 
   bool did_handle_successfully() const { return did_handle_successfully_; }
 
@@ -261,7 +261,15 @@ class CrxInstaller : public SandboxedUnpackerClient {
   // should complete.
   base::Optional<CrxInstallError> AllowInstall(const Extension* extension);
 
+  // To check whether we need to compute hashes or not, we have to make a query
+  // to ContentVerifier, and that should be done on the UI thread.
+  void ShouldComputeHashesOnUI(scoped_refptr<const Extension> extension,
+                               base::OnceCallback<void(bool)> callback);
+
   // SandboxedUnpackerClient
+  void ShouldComputeHashesForOffWebstoreExtension(
+      scoped_refptr<const Extension> extension,
+      base::OnceCallback<void(bool)> callback) override;
   void OnUnpackFailure(const CrxInstallError& error) override;
   void OnUnpackSuccess(
       const base::FilePath& temp_dir,

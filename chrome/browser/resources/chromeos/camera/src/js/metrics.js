@@ -56,19 +56,21 @@ cca.metrics.ga_ = (function() {
   };
   var initBuilder = () => {
     return new Promise((resolve) => {
-      try {
-        chrome.chromeosInfoPrivate.get(['board'],
-            (values) => resolve(values['board']));
-      } catch (e) {
-        resolve('');
-      }
-    }).then((board) => {
-      var boardName = /^(x86-)?(\w*)/.exec(board)[0];
-      var match = navigator.appVersion.match(/CrOS\s+\S+\s+([\d.]+)/);
-      var osVer = match ? match[1] : '';
-      cca.metrics.base_ = analytics.EventBuilder.builder()
-          .dimen(1, boardName).dimen(2, osVer);
-    });
+             try {
+               chrome.chromeosInfoPrivate.get(
+                   ['board'], (values) => resolve(values['board']));
+             } catch (e) {
+               resolve('');
+             }
+           })
+        .then((board) => {
+          var boardName = /^(x86-)?(\w*)/.exec(board)[0];
+          var match = navigator.appVersion.match(/CrOS\s+\S+\s+([\d.]+)/);
+          var osVer = match ? match[1] : '';
+          cca.metrics.base_ = analytics.EventBuilder.builder()
+                                  .dimen(1, boardName)
+                                  .dimen(2, osVer);
+        });
   };
 
   return Promise.all([getConfig(), checkEnabled(), initBuilder()])
@@ -85,8 +87,8 @@ cca.metrics.ga_ = (function() {
  * @private
  */
 cca.metrics.launchType_ = function(ackMigrate) {
-  return cca.metrics.base_.category('launch').action('start')
-      .label(ackMigrate ? 'ack-migrate' : '');
+  return cca.metrics.base_.category('launch').action('start').label(
+      ackMigrate ? 'ack-migrate' : '');
 };
 
 /**
@@ -103,14 +105,20 @@ cca.metrics.IntentResultType = {
  * Returns event builder for the metrics type: capture.
  * @param {?string} facingMode Camera facing-mode of the capture.
  * @param {number} length Length of 1 minute buckets for captured video.
- * @param {!{width: number, height: number}} resolution Capture resolution.
+ * @param {!cca.Resolution} resolution Capture resolution.
  * @param {!cca.metrics.IntentResultType} intentResult
  * @return {!analytics.EventBuilder}
  * @private
  */
 cca.metrics.captureType_ = function(
-    facingMode, length, {width, height}, intentResult) {
-  var condState = (states, cond = undefined, strict = undefined) => {
+    facingMode, length, resolution, intentResult) {
+  /**
+   * @param {!Array<cca.state.StateUnion>} states
+   * @param {cca.state.StateUnion=} cond
+   * @param {boolean=} strict
+   * @return {string}
+   */
+  const condState = (states, cond = undefined, strict = undefined) => {
     // Return the first existing state among the given states only if there is
     // no gate condition or the condition is met.
     const prerequisite = !cond || cca.state.get(cond);
@@ -121,21 +129,42 @@ cca.metrics.captureType_ = function(
         'n/a';
   };
 
+  const State = cca.state.State;
   return cca.metrics.base_.category('capture')
-      .action(/^(\w*)/.exec(condState(
-          ['video-mode', 'photo-mode', 'square-mode', 'portrait-mode']))[0])
+      .action(condState(Object.values(cca.Mode)))
       .label(facingMode || '(not set)')
-      .dimen(3, condState(['sound']))
-      .dimen(4, condState(['mirror']))
-      .dimen(5, condState(['_3x3', '_4x4', 'golden'], 'grid'))
-      .dimen(6, condState(['_3sec', '_10sec'], 'timer'))
-      .dimen(7, condState(['mic'], 'video-mode', true))
-      .dimen(8, condState(['max-wnd']))
-      .dimen(9, condState(['tall']))
-      .dimen(10, `${width}x${height}`)
-      .dimen(11, condState(['_30fps', '_60fps'], 'video-mode', true))
+      // Skips 3rd dimension for obsolete 'sound' state.
+      .dimen(4, condState([State.MIRROR]))
+      .dimen(
+          5,
+          condState(
+              [State.GRID_3x3, State.GRID_4x4, State.GRID_GOLDEN], State.GRID))
+      .dimen(6, condState([State.TIMER_3SEC, State.TIMER_10SEC], State.TIMER))
+      .dimen(7, condState([State.MIC], cca.Mode.VIDEO, true))
+      .dimen(8, condState([State.MAX_WND]))
+      .dimen(9, condState([State.TALL]))
+      .dimen(10, resolution.toString())
+      .dimen(11, condState([State.FPS_30, State.FPS_60], cca.Mode.VIDEO, true))
       .dimen(12, intentResult)
       .value(length || 0);
+};
+
+/**
+ * Returns event builder for the metrics type: perf.
+ * @param {string} event The target event type.
+ * @param {number} duration The duration of the event in ms.
+ * @param {Object=} extras Optional information for the event.
+ * @return {!analytics.EventBuilder}
+ * @private
+ */
+cca.metrics.perfType_ = function(event, duration, extras = {}) {
+  const {resolution = ''} = extras;
+  return cca.metrics.base_.category('perf')
+      .action(event)
+      // Round the duration here since GA expects that the value is an integer.
+      // Reference: https://support.google.com/analytics/answer/1033068
+      .value(Math.round(duration))
+      .dimen(3, `${resolution}`);
 };
 
 /**
@@ -145,6 +174,7 @@ cca.metrics.captureType_ = function(
 cca.metrics.Type = {
   LAUNCH: cca.metrics.launchType_,
   CAPTURE: cca.metrics.captureType_,
+  PERF: cca.metrics.perfType_,
 };
 
 /**

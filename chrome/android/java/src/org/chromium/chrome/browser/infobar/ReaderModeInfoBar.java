@@ -20,7 +20,8 @@ import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeManager;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.ui.widget.text.AccessibleTextView;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.components.browser_ui.widget.text.AccessibleTextView;
 
 /**
  * This is the InfoBar implementation of the Reader Mode UI. This is used in place of the
@@ -106,8 +107,8 @@ public class ReaderModeInfoBar extends InfoBar {
         if (getNativeInfoBarPtr() == 0) return null;
         Tab tab = ReaderModeInfoBarJni.get().getTab(getNativeInfoBarPtr(), ReaderModeInfoBar.this);
 
-        if (tab == null || tab.getActivity() == null) return null;
-        return tab.getActivity().getReaderModeManager();
+        if (tab == null || ((TabImpl) tab).getActivity() == null) return null;
+        return ((TabImpl) tab).getActivity().getReaderModeManager();
     }
 
     /**

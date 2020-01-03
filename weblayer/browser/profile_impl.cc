@@ -6,15 +6,19 @@
 
 #include "base/bind.h"
 #include "base/callback_forward.h"
+#include "base/files/file_util.h"
+#include "base/path_service.h"
+#include "base/strings/string_util.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "components/web_cache/browser/web_cache_manager.h"
-#include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browsing_data_remover.h"
-#include "content/public/browser/download_manager_delegate.h"
-#include "content/public/browser/resource_context.h"
-#include "weblayer/browser/ssl_host_state_delegate_impl.h"
+#include "content/public/browser/storage_partition.h"
+#include "services/network/public/mojom/network_context.mojom.h"
+#include "weblayer/browser/browser_context_impl.h"
 #include "weblayer/browser/tab_impl.h"
-#include "weblayer/public/download_delegate.h"
+#include "weblayer/common/weblayer_paths.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/callback_android.h"
@@ -22,6 +26,10 @@
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "weblayer/browser/java/jni/ProfileImpl_jni.h"
+#endif
+
+#if defined(OS_POSIX)
+#include "base/base_paths_posix.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -32,134 +40,17 @@ namespace weblayer {
 
 namespace {
 
-class ResourceContextImpl : public content::ResourceContext {
- public:
-  ResourceContextImpl() = default;
-  ~ResourceContextImpl() override = default;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ResourceContextImpl);
-};
-
-class DownloadManagerDelegateImpl : public content::DownloadManagerDelegate {
- public:
-  DownloadManagerDelegateImpl() = default;
-  ~DownloadManagerDelegateImpl() override = default;
-
-  bool InterceptDownloadIfApplicable(
-      const GURL& url,
-      const std::string& user_agent,
-      const std::string& content_disposition,
-      const std::string& mime_type,
-      const std::string& request_origin,
-      int64_t content_length,
-      bool is_transient,
-      content::WebContents* web_contents) override {
-    // If there's no DownloadDelegate, the download is simply dropped.
-    auto* tab = TabImpl::FromWebContents(web_contents);
-    if (!tab)
-      return true;
-
-    DownloadDelegate* delegate = tab->download_delegate();
-    if (!delegate)
-      return true;
-
-    delegate->DownloadRequested(url, user_agent, content_disposition, mime_type,
-                                content_length);
-    return true;
+bool IsNameValid(const std::string& name) {
+  for (size_t i = 0; i < name.size(); ++i) {
+    char c = name[i];
+    if (!(base::IsAsciiDigit(c) || base::IsAsciiAlpha(c) || c == '_')) {
+      return false;
+    }
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DownloadManagerDelegateImpl);
-};
+  return true;
+}
 
 }  // namespace
-
-class ProfileImpl::BrowserContextImpl : public content::BrowserContext {
- public:
-  BrowserContextImpl(const base::FilePath& path) : path_(path) {
-    resource_context_ = std::make_unique<ResourceContextImpl>();
-    content::BrowserContext::Initialize(this, path_);
-  }
-
-  ~BrowserContextImpl() override { NotifyWillBeDestroyed(this); }
-
-  // BrowserContext implementation:
-#if !defined(OS_ANDROID)
-  std::unique_ptr<content::ZoomLevelDelegate> CreateZoomLevelDelegate(
-      const base::FilePath&) override {
-    return nullptr;
-  }
-#endif  // !defined(OS_ANDROID)
-
-  base::FilePath GetPath() override { return path_; }
-
-  bool IsOffTheRecord() override { return path_.empty(); }
-
-  content::DownloadManagerDelegate* GetDownloadManagerDelegate() override {
-    return &download_delegate_;
-  }
-
-  content::ResourceContext* GetResourceContext() override {
-    return resource_context_.get();
-  }
-
-  content::BrowserPluginGuestManager* GetGuestManager() override {
-    return nullptr;
-  }
-
-  storage::SpecialStoragePolicy* GetSpecialStoragePolicy() override {
-    return nullptr;
-  }
-
-  content::PushMessagingService* GetPushMessagingService() override {
-    return nullptr;
-  }
-
-  content::StorageNotificationService* GetStorageNotificationService()
-      override {
-    return nullptr;
-  }
-
-  content::SSLHostStateDelegate* GetSSLHostStateDelegate() override {
-    return &ssl_host_state_delegate_;
-  }
-
-  content::PermissionControllerDelegate* GetPermissionControllerDelegate()
-      override {
-    return nullptr;
-  }
-
-  content::ClientHintsControllerDelegate* GetClientHintsControllerDelegate()
-      override {
-    return nullptr;
-  }
-
-  content::BackgroundFetchDelegate* GetBackgroundFetchDelegate() override {
-    return nullptr;
-  }
-
-  content::BackgroundSyncController* GetBackgroundSyncController() override {
-    return nullptr;
-  }
-
-  content::BrowsingDataRemoverDelegate* GetBrowsingDataRemoverDelegate()
-      override {
-    return nullptr;
-  }
-
-  content::ContentIndexProvider* GetContentIndexProvider() override {
-    return nullptr;
-  }
-
- private:
-  base::FilePath path_;
-  std::unique_ptr<ResourceContextImpl> resource_context_;
-  DownloadManagerDelegateImpl download_delegate_;
-  SSLHostStateDelegateImpl ssl_host_state_delegate_;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserContextImpl);
-};
 
 class ProfileImpl::DataClearer : public content::BrowsingDataRemover::Observer {
  public:
@@ -190,12 +81,48 @@ class ProfileImpl::DataClearer : public content::BrowsingDataRemover::Observer {
   base::OnceCallback<void()> callback_;
 };
 
-ProfileImpl::ProfileImpl(const base::FilePath& path) : path_(path) {
+// static
+base::FilePath ProfileImpl::GetCachePath(content::BrowserContext* context) {
+  DCHECK(context);
+  ProfileImpl* profile =
+      static_cast<BrowserContextImpl*>(context)->profile_impl();
+#if defined(OS_POSIX)
+  base::FilePath path;
+  {
+    base::ScopedAllowBlocking allow_blocking;
+    CHECK(base::PathService::Get(base::DIR_CACHE, &path));
+    path = path.AppendASCII("profiles").AppendASCII(profile->name_.c_str());
+    if (!base::PathExists(path))
+      base::CreateDirectory(path);
+  }
+  return path;
+#else
+  return profile->data_path_;
+#endif
+}
+
+ProfileImpl::ProfileImpl(const std::string& name) : name_(name) {
+  if (!name.empty()) {
+    CHECK(IsNameValid(name));
+    {
+      base::ScopedAllowBlocking allow_blocking;
+      CHECK(base::PathService::Get(DIR_USER_DATA, &data_path_));
+      data_path_ = data_path_.AppendASCII("profiles").AppendASCII(name.c_str());
+
+      if (!base::PathExists(data_path_))
+        base::CreateDirectory(data_path_);
+    }
+  }
+
   // Ensure WebCacheManager is created so that it starts observing
   // OnRenderProcessHostCreated events.
   web_cache::WebCacheManager::GetInstance();
 
-  browser_context_ = std::make_unique<BrowserContextImpl>(path_);
+  browser_context_ = std::make_unique<BrowserContextImpl>(this, data_path_);
+
+  locale_change_subscription_ =
+      i18n::RegisterLocaleChangeCallback(base::BindRepeating(
+          &ProfileImpl::OnLocaleChanged, base::Unretained(this)));
 }
 
 ProfileImpl::~ProfileImpl() {
@@ -250,19 +177,31 @@ void ProfileImpl::ClearRendererCache() {
   }
 }
 
-std::unique_ptr<Profile> Profile::Create(const base::FilePath& path) {
-  return std::make_unique<ProfileImpl>(path);
+void ProfileImpl::OnLocaleChanged() {
+  content::BrowserContext::ForEachStoragePartition(
+      GetBrowserContext(),
+      base::BindRepeating(
+          [](const std::string& accept_language,
+             content::StoragePartition* storage_partition) {
+            storage_partition->GetNetworkContext()->SetAcceptLanguage(
+                accept_language);
+          },
+          i18n::GetAcceptLangs()));
+}
+
+std::unique_ptr<Profile> Profile::Create(const std::string& name) {
+  return std::make_unique<ProfileImpl>(name);
 }
 
 #if defined(OS_ANDROID)
 ProfileImpl::ProfileImpl(JNIEnv* env,
-                         const base::android::JavaParamRef<jstring>& path)
-    : ProfileImpl(base::FilePath(ConvertJavaStringToUTF8(env, path))) {}
+                         const base::android::JavaParamRef<jstring>& name)
+    : ProfileImpl(ConvertJavaStringToUTF8(env, name)) {}
 
 static jlong JNI_ProfileImpl_CreateProfile(
     JNIEnv* env,
-    const base::android::JavaParamRef<jstring>& path) {
-  return reinterpret_cast<jlong>(new ProfileImpl(env, path));
+    const base::android::JavaParamRef<jstring>& name) {
+  return reinterpret_cast<jlong>(new ProfileImpl(env, name));
 }
 
 static void JNI_ProfileImpl_DeleteProfile(JNIEnv* env, jlong profile) {

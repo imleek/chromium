@@ -29,9 +29,9 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_menu_source_type.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
-#include "third_party/blink/public/platform/web_menu_source_type.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/events/text_event_input_type.h"
 #include "third_party/blink/renderer/core/input/fallback_cursor_event_manager.h"
@@ -62,7 +62,6 @@ class Element;
 class Event;
 template <typename EventType>
 class EventWithHitTestResults;
-class FloatQuad;
 class HTMLFrameSetElement;
 class HitTestRequest;
 class HitTestResult;
@@ -97,7 +96,7 @@ class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
 
   void MayUpdateHoverWhenContentUnderMouseChanged(
       MouseEventManager::UpdateHoverReason);
-  void MayUpdateHoverAfterScroll(const FloatQuad&);
+  void MayUpdateHoverAfterScroll(const FloatRect&);
 
   HitTestResult HitTestResultAtLocation(
       const HitTestLocation&,
@@ -496,6 +495,15 @@ class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
                            EditableAnchorTextCanStartSelection);
   FRIEND_TEST_ALL_PREFIXES(EventHandlerTest,
                            ReadOnlyInputDoesNotInheritUserSelect);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest,
+                           CursorForVerticalResizableTextArea);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest,
+                           CursorForHorizontalResizableTextArea);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, CursorForResizableTextArea);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, CursorForRtlResizableTextArea);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest,
+                           CursorForInlineVerticalWritingMode);
+  FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, CursorForBlockVerticalWritingMode);
 
   FRIEND_TEST_ALL_PREFIXES(FallbackCursorEventManagerTest,
                            MouseMoveCursorLockOnDiv);

@@ -24,6 +24,7 @@ class SkiaOutputDeviceDawn : public SkiaOutputDevice {
   SkiaOutputDeviceDawn(
       DawnContextProvider* context_provider,
       gfx::AcceleratedWidget widget,
+      gpu::MemoryTracker* memory_tracker,
       DidSwapBufferCompleteCallback did_swap_buffer_complete_callback);
   ~SkiaOutputDeviceDawn() override;
 
@@ -37,8 +38,6 @@ class SkiaOutputDeviceDawn : public SkiaOutputDevice {
                    std::vector<ui::LatencyInfo> latency_info) override;
   SkSurface* BeginPaint() override;
   void EndPaint(const GrBackendSemaphore& semaphore) override;
-  void EnsureBackbuffer() override;
-  void DiscardBackbuffer() override;
 
  private:
   // Create a platform-specific swapchain implementation.

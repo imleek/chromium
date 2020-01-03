@@ -53,6 +53,11 @@ extern const char kAutofillPruneSuggestionsDescription[];
 extern const char kAutofillSaveCardDismissOnNavigationName[];
 extern const char kAutofillSaveCardDismissOnNavigationDescription[];
 
+// Title and description for the flag that enables editing on the Messages UI
+// for SaveCard Infobars.
+extern const char kAutofillSaveCardInfobarEditSupportName[];
+extern const char kAutofillSaveCardInfobarEditSupportDescription[];
+
 // Title and description for the flag to control if prefilled value filter
 // profiles.
 extern const char kAutofillShowAllSuggestionsOnPrefilledFormsName[];
@@ -98,6 +103,11 @@ extern const char kCollectionsCardPresentationStyleDescription[];
 extern const char kConfirmInfobarMessagesUIName[];
 extern const char kConfirmInfobarMessagesUIDescription[];
 
+// Title and description for the flag that enables Messages UI on
+// Crash Restore Infobars.
+extern const char kCrashRestoreInfobarMessagesUIName[];
+extern const char kCrashRestoreInfobarMessagesUIDescription[];
+
 // Title and description for the flag to scan a new credit card using the
 // camera.
 extern const char kCreditCardScannerName[];
@@ -108,6 +118,11 @@ extern const char kCreditCardScannerDescription[];
 extern const char kDcheckIsFatalName[];
 extern const char kDcheckIsFatalDescription[];
 #endif  // defined(DCHECK_IS_CONFIGURABLE)
+
+// Title and description for the flag to request the desktop version of web site
+// by default on iPad
+extern const char kDefaultToDesktopOnIPadName[];
+extern const char kDefaultToDesktopOnIPadDescription[];
 
 // Title and description for the flag to control if a crash report is generated
 // on main thread freeze.
@@ -184,6 +199,11 @@ extern const char kFullscreenSmoothScrollingDescription[];
 extern const char kIgnoresViewportScaleLimitsName[];
 extern const char kIgnoresViewportScaleLimitsDescription[];
 
+// Title and description for the flag to present the new UI Reboot on Infobars
+// using OverlayPresenter.
+extern const char kInfobarOverlayUIName[];
+extern const char kInfobarOverlayUIDescription[];
+
 // Title and description for the flag to enable the new UI Reboot on Infobars.
 extern const char kInfobarUIRebootName[];
 extern const char kInfobarUIRebootDescription[];
@@ -193,10 +213,6 @@ extern const char kInfobarUIRebootDescription[];
 extern const char kInProductHelpDemoModeName[];
 extern const char kInProductHelpDemoModeDescription[];
 
-// Title and description for the flag to enable the language settings page.
-extern const char kLanguageSettingsName[];
-extern const char kLanguageSettingsDescription[];
-
 // Title and description for the flag to lock the bottom toolbar into place.
 extern const char kLockBottomToolbarName[];
 extern const char kLockBottomToolbarDescription[];
@@ -205,6 +221,11 @@ extern const char kLockBottomToolbarDescription[];
 // display of omnibox warnings about non-secure pages.
 extern const char kMarkHttpAsName[];
 extern const char kMarkHttpAsDescription[];
+
+// Title and description for the flag where the Google SRP is requested in
+// mobile mode by default.
+extern const char kMobileGoogleSRPName[];
+extern const char kMobileGoogleSRPDescription[];
 
 // Title and description for the flag to enable new Clear Browsing Data UI.
 extern const char kNewClearBrowsingDataUIName[];
@@ -218,15 +239,15 @@ extern const char kNewOmniboxPopupLayoutDescription[];
 extern const char kNonModalDialogsName[];
 extern const char kNonModalDialogsDescription[];
 
-// Title and description for the flag to display offline pages directly in the
-// web view.
-extern const char kOfflineVersionWithoutNativeContentName[];
-extern const char kOfflineVersionWithoutNativeContentDescription[];
-
 // Title and description for the flag to show most visited sites and collection
 // shortcuts in the omnibox popup instead of ZeroSuggest.
 extern const char kOmniboxPopupShortcutIconsInZeroStateName[];
 extern const char kOmniboxPopupShortcutIconsInZeroStateDescription[];
+
+// Title and description for the flag to preserve the default match when an
+// async match updates.
+extern const char kOmniboxPreserveDefaultMatchAgainstAsyncUpdateName[];
+extern const char kOmniboxPreserveDefaultMatchAgainstAsyncUpdateDescription[];
 
 // Title and description for the flag to change the max number of autocomplete
 // matches in the omnibox popup.
@@ -247,6 +268,11 @@ extern const char kOmniboxOnDeviceHeadSuggestionsDescription[];
 // credentials.
 extern const char kPasswordLeakDetectionName[];
 extern const char kPasswordLeakDetectionDescription[];
+
+// Title and description for the flag that reload the page when the renderer
+// crashes.
+extern const char kReloadSadTabName[];
+extern const char kReloadSadTabDescription[];
 
 // Title and description for the flag that enables Messages UI on
 // SaveCard Infobars.
@@ -284,11 +310,6 @@ extern const char kSettingsRefreshDescription[];
 // Autofill field type predictions as placeholder.
 extern const char kShowAutofillTypePredictionsName[];
 extern const char kShowAutofillTypePredictionsDescription[];
-
-// Title and description for the flag to enable WKBackForwardList based
-// navigation manager.
-extern const char kSlimNavigationManagerName[];
-extern const char kSlimNavigationManagerDescription[];
 
 // Title and description for the flag to use |-drawViewHierarchy:| for taking
 // snapshots.

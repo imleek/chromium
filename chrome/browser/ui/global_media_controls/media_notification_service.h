@@ -11,6 +11,8 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/global_media_controls/cast_media_notification_provider.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_container_observer.h"
@@ -31,10 +33,6 @@ namespace media_message_center {
 class MediaSessionNotificationItem;
 }  // namespace media_message_center
 
-namespace service_manager {
-class Connector;
-}  // namespace service_manager
-
 class MediaDialogDelegate;
 class MediaNotificationContainerImpl;
 class MediaNotificationServiceObserver;
@@ -45,8 +43,7 @@ class MediaNotificationService
       public media_message_center::MediaNotificationController,
       public MediaNotificationContainerObserver {
  public:
-  MediaNotificationService(Profile* profile,
-                           service_manager::Connector* connector);
+  explicit MediaNotificationService(Profile* profile);
   MediaNotificationService(const MediaNotificationService&) = delete;
   MediaNotificationService& operator=(const MediaNotificationService&) = delete;
   ~MediaNotificationService() override;
@@ -96,9 +93,32 @@ class MediaNotificationService
   // True if there is an open MediaDialogView associated with this service.
   bool HasOpenDialog() const;
 
+  // Called by a |MediaNotificationService::Session| when it becomes active.
+  void OnSessionBecameActive(const std::string& id);
+
+  // Called by a |MediaNotificationService::Session| when it becomes inactive.
+  void OnSessionBecameInactive(const std::string& id);
+
  private:
   friend class MediaNotificationServiceTest;
   friend class MediaToolbarButtonControllerTest;
+  FRIEND_TEST_ALL_PREFIXES(MediaNotificationServiceTest,
+                           HideAfterTimeoutAndActiveAgainOnPlay);
+  FRIEND_TEST_ALL_PREFIXES(MediaNotificationServiceTest,
+                           SessionIsRemovedImmediatelyWhenATabCloses);
+  FRIEND_TEST_ALL_PREFIXES(MediaNotificationServiceTest, DismissesMediaSession);
+  FRIEND_TEST_ALL_PREFIXES(MediaNotificationServiceTest,
+                           HidesInactiveNotifications);
+
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class GlobalMediaControlsDismissReason {
+    kUserDismissedNotification = 0,
+    kInactiveTimeout = 1,
+    kTabClosed = 2,
+    kMediaSessionStopped = 3,
+    kMaxValue = kMediaSessionStopped,
+  };
 
   class Session : public content::WebContentsObserver,
                   public media_session::mojom::MediaControllerObserver {
@@ -115,7 +135,6 @@ class MediaNotificationService
 
     // content::WebContentsObserver implementation.
     void WebContentsDestroyed() override;
-    void OnWebContentsFocused(content::RenderWidgetHost*) override;
 
     // media_session::mojom::MediaControllerObserver:
     void MediaSessionInfoChanged(
@@ -140,11 +159,27 @@ class MediaNotificationService
     void SetController(
         mojo::Remote<media_session::mojom::MediaController> controller);
 
-   private:
-    void StartInactiveTimer();
+    // Sets the reason why this session was dismissed/removed. Can only be
+    // called if the value has not already been set.
+    void set_dismiss_reason(GlobalMediaControlsDismissReason reason);
 
     // Called when a session is interacted with (to reset |inactive_timer_|).
     void OnSessionInteractedWith();
+
+    // Called when the notification associated with this session is pulled out
+    // into an overlay or it's overlay is closed.
+    void OnSessionOverlayStateChanged(bool is_in_overlay);
+
+   private:
+    static void RecordDismissReason(GlobalMediaControlsDismissReason reason);
+
+    void StartInactiveTimer();
+
+    void OnInactiveTimerFired();
+
+    void RecordInteractionDelayAfterPause();
+
+    void MarkActiveIfNecessary();
 
     MediaNotificationService* owner_;
     const std::string id_;
@@ -152,6 +187,20 @@ class MediaNotificationService
 
     // Used to stop/hide a paused session after a period of inactivity.
     base::OneShotTimer inactive_timer_;
+
+    base::TimeTicks last_interaction_time_ = base::TimeTicks::Now();
+
+    // The reason why this session was dismissed/removed.
+    base::Optional<GlobalMediaControlsDismissReason> dismiss_reason_;
+
+    // True if the session's playback state is "playing".
+    bool is_playing_ = false;
+
+    // True if we're currently marked inactive.
+    bool is_marked_inactive_ = false;
+
+    // True if we're in an overlay notification.
+    bool is_in_overlay_ = false;
 
     // Used to receive updates to the Media Session playback state.
     mojo::Receiver<media_session::mojom::MediaControllerObserver>
@@ -164,14 +213,13 @@ class MediaNotificationService
   base::WeakPtr<media_message_center::MediaNotificationItem>
   GetNotificationItem(const std::string& id);
 
-  service_manager::Connector* const connector_;
   MediaDialogDelegate* dialog_delegate_ = nullptr;
 
   OverlayMediaNotificationsManager overlay_media_notifications_manager_;
 
-  // Used to track whether there are any active controllable media sessions. If
-  // not, then there's nothing to show in the dialog and we can hide the toolbar
-  // icon.
+  // Used to track whether there are any active controllable sessions. If not,
+  // then there's nothing to show in the dialog and we can hide the toolbar
+  // icon. Contains sessions from both Media Session API and Cast.
   std::unordered_set<std::string> active_controllable_session_ids_;
 
   // Tracks the sessions that are currently frozen. If there are only frozen
@@ -182,6 +230,12 @@ class MediaNotificationService
   // should not be shown in the dialog and will be ignored for showing the
   // toolbar icon.
   std::unordered_set<std::string> dragged_out_session_ids_;
+
+  // Tracks the sessions that are currently inactive. Sessions become inactive
+  // after a period of time of being paused with no user interaction. Inactive
+  // sessions are hidden from the dialog until the user interacts with them
+  // again (e.g. by playing the session).
+  std::unordered_set<std::string> inactive_session_ids_;
 
   // Stores a Session for each media session keyed by its |request_id| in string
   // format.

@@ -48,6 +48,7 @@ import org.chromium.device.mojom.NdefMessage;
 import org.chromium.device.mojom.NdefPushOptions;
 import org.chromium.device.mojom.NdefPushTarget;
 import org.chromium.device.mojom.NdefRecord;
+import org.chromium.device.mojom.NdefRecordTypeCategory;
 import org.chromium.device.mojom.NdefScanOptions;
 import org.chromium.device.mojom.Nfc.CancelAllWatchesResponse;
 import org.chromium.device.mojom.Nfc.CancelPushResponse;
@@ -62,6 +63,7 @@ import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 /**
  * Unit tests for NfcImpl and NdefMessageUtils classes.
@@ -89,14 +91,11 @@ public class NFCTest {
     private ArgumentCaptor<int[]> mOnWatchCallbackCaptor;
 
     // Constants used for the test.
-    private static final String DUMMY_EXTERNAL_RECORD_DOMAIN = "abc.com";
-    private static final String DUMMY_EXTERNAL_RECORD_TYPE = "xyz";
+    private static final String DUMMY_EXTERNAL_TYPE = "abc.com:xyz";
     private static final String DUMMY_RECORD_ID = "https://www.example.com/ids/1";
     private static final String TEST_TEXT = "test";
     private static final String TEST_URL = "https://google.com";
     private static final String TEST_JSON = "{\"key1\":\"value1\",\"key2\":2}";
-    private static final String AUTHOR_RECORD_DOMAIN = "w3.org";
-    private static final String AUTHOR_RECORD_TYPE = "A";
     private static final String TEXT_MIME = "text/plain";
     private static final String JSON_MIME = "application/json";
     private static final String OCTET_STREAM_MIME = "application/octet-stream";
@@ -158,7 +157,7 @@ public class NFCTest {
         try {
             doNothing().when(mNfcTagHandler).connect();
             doNothing().when(mNfcTagHandler).write(any(android.nfc.NdefMessage.class));
-            doReturn(createUrlWebNFCNdefMessage(TEST_URL)).when(mNfcTagHandler).read();
+            doReturn(createNdefMessageWithRecordId(DUMMY_RECORD_ID)).when(mNfcTagHandler).read();
             doNothing().when(mNfcTagHandler).close();
         } catch (IOException | FormatException e) {
         }
@@ -220,11 +219,11 @@ public class NFCTest {
         android.nfc.NdefMessage emptyNdefMessage = new android.nfc.NdefMessage(
                 new android.nfc.NdefRecord(android.nfc.NdefRecord.TNF_EMPTY, null, null, null));
         NdefMessage emptyMojoNdefMessage = NdefMessageUtils.toNdefMessage(emptyNdefMessage);
-        assertNull(emptyMojoNdefMessage.url);
         assertEquals(1, emptyMojoNdefMessage.data.length);
+        assertEquals(NdefRecordTypeCategory.STANDARDIZED, emptyMojoNdefMessage.data[0].category);
         assertEquals(NdefMessageUtils.RECORD_TYPE_EMPTY, emptyMojoNdefMessage.data[0].recordType);
         assertEquals(null, emptyMojoNdefMessage.data[0].mediaType);
-        assertEquals(true, emptyMojoNdefMessage.data[0].id.isEmpty());
+        assertEquals(null, emptyMojoNdefMessage.data[0].id);
         assertNull(emptyMojoNdefMessage.data[0].encoding);
         assertNull(emptyMojoNdefMessage.data[0].lang);
         assertEquals(0, emptyMojoNdefMessage.data[0].data.length);
@@ -232,13 +231,14 @@ public class NFCTest {
         // Test url record conversion.
         android.nfc.NdefMessage urlNdefMessage =
                 new android.nfc.NdefMessage(NdefMessageUtils.createPlatformUrlRecord(
-                        ApiCompatibilityUtils.getBytesUtf8(TEST_URL), false /* isAbsUrl */));
+                        ApiCompatibilityUtils.getBytesUtf8(TEST_URL), DUMMY_RECORD_ID,
+                        false /* isAbsUrl */));
         NdefMessage urlMojoNdefMessage = NdefMessageUtils.toNdefMessage(urlNdefMessage);
-        assertNull(urlMojoNdefMessage.url);
         assertEquals(1, urlMojoNdefMessage.data.length);
+        assertEquals(NdefRecordTypeCategory.STANDARDIZED, urlMojoNdefMessage.data[0].category);
         assertEquals(NdefMessageUtils.RECORD_TYPE_URL, urlMojoNdefMessage.data[0].recordType);
         assertEquals(null, urlMojoNdefMessage.data[0].mediaType);
-        assertEquals(true, urlMojoNdefMessage.data[0].id.isEmpty());
+        assertEquals(DUMMY_RECORD_ID, urlMojoNdefMessage.data[0].id);
         assertNull(urlMojoNdefMessage.data[0].encoding);
         assertNull(urlMojoNdefMessage.data[0].lang);
         assertEquals(TEST_URL, new String(urlMojoNdefMessage.data[0].data));
@@ -246,48 +246,45 @@ public class NFCTest {
         // Test absolute-url record conversion.
         android.nfc.NdefMessage absUrlNdefMessage =
                 new android.nfc.NdefMessage(NdefMessageUtils.createPlatformUrlRecord(
-                        ApiCompatibilityUtils.getBytesUtf8(TEST_URL), true /* isAbsUrl */));
+                        ApiCompatibilityUtils.getBytesUtf8(TEST_URL), DUMMY_RECORD_ID,
+                        true /* isAbsUrl */));
         NdefMessage absUrlMojoNdefMessage = NdefMessageUtils.toNdefMessage(absUrlNdefMessage);
-        assertNull(absUrlMojoNdefMessage.url);
         assertEquals(1, absUrlMojoNdefMessage.data.length);
+        assertEquals(NdefRecordTypeCategory.STANDARDIZED, absUrlMojoNdefMessage.data[0].category);
         assertEquals(NdefMessageUtils.RECORD_TYPE_ABSOLUTE_URL,
                 absUrlMojoNdefMessage.data[0].recordType);
         assertEquals(null, absUrlMojoNdefMessage.data[0].mediaType);
-        assertEquals(true, absUrlMojoNdefMessage.data[0].id.isEmpty());
+        assertEquals(DUMMY_RECORD_ID, absUrlMojoNdefMessage.data[0].id);
         assertEquals(TEST_URL, new String(absUrlMojoNdefMessage.data[0].data));
 
-        // Test TEXT record conversion for UTF-8 content.
+        // Test text record conversion for UTF-8 content.
         android.nfc.NdefMessage utf8TextNdefMessage = new android.nfc.NdefMessage(
-                android.nfc.NdefRecord.createTextRecord(LANG_EN_US, TEST_TEXT));
+                NdefMessageUtils.createPlatformTextRecord(DUMMY_RECORD_ID, LANG_EN_US,
+                        ENCODING_UTF8, ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT)));
         NdefMessage utf8TextMojoNdefMessage = NdefMessageUtils.toNdefMessage(utf8TextNdefMessage);
-        assertNull(utf8TextMojoNdefMessage.url);
         assertEquals(1, utf8TextMojoNdefMessage.data.length);
+        assertEquals(NdefRecordTypeCategory.STANDARDIZED, utf8TextMojoNdefMessage.data[0].category);
         assertEquals(NdefMessageUtils.RECORD_TYPE_TEXT, utf8TextMojoNdefMessage.data[0].recordType);
         assertEquals(null, utf8TextMojoNdefMessage.data[0].mediaType);
-        assertEquals(true, utf8TextMojoNdefMessage.data[0].id.isEmpty());
+        assertEquals(DUMMY_RECORD_ID, utf8TextMojoNdefMessage.data[0].id);
         assertEquals(ENCODING_UTF8, utf8TextMojoNdefMessage.data[0].encoding);
         assertEquals(LANG_EN_US, utf8TextMojoNdefMessage.data[0].lang);
         assertEquals(TEST_TEXT, new String(utf8TextMojoNdefMessage.data[0].data, "UTF-8"));
 
-        // Test TEXT record conversion for UTF-16 content.
+        // Test text record conversion for UTF-16 content.
         byte[] textBytes = TEST_TEXT.getBytes(StandardCharsets.UTF_16BE);
         byte[] languageCodeBytes = LANG_EN_US.getBytes(StandardCharsets.US_ASCII);
-        ByteBuffer buffer = ByteBuffer.allocate(1 + languageCodeBytes.length + textBytes.length);
-        byte status = (byte) languageCodeBytes.length;
-        status |= (byte) (1 << 7);
-        buffer.put(status);
-        buffer.put(languageCodeBytes);
-        buffer.put(textBytes);
-        android.nfc.NdefMessage utf16TextNdefMessage = new android.nfc.NdefMessage(
-                new android.nfc.NdefRecord(android.nfc.NdefRecord.TNF_WELL_KNOWN,
-                        android.nfc.NdefRecord.RTD_TEXT, null, buffer.array()));
+        android.nfc.NdefMessage utf16TextNdefMessage =
+                new android.nfc.NdefMessage(NdefMessageUtils.createPlatformTextRecord(
+                        DUMMY_RECORD_ID, LANG_EN_US, ENCODING_UTF16, textBytes));
         NdefMessage utf16TextMojoNdefMessage = NdefMessageUtils.toNdefMessage(utf16TextNdefMessage);
-        assertNull(utf16TextMojoNdefMessage.url);
         assertEquals(1, utf16TextMojoNdefMessage.data.length);
+        assertEquals(
+                NdefRecordTypeCategory.STANDARDIZED, utf16TextMojoNdefMessage.data[0].category);
         assertEquals(
                 NdefMessageUtils.RECORD_TYPE_TEXT, utf16TextMojoNdefMessage.data[0].recordType);
         assertEquals(null, utf16TextMojoNdefMessage.data[0].mediaType);
-        assertEquals(true, utf16TextMojoNdefMessage.data[0].id.isEmpty());
+        assertEquals(DUMMY_RECORD_ID, utf16TextMojoNdefMessage.data[0].id);
         assertEquals(ENCODING_UTF16, utf16TextMojoNdefMessage.data[0].encoding);
         assertEquals(LANG_EN_US, utf16TextMojoNdefMessage.data[0].lang);
         assertEquals(TEST_TEXT, new String(utf16TextMojoNdefMessage.data[0].data, "UTF-16"));
@@ -297,8 +294,8 @@ public class NFCTest {
                 new android.nfc.NdefMessage(NdefMessageUtils.createPlatformMimeRecord(
                         TEXT_MIME, DUMMY_RECORD_ID, ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT)));
         NdefMessage mimeMojoNdefMessage = NdefMessageUtils.toNdefMessage(mimeNdefMessage);
-        assertNull(mimeMojoNdefMessage.url);
         assertEquals(1, mimeMojoNdefMessage.data.length);
+        assertEquals(NdefRecordTypeCategory.STANDARDIZED, mimeMojoNdefMessage.data[0].category);
         assertEquals(NdefMessageUtils.RECORD_TYPE_MIME, mimeMojoNdefMessage.data[0].recordType);
         assertEquals(TEXT_MIME, mimeMojoNdefMessage.data[0].mediaType);
         assertEquals(DUMMY_RECORD_ID, mimeMojoNdefMessage.data[0].id);
@@ -311,8 +308,8 @@ public class NFCTest {
                 new android.nfc.NdefMessage(NdefMessageUtils.createPlatformMimeRecord(
                         JSON_MIME, DUMMY_RECORD_ID, ApiCompatibilityUtils.getBytesUtf8(TEST_JSON)));
         NdefMessage jsonMojoNdefMessage = NdefMessageUtils.toNdefMessage(jsonNdefMessage);
-        assertNull(jsonMojoNdefMessage.url);
         assertEquals(1, jsonMojoNdefMessage.data.length);
+        assertEquals(NdefRecordTypeCategory.STANDARDIZED, jsonMojoNdefMessage.data[0].category);
         assertEquals(NdefMessageUtils.RECORD_TYPE_MIME, jsonMojoNdefMessage.data[0].recordType);
         assertEquals(JSON_MIME, jsonMojoNdefMessage.data[0].mediaType);
         assertEquals(DUMMY_RECORD_ID, jsonMojoNdefMessage.data[0].id);
@@ -326,8 +323,8 @@ public class NFCTest {
                         ApiCompatibilityUtils.getBytesUtf8(DUMMY_RECORD_ID),
                         ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT)));
         NdefMessage unknownMojoNdefMessage = NdefMessageUtils.toNdefMessage(unknownNdefMessage);
-        assertNull(unknownMojoNdefMessage.url);
         assertEquals(1, unknownMojoNdefMessage.data.length);
+        assertEquals(NdefRecordTypeCategory.STANDARDIZED, unknownMojoNdefMessage.data[0].category);
         assertEquals(
                 NdefMessageUtils.RECORD_TYPE_UNKNOWN, unknownMojoNdefMessage.data[0].recordType);
         assertEquals(DUMMY_RECORD_ID, unknownMojoNdefMessage.data[0].id);
@@ -337,15 +334,14 @@ public class NFCTest {
 
         // Test external record conversion.
         android.nfc.NdefMessage extNdefMessage = new android.nfc.NdefMessage(
-                android.nfc.NdefRecord.createExternal(DUMMY_EXTERNAL_RECORD_DOMAIN,
-                        DUMMY_EXTERNAL_RECORD_TYPE, ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT)));
+                NdefMessageUtils.createPlatformExternalRecord(DUMMY_EXTERNAL_TYPE, DUMMY_RECORD_ID,
+                        ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT)));
         NdefMessage extMojoNdefMessage = NdefMessageUtils.toNdefMessage(extNdefMessage);
-        assertNull(extMojoNdefMessage.url);
         assertEquals(1, extMojoNdefMessage.data.length);
-        assertEquals(DUMMY_EXTERNAL_RECORD_DOMAIN + ':' + DUMMY_EXTERNAL_RECORD_TYPE,
-                extMojoNdefMessage.data[0].recordType);
+        assertEquals(NdefRecordTypeCategory.EXTERNAL, extMojoNdefMessage.data[0].category);
+        assertEquals(DUMMY_EXTERNAL_TYPE, extMojoNdefMessage.data[0].recordType);
         assertEquals(null, extMojoNdefMessage.data[0].mediaType);
-        assertEquals(true, extMojoNdefMessage.data[0].id.isEmpty());
+        assertEquals(DUMMY_RECORD_ID, extMojoNdefMessage.data[0].id);
         assertNull(extMojoNdefMessage.data[0].encoding);
         assertNull(extMojoNdefMessage.data[0].lang);
         assertEquals(TEST_TEXT, new String(extMojoNdefMessage.data[0].data));
@@ -356,38 +352,22 @@ public class NFCTest {
         byte[] payloadBytes = payloadMessage.toByteArray();
         // Put |payloadBytes| as payload of an external record.
         android.nfc.NdefMessage extNdefMessage1 =
-                new android.nfc.NdefMessage(android.nfc.NdefRecord.createExternal(
-                        DUMMY_EXTERNAL_RECORD_DOMAIN, DUMMY_EXTERNAL_RECORD_TYPE, payloadBytes));
+                new android.nfc.NdefMessage(NdefMessageUtils.createPlatformExternalRecord(
+                        DUMMY_EXTERNAL_TYPE, DUMMY_RECORD_ID, payloadBytes));
         NdefMessage extMojoNdefMessage1 = NdefMessageUtils.toNdefMessage(extNdefMessage1);
         assertEquals(1, extMojoNdefMessage1.data.length);
-        assertEquals(DUMMY_EXTERNAL_RECORD_DOMAIN + ':' + DUMMY_EXTERNAL_RECORD_TYPE,
-                extMojoNdefMessage1.data[0].recordType);
+        assertEquals(NdefRecordTypeCategory.EXTERNAL, extMojoNdefMessage1.data[0].category);
+        assertEquals(DUMMY_EXTERNAL_TYPE, extMojoNdefMessage1.data[0].recordType);
         assertEquals(null, extMojoNdefMessage1.data[0].mediaType);
+        assertEquals(DUMMY_RECORD_ID, extMojoNdefMessage1.data[0].id);
         // The embedded ndef message should have content corresponding with the original
         // |payloadMessage|.
         NdefMessage payloadMojoMessage = extMojoNdefMessage1.data[0].payloadMessage;
         assertEquals(1, payloadMojoMessage.data.length);
+        assertEquals(NdefRecordTypeCategory.STANDARDIZED, payloadMojoMessage.data[0].category);
         assertEquals(NdefMessageUtils.RECORD_TYPE_TEXT, payloadMojoMessage.data[0].recordType);
         assertEquals(null, payloadMojoMessage.data[0].mediaType);
         assertEquals(TEST_TEXT, new String(payloadMojoMessage.data[0].data));
-
-        // Test NdefMessage with an additional WebNFC author record.
-        android.nfc.NdefRecord jsonNdefRecord = NdefMessageUtils.createPlatformMimeRecord(
-                JSON_MIME, DUMMY_RECORD_ID, ApiCompatibilityUtils.getBytesUtf8(TEST_JSON));
-        android.nfc.NdefRecord extNdefRecord =
-                android.nfc.NdefRecord.createExternal(AUTHOR_RECORD_DOMAIN, AUTHOR_RECORD_TYPE,
-                        ApiCompatibilityUtils.getBytesUtf8(TEST_URL));
-        android.nfc.NdefMessage webNdefMessage =
-                new android.nfc.NdefMessage(jsonNdefRecord, extNdefRecord);
-        NdefMessage webMojoNdefMessage = NdefMessageUtils.toNdefMessage(webNdefMessage);
-        assertEquals(TEST_URL, webMojoNdefMessage.url);
-        assertEquals(1, webMojoNdefMessage.data.length);
-        assertEquals(NdefMessageUtils.RECORD_TYPE_MIME, webMojoNdefMessage.data[0].recordType);
-        assertEquals(DUMMY_RECORD_ID, webMojoNdefMessage.data[0].id);
-        assertEquals(JSON_MIME, webMojoNdefMessage.data[0].mediaType);
-        assertNull(webMojoNdefMessage.data[0].encoding);
-        assertNull(webMojoNdefMessage.data[0].lang);
-        assertEquals(TEST_JSON, new String(webMojoNdefMessage.data[0].data));
     }
 
     /**
@@ -398,52 +378,50 @@ public class NFCTest {
     public void testMojoToNdefConversion() throws InvalidNdefMessageException {
         // Test url record conversion.
         NdefRecord urlMojoNdefRecord = new NdefRecord();
+        urlMojoNdefRecord.category = NdefRecordTypeCategory.STANDARDIZED;
         urlMojoNdefRecord.recordType = NdefMessageUtils.RECORD_TYPE_URL;
+        urlMojoNdefRecord.id = DUMMY_RECORD_ID;
         urlMojoNdefRecord.data = ApiCompatibilityUtils.getBytesUtf8(TEST_URL);
-        NdefMessage urlMojoNdefMessage = createMojoNdefMessage(TEST_URL, urlMojoNdefRecord);
+        NdefMessage urlMojoNdefMessage = createMojoNdefMessage(urlMojoNdefRecord);
         android.nfc.NdefMessage urlNdefMessage = NdefMessageUtils.toNdefMessage(urlMojoNdefMessage);
-        assertEquals(2, urlNdefMessage.getRecords().length);
+        assertEquals(1, urlNdefMessage.getRecords().length);
         assertEquals(
                 android.nfc.NdefRecord.TNF_WELL_KNOWN, urlNdefMessage.getRecords()[0].getTnf());
         assertEquals(new String(android.nfc.NdefRecord.RTD_URI),
                 new String(urlNdefMessage.getRecords()[0].getType()));
+        assertEquals(DUMMY_RECORD_ID, new String(urlNdefMessage.getRecords()[0].getId()));
         assertEquals(TEST_URL, urlNdefMessage.getRecords()[0].toUri().toString());
-        assertEquals(
-                android.nfc.NdefRecord.TNF_EXTERNAL_TYPE, urlNdefMessage.getRecords()[1].getTnf());
-        assertEquals(0,
-                new String(urlNdefMessage.getRecords()[1].getType())
-                        .compareToIgnoreCase(AUTHOR_RECORD_DOMAIN + ":" + AUTHOR_RECORD_TYPE));
 
         // Test absolute-url record conversion.
         NdefRecord absUrlMojoNdefRecord = new NdefRecord();
+        absUrlMojoNdefRecord.category = NdefRecordTypeCategory.STANDARDIZED;
         absUrlMojoNdefRecord.recordType = NdefMessageUtils.RECORD_TYPE_ABSOLUTE_URL;
+        absUrlMojoNdefRecord.id = DUMMY_RECORD_ID;
         absUrlMojoNdefRecord.data = ApiCompatibilityUtils.getBytesUtf8(TEST_URL);
-        NdefMessage absUrlMojoNdefMessage = createMojoNdefMessage(TEST_URL, absUrlMojoNdefRecord);
+        NdefMessage absUrlMojoNdefMessage = createMojoNdefMessage(absUrlMojoNdefRecord);
         android.nfc.NdefMessage absUrlNdefMessage =
                 NdefMessageUtils.toNdefMessage(absUrlMojoNdefMessage);
-        assertEquals(2, absUrlNdefMessage.getRecords().length);
+        assertEquals(1, absUrlNdefMessage.getRecords().length);
         assertEquals(android.nfc.NdefRecord.TNF_ABSOLUTE_URI,
                 absUrlNdefMessage.getRecords()[0].getTnf());
+        assertEquals(DUMMY_RECORD_ID, new String(absUrlNdefMessage.getRecords()[0].getId()));
         assertEquals(TEST_URL, absUrlNdefMessage.getRecords()[0].toUri().toString());
-        assertEquals(android.nfc.NdefRecord.TNF_EXTERNAL_TYPE,
-                absUrlNdefMessage.getRecords()[1].getTnf());
-        assertEquals(0,
-                new String(absUrlNdefMessage.getRecords()[1].getType())
-                        .compareToIgnoreCase(AUTHOR_RECORD_DOMAIN + ":" + AUTHOR_RECORD_TYPE));
 
-        // Test TEXT record conversion for UTF-8 content.
+        // Test text record conversion for UTF-8 content.
         NdefRecord utf8TextMojoNdefRecord = new NdefRecord();
+        utf8TextMojoNdefRecord.category = NdefRecordTypeCategory.STANDARDIZED;
         utf8TextMojoNdefRecord.recordType = NdefMessageUtils.RECORD_TYPE_TEXT;
+        utf8TextMojoNdefRecord.id = DUMMY_RECORD_ID;
         utf8TextMojoNdefRecord.encoding = ENCODING_UTF8;
         utf8TextMojoNdefRecord.lang = LANG_EN_US;
         utf8TextMojoNdefRecord.data = ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT);
-        NdefMessage utf8TextMojoNdefMessage =
-                createMojoNdefMessage(TEST_URL, utf8TextMojoNdefRecord);
+        NdefMessage utf8TextMojoNdefMessage = createMojoNdefMessage(utf8TextMojoNdefRecord);
         android.nfc.NdefMessage utf8TextNdefMessage =
                 NdefMessageUtils.toNdefMessage(utf8TextMojoNdefMessage);
-        assertEquals(2, utf8TextNdefMessage.getRecords().length);
+        assertEquals(1, utf8TextNdefMessage.getRecords().length);
         assertEquals(android.nfc.NdefRecord.TNF_WELL_KNOWN,
                 utf8TextNdefMessage.getRecords()[0].getTnf());
+        assertEquals(DUMMY_RECORD_ID, new String(utf8TextNdefMessage.getRecords()[0].getId()));
         {
             byte[] languageCodeBytes = LANG_EN_US.getBytes(StandardCharsets.US_ASCII);
             ByteBuffer expectedPayload = ByteBuffer.allocate(
@@ -455,22 +433,22 @@ public class NFCTest {
             assertArrayEquals(
                     expectedPayload.array(), utf8TextNdefMessage.getRecords()[0].getPayload());
         }
-        assertEquals(android.nfc.NdefRecord.TNF_EXTERNAL_TYPE,
-                utf8TextNdefMessage.getRecords()[1].getTnf());
 
-        // Test TEXT record conversion for UTF-16 content.
+        // Test text record conversion for UTF-16 content.
         NdefRecord utf16TextMojoNdefRecord = new NdefRecord();
+        utf16TextMojoNdefRecord.category = NdefRecordTypeCategory.STANDARDIZED;
         utf16TextMojoNdefRecord.recordType = NdefMessageUtils.RECORD_TYPE_TEXT;
+        utf16TextMojoNdefRecord.id = DUMMY_RECORD_ID;
         utf16TextMojoNdefRecord.encoding = ENCODING_UTF16;
         utf16TextMojoNdefRecord.lang = LANG_EN_US;
         utf16TextMojoNdefRecord.data = TEST_TEXT.getBytes(Charset.forName("UTF-16"));
-        NdefMessage utf16TextMojoNdefMessage =
-                createMojoNdefMessage(TEST_URL, utf16TextMojoNdefRecord);
+        NdefMessage utf16TextMojoNdefMessage = createMojoNdefMessage(utf16TextMojoNdefRecord);
         android.nfc.NdefMessage utf16TextNdefMessage =
                 NdefMessageUtils.toNdefMessage(utf16TextMojoNdefMessage);
-        assertEquals(2, utf16TextNdefMessage.getRecords().length);
+        assertEquals(1, utf16TextNdefMessage.getRecords().length);
         assertEquals(android.nfc.NdefRecord.TNF_WELL_KNOWN,
                 utf16TextNdefMessage.getRecords()[0].getTnf());
+        assertEquals(DUMMY_RECORD_ID, new String(utf16TextNdefMessage.getRecords()[0].getId()));
         {
             byte[] languageCodeBytes = LANG_EN_US.getBytes(StandardCharsets.US_ASCII);
             ByteBuffer expectedPayload = ByteBuffer.allocate(
@@ -483,85 +461,80 @@ public class NFCTest {
             assertArrayEquals(
                     expectedPayload.array(), utf16TextNdefMessage.getRecords()[0].getPayload());
         }
-        assertEquals(android.nfc.NdefRecord.TNF_EXTERNAL_TYPE,
-                utf16TextNdefMessage.getRecords()[1].getTnf());
 
         // Test mime record conversion with "text/plain" mime type.
         NdefRecord mimeMojoNdefRecord = new NdefRecord();
+        mimeMojoNdefRecord.category = NdefRecordTypeCategory.STANDARDIZED;
         mimeMojoNdefRecord.recordType = NdefMessageUtils.RECORD_TYPE_MIME;
         mimeMojoNdefRecord.mediaType = TEXT_MIME;
         mimeMojoNdefRecord.id = DUMMY_RECORD_ID;
         mimeMojoNdefRecord.data = ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT);
-        NdefMessage mimeMojoNdefMessage = createMojoNdefMessage(TEST_URL, mimeMojoNdefRecord);
+        NdefMessage mimeMojoNdefMessage = createMojoNdefMessage(mimeMojoNdefRecord);
         android.nfc.NdefMessage mimeNdefMessage =
                 NdefMessageUtils.toNdefMessage(mimeMojoNdefMessage);
-        assertEquals(2, mimeNdefMessage.getRecords().length);
+        assertEquals(1, mimeNdefMessage.getRecords().length);
         assertEquals(
                 android.nfc.NdefRecord.TNF_MIME_MEDIA, mimeNdefMessage.getRecords()[0].getTnf());
         assertEquals(TEXT_MIME, mimeNdefMessage.getRecords()[0].toMimeType());
         assertEquals(DUMMY_RECORD_ID, new String(mimeNdefMessage.getRecords()[0].getId()));
         assertEquals(TEST_TEXT, new String(mimeNdefMessage.getRecords()[0].getPayload()));
-        assertEquals(
-                android.nfc.NdefRecord.TNF_EXTERNAL_TYPE, mimeNdefMessage.getRecords()[1].getTnf());
 
         // Test mime record conversion with "application/json" mime type.
         NdefRecord jsonMojoNdefRecord = new NdefRecord();
+        jsonMojoNdefRecord.category = NdefRecordTypeCategory.STANDARDIZED;
         jsonMojoNdefRecord.recordType = NdefMessageUtils.RECORD_TYPE_MIME;
         jsonMojoNdefRecord.mediaType = JSON_MIME;
         jsonMojoNdefRecord.id = DUMMY_RECORD_ID;
         jsonMojoNdefRecord.data = ApiCompatibilityUtils.getBytesUtf8(TEST_JSON);
-        NdefMessage jsonMojoNdefMessage = createMojoNdefMessage(TEST_URL, jsonMojoNdefRecord);
+        NdefMessage jsonMojoNdefMessage = createMojoNdefMessage(jsonMojoNdefRecord);
         android.nfc.NdefMessage jsonNdefMessage =
                 NdefMessageUtils.toNdefMessage(jsonMojoNdefMessage);
-        assertEquals(2, jsonNdefMessage.getRecords().length);
+        assertEquals(1, jsonNdefMessage.getRecords().length);
         assertEquals(
                 android.nfc.NdefRecord.TNF_MIME_MEDIA, jsonNdefMessage.getRecords()[0].getTnf());
         assertEquals(JSON_MIME, jsonNdefMessage.getRecords()[0].toMimeType());
         assertEquals(DUMMY_RECORD_ID, new String(jsonNdefMessage.getRecords()[0].getId()));
         assertEquals(TEST_JSON, new String(jsonNdefMessage.getRecords()[0].getPayload()));
-        assertEquals(
-                android.nfc.NdefRecord.TNF_EXTERNAL_TYPE, jsonNdefMessage.getRecords()[1].getTnf());
 
         // Test unknown record conversion.
         NdefRecord unknownMojoNdefRecord = new NdefRecord();
+        unknownMojoNdefRecord.category = NdefRecordTypeCategory.STANDARDIZED;
         unknownMojoNdefRecord.recordType = NdefMessageUtils.RECORD_TYPE_UNKNOWN;
+        unknownMojoNdefRecord.id = DUMMY_RECORD_ID;
         unknownMojoNdefRecord.data = ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT);
-        NdefMessage unknownMojoNdefMessage = createMojoNdefMessage(TEST_URL, unknownMojoNdefRecord);
+        NdefMessage unknownMojoNdefMessage = createMojoNdefMessage(unknownMojoNdefRecord);
         android.nfc.NdefMessage unknownNdefMessage =
                 NdefMessageUtils.toNdefMessage(unknownMojoNdefMessage);
-        assertEquals(2, unknownNdefMessage.getRecords().length);
+        assertEquals(1, unknownNdefMessage.getRecords().length);
         assertEquals(
                 android.nfc.NdefRecord.TNF_UNKNOWN, unknownNdefMessage.getRecords()[0].getTnf());
+        assertEquals(DUMMY_RECORD_ID, new String(unknownNdefMessage.getRecords()[0].getId()));
         assertEquals(TEST_TEXT, new String(unknownNdefMessage.getRecords()[0].getPayload()));
-        assertEquals(android.nfc.NdefRecord.TNF_EXTERNAL_TYPE,
-                unknownNdefMessage.getRecords()[1].getTnf());
 
         // Test external record conversion.
         NdefRecord extMojoNdefRecord = new NdefRecord();
-        extMojoNdefRecord.recordType =
-                DUMMY_EXTERNAL_RECORD_DOMAIN + ':' + DUMMY_EXTERNAL_RECORD_TYPE;
+        extMojoNdefRecord.category = NdefRecordTypeCategory.EXTERNAL;
+        extMojoNdefRecord.recordType = DUMMY_EXTERNAL_TYPE;
+        extMojoNdefRecord.id = DUMMY_RECORD_ID;
         extMojoNdefRecord.data = ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT);
-        NdefMessage extMojoNdefMessage = createMojoNdefMessage(TEST_URL, extMojoNdefRecord);
+        NdefMessage extMojoNdefMessage = createMojoNdefMessage(extMojoNdefRecord);
         android.nfc.NdefMessage extNdefMessage = NdefMessageUtils.toNdefMessage(extMojoNdefMessage);
-        assertEquals(2, extNdefMessage.getRecords().length);
+        assertEquals(1, extNdefMessage.getRecords().length);
         assertEquals(
                 android.nfc.NdefRecord.TNF_EXTERNAL_TYPE, extNdefMessage.getRecords()[0].getTnf());
-        assertEquals(DUMMY_EXTERNAL_RECORD_DOMAIN + ':' + DUMMY_EXTERNAL_RECORD_TYPE,
-                new String(extNdefMessage.getRecords()[0].getType()));
+        assertEquals(DUMMY_EXTERNAL_TYPE, new String(extNdefMessage.getRecords()[0].getType()));
+        assertEquals(DUMMY_RECORD_ID, new String(extNdefMessage.getRecords()[0].getId()));
         assertEquals(TEST_TEXT, new String(extNdefMessage.getRecords()[0].getPayload()));
-        assertEquals(
-                android.nfc.NdefRecord.TNF_EXTERNAL_TYPE, extNdefMessage.getRecords()[1].getTnf());
 
         // Test EMPTY record conversion.
         NdefRecord emptyMojoNdefRecord = new NdefRecord();
+        emptyMojoNdefRecord.category = NdefRecordTypeCategory.STANDARDIZED;
         emptyMojoNdefRecord.recordType = NdefMessageUtils.RECORD_TYPE_EMPTY;
-        NdefMessage emptyMojoNdefMessage = createMojoNdefMessage(TEST_URL, emptyMojoNdefRecord);
+        NdefMessage emptyMojoNdefMessage = createMojoNdefMessage(emptyMojoNdefRecord);
         android.nfc.NdefMessage emptyNdefMessage =
                 NdefMessageUtils.toNdefMessage(emptyMojoNdefMessage);
-        assertEquals(2, emptyNdefMessage.getRecords().length);
+        assertEquals(1, emptyNdefMessage.getRecords().length);
         assertEquals(android.nfc.NdefRecord.TNF_EMPTY, emptyNdefMessage.getRecords()[0].getTnf());
-        assertEquals(android.nfc.NdefRecord.TNF_EXTERNAL_TYPE,
-                emptyNdefMessage.getRecords()[1].getTnf());
     }
 
     /**
@@ -570,13 +543,49 @@ public class NFCTest {
     @Test(expected = InvalidNdefMessageException.class)
     @Feature({"NFCTest"})
     public void testInvalidExternalRecordType() throws InvalidNdefMessageException {
-        NdefRecord extMojoNdefRecord = new NdefRecord();
-        // '/' is not allowed.
-        extMojoNdefRecord.recordType = "abc.com:xyz/";
-        extMojoNdefRecord.data = ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT);
-        NdefMessage extMojoNdefMessage = createMojoNdefMessage(TEST_URL, extMojoNdefRecord);
-        android.nfc.NdefMessage extNdefMessage = NdefMessageUtils.toNdefMessage(extMojoNdefMessage);
-        assertEquals(null, extNdefMessage);
+        {
+            NdefRecord extMojoNdefRecord = new NdefRecord();
+            extMojoNdefRecord.category = NdefRecordTypeCategory.EXTERNAL;
+            // Must have a ':'.
+            extMojoNdefRecord.recordType = "abc.com";
+            extMojoNdefRecord.data = ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT);
+            NdefMessage extMojoNdefMessage = createMojoNdefMessage(extMojoNdefRecord);
+            android.nfc.NdefMessage extNdefMessage =
+                    NdefMessageUtils.toNdefMessage(extMojoNdefMessage);
+            assertNull(extNdefMessage);
+        }
+        {
+            NdefRecord extMojoNdefRecord = new NdefRecord();
+            extMojoNdefRecord.category = NdefRecordTypeCategory.EXTERNAL;
+            extMojoNdefRecord.data = ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT);
+
+            char[] chars = new char[251];
+            Arrays.fill(chars, 'a');
+            String domain = new String(chars);
+
+            // |recordType|'s length is 255, OK.
+            extMojoNdefRecord.recordType = domain + ":xyz";
+            android.nfc.NdefMessage extNdefMessage_255 =
+                    NdefMessageUtils.toNdefMessage(createMojoNdefMessage(extMojoNdefRecord));
+            assertNotNull(extNdefMessage_255);
+
+            // Exceeding the maximum length 255, FAIL.
+            extMojoNdefRecord.recordType = domain + ":xyze";
+            android.nfc.NdefMessage extNdefMessage_256 =
+                    NdefMessageUtils.toNdefMessage(createMojoNdefMessage(extMojoNdefRecord));
+            assertNull(extNdefMessage_256);
+        }
+        {
+            NdefRecord extMojoNdefRecord = new NdefRecord();
+            extMojoNdefRecord.category = NdefRecordTypeCategory.EXTERNAL;
+            // '/' is not allowed.
+            extMojoNdefRecord.recordType = "abc.com:xyz/";
+            extMojoNdefRecord.data = ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT);
+            NdefMessage extMojoNdefMessage = createMojoNdefMessage(extMojoNdefRecord);
+            android.nfc.NdefMessage extNdefMessage =
+                    NdefMessageUtils.toNdefMessage(extMojoNdefMessage);
+            assertNull(extNdefMessage);
+        }
     }
 
     /**
@@ -736,9 +745,9 @@ public class NFCTest {
         mDelegate.invokeCallback();
         nfc.setClient(mNfcClient);
 
-        // Should match by WebNFC Id (exact match).
+        // Should match by record id (exact match).
         NdefScanOptions options1 = createNdefScanOptions();
-        options1.url = TEST_URL;
+        options1.id = DUMMY_RECORD_ID;
         int watchId1 = mNextWatchId++;
         WatchResponse mockWatchCallback1 = mock(WatchResponse.class);
         nfc.watch(options1, watchId1, mockWatchCallback1);
@@ -764,11 +773,20 @@ public class NFCTest {
 
         // Should not match
         NdefScanOptions options4 = createNdefScanOptions();
-        options4.url = AUTHOR_RECORD_DOMAIN;
+        options4.id = "random_record_id";
         int watchId4 = mNextWatchId++;
         WatchResponse mockWatchCallback4 = mock(WatchResponse.class);
         nfc.watch(options4, watchId4, mockWatchCallback4);
         verify(mockWatchCallback4).call(mErrorCaptor.capture());
+        assertNull(mErrorCaptor.getValue());
+
+        // Should not match because the record type must match case-sensitive.
+        NdefScanOptions options5 = createNdefScanOptions();
+        options5.recordType = "Url";
+        int watchId5 = mNextWatchId++;
+        WatchResponse mockWatchCallback5 = mock(WatchResponse.class);
+        nfc.watch(options5, watchId5, mockWatchCallback5);
+        verify(mockWatchCallback5).call(mErrorCaptor.capture());
         assertNull(mErrorCaptor.getValue());
 
         nfc.processPendingOperationsForTesting(mNfcTagHandler);
@@ -781,6 +799,63 @@ public class NFCTest {
         assertEquals(watchId1, mOnWatchCallbackCaptor.getValue()[0]);
         assertEquals(watchId2, mOnWatchCallbackCaptor.getValue()[1]);
         assertEquals(watchId3, mOnWatchCallbackCaptor.getValue()[2]);
+    }
+
+    /**
+     * Test that Nfc.watch() matching function compares 2 external types in case-insensitive manner.
+     */
+    @Test
+    @Feature({"NFCTest"})
+    public void testWatchMatchingExternalType() {
+        TestNfcImpl nfc = new TestNfcImpl(mContext, mDelegate);
+        mDelegate.invokeCallback();
+        nfc.setClient(mNfcClient);
+
+        // Prepare the external type record.
+        android.nfc.NdefMessage extNdefMessage = new android.nfc.NdefMessage(
+                NdefMessageUtils.createPlatformExternalRecord(DUMMY_EXTERNAL_TYPE, DUMMY_RECORD_ID,
+                        ApiCompatibilityUtils.getBytesUtf8(TEST_TEXT)));
+        try {
+            doReturn(extNdefMessage).when(mNfcTagHandler).read();
+        } catch (IOException | FormatException e) {
+        }
+
+        // Should match, the record type is exactly equal.
+        NdefScanOptions options1 = createNdefScanOptions();
+        options1.recordType = DUMMY_EXTERNAL_TYPE;
+        int watchId1 = mNextWatchId++;
+        WatchResponse mockWatchCallback1 = mock(WatchResponse.class);
+        nfc.watch(options1, watchId1, mockWatchCallback1);
+        verify(mockWatchCallback1).call(mErrorCaptor.capture());
+        assertNull(mErrorCaptor.getValue());
+
+        // Should match, the record type is equal in case-insensitive manner.
+        NdefScanOptions options2 = createNdefScanOptions();
+        options2.recordType = "aBc.com:xyZ";
+        int watchId2 = mNextWatchId++;
+        WatchResponse mockWatchCallback2 = mock(WatchResponse.class);
+        nfc.watch(options2, watchId2, mockWatchCallback2);
+        verify(mockWatchCallback2).call(mErrorCaptor.capture());
+        assertNull(mErrorCaptor.getValue());
+
+        // Should not match, the record type is NOT equal even in case-insensitive manner.
+        NdefScanOptions options3 = createNdefScanOptions();
+        options3.recordType = "abcd.com:xyz";
+        int watchId3 = mNextWatchId++;
+        WatchResponse mockWatchCallback3 = mock(WatchResponse.class);
+        nfc.watch(options3, watchId3, mockWatchCallback3);
+        verify(mockWatchCallback3).call(mErrorCaptor.capture());
+        assertNull(mErrorCaptor.getValue());
+
+        nfc.processPendingOperationsForTesting(mNfcTagHandler);
+
+        // Check that client was notified and watch with correct id was triggered.
+        verify(mNfcClient, times(1))
+                .onWatch(mOnWatchCallbackCaptor.capture(), nullable(String.class),
+                        any(NdefMessage.class));
+        assertEquals(2, mOnWatchCallbackCaptor.getValue().length);
+        assertEquals(watchId1, mOnWatchCallbackCaptor.getValue()[0]);
+        assertEquals(watchId2, mOnWatchCallbackCaptor.getValue()[1]);
     }
 
     /**
@@ -874,6 +949,61 @@ public class NFCTest {
     }
 
     /**
+     * Test that when the tag in proximity is found to be not NDEF compatible, an error event will
+     * be dispatched to the client and the pending push operation will also be ended with an error.
+     */
+    @Test
+    @Feature({"NFCTest"})
+    public void testNonNdefCompatibleTagFound() {
+        TestNfcImpl nfc = new TestNfcImpl(mContext, mDelegate);
+        mDelegate.invokeCallback();
+        nfc.setClient(mNfcClient);
+        // Prepare at least one watcher, otherwise the error won't be notified.
+        WatchResponse mockWatchCallback = mock(WatchResponse.class);
+        nfc.watch(createNdefScanOptions(), mNextWatchId, mockWatchCallback);
+        // Start a push.
+        PushResponse mockCallback = mock(PushResponse.class);
+        nfc.push(createMojoNdefMessage(), createNdefPushOptions(), mockCallback);
+
+        // Pass null tag handler to simulate that the tag is not NDEF compatible.
+        nfc.processPendingOperationsForTesting(null);
+
+        // An error is notified.
+        verify(mNfcClient, times(1)).onError(NdefErrorType.NOT_SUPPORTED);
+        // No watch.
+        verify(mNfcClient, times(0))
+                .onWatch(mOnWatchCallbackCaptor.capture(), nullable(String.class),
+                        any(NdefMessage.class));
+
+        // The pending push failed with the correct error.
+        verify(mockCallback).call(mErrorCaptor.capture());
+        assertNotNull(mErrorCaptor.getValue());
+        assertEquals(NdefErrorType.NOT_SUPPORTED, mErrorCaptor.getValue().errorType);
+    }
+
+    /**
+     * Test that when the tag in proximity is found to be not NDEF compatible, an error event will
+     * not be dispatched to the client if there is no watcher present.
+     */
+    @Test
+    @Feature({"NFCTest"})
+    public void testNonNdefCompatibleTagFoundWithoutWatcher() {
+        TestNfcImpl nfc = new TestNfcImpl(mContext, mDelegate);
+        mDelegate.invokeCallback();
+        nfc.setClient(mNfcClient);
+
+        // Pass null tag handler to simulate that the tag is not NDEF compatible.
+        nfc.processPendingOperationsForTesting(null);
+
+        // An error is NOT notified.
+        verify(mNfcClient, times(0)).onError(NdefErrorType.NOT_SUPPORTED);
+        // No watch.
+        verify(mNfcClient, times(0))
+                .onWatch(mOnWatchCallbackCaptor.capture(), nullable(String.class),
+                        any(NdefMessage.class));
+    }
+
+    /**
      * Test that when tag is disconnected during read operation, IllegalStateException is handled.
      */
     @Test
@@ -891,10 +1021,11 @@ public class NFCTest {
         // Mocks 'NFC tag found' event.
         nfc.processPendingOperationsForTesting(mNfcTagHandler);
 
-        // Check that client was not notified.
+        // Check that the watch was not triggered but an error was dispatched to the client.
         verify(mNfcClient, times(0))
                 .onWatch(mOnWatchCallbackCaptor.capture(), nullable(String.class),
                         any(NdefMessage.class));
+        verify(mNfcClient, times(1)).onError(NdefErrorType.IO_ERROR);
     }
 
     /**
@@ -1070,146 +1201,6 @@ public class NFCTest {
     }
 
     /**
-     * Test that Nfc.watch() WebNFC Id pattern matching works correctly.
-     */
-    @Test
-    @Feature({"NFCTest"})
-    public void testWatchPatternMatching() throws IOException, FormatException {
-        TestNfcImpl nfc = new TestNfcImpl(mContext, mDelegate);
-        mDelegate.invokeCallback();
-        nfc.setClient(mNfcClient);
-
-        // Should match.
-        int watchId1 = mNextWatchId++;
-        {
-            NdefScanOptions options = createNdefScanOptions();
-            options.url = "https://test.com/*";
-            WatchResponse mockWatchCallback = mock(WatchResponse.class);
-            nfc.watch(options, watchId1, mockWatchCallback);
-            verify(mockWatchCallback).call(mErrorCaptor.capture());
-            assertNull(mErrorCaptor.getValue());
-        }
-
-        // Should match.
-        int watchId2 = mNextWatchId++;
-        {
-            NdefScanOptions options = createNdefScanOptions();
-            options.url = "https://test.com/contact/42";
-            WatchResponse mockWatchCallback = mock(WatchResponse.class);
-            nfc.watch(options, watchId2, mockWatchCallback);
-            verify(mockWatchCallback).call(mErrorCaptor.capture());
-            assertNull(mErrorCaptor.getValue());
-        }
-
-        // Should match.
-        int watchId3 = mNextWatchId++;
-        {
-            NdefScanOptions options = createNdefScanOptions();
-            options.url = "https://subdomain.test.com/*";
-            WatchResponse mockWatchCallback = mock(WatchResponse.class);
-            nfc.watch(options, watchId3, mockWatchCallback);
-            verify(mockWatchCallback).call(mErrorCaptor.capture());
-            assertNull(mErrorCaptor.getValue());
-        }
-
-        // Should match.
-        int watchId4 = mNextWatchId++;
-        {
-            NdefScanOptions options = createNdefScanOptions();
-            options.url = "https://subdomain.test.com/contact";
-            WatchResponse mockWatchCallback = mock(WatchResponse.class);
-            nfc.watch(options, watchId4, mockWatchCallback);
-            verify(mockWatchCallback).call(mErrorCaptor.capture());
-            assertNull(mErrorCaptor.getValue());
-        }
-
-        // Should not match.
-        {
-            NdefScanOptions options = createNdefScanOptions();
-            options.url = "https://www.test.com/*";
-            WatchResponse mockWatchCallback = mock(WatchResponse.class);
-            nfc.watch(options, mNextWatchId++, mockWatchCallback);
-            verify(mockWatchCallback).call(mErrorCaptor.capture());
-            assertNull(mErrorCaptor.getValue());
-        }
-
-        // Should not match.
-        {
-            NdefScanOptions options = createNdefScanOptions();
-            options.url = "http://test.com/*";
-            WatchResponse mockWatchCallback = mock(WatchResponse.class);
-            nfc.watch(options, mNextWatchId++, mockWatchCallback);
-            verify(mockWatchCallback).call(mErrorCaptor.capture());
-            assertNull(mErrorCaptor.getValue());
-        }
-
-        // Should not match.
-        {
-            NdefScanOptions options = createNdefScanOptions();
-            options.url = "invalid pattern url";
-            WatchResponse mockWatchCallback = mock(WatchResponse.class);
-            nfc.watch(options, mNextWatchId++, mockWatchCallback);
-            verify(mockWatchCallback).call(mErrorCaptor.capture());
-            assertNull(mErrorCaptor.getValue());
-        }
-
-        doReturn(createUrlWebNFCNdefMessage("https://subdomain.test.com/contact/42"))
-                .when(mNfcTagHandler)
-                .read();
-        nfc.processPendingOperationsForTesting(mNfcTagHandler);
-
-        // None of the watches should match NdefMessage with this WebNFC Id.
-        doReturn(createUrlWebNFCNdefMessage("https://notest.com/foo")).when(mNfcTagHandler).read();
-        nfc.processPendingOperationsForTesting(mNfcTagHandler);
-
-        // Check that client was notified and watch with correct id was triggered.
-        verify(mNfcClient, times(1))
-                .onWatch(mOnWatchCallbackCaptor.capture(), nullable(String.class),
-                        any(NdefMessage.class));
-        assertEquals(4, mOnWatchCallbackCaptor.getValue().length);
-        assertEquals(watchId1, mOnWatchCallbackCaptor.getValue()[0]);
-        assertEquals(watchId2, mOnWatchCallbackCaptor.getValue()[1]);
-        assertEquals(watchId3, mOnWatchCallbackCaptor.getValue()[2]);
-        assertEquals(watchId4, mOnWatchCallbackCaptor.getValue()[3]);
-    }
-
-    /**
-     * Test that Nfc.watch() WebNFC Id pattern matching works correctly for invalid WebNFC Ids.
-     */
-    @Test
-    @Feature({"NFCTest"})
-    public void testWatchPatternMatchingInvalidId() throws IOException, FormatException {
-        TestNfcImpl nfc = new TestNfcImpl(mContext, mDelegate);
-        mDelegate.invokeCallback();
-        nfc.setClient(mNfcClient);
-
-        // Should not match when invalid WebNFC Id is received.
-        NdefScanOptions options = createNdefScanOptions();
-        options.url = "https://test.com/*";
-        WatchResponse mockWatchCallback = mock(WatchResponse.class);
-        nfc.watch(options, mNextWatchId, mockWatchCallback);
-        verify(mockWatchCallback).call(mErrorCaptor.capture());
-        assertNull(mErrorCaptor.getValue());
-
-        doReturn(createUrlWebNFCNdefMessage("http://subdomain.test.com/contact/42"))
-                .when(mNfcTagHandler)
-                .read();
-        nfc.processPendingOperationsForTesting(mNfcTagHandler);
-
-        doReturn(createUrlWebNFCNdefMessage("ftp://subdomain.test.com/contact/42"))
-                .when(mNfcTagHandler)
-                .read();
-        nfc.processPendingOperationsForTesting(mNfcTagHandler);
-
-        doReturn(createUrlWebNFCNdefMessage("invalid url")).when(mNfcTagHandler).read();
-        nfc.processPendingOperationsForTesting(mNfcTagHandler);
-
-        verify(mNfcClient, times(0))
-                .onWatch(mOnWatchCallbackCaptor.capture(), nullable(String.class),
-                        any(NdefMessage.class));
-    }
-
-    /**
      * Test that Nfc.push() succeeds for NFC messages with EMPTY records.
      */
     @Test
@@ -1221,8 +1212,9 @@ public class NFCTest {
 
         // Create message with empty record.
         NdefRecord emptyNdefRecord = new NdefRecord();
+        emptyNdefRecord.category = NdefRecordTypeCategory.STANDARDIZED;
         emptyNdefRecord.recordType = NdefMessageUtils.RECORD_TYPE_EMPTY;
-        NdefMessage ndefMessage = createMojoNdefMessage(TEST_URL, emptyNdefRecord);
+        NdefMessage ndefMessage = createMojoNdefMessage(emptyNdefRecord);
 
         nfc.push(ndefMessage, createNdefPushOptions(), mockCallback);
         nfc.processPendingOperationsForTesting(mNfcTagHandler);
@@ -1242,17 +1234,16 @@ public class NFCTest {
 
     private NdefScanOptions createNdefScanOptions() {
         NdefScanOptions options = new NdefScanOptions();
-        options.url = "";
         options.mediaType = "";
         return options;
     }
 
     private NdefMessage createMojoNdefMessage() {
         NdefMessage message = new NdefMessage();
-        message.url = "";
         message.data = new NdefRecord[1];
 
         NdefRecord nfcRecord = new NdefRecord();
+        nfcRecord.category = NdefRecordTypeCategory.STANDARDIZED;
         nfcRecord.recordType = NdefMessageUtils.RECORD_TYPE_TEXT;
         nfcRecord.encoding = ENCODING_UTF8;
         nfcRecord.lang = LANG_EN_US;
@@ -1261,23 +1252,16 @@ public class NFCTest {
         return message;
     }
 
-    private NdefMessage createMojoNdefMessage(String url, NdefRecord record) {
+    private NdefMessage createMojoNdefMessage(NdefRecord record) {
         NdefMessage message = new NdefMessage();
-        message.url = url;
         message.data = new NdefRecord[1];
         message.data[0] = record;
         return message;
     }
 
-    private android.nfc.NdefMessage createUrlWebNFCNdefMessage(String webNfcId) {
-        NdefRecord urlMojoNdefRecord = new NdefRecord();
-        urlMojoNdefRecord.recordType = NdefMessageUtils.RECORD_TYPE_URL;
-        urlMojoNdefRecord.data = ApiCompatibilityUtils.getBytesUtf8(TEST_URL);
-        NdefMessage urlNdefMessage = createMojoNdefMessage(webNfcId, urlMojoNdefRecord);
-        try {
-            return NdefMessageUtils.toNdefMessage(urlNdefMessage);
-        } catch (InvalidNdefMessageException e) {
-            return null;
-        }
+    private android.nfc.NdefMessage createNdefMessageWithRecordId(String id)
+            throws UnsupportedEncodingException {
+        return new android.nfc.NdefMessage(NdefMessageUtils.createPlatformUrlRecord(
+                ApiCompatibilityUtils.getBytesUtf8(TEST_URL), id, false /* isAbsUrl */));
     }
 }

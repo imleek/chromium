@@ -3,44 +3,74 @@
     --tabstrip-tab-height: calc(var(--tabstrip-tab-title-height) +
                                 var(--tabstrip-tab-thumbnail-height));
     --tabstrip-tab-width: var(--tabstrip-tab-thumbnail-width);
-    --tabstrip-tab-margin-inline-end: 16px;
+    --tabstrip-tab-spacing: 16px;
 
     background: var(--tabstrip-background-color);
     box-sizing: border-box;
     display: flex;
-    min-width: fit-content;
-    padding: 16px;
+    height: 100%;
+    overflow: overlay hidden;
+    touch-action: pan-x;
     width: 100%;
   }
 
-  #pinnedTabsContainer {
-    /* 4 pinned tabs should fit in the same space vertically as 1 unpinned
-     * tab. 30px is subtracted from the height of an unpinned tab as there
-     * are three 10px gaps to separate each of the 4 pinned tabs. */
-    --tabstrip-pinned-tab-size: calc((var(--tabstrip-tab-height) - 30px) / 4);
+  #tabs {
+    display: flex;
+    min-width: fit-content;
+    overflow: hidden;
+    padding-inline-end: calc(
+        var(--tabstrip-new-tab-button-width) +
+        var(--tabstrip-new-tab-button-margin));
+  }
+
+  #pinnedTabs {
+    /* 3 pinned tabs should fit in the same space vertically as 1 unpinned
+     * tab. 20px is subtracted from the height of an unpinned tab as there
+     * are two 10px gaps to separate each of the 3 pinned tabs. */
+    --tabstrip-pinned-tab-size: calc((var(--tabstrip-tab-height) - 20px) / 3);
 
     display: grid;
     grid-auto-columns: var(--tabstrip-pinned-tab-size);
     grid-auto-flow: column;
     grid-gap: 10px;
-    grid-template-rows: repeat(4, var(--tabstrip-pinned-tab-size));
-    margin-inline-end: var(--tabstrip-tab-margin-inline-end);
+    grid-template-rows: repeat(3, var(--tabstrip-pinned-tab-size));
+    padding: var(--tabstrip-tab-spacing);
+    padding-inline-end: 0;
   }
 
-  #pinnedTabsContainer:empty {
+  #pinnedTabs:empty {
     display: none;
   }
 
-  #tabsContainer {
+  #unpinnedTabs {
     display: flex;
+    min-width: fit-content;
+    padding: var(--tabstrip-tab-spacing);
+    padding-inline-end: 0;
   }
 
-  #tabsContainer tabstrip-tab {
-    margin-inline-end: var(--tabstrip-tab-margin-inline-end);
+  #newTabButton {
+    --cr-icon-button-size: var(--tabstrip-new-tab-button-width);
+    --cr-icon-button-icon-size: 32px;
+    --cr-icon-button-fill-color: var(--tabstrip-tab-text-color);
+    --cr-icon-button-margin-end: var(--new-tab-button-margin);
+    --cr-icon-button-margin-start: 0;
+    background: var(--tabstrip-tab-background-color);
+    border-radius: 50%;
+    box-shadow: 0 1px 3px 0 rgba(var(--google-grey-800-rgb), .3),
+                0 4px 8px 3px rgba(var(--google-grey-800-rgb), .15);
+    height: var(--tabstrip-new-tab-button-width);
+    margin: 0;
+    position: fixed;
+    right: var(--tabstrip-new-tab-button-margin);
+    top: 50%;
+    transform: translateY(-50%);
+    width: var(--tabstrip-new-tab-button-width);
   }
 
-  #tabsContainer tabstrip-tab:last-child {
-    --tabstrip-tab-margin-inline-end: 0;
+  :host-context([dir='rtl']) #newTabButton {
+    left: var(--tabstrip-new-tab-button-margin);
+    right: auto;
   }
 
   #demoOptions {
@@ -52,14 +82,16 @@
   }
 </style>
 
-<div id="pinnedTabsContainer"></div>
-<div id="tabsContainer"></div>
+<div id="tabs">
+  <div id="pinnedTabs"></div>
+  <div id="unpinnedTabs"></div>
+</div>
+<cr-icon-button aria-label="$i18n{newTab}"
+    id="newTabButton"
+    iron-icon="cr:add">
+</cr-icon-button>
 
 <div id="demoOptions">
-  <label>
-    <input type="checkbox" id="mruCheckbox">MRU model
-  </label>
-
   <label>
     <input type="checkbox" id="autoCloseCheckbox">Auto-close
   </label>

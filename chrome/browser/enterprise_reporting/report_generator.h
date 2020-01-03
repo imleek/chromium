@@ -11,7 +11,9 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/enterprise_reporting/browser_report_generator.h"
+#include "chrome/browser/enterprise_reporting/report_request_definition.h"
 #include "chrome/browser/enterprise_reporting/report_request_queue_generator.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 
@@ -21,13 +23,9 @@ namespace enterprise_reporting {
 
 class ReportGenerator {
  public:
-#if defined(OS_CHROMEOS)
-  using Request = em::ChromeOsUserReportRequest;
-#else
-  using Request = em::ChromeDesktopReportRequest;
-#endif
-  using Requests = std::queue<std::unique_ptr<Request>>;
-  using ReportCallback = base::OnceCallback<void(Requests)>;
+  using ReportRequest = definition::ReportRequest;
+  using ReportRequests = std::queue<std::unique_ptr<ReportRequest>>;
+  using ReportCallback = base::OnceCallback<void(ReportRequests)>;
 
   ReportGenerator();
   virtual ~ReportGenerator();
@@ -54,6 +52,12 @@ class ReportGenerator {
   // on other platforms.
   virtual std::string GetSerialNumber();
 
+#if defined(OS_CHROMEOS)
+  // Collect the Android application information installed on primary profile,
+  // and append it to |basic_request_|.
+  virtual void AppendAndroidAppInfos();
+#endif
+
  private:
   void OnBrowserReportReady(std::unique_ptr<em::BrowserReport> browser_report);
 
@@ -61,7 +65,7 @@ class ReportGenerator {
   BrowserReportGenerator browser_report_generator_;
   ReportCallback callback_;
   // Basic information that is shared among requests.
-  Request basic_request_;
+  ReportRequest basic_request_;
 
   base::WeakPtrFactory<ReportGenerator> weak_ptr_factory_{this};
 

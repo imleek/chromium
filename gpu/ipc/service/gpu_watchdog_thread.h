@@ -31,6 +31,32 @@ enum class GpuWatchdogThreadEvent {
   kMaxValue = kGpuWatchdogEnd,
 };
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class GpuWatchdogTimeoutEvent {
+  // Recorded each time OnWatchdogTimeout() is called.
+  kTimeout,
+  // Recorded when a GPU main thread is killed for a detected hang.
+  kKill,
+  // Window only: Recorded when a hang is detected but we allow the GPU main
+  // thread to continue until it spent the full
+  // thread time doing the work.
+  kMoreThreadTime,
+  // Windows only: The GPU makes progress after givenmore thread time. The GPU
+  // main thread is not killed.
+  kProgressAfterMoreThreadTime,
+  // A gpu hang is detected but watchdog waits for 60 seconds before taking
+  // action.
+  kTimeoutWait,
+  // The GPU makes progress within 60 sec in OnWatchdogTimeout(). The GPU main
+  // thread is not killed.
+  kProgressAfterWait,
+  // Just continue if it's not on the TTY of our host X11 server.
+  kContinueOnNonHostServerTty,
+
+  kMaxValue = kContinueOnNonHostServerTty,
+};
+
 // A thread that intermitently sends tasks to a group of watched message loops
 // and deliberately crashes if one of them does not respond after a timeout.
 class GPU_IPC_SERVICE_EXPORT GpuWatchdogThread : public base::Thread,
@@ -57,6 +83,13 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThread : public base::Thread,
   // This function is called directly from
   // viz::GpuServiceImpl::~GpuServiceImpl()
   virtual void OnGpuProcessTearDown() = 0;
+
+  // Pause the GPU watchdog to stop the timeout task. If the current heavy task
+  // is not running on the GPU driver, the watchdog can be paused to avoid
+  // unneeded crash.
+  virtual void PauseWatchdog() = 0;
+  // Continue the watchdog after a pause.
+  virtual void ResumeWatchdog() = 0;
 
   virtual void GpuWatchdogHistogram(GpuWatchdogThreadEvent thread_event) = 0;
 
@@ -86,6 +119,8 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThreadImplV1
   void OnForegrounded() override;
   void OnInitComplete() override {}
   void OnGpuProcessTearDown() override {}
+  void ResumeWatchdog() override {}
+  void PauseWatchdog() override {}
   void GpuWatchdogHistogram(GpuWatchdogThreadEvent thread_event) override;
   bool IsGpuHangDetectedForTesting() override;
 
@@ -105,7 +140,8 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThreadImplV1
     ~GpuWatchdogTaskObserver() override;
 
     // Implements TaskObserver.
-    void WillProcessTask(const base::PendingTask& pending_task) override;
+    void WillProcessTask(const base::PendingTask& pending_task,
+                         bool was_blocked_or_low_priority) override;
     void DidProcessTask(const base::PendingTask& pending_task) override;
 
    private:
@@ -218,6 +254,16 @@ class GPU_IPC_SERVICE_EXPORT GpuWatchdogThreadImplV1
   // This is the time the last check was sent.
   base::Time check_time_;
   base::TimeTicks check_timeticks_;
+
+  // The time in the last OnCheckTimeout()
+  base::TimeTicks last_timeout_timeticks_;
+
+  // After GPU hang detected, whether the GPU thread is allowed to continue due
+  // to not spending enough thread time.
+  bool more_gpu_thread_time_allowed_ = false;
+
+  // whether GpuWatchdogThreadEvent::kGpuWatchdogStart has been recorded.
+  bool is_watchdog_start_histogram_recorded = false;
 
 #if defined(USE_X11)
   FILE* tty_file_;

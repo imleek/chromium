@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/html/forms/form_controller.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/network/form_data_encoder.h"
 #include "third_party/blink/renderer/platform/wtf/text/line_ending.h"
@@ -301,7 +302,7 @@ scoped_refptr<EncodedFormData> FormData::EncodeMultiPartFormData() {
         auto* file = To<File>(entry->GetBlob());
         // Do not add the file if the path is empty.
         if (!file->GetPath().IsEmpty())
-          form_data->AppendFile(file->GetPath());
+          form_data->AppendFile(file->GetPath(), file->LastModifiedTime());
       } else {
         form_data->AppendBlob(entry->GetBlob()->Uuid(),
                               entry->GetBlob()->GetBlobDataHandle());
@@ -359,8 +360,8 @@ File* FormData::Entry::GetFile() const {
   String filename = filename_;
   if (filename.IsNull())
     filename = "blob";
-  return File::Create(filename, base::Time::Now().ToDoubleT() * 1000.0,
-                      GetBlob()->GetBlobDataHandle());
+  return MakeGarbageCollected<File>(filename, base::Time::Now(),
+                                    GetBlob()->GetBlobDataHandle());
 }
 
 void FormData::AppendToControlState(FormControlState& state) const {

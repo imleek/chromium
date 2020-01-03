@@ -47,7 +47,7 @@ function parseLocalDestination(destinationInfo) {
   const options = {
     description: destinationInfo.printerDescription,
     isEnterprisePrinter: destinationInfo.cupsEnterprisePrinter,
-    policies: destinationInfo.policies
+    policies: destinationInfo.policies,
   };
   if (destinationInfo.printerOptions) {
     // Convert options into cloud print tags format.

@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "ipc/ipc_message_macros.h"
@@ -18,6 +19,7 @@
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/address_list.h"
 #include "net/base/net_errors.h"
+#include "net/dns/public/resolve_error_info.h"
 #include "net/log/net_log_with_source.h"
 #include "services/network/public/cpp/resolve_host_client_base.h"
 #include "services/network/public/mojom/host_resolver.mojom.h"
@@ -47,7 +49,8 @@ class DnsLookupRequest : public network::ResolveHostClientBase {
     content::RenderProcessHost* render_process_host =
         content::RenderProcessHost::FromID(render_process_id_);
     if (!render_process_host) {
-      OnComplete(net::ERR_FAILED, base::nullopt);
+      OnComplete(net::ERR_NAME_NOT_RESOLVED,
+                 net::ResolveErrorInfo(net::ERR_FAILED), base::nullopt);
       return;
     }
 
@@ -60,21 +63,26 @@ class DnsLookupRequest : public network::ResolveHostClientBase {
     // Make a note that this is a speculative resolve request. This allows
     // separating it from real navigations in the observer's callback.
     resolve_host_parameters->is_speculative = true;
+    // TODO(https://crbug.com/997049): Pass in a non-empty NetworkIsolationKey.
     render_process_host->GetStoragePartition()
         ->GetNetworkContext()
-        ->ResolveHost(host_port_pair, std::move(resolve_host_parameters),
+        ->ResolveHost(host_port_pair, net::NetworkIsolationKey::Todo(),
+                      std::move(resolve_host_parameters),
                       receiver_.BindNewPipeAndPassRemote());
     receiver_.set_disconnect_handler(
         base::BindOnce(&DnsLookupRequest::OnComplete, base::Unretained(this),
-                       net::ERR_FAILED, base::nullopt));
+                       net::ERR_NAME_NOT_RESOLVED,
+                       net::ResolveErrorInfo(net::ERR_FAILED), base::nullopt));
   }
 
  private:
   // network::mojom::ResolveHostClient:
   void OnComplete(
       int result,
+      const net::ResolveErrorInfo& resolve_error_info,
       const base::Optional<net::AddressList>& resolved_addresses) override {
-    VLOG(2) << __FUNCTION__ << ": " << hostname_ << ", result=" << result;
+    VLOG(2) << __FUNCTION__ << ": " << hostname_
+            << ", result=" << resolve_error_info.error;
     request_.reset();
   }
 
@@ -96,8 +104,9 @@ SimpleNetworkHintsHandlerImpl::~SimpleNetworkHintsHandlerImpl() = default;
 
 // static
 void SimpleNetworkHintsHandlerImpl::Create(
-    int render_process_id,
+    content::RenderFrameHost* frame_host,
     mojo::PendingReceiver<mojom::NetworkHintsHandler> receiver) {
+  int render_process_id = frame_host->GetProcess()->GetID();
   mojo::MakeSelfOwnedReceiver(
       base::WrapUnique(new SimpleNetworkHintsHandlerImpl(render_process_id)),
       std::move(receiver));
@@ -113,8 +122,7 @@ void SimpleNetworkHintsHandlerImpl::PrefetchDNS(
   }
 }
 
-void SimpleNetworkHintsHandlerImpl::Preconnect(int render_frame_id,
-                                               const GURL& url,
+void SimpleNetworkHintsHandlerImpl::Preconnect(const GURL& url,
                                                bool allow_credentials) {
   // Not implemented.
 }

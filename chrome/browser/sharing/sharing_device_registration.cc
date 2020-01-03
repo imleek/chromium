@@ -174,8 +174,10 @@ void SharingDeviceRegistration::UnregisterDevice(
 void SharingDeviceRegistration::OnVapidFCMTokenDeleted(
     RegistrationCallback callback,
     SharingDeviceRegistrationResult result) {
-  if (result != SharingDeviceRegistrationResult::kSuccess)
+  if (result != SharingDeviceRegistrationResult::kSuccess) {
     std::move(callback).Run(result);
+    return;
+  }
 
   DeleteFCMToken(kSharingSenderID, std::move(callback));
 }
@@ -276,7 +278,7 @@ bool SharingDeviceRegistration::IsSharedClipboardSupported() const {
 
 bool SharingDeviceRegistration::IsSmsFetcherSupported() const {
 #if defined(OS_ANDROID)
-  return base::FeatureList::IsEnabled(kSmsFetchRequestHandler);
+  return base::FeatureList::IsEnabled(kSmsReceiverCrossDevice);
 #endif
 
   return false;

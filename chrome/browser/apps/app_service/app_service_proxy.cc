@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/apps/app_service/app_icon_source.h"
@@ -14,12 +15,11 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/uninstall_dialog.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/services/app_service/app_service_impl.h"
-#include "chrome/services/app_service/public/cpp/instance_registry.h"
 #include "chrome/services/app_service/public/cpp/intent_filter_util.h"
 #include "chrome/services/app_service/public/cpp/intent_util.h"
 #include "chrome/services/app_service/public/mojom/types.mojom.h"
-#include "content/public/browser/browser_context.h"
 #include "content/public/browser/url_data_source.h"
 #include "url/url_constants.h"
 
@@ -85,6 +85,11 @@ AppServiceProxy::AppServiceProxy(Profile* profile)
 
 AppServiceProxy::~AppServiceProxy() = default;
 
+// static
+void AppServiceProxy::RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  AppServiceImpl::RegisterProfilePrefs(registry);
+}
+
 void AppServiceProxy::ReInitializeForTesting(Profile* profile) {
   // Some test code creates a profile and profile-linked services, like the App
   // Service, before the profile is fully initialized. Such tests can call this
@@ -106,8 +111,8 @@ void AppServiceProxy::Initialize() {
     return;
   }
 
-  app_service_impl_ = std::make_unique<apps::AppServiceImpl>(
-      content::BrowserContext::GetConnectorFor(profile_));
+  app_service_impl_ =
+      std::make_unique<apps::AppServiceImpl>(profile_->GetPrefs());
   app_service_impl_->BindReceiver(app_service_.BindNewPipeAndPassReceiver());
 
   if (app_service_.is_connected()) {
@@ -127,9 +132,13 @@ void AppServiceProxy::Initialize() {
     extension_apps_ = std::make_unique<ExtensionApps>(
         app_service_, profile_, apps::mojom::AppType::kExtension,
         &instance_registry_);
-    extension_web_apps_ = std::make_unique<ExtensionApps>(
-        app_service_, profile_, apps::mojom::AppType::kWeb,
-        &instance_registry_);
+    if (base::FeatureList::IsEnabled(features::kDesktopPWAsWithoutExtensions)) {
+      web_apps_ = std::make_unique<WebApps>(app_service_, profile_);
+    } else {
+      extension_web_apps_ = std::make_unique<ExtensionApps>(
+          app_service_, profile_, apps::mojom::AppType::kWeb,
+          &instance_registry_);
+    }
 
     // Asynchronously add app icon source, so we don't do too much work in the
     // constructor.
@@ -275,9 +284,7 @@ void AppServiceProxy::PauseApps(
     constexpr bool kPaused = true;
     UpdatePausedStatus(app_type, data.first, kPaused);
 
-    // TODO(crbug.com/1011235): Add the app running checking. If the app is not
-    // running, don't create the pause dialog, pause the app directly.
-    if (app_type != apps::mojom::AppType::kArc) {
+    if (!data.second.should_show_pause_dialog) {
       app_service_->PauseApp(app_type, data.first);
       continue;
     }
@@ -320,7 +327,11 @@ void AppServiceProxy::FlushMojoCallsForTesting() {
   built_in_chrome_os_apps_->FlushMojoCallsForTesting();
   crostini_apps_->FlushMojoCallsForTesting();
   extension_apps_->FlushMojoCallsForTesting();
-  extension_web_apps_->FlushMojoCallsForTesting();
+  if (web_apps_) {
+    web_apps_->FlushMojoCallsForTesting();
+  } else {
+    extension_web_apps_->FlushMojoCallsForTesting();
+  }
 #endif
   receivers_.FlushForTesting();
 }
@@ -350,6 +361,9 @@ std::vector<std::string> AppServiceProxy::GetAppIdsForIntent(
   std::vector<std::string> app_ids;
   if (app_service_.is_bound()) {
     cache_.ForEachApp([&app_ids, &intent](const apps::AppUpdate& update) {
+      if (update.Readiness() == apps::mojom::Readiness::kUninstalledByUser) {
+        return;
+      }
       for (const auto& filter : update.IntentFilters()) {
         if (apps_util::IntentMatchesFilter(intent, filter)) {
           app_ids.push_back(update.AppId());
@@ -368,7 +382,11 @@ void AppServiceProxy::SetArcIsRegistered() {
 
   arc_is_registered_ = true;
   extension_apps_->ObserveArc();
-  extension_web_apps_->ObserveArc();
+  if (web_apps_) {
+    web_apps_->ObserveArc();
+  } else {
+    extension_web_apps_->ObserveArc();
+  }
 #endif
 }
 
@@ -380,16 +398,18 @@ void AppServiceProxy::AddPreferredApp(const std::string& app_id,
 void AppServiceProxy::AddPreferredApp(const std::string& app_id,
                                       const apps::mojom::IntentPtr& intent) {
   auto intent_filter = FindBestMatchingFilter(intent);
-  if (intent_filter) {
-    preferred_apps_.AddPreferredApp(app_id, intent_filter);
-    if (app_service_.is_connected()) {
-      cache_.ForOneApp(app_id, [this, &intent_filter,
-                                &intent](const apps::AppUpdate& update) {
-        app_service_->AddPreferredApp(update.AppType(), update.AppId(),
-                                      std::move(intent_filter),
-                                      intent->Clone());
-      });
-    }
+  if (!intent_filter) {
+    return;
+  }
+  preferred_apps_.AddPreferredApp(app_id, intent_filter);
+  if (app_service_.is_connected()) {
+    cache_.ForOneApp(
+        app_id, [this, &intent_filter, &intent](const apps::AppUpdate& update) {
+          constexpr bool kFromPublisher = false;
+          app_service_->AddPreferredApp(update.AppType(), update.AppId(),
+                                        std::move(intent_filter),
+                                        intent->Clone(), kFromPublisher);
+        });
   }
 }
 
@@ -405,7 +425,11 @@ void AppServiceProxy::Shutdown() {
 #if defined(OS_CHROMEOS)
   if (app_service_.is_connected()) {
     extension_apps_->Shutdown();
-    extension_web_apps_->Shutdown();
+    if (web_apps_) {
+      web_apps_->Shutdown();
+    } else {
+      extension_web_apps_->Shutdown();
+    }
   }
 #endif  // OS_CHROMEOS
 }
@@ -423,6 +447,12 @@ void AppServiceProxy::OnPreferredAppSet(
     const std::string& app_id,
     apps::mojom::IntentFilterPtr intent_filter) {
   preferred_apps_.AddPreferredApp(app_id, intent_filter);
+}
+
+void AppServiceProxy::OnPreferredAppRemoved(
+    const std::string& app_id,
+    apps::mojom::IntentFilterPtr intent_filter) {
+  preferred_apps_.DeletePreferredApp(app_id, intent_filter);
 }
 
 void AppServiceProxy::InitializePreferredApps(base::Value preferred_apps) {

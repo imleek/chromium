@@ -39,6 +39,7 @@
 #include "media/blink/learning_experiment_helper.h"
 #include "media/blink/media_blink_export.h"
 #include "media/blink/multibuffer_data_source.h"
+#include "media/blink/power_status_helper.h"
 #include "media/blink/video_frame_compositor.h"
 #include "media/blink/webmediaplayer_params.h"
 #include "media/filters/pipeline_controller.h"
@@ -341,7 +342,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
                               BufferingStateChangeReason reason) override;
   void OnDurationChange() override;
   void OnAddTextTrack(const TextTrackConfig& config,
-                      const AddTextTrackDoneCB& done_cb) override;
+                      AddTextTrackDoneCB done_cb) override;
   void OnWaiting(WaitingReason reason) override;
   void OnAudioConfigChange(const AudioDecoderConfig& config) override;
   void OnVideoConfigChange(const VideoDecoderConfig& config) override;
@@ -377,8 +378,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
       bool decoder_requires_restart_for_overlay,
       const ProvideOverlayInfoCB& provide_overlay_info_cb);
 
-  // Creates a Renderer via the |renderer_factory_selector_|.
-  std::unique_ptr<Renderer> CreateRenderer();
+  // Creates a Renderer via the |renderer_factory_selector_|. If the
+  // |factory_type| is base::nullopt, create the base Renderer. Otherwise, set
+  // the base type to be |factory_type| and create a Renderer of that type.
+  std::unique_ptr<Renderer> CreateRenderer(
+      base::Optional<RendererFactoryType> factory_type);
 
   // Finishes starting the pipeline due to a call to load().
   void StartPipeline();
@@ -1006,10 +1010,12 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   base::CancelableOnceClosure have_enough_after_lazy_load_cb_;
 
   // State for simplified watch time reporting.
-  RendererFactorySelector::FactoryType reported_renderer_type_;
+  RendererFactoryType reported_renderer_type_;
   SimpleWatchTimer simple_watch_timer_;
 
   LearningExperimentHelper will_play_helper_;
+
+  std::unique_ptr<PowerStatusHelper> power_status_helper_;
 
   base::WeakPtr<WebMediaPlayerImpl> weak_this_;
   base::WeakPtrFactory<WebMediaPlayerImpl> weak_factory_{this};

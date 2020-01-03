@@ -46,7 +46,7 @@
 
 namespace network {
 
-const size_t SimpleURLLoader::kMaxBoundedStringDownloadSize = 1024 * 1024;
+const size_t SimpleURLLoader::kMaxBoundedStringDownloadSize = 5 * 1024 * 1024;
 const size_t SimpleURLLoader::kMaxUploadStringSizeToCopy = 256 * 1024;
 
 namespace {
@@ -229,6 +229,7 @@ class SimpleURLLoaderImpl : public SimpleURLLoader,
       uint64_t length = std::numeric_limits<uint64_t>::max()) override;
   void SetRetryOptions(int max_retries, int retry_mode) override;
   void SetURLLoaderFactoryOptions(uint32_t options) override;
+  void SetRequestID(int32_t request_id) override;
   void SetTimeoutDuration(base::TimeDelta timeout_duration) override;
 
   int NetError() const override;
@@ -333,7 +334,7 @@ class SimpleURLLoaderImpl : public SimpleURLLoader,
   // closed.
   void MaybeComplete();
 
-  std::vector<OnRedirectCallback> on_redirect_callback_;
+  OnRedirectCallback on_redirect_callback_;
   OnResponseStartedCallback on_response_started_callback_;
   UploadProgressCallback on_upload_progress_callback_;
   DownloadProgressCallback on_download_progress_callback_;
@@ -344,6 +345,7 @@ class SimpleURLLoaderImpl : public SimpleURLLoader,
   int remaining_retries_ = 0;
   int retry_mode_ = RETRY_NEVER;
   uint32_t url_loader_factory_options_ = 0;
+  int32_t request_id_ = 0;
 
   // The next values contain all the information required to restart the
   // request.
@@ -358,7 +360,7 @@ class SimpleURLLoaderImpl : public SimpleURLLoader,
   std::unique_ptr<BodyHandler> body_handler_;
 
   mojo::Receiver<mojom::URLLoaderClient> client_receiver_{this};
-  mojom::URLLoaderPtr url_loader_;
+  mojo::Remote<mojom::URLLoader> url_loader_;
 
   std::unique_ptr<StringUploadDataPipeGetter> string_upload_data_pipe_getter_;
 
@@ -1242,8 +1244,7 @@ void SimpleURLLoaderImpl::SetOnRedirectCallback(
   // Check if a request has not yet been started.
   DCHECK(!body_handler_);
 
-  on_redirect_callback_.push_back(on_redirect_callback);
-  DCHECK(on_redirect_callback);
+  on_redirect_callback_ = on_redirect_callback;
 }
 
 void SimpleURLLoaderImpl::SetOnResponseStartedCallback(
@@ -1364,6 +1365,12 @@ void SimpleURLLoaderImpl::SetURLLoaderFactoryOptions(uint32_t options) {
   // Check if a request has not yet been started.
   DCHECK(!body_handler_);
   url_loader_factory_options_ = options;
+}
+
+void SimpleURLLoaderImpl::SetRequestID(int32_t request_id) {
+  // Check if a request has not yet been started.
+  DCHECK(!body_handler_);
+  request_id_ = request_id;
 }
 
 void SimpleURLLoaderImpl::SetTimeoutDuration(base::TimeDelta timeout_duration) {
@@ -1516,7 +1523,7 @@ void SimpleURLLoaderImpl::StartRequest(
         string_upload_data_pipe_getter_->GetRemoteForNewUpload());
   }
   url_loader_factory->CreateLoaderAndStart(
-      mojo::MakeRequest(&url_loader_), 0 /* routing_id */, 0 /* request_id */,
+      url_loader_.BindNewPipeAndPassReceiver(), 0 /* routing_id */, request_id_,
       url_loader_factory_options_, *resource_request_,
       client_receiver_.BindNewPipeAndPassRemote(),
       net::MutableNetworkTrafficAnnotationTag(annotation_tag_));
@@ -1607,15 +1614,13 @@ void SimpleURLLoaderImpl::OnReceiveRedirect(
   }
 
   std::vector<std::string> removed_headers;
-  for (auto callback : on_redirect_callback_) {
-    if (callback) {
-      base::WeakPtr<SimpleURLLoaderImpl> weak_this =
-          weak_ptr_factory_.GetWeakPtr();
-      callback.Run(redirect_info, *response_head, &removed_headers);
-      // If deleted by the callback, bail now.
-      if (!weak_this)
-        return;
-    }
+  if (on_redirect_callback_) {
+    base::WeakPtr<SimpleURLLoaderImpl> weak_this =
+        weak_ptr_factory_.GetWeakPtr();
+    on_redirect_callback_.Run(redirect_info, *response_head, &removed_headers);
+    // If deleted by the callback, bail now.
+    if (!weak_this)
+      return;
   }
 
   final_url_ = redirect_info.new_url;

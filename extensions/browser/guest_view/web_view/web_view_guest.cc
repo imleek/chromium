@@ -215,6 +215,15 @@ static base::LazyInstance<WebViewKeyToIDMap>::DestructorAtExit
 
 }  // namespace
 
+WebViewGuest::NewWindowInfo::NewWindowInfo(const GURL& url,
+                                           const std::string& name)
+    : name(name), url(url) {}
+
+WebViewGuest::NewWindowInfo::NewWindowInfo(const WebViewGuest::NewWindowInfo&) =
+    default;
+
+WebViewGuest::NewWindowInfo::~NewWindowInfo() = default;
+
 // static
 void WebViewGuest::CleanUp(content::BrowserContext* browser_context,
                            int embedder_process_id,
@@ -362,7 +371,7 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
     // Create the SiteInstance in a new BrowsingInstance, which will ensure
     // that webview tags are also not allowed to send messages across
     // different partitions.
-    guest_site_instance = content::SiteInstance::CreateForURL(
+    guest_site_instance = content::SiteInstance::CreateForGuest(
         owner_render_process_host->GetBrowserContext(), guest_site);
   }
   WebContents::CreateParams params(
@@ -555,24 +564,6 @@ void WebViewGuest::GuestZoomChanged(double old_zoom_level,
 void WebViewGuest::WillDestroy() {
   if (!attached() && GetOpener())
     GetOpener()->pending_new_windows_.erase(this);
-}
-
-bool WebViewGuest::DidAddMessageToConsole(
-    WebContents* source,
-    blink::mojom::ConsoleMessageLevel log_level,
-    const base::string16& message,
-    int32_t line_no,
-    const base::string16& source_id) {
-  auto args = std::make_unique<base::DictionaryValue>();
-  // Log levels are from base/logging.h: LogSeverity.
-  args->SetInteger(webview::kLevel,
-                   blink::ConsoleMessageLevelToLogSeverity(log_level));
-  args->SetString(webview::kMessage, message);
-  args->SetInteger(webview::kLine, line_no);
-  args->SetString(webview::kSourceId, source_id);
-  DispatchEventToView(std::make_unique<GuestViewEvent>(
-      webview::kEventConsoleMessage, std::move(args)));
-  return false;
 }
 
 void WebViewGuest::CloseContents(WebContents* source) {
@@ -984,6 +975,22 @@ void WebViewGuest::OnAudioStateChanged(bool audible) {
       webview::kEventAudioStateChanged, std::move(args)));
 }
 
+void WebViewGuest::OnDidAddMessageToConsole(
+    blink::mojom::ConsoleMessageLevel log_level,
+    const base::string16& message,
+    int32_t line_no,
+    const base::string16& source_id) {
+  auto args = std::make_unique<base::DictionaryValue>();
+  // Log levels are from base/logging.h: LogSeverity.
+  args->SetInteger(webview::kLevel,
+                   blink::ConsoleMessageLevelToLogSeverity(log_level));
+  args->SetString(webview::kMessage, message);
+  args->SetInteger(webview::kLine, line_no);
+  args->SetString(webview::kSourceId, source_id);
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
+      webview::kEventConsoleMessage, std::move(args)));
+}
+
 void WebViewGuest::ReportFrameNameChange(const std::string& name) {
   name_ = name;
   auto args = std::make_unique<base::DictionaryValue>();
@@ -1049,11 +1056,9 @@ void WebViewGuest::CanDownload(const GURL& url,
 void WebViewGuest::RequestPointerLockPermission(
     bool user_gesture,
     bool last_unlocked_by_target,
-    const base::Callback<void(bool)>& callback) {
+    base::OnceCallback<void(bool)> callback) {
   web_view_permission_helper_->RequestPointerLockPermission(
-      user_gesture,
-      last_unlocked_by_target,
-      callback);
+      user_gesture, last_unlocked_by_target, std::move(callback));
 }
 
 void WebViewGuest::SignalWhenReady(base::OnceClosure callback) {

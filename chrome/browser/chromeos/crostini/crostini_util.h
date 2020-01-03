@@ -45,6 +45,11 @@ struct ContainerId {
 };
 
 bool operator<(const ContainerId& lhs, const ContainerId& rhs) noexcept;
+bool operator==(const ContainerId& lhs, const ContainerId& rhs) noexcept;
+inline bool operator!=(const ContainerId& lhs,
+                       const ContainerId& rhs) noexcept {
+  return !(lhs == rhs);
+}
 
 std::ostream& operator<<(std::ostream& ostream,
                          const ContainerId& container_id);
@@ -57,6 +62,9 @@ bool IsUninstallable(Profile* profile, const std::string& app_id);
 
 // Returns whether the default Crostini VM is running for the user.
 bool IsCrostiniRunning(Profile* profile);
+
+// Whether the user is able to perform a container upgrade.
+bool ShouldAllowContainerUpgrade();
 
 // Returns whether default Crostini container should be configured according to
 // the configuration specified by CrostiniAnsiblePlaybook user policy.
@@ -114,8 +122,6 @@ enum class CrostiniUISurface { kSettings = 0, kAppList = 1, kCount };
 // See chrome/browser/ui/views/crostini for implementation of the ShowXXX
 // functions below.
 
-// Shows the Crostini Installer dialog.
-void ShowCrostiniInstallerView(Profile* profile, CrostiniUISurface ui_surface);
 // Shows the Crostini Uninstaller dialog.
 void ShowCrostiniUninstallerView(Profile* profile,
                                  CrostiniUISurface ui_surface);
@@ -136,6 +142,8 @@ views::Widget* ShowCrostiniForceCloseDialog(
 // Termina version matches).
 void ShowCrostiniUpdateComponentView(Profile* profile,
                                      CrostiniUISurface ui_surface);
+// Shows the ui with the error message when installing a package fails.
+void ShowCrostiniPackageInstallFailureView(const std::string& error_message);
 
 // Shows the Crostini Container Upgrade dialog (for running upgrades in the
 // container).
@@ -153,15 +161,25 @@ void CloseCrostiniUpdateFilesystemView();
 // applying an Ansible playbook in the container).
 void ShowCrostiniAnsibleSoftwareConfigView(Profile* profile);
 
+// Returns App ID of the terminal app which is either the older crosh-based
+// terminal, or the new Terminal System App if the TerminalSystemApp feature
+// is enabled.
+const std::string& GetTerminalId();
+
+// Returns the alternative terminal ID to |GetTerminalId|.  This is used when
+// migrating terminals when TerminalSystemApp feature changes.
+const std::string& GetDeletedTerminalId();
+
 // We use an arbitrary well-formed extension id for the Terminal app, this
 // is equal to GenerateId("Terminal").
 constexpr char kCrostiniTerminalId[] = "oajcgpnkmhaalajejhlfpacbiokdnnfe";
+// web_app::GenerateAppIdFromURL("chrome://terminal/html/terminal.html")
+constexpr char kCrostiniTerminalSystemAppId[] =
+    "oapmgeobaaddjmlgbbjbdhapidbomlgg";
 
 constexpr char kCrostiniDefaultVmName[] = "termina";
 constexpr char kCrostiniDefaultContainerName[] = "penguin";
 constexpr char kCrostiniDefaultUsername[] = "emperor";
-constexpr char kCrostiniCroshBuiltinAppId[] =
-    "nkoccljplnhpfnfiajclkommnmllphnl";
 // In order to be compatible with sync folder id must match standard.
 // Generated using crx_file::id_util::GenerateId("LinuxAppsFolder")
 constexpr char kCrostiniFolderId[] = "ddolnhmblagmcagkedkbfejapapdimlk";

@@ -5,7 +5,6 @@
 #include "ash/wm/splitview/split_view_utils.h"
 
 #include "ash/accessibility/accessibility_controller_impl.h"
-#include "ash/display/screen_orientation_controller.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/toast_data.h"
@@ -20,13 +19,15 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
 #include "base/command_line.h"
-#include "ui/aura/window_delegate.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
-#include "ui/wm/core/window_util.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
+#include "ui/wm/core/transient_window_manager.h"
 
 namespace ash {
 
@@ -136,7 +137,55 @@ void ApplyAnimationSettings(
     animator->SchedulePauseForProperties(delay, animated_property);
 }
 
+// Returns BubbleDialogDelegateView if |transient_window| is a bubble dialog.
+views::BubbleDialogDelegateView* AsBubbleDialogDelegate(
+    aura::Window* transient_window) {
+  views::Widget* widget =
+      views::Widget::GetWidgetForNativeWindow(transient_window);
+  if (!widget || !widget->widget_delegate())
+    return nullptr;
+  return widget->widget_delegate()->AsBubbleDialogDelegate();
+}
+
 }  // namespace
+
+WindowTransformAnimationObserver::WindowTransformAnimationObserver(
+    aura::Window* window)
+    : window_(window) {
+  window_->AddObserver(this);
+}
+
+WindowTransformAnimationObserver::~WindowTransformAnimationObserver() {
+  if (window_)
+    window_->RemoveObserver(this);
+}
+
+void WindowTransformAnimationObserver::OnImplicitAnimationsCompleted() {
+  // After window transform animation is done and if the window's transform is
+  // set to identity transform, force to relayout all its transient bubble
+  // dialogs.
+  if (!window_->layer()->GetTargetTransform().IsIdentity()) {
+    delete this;
+    return;
+  }
+
+  for (auto* transient_window :
+       ::wm::TransientWindowManager::GetOrCreate(window_)
+           ->transient_children()) {
+    // For now we only care about bubble dialog type transient children.
+    views::BubbleDialogDelegateView* bubble_delegate_view =
+        AsBubbleDialogDelegate(transient_window);
+    if (bubble_delegate_view)
+      bubble_delegate_view->OnAnchorBoundsChanged();
+  }
+
+  delete this;
+}
+
+void WindowTransformAnimationObserver::OnWindowDestroying(
+    aura::Window* window) {
+  delete this;
+}
 
 void DoSplitviewOpacityAnimation(ui::Layer* layer,
                                  SplitviewAnimationType type) {
@@ -185,9 +234,11 @@ void DoSplitviewOpacityAnimation(ui::Layer* layer,
   layer->SetOpacity(target_opacity);
 }
 
-void DoSplitviewTransformAnimation(ui::Layer* layer,
-                                   SplitviewAnimationType type,
-                                   const gfx::Transform& target_transform) {
+void DoSplitviewTransformAnimation(
+    ui::Layer* layer,
+    SplitviewAnimationType type,
+    const gfx::Transform& target_transform,
+    std::unique_ptr<ui::ImplicitAnimationObserver> animation_observer) {
   if (layer->GetTargetTransform() == target_transform)
     return;
 
@@ -217,6 +268,8 @@ void DoSplitviewTransformAnimation(ui::Layer* layer,
 
   ui::LayerAnimator* animator = layer->GetAnimator();
   ui::ScopedLayerAnimationSettings settings(animator);
+  if (animation_observer.get())
+    settings.AddObserver(animation_observer.release());
   ApplyAnimationSettings(&settings, animator,
                          ui::LayerAnimationElement::TRANSFORM, duration, tween,
                          preemption_strategy, delay);
@@ -249,7 +302,7 @@ void MaybeRestoreSplitView(bool refresh_snapped_windows) {
         Shell::Get()->mru_window_tracker()->BuildWindowListIgnoreModal(
             kActiveDesk);
     for (aura::Window* window : windows) {
-      if (!CanSnapInSplitview(window)) {
+      if (!split_view_controller->CanSnapWindow(window)) {
         // Since we are in tablet mode, and this window is not snappable, we
         // should maximize it.
         WindowState::Get(window)->Maximize();
@@ -321,32 +374,6 @@ bool ShouldAllowSplitView() {
   return true;
 }
 
-bool CanSnapInSplitview(aura::Window* window) {
-  if (!ShouldAllowSplitView())
-    return false;
-
-  if (!wm::CanActivateWindow(window))
-    return false;
-
-  if (!WindowState::Get(window)->CanSnap())
-    return false;
-
-  // Return true if |window|'s minimum size, if any, fits into the left or top
-  // with the default divider position. (If the work area length is odd, then
-  // the right or bottom will be one pixel larger.)
-  if (!window->delegate())
-    return true;
-  const gfx::Size min_size = window->delegate()->GetMinimumSize();
-  const gfx::Rect work_area =
-      screen_util::GetDisplayWorkAreaBoundsInScreenForActiveDeskContainer(
-          window);
-  return IsCurrentScreenOrientationLandscape()
-             ? min_size.width() <=
-                   work_area.width() / 2 - kSplitviewDividerShortSideLength / 2
-             : min_size.height() <= work_area.height() / 2 -
-                                        kSplitviewDividerShortSideLength / 2;
-}
-
 void ShowAppCannotSnapToast() {
   ash::Shell::Get()->toast_manager()->Show(ash::ToastData(
       kAppCannotSnapToastId,
@@ -354,38 +381,35 @@ void ShowAppCannotSnapToast() {
       kAppCannotSnapToastDurationMs, base::Optional<base::string16>()));
 }
 
-bool IsPhysicalLeftOrTop(SplitViewController::SnapPosition position) {
-  DCHECK_NE(SplitViewController::NONE, position);
-  return position == (IsCurrentScreenOrientationPrimary()
-                          ? SplitViewController::LEFT
-                          : SplitViewController::RIGHT);
-}
-
 SplitViewController::SnapPosition GetSnapPosition(
+    aura::Window* root_window,
     aura::Window* window,
-    const gfx::Point& location_in_screen,
-    const gfx::Rect& work_area) {
-  if (!ShouldAllowSplitView() || !CanSnapInSplitview(window))
+    const gfx::Point& location_in_screen) {
+  if (!ShouldAllowSplitView() ||
+      !SplitViewController::Get(root_window)->CanSnapWindow(window)) {
     return SplitViewController::NONE;
+  }
 
-  const bool is_landscape = IsCurrentScreenOrientationLandscape();
-  const bool is_primary = IsCurrentScreenOrientationPrimary();
+  const bool horizontal = SplitViewController::IsLayoutHorizontal();
+  const bool right_side_up = SplitViewController::IsLayoutRightSideUp();
 
   // Check to see if the current event location |location_in_screen|is within
   // the drag indicators bounds.
-  gfx::Rect area(work_area);
-  if (is_landscape) {
+  gfx::Rect area(
+      screen_util::GetDisplayWorkAreaBoundsInScreenForActiveDeskContainer(
+          root_window));
+  if (horizontal) {
     const int screen_edge_inset_for_drag =
         area.width() * kHighlightScreenPrimaryAxisRatio +
         kHighlightScreenEdgePaddingDp;
     area.Inset(screen_edge_inset_for_drag, 0);
     if (location_in_screen.x() <= area.x()) {
-      return is_primary ? SplitViewController::LEFT
-                        : SplitViewController::RIGHT;
+      return right_side_up ? SplitViewController::LEFT
+                           : SplitViewController::RIGHT;
     }
     if (location_in_screen.x() >= area.right() - 1) {
-      return is_primary ? SplitViewController::RIGHT
-                        : SplitViewController::LEFT;
+      return right_side_up ? SplitViewController::RIGHT
+                           : SplitViewController::LEFT;
     }
     return SplitViewController::NONE;
   }
@@ -395,9 +419,11 @@ SplitViewController::SnapPosition GetSnapPosition(
       kHighlightScreenEdgePaddingDp;
   area.Inset(0, screen_edge_inset_for_drag);
   if (location_in_screen.y() <= area.y())
-    return is_primary ? SplitViewController::LEFT : SplitViewController::RIGHT;
+    return right_side_up ? SplitViewController::LEFT
+                         : SplitViewController::RIGHT;
   if (location_in_screen.y() >= area.bottom() - 1)
-    return is_primary ? SplitViewController::RIGHT : SplitViewController::LEFT;
+    return right_side_up ? SplitViewController::RIGHT
+                         : SplitViewController::LEFT;
   return SplitViewController::NONE;
 }
 

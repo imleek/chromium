@@ -1091,7 +1091,7 @@ class PortTest(LoggingTestCase):
     def test_default_results_directory(self):
         port = self.make_port(options=optparse.Values({'target': 'Default', 'configuration': 'Release'}))
         # By default the results directory is in the build directory: out/<target>.
-        self.assertEqual(port.default_results_directory(), '/mock-checkout/out/Default/layout-test-results')
+        self.assertEqual(port.default_results_directory(), '/mock-checkout/out/Default')
 
     def test_results_directory(self):
         port = self.make_port(options=optparse.Values({'results_directory': 'some-directory/results'}))
@@ -1163,6 +1163,16 @@ class PortTest(LoggingTestCase):
             Port.split_webdriver_test_name("tests/accept_alert/accept.py"),
             ("tests/accept_alert/accept.py", None))
 
+    def test_split_webdriver_subtest_pytest_name(self):
+        self.assertEqual(
+            Port.split_webdriver_subtest_pytest_name(
+                "tests/accept_alert/accept.py::foo"),
+            ("tests/accept_alert/accept.py", "foo"))
+        self.assertEqual(
+            Port.split_webdriver_subtest_pytest_name(
+                "tests/accept_alert/accept.py"),
+            ("tests/accept_alert/accept.py", None))
+
     def test_add_webdriver_subtest_suffix(self):
         self.assertEqual(
             Port.add_webdriver_subtest_suffix("abd", "bar"), "abd>>bar")
@@ -1170,11 +1180,10 @@ class PortTest(LoggingTestCase):
             Port.add_webdriver_subtest_suffix("abd", None), "abd")
 
     def test_add_webdriver_subtest_pytest_suffix(self):
-        port = self.make_port()
         wb_test_name = "abd"
         sub_test_name = "bar"
 
-        full_webdriver_name = port.add_webdriver_subtest_pytest_suffix(
+        full_webdriver_name = Port.add_webdriver_subtest_pytest_suffix(
             wb_test_name, sub_test_name)
 
         self.assertEqual(full_webdriver_name, "abd::bar")

@@ -39,12 +39,11 @@
 #include "build/build_config.h"
 #include "cc/layers/picture_layer.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_menu_source_type.h"
 #include "third_party/blink/public/common/media/media_player_action.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/common/plugin/plugin_action.h"
-#include "third_party/blink/public/platform/web_float_point.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/platform/web_menu_source_type.h"
 #include "third_party/blink/public/platform/web_scroll_into_view_params.h"
 #include "third_party/blink/public/platform/web_text_autosizer_page_info.h"
 #include "third_party/blink/public/platform/web_text_input_info.h"
@@ -301,7 +300,6 @@ WebViewImpl::WebViewImpl(WebViewClient* client,
 
   AllInstances().insert(this);
 
-  page_importance_signals_.SetObserver(client);
   resize_viewport_anchor_ =
       MakeGarbageCollected<ResizeViewportAnchor>(*AsView().page);
 }
@@ -354,8 +352,8 @@ void WebViewImpl::HandleMouseDown(LocalFrame& main_frame,
   // If the hit node is a plugin but a scrollbar is over it don't start mouse
   // capture because it will interfere with the scrollbar receiving events.
   if (event.button == WebMouseEvent::Button::kLeft) {
-    HitTestLocation location(
-        main_frame.View()->ConvertFromRootFrame(event.PositionInWidget()));
+    HitTestLocation location(main_frame.View()->ConvertFromRootFrame(
+        FloatPoint(event.PositionInWidget())));
     HitTestResult result(
         main_frame.GetEventHandler().HitTestResultAtLocation(location));
     result.SetToShadowHostIfInRestrictedShadowRoot();
@@ -364,7 +362,7 @@ void WebViewImpl::HandleMouseDown(LocalFrame& main_frame,
     if (!result.GetScrollbar() && hit_node && hit_node->GetLayoutObject() &&
         hit_node->GetLayoutObject()->IsEmbeddedObject() && html_element &&
         html_element->IsPluginElement()) {
-      mouse_capture_element_ = ToHTMLPlugInElement(hit_node);
+      mouse_capture_element_ = To<HTMLPlugInElement>(hit_node);
       main_frame.Client()->SetMouseCapture(true);
       TRACE_EVENT_ASYNC_BEGIN0("input", "capturing mouse", this);
     }
@@ -411,7 +409,7 @@ void WebViewImpl::MouseContextMenu(const WebMouseEvent& event) {
       TransformWebMouseEvent(MainFrameImpl()->GetFrameView(), event);
   transformed_event.menu_source_type = kMenuSourceMouse;
   PhysicalOffset position_in_root_frame = PhysicalOffset::FromFloatPointRound(
-      transformed_event.PositionInRootFrame());
+      FloatPoint(transformed_event.PositionInRootFrame()));
 
   // Find the right target frame. See issue 1186900.
   HitTestResult result = HitTestResultForRootFramePos(position_in_root_frame);
@@ -1328,9 +1326,7 @@ void WebViewImpl::DidUpdateBrowserControls() {
   DCHECK(client);
   client->SetBrowserControlsShownRatio(GetBrowserControls().TopShownRatio(),
                                        GetBrowserControls().BottomShownRatio());
-  client->SetBrowserControlsHeight(GetBrowserControls().TopHeight(),
-                                   GetBrowserControls().BottomHeight(),
-                                   GetBrowserControls().ShrinkViewport());
+  client->SetBrowserControlsParams(GetBrowserControls().Params());
 
   VisualViewport& visual_viewport = GetPage()->GetVisualViewport();
 
@@ -1351,13 +1347,10 @@ BrowserControls& WebViewImpl::GetBrowserControls() {
   return GetPage()->GetBrowserControls();
 }
 
-void WebViewImpl::ResizeViewWhileAnchored(float top_controls_height,
-                                          float bottom_controls_height,
-                                          bool browser_controls_shrink_layout) {
+void WebViewImpl::ResizeViewWhileAnchored(cc::BrowserControlsParams params) {
   DCHECK(MainFrameImpl());
 
-  GetBrowserControls().SetHeight(top_controls_height, bottom_controls_height,
-                                 browser_controls_shrink_layout);
+  GetBrowserControls().SetParams(params);
 
   {
     // Avoids unnecessary invalidations while various bits of state in
@@ -1386,13 +1379,21 @@ void WebViewImpl::ResizeWithBrowserControls(
     float top_controls_height,
     float bottom_controls_height,
     bool browser_controls_shrink_layout) {
+  ResizeWithBrowserControls(
+      new_size, {top_controls_height, GetBrowserControls().TopMinHeight(),
+                 bottom_controls_height, GetBrowserControls().BottomMinHeight(),
+                 GetBrowserControls().AnimateHeightChanges(),
+                 browser_controls_shrink_layout});
+}
+
+void WebViewImpl::ResizeWithBrowserControls(
+    const WebSize& new_size,
+    cc::BrowserControlsParams browser_controls_params) {
   if (should_auto_resize_)
     return;
 
   if (size_ == new_size &&
-      GetBrowserControls().TopHeight() == top_controls_height &&
-      GetBrowserControls().BottomHeight() == bottom_controls_height &&
-      GetBrowserControls().ShrinkViewport() == browser_controls_shrink_layout)
+      GetBrowserControls().Params() == browser_controls_params)
     return;
 
   if (GetPage()->MainFrame() && !GetPage()->MainFrame()->IsLocalFrame()) {
@@ -1403,9 +1404,7 @@ void WebViewImpl::ResizeWithBrowserControls(
     size_ = new_size;
     GetPageScaleConstraintsSet().DidChangeInitialContainingBlockSize(size_);
     GetPage()->GetVisualViewport().SetSize(size_);
-    GetPage()->GetBrowserControls().SetHeight(top_controls_height,
-                                              bottom_controls_height,
-                                              browser_controls_shrink_layout);
+    GetPage()->GetBrowserControls().SetParams(browser_controls_params);
     return;
   }
 
@@ -1430,12 +1429,10 @@ void WebViewImpl::ResizeWithBrowserControls(
     RotationViewportAnchor anchor(*view, visual_viewport,
                                   viewport_anchor_coords,
                                   GetPageScaleConstraintsSet());
-    ResizeViewWhileAnchored(top_controls_height, bottom_controls_height,
-                            browser_controls_shrink_layout);
+    ResizeViewWhileAnchored(browser_controls_params);
   } else {
     ResizeViewportAnchor::ResizeScope resize_scope(*resize_viewport_anchor_);
-    ResizeViewWhileAnchored(top_controls_height, bottom_controls_height,
-                            browser_controls_shrink_layout);
+    ResizeViewWhileAnchored(browser_controls_params);
   }
   SendResizeEventForMainFrame();
 }
@@ -2076,15 +2073,6 @@ void WebViewImpl::SetFocusedFrame(WebFrame* frame) {
   core_frame->GetPage()->GetFocusController().SetFocusedFrame(core_frame);
 }
 
-void WebViewImpl::FocusDocumentView(WebFrame* frame) {
-  // This is currently only used when replicating focus changes for
-  // cross-process frames, and |notifyEmbedder| is disabled to avoid sending
-  // duplicate frameFocused updates from FocusController to the browser
-  // process, which already knows the latest focused frame.
-  GetPage()->GetFocusController().FocusDocumentView(
-      WebFrame::ToCoreFrame(*frame), false /* notifyEmbedder */);
-}
-
 void WebViewImpl::SetInitialFocus(bool reverse) {
   if (!AsView().page)
     return;
@@ -2095,32 +2083,6 @@ void WebViewImpl::SetInitialFocus(bool reverse) {
   }
   GetPage()->GetFocusController().SetInitialFocus(
       reverse ? kWebFocusTypeBackward : kWebFocusTypeForward);
-}
-
-void WebViewImpl::ClearFocusedElement() {
-  Frame* frame = FocusedCoreFrame();
-
-  auto* local_frame = DynamicTo<LocalFrame>(frame);
-  if (!local_frame)
-    return;
-
-  Document* document = local_frame->GetDocument();
-  if (!document)
-    return;
-
-  Element* old_focused_element = document->FocusedElement();
-  document->ClearFocusedElement();
-  if (!old_focused_element)
-    return;
-
-  // If a text field has focus, we need to make sure the selection controller
-  // knows to remove selection from it. Otherwise, the text field is still
-  // processing keyboard events even though focus has been moved to the page and
-  // keystrokes get eaten as a result.
-  document->UpdateStyleAndLayoutTree();
-  if (HasEditableStyle(*old_focused_element) ||
-      old_focused_element->IsTextControl())
-    local_frame->Selection().Clear();
 }
 
 // TODO(dglazkov): Remove and replace with Node:hasEditableStyle.
@@ -2195,7 +2157,7 @@ bool WebViewImpl::ShouldZoomToLegibleScale(const Element& element) {
     // back out.
     TouchAction action =
         touch_action_util::ComputeEffectiveTouchAction(element);
-    if (!(action & TouchAction::kTouchActionPinchZoom))
+    if (!(static_cast<int>(action) & static_cast<int>(TouchAction::kPinchZoom)))
       zoom_into_legible_scale = false;
   }
 
@@ -2360,8 +2322,8 @@ void WebViewImpl::PropagateZoomFactorToLocalFrameRoots(Frame* frame,
   auto* local_frame = DynamicTo<LocalFrame>(frame);
   if (local_frame && local_frame->IsLocalRoot()) {
     if (Document* document = local_frame->GetDocument()) {
-      if (!document->IsPluginDocument() ||
-          !ToPluginDocument(document)->GetPluginView()) {
+      auto* plugin_document = DynamicTo<PluginDocument>(document);
+      if (!plugin_document || !plugin_document->GetPluginView()) {
         local_frame->SetPageZoomFactor(zoom_factor);
       }
     }
@@ -2428,19 +2390,19 @@ float WebViewImpl::ClampPageScaleFactorToLimits(float scale_factor) const {
       scale_factor);
 }
 
-void WebViewImpl::SetVisualViewportOffset(const WebFloatPoint& offset) {
+void WebViewImpl::SetVisualViewportOffset(const gfx::PointF& offset) {
   DCHECK(GetPage());
-  GetPage()->GetVisualViewport().SetLocation(offset);
+  GetPage()->GetVisualViewport().SetLocation(FloatPoint(offset));
 }
 
-WebFloatPoint WebViewImpl::VisualViewportOffset() const {
+gfx::PointF WebViewImpl::VisualViewportOffset() const {
   DCHECK(GetPage());
   return GetPage()->GetVisualViewport().VisibleRect().Location();
 }
 
-WebFloatSize WebViewImpl::VisualViewportSize() const {
+gfx::SizeF WebViewImpl::VisualViewportSize() const {
   DCHECK(GetPage());
-  return GetPage()->GetVisualViewport().VisibleRect().Size();
+  return gfx::SizeF(GetPage()->GetVisualViewport().VisibleRect().Size());
 }
 
 void WebViewImpl::SetPageScaleFactorAndLocation(float scale_factor,
@@ -2755,7 +2717,7 @@ void WebViewImpl::PerformPluginAction(const PluginAction& action,
   HitTestResult result =
       HitTestResultForRootFramePos(PhysicalOffset(IntPoint(location)));
   Node* node = result.InnerNode();
-  if (!IsHTMLObjectElement(*node) && !IsHTMLEmbedElement(*node))
+  if (!IsA<HTMLObjectElement>(*node) && !IsA<HTMLEmbedElement>(*node))
     return;
 
   LayoutObject* object = node->GetLayoutObject();
@@ -3015,10 +2977,8 @@ void WebViewImpl::DidCommitLoad(bool is_new_navigation,
     should_dispatch_first_layout_after_finished_parsing_ = true;
     should_dispatch_first_layout_after_finished_loading_ = true;
 
-    if (is_new_navigation) {
+    if (is_new_navigation)
       GetPageScaleConstraintsSet().SetNeedsReset(true);
-      page_importance_signals_.OnCommitLoad();
-    }
   }
 
   // Give the visual viewport's scroll layer its initial size.
@@ -3140,10 +3100,6 @@ void WebViewImpl::SetMainFrameOverlayColor(SkColor color) {
   DCHECK(AsView().page->MainFrame());
   if (auto* local_frame = DynamicTo<LocalFrame>(AsView().page->MainFrame()))
     local_frame->SetMainFrameColorOverlay(color);
-}
-
-WebPageImportanceSignals* WebViewImpl::PageImportanceSignals() {
-  return &page_importance_signals_;
 }
 
 Element* WebViewImpl::FocusedElement() const {
@@ -3309,7 +3265,7 @@ Node* WebViewImpl::FindNodeFromScrollableCompositorElementId(
   if (!GetPage())
     return nullptr;
 
-  if (element_id == GetPage()->GetVisualViewport().GetCompositorElementId()) {
+  if (element_id == GetPage()->GetVisualViewport().GetScrollElementId()) {
     // Return the Document in this case since the window.visualViewport DOM
     // object is not a node.
     if (MainFrameImpl())

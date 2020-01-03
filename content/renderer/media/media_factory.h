@@ -30,13 +30,13 @@
 #endif
 
 namespace blink {
+class BrowserInterfaceBrokerProxy;
 class WebContentDecryptionModule;
 class WebEncryptedMediaClient;
 class WebLocalFrame;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
 class WebMediaPlayerEncryptedMediaClient;
-class WebMediaStreamRendererFactory;
 }
 
 namespace cc {
@@ -51,13 +51,6 @@ class MediaObserver;
 class RemotePlaybackClientWrapper;
 class RendererWebMediaPlayerDelegate;
 class WebEncryptedMediaClientImpl;
-}
-
-namespace service_manager {
-class InterfaceProvider;
-namespace mojom {
-class InterfaceProvider;
-}
 }
 
 namespace content {
@@ -140,11 +133,6 @@ class MediaFactory {
   // |media_player_delegate_| is NULL, one is created.
   media::RendererWebMediaPlayerDelegate* GetWebMediaPlayerDelegate();
 
-  // Creates a blink::WebMediaStreamRendererFactory used for creating audio and
-  // video renderers for blink::WebMediaPlayerMS.
-  std::unique_ptr<blink::WebMediaStreamRendererFactory>
-  CreateMediaStreamRendererFactory();
-
   media::DecoderFactory* GetDecoderFactory();
 
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
@@ -169,10 +157,10 @@ class MediaFactory {
   // Injected callback for requesting overlay routing tokens.
   media::RequestRoutingTokenCallback request_routing_token_cb_;
 
-  // Handy pointer to RenderFrame's remote interfaces. Null until SetupMojo().
-  // Lifetime matches that of the owning |render_frame_|. Will always be valid
-  // once assigned.
-  service_manager::InterfaceProvider* remote_interfaces_ = nullptr;
+  // Handy pointer to RenderFrame's browser interface broker. Null until
+  // SetupMojo(). Lifetime matches that of the owning |render_frame_|. Will
+  // always be valid once assigned.
+  blink::BrowserInterfaceBrokerProxy* interface_broker_ = nullptr;
 
   // Manages play, pause notifications for WebMediaPlayer implementations; its
   // lifetime is tied to the RenderFrame via the RenderFrameObserver interface.

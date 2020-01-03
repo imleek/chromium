@@ -51,7 +51,7 @@ ScriptPromise NativeFileSystemWriter::write(
   } else if (data.IsArrayBufferView()) {
     DOMArrayBufferView* array_buffer_view = data.GetAsArrayBufferView().View();
     blob_data->AppendBytes(array_buffer_view->BaseAddress(),
-                           array_buffer_view->byteLength());
+                           array_buffer_view->byteLengthAsSizeT());
   } else if (data.IsBlob()) {
     blob = data.GetAsBlob();
   } else if (data.IsUSVString()) {
@@ -62,7 +62,8 @@ ScriptPromise NativeFileSystemWriter::write(
 
   if (!blob) {
     uint64_t size = blob_data->length();
-    blob = Blob::Create(BlobDataHandle::Create(std::move(blob_data), size));
+    blob = MakeGarbageCollected<Blob>(
+        BlobDataHandle::Create(std::move(blob_data), size));
   }
 
   return WriteBlob(script_state, position, blob);

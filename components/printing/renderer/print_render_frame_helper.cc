@@ -1141,10 +1141,6 @@ void PrintRenderFrameHelper::DidFinishLoad() {
 }
 
 void PrintRenderFrameHelper::ScriptedPrint(bool user_initiated) {
-  // Allow Prerendering to cancel this print request if necessary.
-  if (delegate_->CancelPrerender(render_frame()))
-    return;
-
   blink::WebLocalFrame* web_frame = render_frame()->GetWebFrame();
   if (!IsScriptInitiatedPrintAllowed(web_frame, user_initiated))
     return;
@@ -1242,7 +1238,7 @@ void PrintRenderFrameHelper::PrintForSystemDialog() {
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 void PrintRenderFrameHelper::InitiatePrintPreview(
-    mojom::PrintRendererAssociatedPtrInfo print_renderer,
+    mojo::PendingAssociatedRemote<mojom::PrintRenderer> print_renderer,
     bool has_selection) {
   ScopedIPC scoped_ipc(weak_ptr_factory_.GetWeakPtr());
   if (ipc_nesting_level_ > 1)
@@ -1568,7 +1564,7 @@ bool PrintRenderFrameHelper::FinalizePrintReadyDocument() {
 
   preview_params.document_cookie = print_pages_params_->params.document_cookie;
   preview_params.expected_pages_count =
-      print_preview_context_.total_page_count();
+      print_preview_context_.pages_rendered_count();
 
   PrintHostMsg_PreviewIds ids(print_pages_params_->params.preview_request_id,
                               print_pages_params_->params.preview_ui_id);
@@ -2645,6 +2641,11 @@ const std::vector<int>&
 PrintRenderFrameHelper::PrintPreviewContext::pages_to_render() const {
   DCHECK_EQ(RENDERING, state_);
   return pages_to_render_;
+}
+
+int PrintRenderFrameHelper::PrintPreviewContext::pages_rendered_count() const {
+  DCHECK_EQ(DONE, state_);
+  return pages_to_render_.size();
 }
 
 MetafileSkia* PrintRenderFrameHelper::PrintPreviewContext::metafile() {

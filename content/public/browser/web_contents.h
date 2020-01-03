@@ -84,8 +84,8 @@ class RenderWidgetHostView;
 class WebContentsDelegate;
 struct CustomContextMenuContext;
 struct DropData;
+struct FaviconURL;
 struct MHTMLGenerationParams;
-struct PageImportanceSignals;
 
 // WebContents is the core class in content/. A WebContents renders web content
 // (usually HTML) in a rectangular area.
@@ -264,7 +264,10 @@ class WebContents : public PageNavigator,
   // nullptr will be returned instead.
   // The callback should only run on the UI thread and it should always be
   // non-null.
-  using Getter = base::Callback<WebContents*(void)>;
+  using Getter = base::RepeatingCallback<WebContents*(void)>;
+  // Use this variant for instances that will only run the callback a single
+  // time.
+  using OnceGetter = base::OnceCallback<WebContents*(void)>;
 
   // Sets delegate for platform specific screen orientation functionality.
   CONTENT_EXPORT static void SetScreenOrientationDelegate(
@@ -422,8 +425,6 @@ class WebContents : public PageNavigator,
   // starting or stopping.
   virtual void RecordAccessibilityEvents(AccessibilityEventCallback callback,
                                          bool start) = 0;
-
-  virtual const PageImportanceSignals& GetPageImportanceSignals() = 0;
 
   // Tab navigation state ------------------------------------------------------
 
@@ -607,6 +608,11 @@ class WebContents : public PageNavigator,
       std::unique_ptr<WebContents> inner_web_contents,
       RenderFrameHost* render_frame_host,
       bool is_full_page) = 0;
+
+  // Returns whether this WebContents is an inner WebContents for a guest.
+  // Important: please avoid using this in new callsites, and use
+  // GetOuterWebContents instead.
+  virtual bool IsInnerWebContentsForGuest() = 0;
 
   // Returns the outer WebContents frame, the same frame that this WebContents
   // was attached in AttachToOuterWebContentsFrame().
@@ -1030,6 +1036,12 @@ class WebContents : public PageNavigator,
 
   // The source ID of the last committed navigation.
   virtual ukm::SourceId GetLastCommittedSourceId() = 0;
+
+  // Returns the raw list of favicon candidates as reported to observers via
+  // WebContentsObserver::DidUpdateFaviconURL() since the last navigation start.
+  // Consider using FaviconDriver in components/favicon if possible for more
+  // reliable favicon-related state.
+  virtual std::vector<FaviconURL> GetFaviconURLs() = 0;
 
  private:
   // This interface should only be implemented inside content.

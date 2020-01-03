@@ -43,7 +43,9 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
 #include "url/url_util.h"
 
@@ -1052,10 +1054,10 @@ void OmniboxEditModel::ClearKeyword() {
 
     view_->OnAfterPossibleChange(false);
   }
+  view_->AnnounceText(l10n_util::GetStringUTF16(IDS_ACC_EXIT_SEARCH_MODE));
 }
 
-void OmniboxEditModel::OnSetFocus(bool control_down,
-                                  bool suppress_on_focus_suggestions) {
+void OmniboxEditModel::OnSetFocus(bool control_down) {
   last_omnibox_focus_ = base::TimeTicks::Now();
   user_input_since_focus_ = false;
 
@@ -1068,9 +1070,6 @@ void OmniboxEditModel::OnSetFocus(bool control_down,
   // trigger ctrl-enter behavior unless it is released and re-pressed. For
   // example, if the user presses ctrl-l to focus the omnibox.
   control_key_state_ = control_down ? DOWN_AND_CONSUMED : UP;
-
-  if (!suppress_on_focus_suggestions)
-    ShowOnFocusSuggestionsIfAutocompleteIdle();
 
   if (user_input_in_progress_ || !in_revert_)
     client_->OnInputStateChanged();
@@ -1195,8 +1194,7 @@ void OmniboxEditModel::OnUpOrDownKeyPressed(int count) {
     // (user_input_in_progress_ is false) unless the first result is a
     // verbatim match of the omnibox input (on-focus query refinements on SERP).
     const size_t line_no = GetNewSelectedLine(count);
-    if (result().default_match() != result().end() && has_temporary_text_ &&
-        line_no == 0 &&
+    if (result().default_match() && has_temporary_text_ && line_no == 0 &&
         (user_input_in_progress_ ||
          result().default_match()->IsVerbatimType())) {
       RevertTemporaryTextAndPopup();
@@ -1510,7 +1508,7 @@ void OmniboxEditModel::GetInfoForCurrentText(AutocompleteMatch* match,
   // match or selected match, if there is one.
   bool found_match_for_text = false;
   if (query_in_progress() || PopupIsOpen()) {
-    if (query_in_progress() && result().default_match() != result().end()) {
+    if (query_in_progress() && result().default_match()) {
       // The user cannot have manually selected a match, or the query would have
       // stopped. So the default match must be the desired selection.
       *match = *result().default_match();
@@ -1554,7 +1552,7 @@ void OmniboxEditModel::RevertTemporaryTextAndPopup() {
   //  2. If there's no default match at all.
   //
   // The original selection will be restored in OnRevertTemporaryText() below.
-  if (!user_input_in_progress_ || result().default_match() == result().end()) {
+  if (!user_input_in_progress_ || !result().default_match()) {
     view_->SetWindowTextAndCaretPos(input_.text(), /*caret_pos=*/0,
                                     /*update_popup=*/false,
                                     /*notify_text_changed=*/true);

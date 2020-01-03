@@ -33,7 +33,10 @@ source_set("common") {
   # In addition, targets outside of the content component (shell and tests)
   # must not link to this because it will duplicate the code in the component
   # build.
-  visibility = [ "//content/*" ]
+  visibility = [
+    "//content/*",
+    "//tools/ipc_fuzzer/message_replay:ipc_fuzzer_replay",
+  ]
 
   sources = [
     "accessibility_messages.h",
@@ -57,7 +60,6 @@ source_set("common") {
     "background_fetch/background_fetch_types.h",
     "browser_plugin/browser_plugin_constants.cc",
     "browser_plugin/browser_plugin_constants.h",
-    "browser_plugin/browser_plugin_messages.h",
     "child_process_host_impl.cc",
     "child_process_host_impl.h",
     "common_param_traits.cc",
@@ -143,8 +145,6 @@ source_set("common") {
     "input/input_event_mojom_traits.h",
     "input/input_event_stream_validator.cc",
     "input/input_event_stream_validator.h",
-    "input/input_param_traits.cc",
-    "input/input_param_traits.h",
     "input/sync_compositor_messages.cc",
     "input/sync_compositor_messages.h",
     "input/synthetic_gesture_params.cc",
@@ -198,8 +198,6 @@ source_set("common") {
     "pepper_renderer_instance_data.cc",
     "pepper_renderer_instance_data.h",
     "process_type.cc",
-    "render_widget_surface_properties.cc",
-    "render_widget_surface_properties.h",
     "resource_messages.h",
     "resource_timing_info.cc",
     "resource_timing_info.h",
@@ -256,6 +254,7 @@ source_set("common") {
     "//third_party/blink/public:blink_headers",
     "//third_party/blink/public/common",
     "//ui/accessibility",
+    "//ui/events/ipc",
   ]
   deps = [
     ":buildflags",
@@ -505,6 +504,7 @@ mojom("mojo_bindings") {
     "//components/tracing/common:interfaces",
     "//content/public/common:interfaces",
     "//content/public/common:resource_type_bindings",
+    "//ipc:mojom",
     "//ipc:mojom_constants",
     "//media/capture/mojom:video_capture",
     "//media/mojo/mojom",

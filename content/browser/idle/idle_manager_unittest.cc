@@ -18,7 +18,6 @@
 #include "content/public/test/mock_permission_manager.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_context.h"
-#include "content/public/test/test_service_manager_context.h"
 #include "content/test/test_render_frame_host.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -29,7 +28,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/idle/idle_manager.mojom.h"
 
-using blink::mojom::IdleManagerPtr;
 using blink::mojom::IdleMonitorPtr;
 using ::testing::_;
 using ::testing::InSequence;

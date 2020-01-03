@@ -15,6 +15,7 @@
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/payments/payments_service_url.h"
+#include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
@@ -62,6 +63,14 @@ ContentAutofillDriver::~ContentAutofillDriver() {}
 // static
 ContentAutofillDriver* ContentAutofillDriver::GetForRenderFrameHost(
     content::RenderFrameHost* render_frame_host) {
+  // With back-forward cache, the page stays alive and its mojo connections are
+  // not closed. The page would be frozen and would eventually stop doing work,
+  // but the messages can still arrive when the frame is not active. Given that
+  // autofill logic can show popups, it's problematic - prevent pages using
+  // autofill from entering back-forward cache for now to avoid it.
+  content::BackForwardCache::DisableForRenderFrameHost(
+      render_frame_host, "autofill::ContentAutofillDriver");
+
   ContentAutofillDriverFactory* factory =
       ContentAutofillDriverFactory::FromWebContents(
           content::WebContents::FromRenderFrameHost(render_frame_host));
@@ -130,6 +139,11 @@ void ContentAutofillDriver::PropagateAutofillPredictions(
     const std::vector<FormStructure*>& forms) {
   autofill_manager_->client()->PropagateAutofillPredictions(render_frame_host_,
                                                             forms);
+}
+
+void ContentAutofillDriver::HandleParsedForms(
+    const std::vector<FormStructure*>& forms) {
+  // No op.
 }
 
 void ContentAutofillDriver::SendAutofillTypePredictionsToRenderer(
@@ -203,11 +217,7 @@ gfx::RectF ContentAutofillDriver::TransformBoundingBoxToViewportCoordinates(
 }
 
 net::NetworkIsolationKey ContentAutofillDriver::NetworkIsolationKey() {
-  content::RenderFrameHost* top_frame_host = render_frame_host_;
-  while (top_frame_host->GetParent())
-    top_frame_host = top_frame_host->GetParent();
-  return net::NetworkIsolationKey(top_frame_host->GetLastCommittedOrigin(),
-                                  render_frame_host_->GetLastCommittedOrigin());
+  return render_frame_host_->GetNetworkIsolationKey();
 }
 
 void ContentAutofillDriver::FormsSeen(const std::vector<FormData>& forms,

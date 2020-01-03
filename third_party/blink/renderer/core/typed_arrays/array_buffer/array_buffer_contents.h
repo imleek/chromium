@@ -65,7 +65,8 @@ class CORE_EXPORT ArrayBufferContents {
                       InitializationPolicy);
   ArrayBufferContents(void* data, size_t length, DataDeleter deleter);
   ArrayBufferContents(ArrayBufferContents&&) = default;
-  explicit ArrayBufferContents(std::shared_ptr<v8::BackingStore> backing_store);
+  explicit ArrayBufferContents(std::shared_ptr<v8::BackingStore> backing_store)
+      : backing_store_(std::move(backing_store)) {}
 
   ~ArrayBufferContents();
 
@@ -95,6 +96,10 @@ class CORE_EXPORT ArrayBufferContents {
   }
   bool IsValid() const { return backing_store_ && backing_store_->Data(); }
 
+  std::shared_ptr<v8::BackingStore> BackingStore() const {
+    return backing_store_;
+  }
+
   void Transfer(ArrayBufferContents& other);
   void ShareWith(ArrayBufferContents& other);
   void ShareNonSharedForInternalUse(ArrayBufferContents& other);
@@ -105,9 +110,6 @@ class CORE_EXPORT ArrayBufferContents {
 
  private:
   static void* AllocateMemoryWithFlags(size_t, InitializationPolicy, int);
-
-  static void DefaultAdjustAmountOfExternalAllocatedMemoryFunction(
-      int64_t diff);
 
   std::shared_ptr<v8::BackingStore> backing_store_;
 

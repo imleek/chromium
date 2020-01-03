@@ -299,6 +299,10 @@ id<GREYMatcher> GoogleServicesSettingsButton() {
   return [ChromeMatchersAppInterface googleServicesSettingsButton];
 }
 
+id<GREYMatcher> GoogleServicesSettingsView() {
+  return [ChromeMatchersAppInterface googleServicesSettingsView];
+}
+
 id<GREYMatcher> SettingsMenuBackButton() {
   return [ChromeMatchersAppInterface settingsMenuBackButton];
 }
@@ -345,6 +349,10 @@ id<GREYMatcher> ClearCacheButton() {
 
 id<GREYMatcher> ClearSavedPasswordsButton() {
   return [ChromeMatchersAppInterface clearSavedPasswordsButton];
+}
+
+id<GREYMatcher> ClearAutofillButton() {
+  return [ChromeMatchersAppInterface clearAutofillButton];
 }
 
 id<GREYMatcher> ContentSuggestionCollectionView() {
@@ -485,6 +493,24 @@ id<GREYMatcher> SettingsBottomToolbarDeleteButton() {
 
 id<GREYMatcher> AutofillSuggestionViewMatcher() {
   return [ChromeMatchersAppInterface autofillSuggestionViewMatcher];
+}
+
+id<GREYMatcher> ContentViewSmallerThanScrollView() {
+  return [ChromeMatchersAppInterface contentViewSmallerThanScrollView];
+}
+
+id<GREYMatcher> AutofillSaveCardLocallyInfobar() {
+  return [ChromeMatchersAppInterface autofillSaveCardLocallyInfobar];
+}
+
+id<GREYMatcher> AutofillUploadCardInfobar() {
+  return [ChromeMatchersAppInterface autofillUploadCardInfobar];
+}
+
+id<GREYMatcher> HistoryEntry(const std::string& url, const std::string& title) {
+  return [ChromeMatchersAppInterface
+      historyEntryForURL:base::SysUTF8ToNSString(url)
+                   title:base::SysUTF8ToNSString(title)];
 }
 
 #pragma mark - Manual Fallback

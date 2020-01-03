@@ -4,10 +4,14 @@
 
 import './strings.m.js';
 import './tab.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/icons.m.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {addWebUIListener} from 'chrome://resources/js/cr.m.js';
+import {FocusOutlineManager} from 'chrome://resources/js/cr/ui/focus_outline_manager.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {isRTL} from 'chrome://resources/js/util.m.js';
 
 import {CustomElement} from './custom_element.js';
 import {TabElement} from './tab.js';
@@ -22,6 +26,24 @@ import {TabData, TabsApiProxy} from './tabs_api_proxy.js';
  * @const {number}
  */
 const SCROLL_PADDING = 32;
+
+/** @type {boolean} */
+let scrollAnimationEnabled = true;
+
+/** @param {boolean} enabled */
+export function setScrollAnimationEnabledForTesting(enabled) {
+  scrollAnimationEnabled = enabled;
+}
+
+/**
+ * @enum {string}
+ */
+const LayoutVariable = {
+  VIEWPORT_WIDTH: '--tabstrip-viewport-width',
+  NEW_TAB_BUTTON_MARGIN: '--tabstrip-new-tab-button-margin',
+  NEW_TAB_BUTTON_WIDTH: '--tabstrip-new-tab-button-width',
+  TAB_WIDTH: '--tabstrip-tab-thumbnail-width',
+};
 
 /**
  * @param {!Element} element
@@ -48,6 +70,13 @@ class TabListElement extends CustomElement {
      */
     this.animationPromises = Promise.resolve();
 
+    /**
+     * The ID of the current animation frame that is in queue to update the
+     * scroll position.
+     * @private {?number}
+     */
+    this.currentScrollUpdateFrame_ = null;
+
     /** @private {!Function} */
     this.documentVisibilityChangeListener_ = () =>
         this.onDocumentVisibilityChange_();
@@ -57,6 +86,9 @@ class TabListElement extends CustomElement {
      * @private {!TabElement|undefined}
      */
     this.draggedItem_;
+
+    /** @private @const {!FocusOutlineManager} */
+    this.focusOutlineManager_ = FocusOutlineManager.forDocument(document);
 
     /**
      * An intersection observer is needed to observe which TabElements are
@@ -71,18 +103,26 @@ class TabListElement extends CustomElement {
             entry.target.tab.id, entry.isIntersecting);
       }
     }, {
+      root: this,
       // The horizontal root margin is set to 100% to also track thumbnails that
       // are one standard finger swipe away.
       rootMargin: '0% 100%',
     });
 
-    /** @private {!Element} */
-    this.pinnedTabsContainerElement_ =
-        /** @type {!Element} */ (
-            this.shadowRoot.querySelector('#pinnedTabsContainer'));
+    /** @private {number|undefined} */
+    this.activatingTabId_;
+
+    /** @private {number|undefined} Timestamp in ms */
+    this.activatingTabIdTimestamp_;
 
     /** @private {!Element} */
-    this.scrollingParent_ = document.documentElement;
+    this.newTabButtonElement_ =
+        /** @type {!Element} */ (
+            this.shadowRoot.querySelector('#newTabButton'));
+
+    /** @private {!Element} */
+    this.pinnedTabsElement_ =
+        /** @type {!Element} */ (this.shadowRoot.querySelector('#pinnedTabs'));
 
     /** @private {!TabStripEmbedderProxy} */
     this.tabStripEmbedderProxy_ = TabStripEmbedderProxy.getInstance();
@@ -91,15 +131,15 @@ class TabListElement extends CustomElement {
     this.tabsApi_ = TabsApiProxy.getInstance();
 
     /** @private {!Element} */
-    this.tabsContainerElement_ =
+    this.unpinnedTabsElement_ =
         /** @type {!Element} */ (
-            this.shadowRoot.querySelector('#tabsContainer'));
+            this.shadowRoot.querySelector('#unpinnedTabs'));
 
     /** @private {!Function} */
     this.windowBlurListener_ = () => this.onWindowBlur_();
 
     /** @private {!Function} */
-    this.windowFocusListener_ = () => this.onWindowFocus_();
+    this.contextMenuListener_ = e => this.onContextMenu_(e);
 
     addWebUIListener(
         'layout-changed', layout => this.applyCSSDictionary_(layout));
@@ -116,19 +156,19 @@ class TabListElement extends CustomElement {
     this.addEventListener(
         'dragover', (e) => this.onDragOver_(/** @type {!DragEvent} */ (e)));
 
+    document.addEventListener('contextmenu', this.contextMenuListener_);
     document.addEventListener(
         'visibilitychange', this.documentVisibilityChangeListener_);
+    addWebUIListener(
+        'received-keyboard-focus', () => this.onReceivedKeyboardFocus_());
     window.addEventListener('blur', this.windowBlurListener_);
-    window.addEventListener('focus', this.windowFocusListener_);
+
+    this.newTabButtonElement_.addEventListener('click', () => {
+      this.tabsApi_.createNewTab();
+    });
 
     if (loadTimeData.getBoolean('showDemoOptions')) {
       this.shadowRoot.querySelector('#demoOptions').style.display = 'block';
-
-      const mruCheckbox = this.shadowRoot.querySelector('#mruCheckbox');
-      mruCheckbox.checked = tabStripOptions.mruEnabled;
-      mruCheckbox.addEventListener('change', () => {
-        tabStripOptions.mruEnabled = mruCheckbox.checked;
-      });
 
       const autoCloseCheckbox =
           this.shadowRoot.querySelector('#autoCloseCheckbox');
@@ -148,6 +188,50 @@ class TabListElement extends CustomElement {
   }
 
   /**
+   * @param {number} scrollBy
+   * @private
+   */
+  animateScrollPosition_(scrollBy) {
+    if (this.currentScrollUpdateFrame_) {
+      cancelAnimationFrame(this.currentScrollUpdateFrame_);
+      this.currentScrollUpdateFrame_ = null;
+    }
+
+    const prevScrollLeft = this.scrollLeft;
+    if (!scrollAnimationEnabled || !this.tabStripEmbedderProxy_.isVisible()) {
+      // Do not animate if tab strip is not visible.
+      this.scrollLeft = prevScrollLeft + scrollBy;
+      return;
+    }
+
+    const duration = 350;
+    let startTime;
+
+    const onAnimationFrame = (currentTime) => {
+      const startScroll = this.scrollLeft;
+      if (!startTime) {
+        startTime = currentTime;
+      }
+
+      const elapsedRatio = Math.min(1, (currentTime - startTime) / duration);
+
+      // The elapsed ratio should be decelerated such that the elapsed time
+      // of the animation gets less and less further apart as time goes on,
+      // giving the effect of an animation that slows down towards the end. When
+      // 0ms has passed, the decelerated ratio should be 0. When the full
+      // duration has passed, the ratio should be 1.
+      const deceleratedRatio =
+          1 - (1 - elapsedRatio) / Math.pow(2, 6 * elapsedRatio);
+
+      this.scrollLeft = prevScrollLeft + (scrollBy * deceleratedRatio);
+
+      this.currentScrollUpdateFrame_ =
+          deceleratedRatio < 1 ? requestAnimationFrame(onAnimationFrame) : null;
+    };
+    this.currentScrollUpdateFrame_ = requestAnimationFrame(onAnimationFrame);
+  }
+
+  /**
    * @param {!Object<string, string>} dictionary
    * @private
    */
@@ -162,9 +246,15 @@ class TabListElement extends CustomElement {
         layout => this.applyCSSDictionary_(layout));
     this.fetchAndUpdateColors_();
 
+    const getTabsStartTimestamp = Date.now();
     this.tabsApi_.getTabs().then(tabs => {
+      this.tabStripEmbedderProxy_.reportTabDataReceivedDuration(
+          tabs.length, Date.now() - getTabsStartTimestamp);
+
+      const createTabsStartTimestamp = Date.now();
       tabs.forEach(tab => this.onTabCreated_(tab));
-      this.moveOrScrollToActiveTab_();
+      this.tabStripEmbedderProxy_.reportTabCreationDuration(
+          tabs.length, Date.now() - createTabsStartTimestamp);
 
       addWebUIListener('tab-created', tab => this.onTabCreated_(tab));
       addWebUIListener(
@@ -179,10 +269,10 @@ class TabListElement extends CustomElement {
   }
 
   disconnectedCallback() {
+    document.removeEventListener('contextmenu', this.contextMenuListener_);
     document.removeEventListener(
         'visibilitychange', this.documentVisibilityChangeListener_);
     window.removeEventListener('blur', this.windowBlurListener_);
-    window.removeEventListener('focus', this.windowFocusListener_);
   }
 
   /**
@@ -193,6 +283,9 @@ class TabListElement extends CustomElement {
   createTabElement_(tab) {
     const tabElement = new TabElement();
     tabElement.tab = tab;
+    tabElement.onTabActivating = (id) => {
+      this.onTabActivating_(id);
+    };
     return tabElement;
   }
 
@@ -222,6 +315,14 @@ class TabListElement extends CustomElement {
   }
 
   /**
+   * @param {!LayoutVariable} variable
+   * @return {number} in pixels
+   */
+  getLayoutVariable_(variable) {
+    return parseInt(this.style.getPropertyValue(variable), 10);
+  }
+
+  /**
    * @param {!TabElement} tabElement
    * @param {number} index
    * @private
@@ -233,15 +334,14 @@ class TabListElement extends CustomElement {
     tabElement.remove();
 
     if (tabElement.tab && tabElement.tab.pinned) {
-      this.pinnedTabsContainerElement_.insertBefore(
-          tabElement, this.pinnedTabsContainerElement_.childNodes[index]);
+      this.pinnedTabsElement_.insertBefore(
+          tabElement, this.pinnedTabsElement_.childNodes[index]);
     } else {
-      // Pinned tabs are in their own container, so the index of non-pinned
+      // Pinned tabs are in their own , so the index of non-pinned
       // tabs need to be offset by the number of pinned tabs
-      const offsetIndex =
-          index - this.pinnedTabsContainerElement_.childElementCount;
-      this.tabsContainerElement_.insertBefore(
-          tabElement, this.tabsContainerElement_.childNodes[offsetIndex]);
+      const offsetIndex = index - this.pinnedTabsElement_.childElementCount;
+      this.unpinnedTabsElement_.insertBefore(
+          tabElement, this.unpinnedTabsElement_.childNodes[offsetIndex]);
     }
 
     if (isInserting) {
@@ -249,28 +349,25 @@ class TabListElement extends CustomElement {
     }
   }
 
-  /** @private */
-  moveOrScrollToActiveTab_() {
-    const activeTab = this.getActiveTab_();
-    if (!activeTab) {
-      return;
-    }
-
-    if (tabStripOptions.mruEnabled &&
-        !this.tabStripEmbedderProxy_.isVisible() && !activeTab.tab.pinned &&
-        this.tabsContainerElement_.firstChild !== activeTab) {
-      this.tabsApi_.moveTab(
-          activeTab.tab.id, this.pinnedTabsContainerElement_.childElementCount);
-    } else {
-      this.scrollToTab_(activeTab);
-    }
+  /**
+   * @param {!Event} event
+   * @private
+   */
+  onContextMenu_(event) {
+    event.preventDefault();
+    this.tabStripEmbedderProxy_.showBackgroundContextMenu(
+        event.clientX, event.clientY);
   }
 
   /** @private */
   onDocumentVisibilityChange_() {
-    this.moveOrScrollToActiveTab_();
-    Array.from(this.tabsContainerElement_.children)
-        .forEach((tabElement) => this.updateThumbnailTrackStatus_(tabElement));
+    if (!this.tabStripEmbedderProxy_.isVisible()) {
+      this.scrollToActiveTab_();
+    }
+
+    this.unpinnedTabsElement_.childNodes.forEach(
+        tabElement => this.updateThumbnailTrackStatus_(
+            /** @type {!TabElement} */ (tabElement)));
   }
 
   /**
@@ -306,7 +403,7 @@ class TabListElement extends CustomElement {
     let dragOverIndex =
         Array.from(dragOverItem.parentNode.children).indexOf(dragOverItem);
     if (!this.draggedItem_.tab.pinned) {
-      dragOverIndex += this.pinnedTabsContainerElement_.childElementCount;
+      dragOverIndex += this.pinnedTabsElement_.childElementCount;
     }
 
     this.tabsApi_.moveTab(this.draggedItem_.tab.id, dragOverIndex);
@@ -322,23 +419,22 @@ class TabListElement extends CustomElement {
       return;
     }
 
-    if (tabStripOptions.mruEnabled && !draggedItem.tab.pinned) {
-      // If MRU is enabled, unpinned tabs should not be draggable.
-      event.preventDefault();
-      return;
-    }
-
-    if (tabStripOptions.mruEnabled) {
-      assert(draggedItem.tab.pinned);
-    }
-
     this.draggedItem_ = /** @type {!TabElement} */ (draggedItem);
     this.draggedItem_.setDragging(true);
     event.dataTransfer.effectAllowed = 'move';
+    const draggedItemRect = this.draggedItem_.getBoundingClientRect();
     event.dataTransfer.setDragImage(
-        this.draggedItem_.getDragImage(),
-        event.pageX - this.draggedItem_.offsetLeft,
-        event.pageY - this.draggedItem_.offsetTop);
+        this.draggedItem_.getDragImage(), event.clientX - draggedItemRect.left,
+        event.clientY - draggedItemRect.top);
+  }
+
+  /** @private */
+  onReceivedKeyboardFocus_() {
+    // FocusOutlineManager relies on the most recent event fired on the
+    // document. When the tab strip first gains keyboard focus, no such event
+    // exists yet, so the outline needs to be explicitly set to visible.
+    this.focusOutlineManager_.visible = true;
+    this.shadowRoot.querySelector('tabstrip-tab').focus();
   }
 
   /**
@@ -346,6 +442,13 @@ class TabListElement extends CustomElement {
    * @private
    */
   onTabActivated_(tabId) {
+    if (this.activatingTabId_ === tabId) {
+      this.tabStripEmbedderProxy_.reportTabActivationDuration(
+          Date.now() - this.activatingTabIdTimestamp_);
+    }
+    this.activatingTabId_ = undefined;
+    this.activatingTabIdTimestamp_ = undefined;
+
     // There may be more than 1 TabElement marked as active if other events
     // have updated a Tab to have an active state. For example, if a
     // tab is created with an already active state, there may be 2 active
@@ -362,8 +465,24 @@ class TabListElement extends CustomElement {
     if (newlyActiveTab) {
       newlyActiveTab.tab = /** @type {!TabData} */ (
           Object.assign({}, newlyActiveTab.tab, {active: true}));
-      this.moveOrScrollToActiveTab_();
+      if (!this.tabStripEmbedderProxy_.isVisible()) {
+        this.scrollToTab_(newlyActiveTab);
+      }
     }
+  }
+
+  /**
+   * @param {number} id The tab ID
+   * @private
+   */
+  onTabActivating_(id) {
+    assert(this.activatingTabId_ === undefined);
+    const activeTab = this.getActiveTab_();
+    if (activeTab && activeTab.tab.id === id) {
+      return;
+    }
+    this.activatingTabId_ = id;
+    this.activatingTabIdTimestamp_ = Date.now();
   }
 
   /**
@@ -372,20 +491,10 @@ class TabListElement extends CustomElement {
    */
   onTabCreated_(tab) {
     const tabElement = this.createTabElement_(tab);
-    if (tabStripOptions.mruEnabled && tab.active && !tab.pinned &&
-        tab.index !== this.pinnedTabsContainerElement_.childElementCount) {
-      // Newly created active tabs should first be moved to the very beginning
-      // of the tab strip to enforce the tab strip's most recently used ordering
-      this.tabsApi_
-          .moveTab(tab.id, this.pinnedTabsContainerElement_.childElementCount)
-          .then(() => {
-            this.insertTabOrMoveTo_(
-                tabElement, this.pinnedTabsContainerElement_.childElementCount);
-            this.addAnimationPromise_(tabElement.slideIn());
-          });
-    } else {
-      this.insertTabOrMoveTo_(tabElement, tab.index);
-      this.addAnimationPromise_(tabElement.slideIn());
+    this.insertTabOrMoveTo_(tabElement, tab.index);
+    this.addAnimationPromise_(tabElement.slideIn());
+    if (tab.active) {
+      this.scrollToTab_(tabElement);
     }
   }
 
@@ -450,7 +559,6 @@ class TabListElement extends CustomElement {
       if (tab.active) {
         this.scrollToTab_(tabElement);
       }
-
       this.updateThumbnailTrackStatus_(tabElement);
     }
   }
@@ -466,8 +574,13 @@ class TabListElement extends CustomElement {
   }
 
   /** @private */
-  onWindowFocus_() {
-    this.shadowRoot.querySelector('tabstrip-tab').focus();
+  scrollToActiveTab_() {
+    const activeTab = this.getActiveTab_();
+    if (!activeTab) {
+      return;
+    }
+
+    this.scrollToTab_(activeTab);
   }
 
   /**
@@ -475,24 +588,46 @@ class TabListElement extends CustomElement {
    * @private
    */
   scrollToTab_(tabElement) {
-    this.animationPromises.then(() => {
-      const screenLeft = this.scrollingParent_.scrollLeft;
-      const screenRight = screenLeft + this.scrollingParent_.offsetWidth;
+    const tabElementWidth = this.getLayoutVariable_(LayoutVariable.TAB_WIDTH);
+    const tabElementRect = tabElement.getBoundingClientRect();
+    // In RTL languages, the TabElement's scale animation scales from right to
+    // left. Therefore, the value of its getBoundingClientRect().left may not be
+    // accurate of its final rendered size because the element may not have
+    // fully scaled to the left yet.
+    const tabElementLeft =
+        isRTL() ? tabElementRect.right - tabElementWidth : tabElementRect.left;
 
-      if (screenLeft > tabElement.offsetLeft) {
-        // If the element's left is to the left of the visible screen, scroll
-        // such that the element's left edge is aligned with the screen's edge
-        this.scrollingParent_.scrollLeft =
-            tabElement.offsetLeft - SCROLL_PADDING;
-      } else if (screenRight < tabElement.offsetLeft + tabElement.offsetWidth) {
-        // If the element's right is to the right of the visible screen, scroll
-        // such that the element's right edge is aligned with the screen's right
-        // edge.
-        this.scrollingParent_.scrollLeft = tabElement.offsetLeft +
-            tabElement.offsetWidth - this.scrollingParent_.offsetWidth +
-            SCROLL_PADDING;
+    const newTabButtonSpace =
+        this.getLayoutVariable_(LayoutVariable.NEW_TAB_BUTTON_WIDTH) +
+        this.getLayoutVariable_(LayoutVariable.NEW_TAB_BUTTON_MARGIN);
+    const leftBoundary =
+        isRTL() ? SCROLL_PADDING + newTabButtonSpace : SCROLL_PADDING;
+
+    let scrollBy = 0;
+    if (tabElementLeft === leftBoundary) {
+      // Perfectly aligned to the left.
+      return;
+    } else if (tabElementLeft < leftBoundary) {
+      // If the element's left is to the left of the left boundary, scroll
+      // such that the element's left edge is aligned with the left boundary.
+      scrollBy = tabElementLeft - leftBoundary;
+    } else {
+      const tabElementRight = tabElementLeft + tabElementWidth;
+      const rightBoundary = isRTL() ?
+          this.getLayoutVariable_(LayoutVariable.VIEWPORT_WIDTH) -
+              SCROLL_PADDING :
+          this.getLayoutVariable_(LayoutVariable.VIEWPORT_WIDTH) -
+              SCROLL_PADDING - newTabButtonSpace;
+
+      if (tabElementRight > rightBoundary) {
+        scrollBy = (tabElementRight) - rightBoundary;
+      } else {
+        // Perfectly aligned to the right.
+        return;
       }
-    });
+    }
+
+    this.animateScrollPosition_(scrollBy);
   }
 
   /**

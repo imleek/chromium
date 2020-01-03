@@ -7,16 +7,13 @@
 
 #include "ash/ash_export.h"
 #include "base/containers/flat_set.h"
+#include "base/power_monitor/power_observer.h"
 #include "base/timer/timer.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/media_session/public/mojom/media_controller.mojom.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/views/controls/button/button.h"
-
-namespace service_manager {
-class Connector;
-}
 
 namespace views {
 class Label;
@@ -40,6 +37,7 @@ class ASH_EXPORT LockScreenMediaControlsView
     : public views::View,
       public media_session::mojom::MediaControllerObserver,
       public media_session::mojom::MediaControllerImageObserver,
+      public base::PowerObserver,
       public views::ButtonListener,
       public ui::ImplicitAnimationObserver {
  public:
@@ -63,7 +61,8 @@ class ASH_EXPORT LockScreenMediaControlsView
     kSessionChanged,
     kDismissedByUser,
     kUnlocked,
-    kMaxValue = kUnlocked
+    kDeviceSleep,
+    kMaxValue = kDeviceSleep
   };
 
   // Whether the controls were shown or not shown and the reason why. This is
@@ -94,8 +93,7 @@ class ASH_EXPORT LockScreenMediaControlsView
     DISALLOW_COPY_AND_ASSIGN(Callbacks);
   };
 
-  LockScreenMediaControlsView(service_manager::Connector* connector,
-                              const Callbacks& callbacks);
+  explicit LockScreenMediaControlsView(const Callbacks& callbacks);
   ~LockScreenMediaControlsView() override;
 
   // views::View:
@@ -134,6 +132,9 @@ class ASH_EXPORT LockScreenMediaControlsView
 
   // ui::EventHandler:
   void OnGestureEvent(ui::GestureEvent* event) override;
+
+  // base::PowerObserver:
+  void OnSuspend() override;
 
   void FlushForTesting();
 
@@ -195,9 +196,6 @@ class ASH_EXPORT LockScreenMediaControlsView
 
   // Animates |contents_view_| to its original position.
   void RunResetControlsAnimation();
-
-  // Used to connect to the Media Session service.
-  service_manager::Connector* const connector_;
 
   // Used to control the active session.
   mojo::Remote<media_session::mojom::MediaController> media_controller_remote_;

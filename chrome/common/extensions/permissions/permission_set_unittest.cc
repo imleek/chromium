@@ -765,7 +765,6 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kDiagnostics);
   skip.insert(APIPermission::kDns);
   skip.insert(APIPermission::kDownloadsShelf);
-  skip.insert(APIPermission::kEmbeddedExtensionOptions);
   skip.insert(APIPermission::kFontSettings);
   skip.insert(APIPermission::kFullscreen);
   skip.insert(APIPermission::kGcm);
@@ -794,9 +793,6 @@ TEST(PermissionsTest, PermissionMessages) {
   // and don't require a prompt, i.e. they're restricted to location 'policy'.
   skip.insert(APIPermission::kEnterprisePlatformKeys);
   skip.insert(APIPermission::kEnterpriseDeviceAttributes);
-  // TODO (crbug/996785): Remove this when permission warning strings will be
-  // added.
-  skip.insert(APIPermission::kPrinting);
 
   // TODO(erikkay) add a string for this permission.
   skip.insert(APIPermission::kBackground);
@@ -843,6 +839,7 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kChromeosInfoPrivate);
   skip.insert(APIPermission::kCloudPrintPrivate);
   skip.insert(APIPermission::kCommandLinePrivate);
+  skip.insert(APIPermission::kCrashReportPrivate);
   skip.insert(APIPermission::kDeveloperPrivate);
   skip.insert(APIPermission::kDownloadsInternal);
   skip.insert(APIPermission::kEchoPrivate);

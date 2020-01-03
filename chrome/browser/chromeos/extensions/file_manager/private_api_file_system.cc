@@ -53,6 +53,7 @@
 #include "extensions/browser/extension_util.h"
 #include "net/base/escape.h"
 #include "services/device/public/mojom/mtp_manager.mojom.h"
+#include "services/device/public/mojom/mtp_storage_info.mojom.h"
 #include "storage/browser/file_system/external_mount_points.h"
 #include "storage/browser/file_system/file_stream_reader.h"
 #include "storage/browser/file_system/file_system_context.h"
@@ -381,9 +382,8 @@ ExtensionFunction::ResponseAction FileManagerPrivateGrantAccessFunction::Run() {
   for (auto* profile : profiles) {
     if (profile->IsOffTheRecord())
       continue;
-    const GURL site = util::GetSiteForExtensionId(extension_id(), profile);
     storage::FileSystemContext* const context =
-        content::BrowserContext::GetStoragePartitionForSite(profile, site)
+        util::GetStoragePartitionForExtensionId(extension_id(), profile)
             ->GetFileSystemContext();
     for (const auto& url : params->entry_urls) {
       const storage::FileSystemURL file_system_url =
@@ -407,19 +407,19 @@ ExtensionFunction::ResponseAction FileManagerPrivateGrantAccessFunction::Run() {
 namespace {
 
 void PostResponseCallbackTaskToUIThread(
-    const FileWatchFunctionBase::ResponseCallback& callback,
+    FileWatchFunctionBase::ResponseCallback callback,
     bool success) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(callback, success));
+                 base::BindOnce(std::move(callback), success));
 }
 
 void PostNotificationCallbackTaskToUIThread(
-    const storage::WatcherManager::NotificationCallback& callback,
+    storage::WatcherManager::NotificationCallback callback,
     storage::WatcherManager::ChangeType type) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(callback, type));
+                 base::BindOnce(std::move(callback), type));
 }
 
 }  // namespace
@@ -646,11 +646,6 @@ FileManagerPrivateInternalValidatePathNameLengthFunction::Run() {
       file_system_context->CrackURL(GURL(params->parent_url)));
   if (!chromeos::FileSystemBackend::CanHandleURL(file_system_url))
     return RespondNow(Error("Invalid URL"));
-
-  // No explicit limit on the length of Drive file names.
-  if (file_system_url.type() == storage::kFileSystemTypeDrive) {
-    return RespondNow(OneArgument(std::make_unique<base::Value>(true)));
-  }
 
   base::PostTaskAndReplyWithResult(
       FROM_HERE,

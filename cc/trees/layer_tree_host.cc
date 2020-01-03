@@ -68,7 +68,7 @@
 namespace {
 static base::AtomicSequenceNumber s_layer_tree_host_sequence_number;
 static base::AtomicSequenceNumber s_image_decode_sequence_number;
-}
+}  // namespace
 
 namespace cc {
 namespace {
@@ -300,8 +300,7 @@ void LayerTreeHost::RequestMainFrameUpdate(bool report_cc_metrics) {
 // code that is logically a main thread operation, e.g. deletion of a Layer,
 // should be delayed until the LayerTreeHost::CommitComplete, which will run
 // after the commit, but on the main thread.
-void LayerTreeHost::FinishCommitOnImplThread(
-    LayerTreeHostImpl* host_impl) {
+void LayerTreeHost::FinishCommitOnImplThread(LayerTreeHostImpl* host_impl) {
   DCHECK(task_runner_provider_->IsImplThread());
 
   TRACE_EVENT0("cc,benchmark", "LayerTreeHost::FinishCommitOnImplThread");
@@ -516,8 +515,7 @@ void LayerTreeHost::DidFailToInitializeLayerTreeFrameSink() {
   client_->DidFailToInitializeLayerTreeFrameSink();
 }
 
-std::unique_ptr<LayerTreeHostImpl>
-LayerTreeHost::CreateLayerTreeHostImpl(
+std::unique_ptr<LayerTreeHostImpl> LayerTreeHost::CreateLayerTreeHostImpl(
     LayerTreeHostImplClient* client) {
   DCHECK(task_runner_provider_->IsImplThread());
 
@@ -630,8 +628,7 @@ void LayerTreeHost::SetNeedsCommitWithForcedRedraw() {
   proxy_->SetNeedsCommit();
 }
 
-void LayerTreeHost::SetAnimationEvents(
-    std::unique_ptr<MutatorEvents> events) {
+void LayerTreeHost::SetAnimationEvents(std::unique_ptr<MutatorEvents> events) {
   DCHECK(task_runner_provider_->IsMainThread());
   mutator_host_->SetAnimationEvents(std::move(events));
 
@@ -642,8 +639,7 @@ void LayerTreeHost::SetAnimationEvents(
   SetNeedsAnimate();
 }
 
-void LayerTreeHost::SetDebugState(
-    const LayerTreeDebugState& debug_state) {
+void LayerTreeHost::SetDebugState(const LayerTreeDebugState& debug_state) {
   LayerTreeDebugState new_debug_state =
       LayerTreeDebugState::Unite(settings_.initial_debug_state, debug_state);
 
@@ -658,8 +654,7 @@ void LayerTreeHost::SetDebugState(
   SetNeedsCommit();
 }
 
-void LayerTreeHost::ApplyPageScaleDeltaFromImplSide(
-    float page_scale_delta) {
+void LayerTreeHost::ApplyPageScaleDeltaFromImplSide(float page_scale_delta) {
   DCHECK(CommitRequested());
   if (page_scale_delta == 1.f)
     return;
@@ -870,7 +865,8 @@ void LayerTreeHost::ApplyViewportChanges(const ScrollAndScaleSet& info) {
       scroll_tree.NotifyDidScroll(
           inner_scroll->element_id,
           scroll_tree.current_scroll_offset(inner_scroll->element_id) +
-              inner_viewport_scroll_delta);
+              inner_viewport_scroll_delta,
+          info.inner_viewport_scroll.snap_target_element_ids);
     }
   }
 
@@ -907,6 +903,7 @@ void LayerTreeHost::SendOverscrollAndScrollEndEventsFromImplSide(
 
 void LayerTreeHost::ApplyScrollAndScale(ScrollAndScaleSet* info) {
   DCHECK(info);
+  TRACE_EVENT0("cc", "LayerTreeHost::ApplyScrollAndScale");
   for (auto& swap_promise : info->swap_promises) {
     TRACE_EVENT_WITH_FLOW1("input,benchmark", "LatencyInfo.Flow",
                            TRACE_ID_DONT_MANGLE(swap_promise->TraceId()),
@@ -924,10 +921,15 @@ void LayerTreeHost::ApplyScrollAndScale(ScrollAndScaleSet* info) {
         SetNeedsUpdateLayers();
       }
       if (IsUsingLayerLists()) {
+        TRACE_EVENT_INSTANT2(
+            "cc", "NotifyDidScroll", TRACE_EVENT_SCOPE_THREAD, "cur_y",
+            scroll_tree.current_scroll_offset(scroll.element_id).y(), "delta",
+            scroll.scroll_delta.y());
         scroll_tree.NotifyDidScroll(
             scroll.element_id,
             scroll_tree.current_scroll_offset(scroll.element_id) +
-                scroll.scroll_delta);
+                scroll.scroll_delta,
+            scroll.snap_target_element_ids);
       }
     }
     for (auto& scrollbar : info->scrollbars) {
@@ -954,15 +956,13 @@ void LayerTreeHost::RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time) {
   client_->RecordEndOfFrameMetrics(frame_begin_time);
 }
 
-const base::WeakPtr<InputHandler>& LayerTreeHost::GetInputHandler()
-    const {
+const base::WeakPtr<InputHandler>& LayerTreeHost::GetInputHandler() const {
   return input_handler_weak_ptr_;
 }
 
-void LayerTreeHost::UpdateBrowserControlsState(
-    BrowserControlsState constraints,
-    BrowserControlsState current,
-    bool animate) {
+void LayerTreeHost::UpdateBrowserControlsState(BrowserControlsState constraints,
+                                               BrowserControlsState current,
+                                               bool animate) {
   // Browser controls are only used in threaded mode but Blink layout tests may
   // call into this. The single threaded version is a no-op.
   proxy_->UpdateBrowserControlsState(constraints, current, animate);
@@ -1204,17 +1204,12 @@ void LayerTreeHost::SetViewportVisibleRect(const gfx::Rect& visible_rect) {
   viewport_visible_rect_ = visible_rect;
 }
 
-void LayerTreeHost::SetBrowserControlsHeight(float top_height,
-                                             float bottom_height,
-                                             bool shrink) {
-  if (top_controls_height_ == top_height &&
-      bottom_controls_height_ == bottom_height &&
-      browser_controls_shrink_blink_size_ == shrink)
+void LayerTreeHost::SetBrowserControlsParams(
+    const BrowserControlsParams& params) {
+  if (browser_controls_params_ == params)
     return;
 
-  top_controls_height_ = top_height;
-  bottom_controls_height_ = bottom_height;
-  browser_controls_shrink_blink_size_ = shrink;
+  browser_controls_params_ = params;
   SetNeedsCommit();
 }
 
@@ -1523,10 +1518,7 @@ void LayerTreeHost::PushLayerTreePropertiesTo(LayerTreeImpl* tree_impl) {
   tree_impl->PushPageScaleFromMainThread(
       page_scale_factor_, min_page_scale_factor_, max_page_scale_factor_);
 
-  tree_impl->set_browser_controls_shrink_blink_size(
-      browser_controls_shrink_blink_size_);
-  tree_impl->SetTopControlsHeight(top_controls_height_);
-  tree_impl->SetBottomControlsHeight(bottom_controls_height_);
+  tree_impl->SetBrowserControlsParams(browser_controls_params_);
   tree_impl->set_overscroll_behavior(overscroll_behavior_);
   tree_impl->PushBrowserControlsFromMainThread(top_controls_shown_ratio_,
                                                bottom_controls_shown_ratio_);
@@ -1566,6 +1558,8 @@ void LayerTreeHost::PushLayerTreePropertiesTo(LayerTreeImpl* tree_impl) {
   if (top_controls_shown_ratio_ > 0.0f && top_controls_shown_ratio_ < 1.0f) {
     tree_impl->UpdateViewportContainerSizes();
   }
+
+  tree_impl->set_display_transform_hint(display_transform_hint_);
 }
 
 void LayerTreeHost::PushSurfaceRangesTo(LayerTreeImpl* tree_impl) {

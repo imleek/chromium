@@ -54,6 +54,7 @@
 namespace blink {
 
 class ExecutionContext;
+class ExceptionState;
 
 class MODULES_EXPORT ServiceWorkerContainer final
     : public EventTargetWithInlineData,
@@ -81,7 +82,7 @@ class MODULES_EXPORT ServiceWorkerContainer final
   void Trace(blink::Visitor*) override;
 
   ServiceWorker* controller() { return controller_; }
-  ScriptPromise ready(ScriptState*);
+  ScriptPromise ready(ScriptState*, ExceptionState&);
 
   ScriptPromise registerServiceWorker(ScriptState*,
                                       const String& pattern,
@@ -108,6 +109,8 @@ class MODULES_EXPORT ServiceWorkerContainer final
 
   void setOnmessage(EventListener* listener);
   EventListener* onmessage();
+
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(messageerror, kMessageerror)
 
   // Returns the ServiceWorkerRegistration object described by the given info.
   // Creates a new object if needed, or else returns the existing one.

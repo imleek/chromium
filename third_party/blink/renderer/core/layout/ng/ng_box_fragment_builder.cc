@@ -79,15 +79,17 @@ void GatherInlineContainerFragmentsFromLinebox(
 
 }  // namespace
 
-void NGBoxFragmentBuilder::AddBreakBeforeChild(NGLayoutInputNode child,
-                                               NGBreakAppeal appeal,
-                                               bool is_forced_break) {
-  break_appeal_ = appeal;
+void NGBoxFragmentBuilder::AddBreakBeforeChild(
+    NGLayoutInputNode child,
+    base::Optional<NGBreakAppeal> appeal,
+    bool is_forced_break) {
+  if (appeal)
+    break_appeal_ = *appeal;
   if (is_forced_break) {
     SetHasForcedBreak();
     // A forced break is considered to always have perfect appeal; they should
     // never be weighed against other potential breakpoints.
-    DCHECK_EQ(appeal, kBreakAppealPerfect);
+    DCHECK(!appeal || *appeal == kBreakAppealPerfect);
   }
 
   DCHECK(has_block_fragmentation_);
@@ -119,6 +121,8 @@ void NGBoxFragmentBuilder::AddResult(const NGLayoutResult& child_layout_result,
       items_builder_->AddLine(*line, offset);
       // TODO(kojii): We probably don't need to AddChild this line, but there
       // maybe OOF objects. Investigate how to handle them.
+    } else {
+      DCHECK(fragment.IsFloating());
     }
   }
   AddChild(fragment, offset, inline_container);
@@ -236,12 +240,15 @@ scoped_refptr<const NGLayoutResult> NGBoxFragmentBuilder::ToBoxFragment(
       NGPhysicalBoxFragment::Create(this, block_or_line_writing_mode);
   fragment->CheckType();
 
-  return base::AdoptRef(new NGLayoutResult(std::move(fragment), this));
+  return base::AdoptRef(
+      new NGLayoutResult(NGLayoutResult::NGBoxFragmentBuilderPassKey(),
+                         std::move(fragment), this));
 }
 
 scoped_refptr<const NGLayoutResult> NGBoxFragmentBuilder::Abort(
     NGLayoutResult::EStatus status) {
-  return base::AdoptRef(new NGLayoutResult(status, this));
+  return base::AdoptRef(new NGLayoutResult(
+      NGLayoutResult::NGBoxFragmentBuilderPassKey(), status, this));
 }
 
 // Computes the geometry required for any inline containing blocks.

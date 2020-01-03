@@ -115,19 +115,42 @@ MachineLevelUserCloudPolicyFetcher::MachineLevelUserCloudPolicyFetcher(
 }
 
 MachineLevelUserCloudPolicyFetcher::~MachineLevelUserCloudPolicyFetcher() {
-  policy_manager_->core()->service()->RemoveObserver(this);
+  // The pointers need to be checked since they might be invalidated from a
+  // |Disconnect| call.
+  if (policy_manager_->core() && policy_manager_->core()->service())
+    policy_manager_->core()->service()->RemoveObserver(this);
 }
 
 void MachineLevelUserCloudPolicyFetcher::SetupRegistrationAndFetchPolicy(
-    const std::string& dm_token,
+    const DMToken& dm_token,
     const std::string& client_id) {
   policy_manager_->core()->client()->SetupRegistration(
-      dm_token, client_id, std::vector<std::string>());
+      dm_token.value(), client_id, std::vector<std::string>());
   policy_manager_->store()->SetupRegistration(dm_token, client_id);
   DCHECK(policy_manager_->IsClientRegistered());
 
   policy_manager_->core()->service()->RefreshPolicy(
-      base::BindRepeating(&OnPolicyFetchCompleted));
+      base::BindOnce(&OnPolicyFetchCompleted));
+}
+
+void MachineLevelUserCloudPolicyFetcher::AddClientObserver(
+    CloudPolicyClient::Observer* observer) {
+  if (policy_manager_)
+    policy_manager_->AddClientObserver(observer);
+}
+
+void MachineLevelUserCloudPolicyFetcher::RemoveClientObserver(
+    CloudPolicyClient::Observer* observer) {
+  if (policy_manager_)
+    policy_manager_->RemoveClientObserver(observer);
+}
+
+void MachineLevelUserCloudPolicyFetcher::Disconnect() {
+  if (policy_manager_) {
+    if (policy_manager_->core() && policy_manager_->core()->service())
+      policy_manager_->core()->service()->RemoveObserver(this);
+    policy_manager_->DisconnectAndRemovePolicy();
+  }
 }
 
 void MachineLevelUserCloudPolicyFetcher::
@@ -164,10 +187,10 @@ void MachineLevelUserCloudPolicyFetcher::InitializeManager(
 }
 
 void MachineLevelUserCloudPolicyFetcher::TryToFetchPolicy() {
-  auto dm_token = BrowserDMTokenStorage::Get()->RetrieveBrowserDMToken();
+  DMToken dm_token = BrowserDMTokenStorage::Get()->RetrieveDMToken();
   std::string client_id = BrowserDMTokenStorage::Get()->RetrieveClientId();
   if (dm_token.is_valid() && !client_id.empty())
-    SetupRegistrationAndFetchPolicy(dm_token.value(), client_id);
+    SetupRegistrationAndFetchPolicy(dm_token, client_id);
 }
 
 }  // namespace policy

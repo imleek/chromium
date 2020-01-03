@@ -119,6 +119,7 @@ class CORE_EXPORT CSSParserContext final
   void CountDeprecation(WebFeature) const;
   bool IsUseCounterRecordingEnabled() const { return document_; }
   bool IsDocumentHandleEqual(const Document* other) const;
+  const Document* GetDocument() const;
 
   ContentSecurityPolicyDisposition ShouldCheckContentSecurityPolicy() const {
     return should_check_content_security_policy_;
@@ -132,6 +133,8 @@ class CORE_EXPORT CSSParserContext final
 
   // TODO(yoichio): Remove when CustomElementsV0 is removed. crrev.com/660759.
   bool CustomElementsV0Enabled() const;
+
+  bool IsForMarkupSanitization() const;
 
   void Trace(blink::Visitor*);
 

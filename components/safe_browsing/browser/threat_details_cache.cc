@@ -39,7 +39,7 @@ void ThreatDetailsCacheCollector::StartCacheCollection(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     ResourceMap* resources,
     bool* result,
-    const base::Closure& callback) {
+    base::OnceClosure callback) {
   // Start the data collection from the HTTP cache. We use a URLFetcher
   // and set the right flags so we only hit the cache.
   DVLOG(1) << "Getting cache data for all urls...";
@@ -47,7 +47,7 @@ void ThreatDetailsCacheCollector::StartCacheCollection(
   resources_ = resources;
   resources_it_ = resources_->begin();
   result_ = result;
-  callback_ = callback;
+  callback_ = std::move(callback);
   has_started_ = true;
 
   // Post a task in the message loop, so the callers don't need to
@@ -110,10 +110,10 @@ void ThreatDetailsCacheCollector::OpenEntry() {
 
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->url = GURL(resources_it_->first);
-  // Only from cache, and don't save cookies.
-  resource_request->load_flags = net::LOAD_ONLY_FROM_CACHE |
-                                 net::LOAD_SKIP_CACHE_VALIDATION |
-                                 net::LOAD_DO_NOT_SAVE_COOKIES;
+  // Only from cache, and don't use cookies.
+  resource_request->load_flags =
+      net::LOAD_ONLY_FROM_CACHE | net::LOAD_SKIP_CACHE_VALIDATION;
+  resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   current_load_ = network::SimpleURLLoader::Create(std::move(resource_request),
                                                    traffic_annotation);
   current_load_->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
@@ -235,8 +235,7 @@ void ThreatDetailsCacheCollector::AllDone(bool success) {
   DVLOG(1) << "AllDone";
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   *result_ = success;
-  base::PostTask(FROM_HERE, {BrowserThread::UI}, callback_);
-  callback_.Reset();
+  base::PostTask(FROM_HERE, {BrowserThread::UI}, std::move(callback_));
 }
 
 }  // namespace safe_browsing

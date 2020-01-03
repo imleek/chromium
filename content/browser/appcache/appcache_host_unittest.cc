@@ -115,9 +115,8 @@ class AppCacheHostTest : public testing::Test {
     MockQuotaManagerProxy() : QuotaManagerProxy(nullptr, nullptr) {}
 
     // Not needed for our tests.
-    void RegisterClient(storage::QuotaClient* client) override {}
-    void NotifyStorageAccessed(storage::QuotaClient::ID client_id,
-                               const url::Origin& origin,
+    void RegisterClient(scoped_refptr<storage::QuotaClient> client) override {}
+    void NotifyStorageAccessed(const url::Origin& origin,
                                blink::mojom::StorageType type) override {}
     void NotifyStorageModified(storage::QuotaClient::ID client_id,
                                const url::Origin& origin,
@@ -512,7 +511,8 @@ TEST_F(AppCacheHostTest, SelectCacheAllowed) {
     AppCacheHost host(kHostIdForTest, kProcessIdForTest, kRenderFrameIdForTest,
                       mojo::NullRemote(), &service_);
     host.set_frontend_for_testing(&mock_frontend_);
-    host.SetFirstPartyUrlForTesting(kDocAndOriginUrl);
+    host.SetSiteForCookiesForTesting(
+        net::SiteForCookies::FromUrl(kDocAndOriginUrl));
     host.SelectCache(kDocAndOriginUrl, blink::mojom::kAppCacheNoCacheId,
                      kManifestUrl);
     EXPECT_EQ(1, mock_quota_proxy->GetInUseCount(kOrigin));
@@ -561,7 +561,8 @@ TEST_F(AppCacheHostTest, SelectCacheBlocked) {
     AppCacheHost host(kHostIdForTest, kProcessIdForTest, kRenderFrameIdForTest,
                       mojo::NullRemote(), &service_);
     host.set_frontend_for_testing(&mock_frontend_);
-    host.SetFirstPartyUrlForTesting(kDocAndOriginUrl);
+    host.SetSiteForCookiesForTesting(
+        net::SiteForCookies::FromUrl(kDocAndOriginUrl));
     host.SelectCache(kDocAndOriginUrl, blink::mojom::kAppCacheNoCacheId,
                      kManifestUrl);
     EXPECT_EQ(1, mock_quota_proxy->GetInUseCount(kOrigin));

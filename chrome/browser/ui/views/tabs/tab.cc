@@ -28,7 +28,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
-#include "chrome/browser/ui/tabs/tab_group_visual_data.h"
 #include "chrome/browser/ui/tabs/tab_style.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -50,6 +49,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/grit/components_scaled_resources.h"
+#include "components/tab_groups/tab_group_color.h"
+#include "components/tab_groups/tab_group_visual_data.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
@@ -214,6 +215,7 @@ Tab::Tab(TabController* controller)
   close_button_ = new TabCloseButton(
       this, base::BindRepeating(&TabController::OnMouseEventInTab,
                                 base::Unretained(controller_)));
+  close_button_->set_has_ink_drop_action_on_click(true);
   AddChildView(close_button_);
 
   tab_close_button_observer_ = std::make_unique<TabCloseButtonObserver>(
@@ -421,13 +423,21 @@ const char* Tab::GetClassName() const {
 }
 
 bool Tab::OnKeyPressed(const ui::KeyEvent& event) {
-  if (event.key_code() == ui::VKEY_SPACE && !IsSelected()) {
+  if ((event.key_code() == ui::VKEY_SPACE ||
+       event.key_code() == ui::VKEY_RETURN) &&
+      !IsSelected()) {
     controller_->SelectTab(this, event);
     return true;
   }
 
-  if (event.type() == ui::ET_KEY_PRESSED &&
-      (event.flags() & ui::EF_CONTROL_DOWN)) {
+  constexpr int kModifiedFlag =
+#if defined(OS_MACOSX)
+      ui::EF_COMMAND_DOWN;
+#else
+      ui::EF_CONTROL_DOWN;
+#endif
+
+  if (event.type() == ui::ET_KEY_PRESSED && (event.flags() & kModifiedFlag)) {
     if (event.flags() & ui::EF_SHIFT_DOWN) {
       if (event.key_code() == ui::VKEY_RIGHT) {
         controller()->MoveTabLast(this);
@@ -731,10 +741,11 @@ void Tab::SetClosing(bool closing) {
 }
 
 base::Optional<SkColor> Tab::GetGroupColor() const {
-  return group().has_value()
-             ? base::make_optional(
-                   controller_->GetVisualDataForGroup(group().value())->color())
-             : base::nullopt;
+  if (!group().has_value())
+    return base::nullopt;
+
+  return controller_->GetPaintedGroupColor(
+      controller_->GetGroupColorId(group().value()));
 }
 
 SkColor Tab::GetAlertIndicatorColor(TabAlertState state) const {
@@ -759,6 +770,7 @@ SkColor Tab::GetAlertIndicatorColor(TabAlertState state) const {
       return theme_provider->GetColor(ThemeProperties::COLOR_TAB_PIP_PLAYING);
     case TabAlertState::BLUETOOTH_CONNECTED:
     case TabAlertState::USB_CONNECTED:
+    case TabAlertState::HID_CONNECTED:
     case TabAlertState::SERIAL_CONNECTED:
     case TabAlertState::VR_PRESENTING_IN_HEADSET:
       return foreground_color_;

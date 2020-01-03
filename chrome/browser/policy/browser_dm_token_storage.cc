@@ -116,13 +116,16 @@ void BrowserDMTokenStorage::StoreDMToken(const std::string& dm_token,
   }
 }
 
-std::string BrowserDMTokenStorage::RetrieveDMToken() {
-  return RetrieveBrowserDMToken().value();
+void BrowserDMTokenStorage::InvalidateDMToken(StoreCallback callback) {
+  StoreDMToken(kInvalidTokenValue, std::move(callback));
 }
 
-DMToken BrowserDMTokenStorage::RetrieveBrowserDMToken() {
+void BrowserDMTokenStorage::ClearDMToken(StoreCallback callback) {
+  StoreDMToken("", std::move(callback));
+}
+
+DMToken BrowserDMTokenStorage::RetrieveDMToken() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!store_callback_);
 
   InitIfNeeded();
   return dm_token_;
@@ -173,6 +176,14 @@ void BrowserDMTokenStorage::InitIfNeeded() {
   }
 
   should_display_error_message_on_failure_ = InitEnrollmentErrorOption();
+}
+
+void BrowserDMTokenStorage::SaveDMToken(const std::string& token) {
+  auto task = SaveDMTokenTask(token, RetrieveClientId());
+  auto reply = base::BindOnce(&BrowserDMTokenStorage::OnDMTokenStored,
+                              weak_factory_.GetWeakPtr());
+  base::PostTaskAndReplyWithResult(SaveDMTokenTaskRunner().get(), FROM_HERE,
+                                   std::move(task), std::move(reply));
 }
 
 std::string BrowserDMTokenStorage::InitSerialNumber() {

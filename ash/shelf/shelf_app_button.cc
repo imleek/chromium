@@ -537,9 +537,10 @@ bool ShelfAppButton::OnMousePressed(const ui::MouseEvent& event) {
   shelf_view_->PointerPressedOnButton(this, ShelfView::MOUSE, event);
 
   if (shelf_view_->IsDraggedView(this)) {
-    drag_timer_.Start(
-        FROM_HERE, base::TimeDelta::FromMilliseconds(kDragTimeThresholdMs),
-        base::Bind(&ShelfAppButton::OnTouchDragTimer, base::Unretained(this)));
+    drag_timer_.Start(FROM_HERE,
+                      base::TimeDelta::FromMilliseconds(kDragTimeThresholdMs),
+                      base::BindOnce(&ShelfAppButton::OnTouchDragTimer,
+                                     base::Unretained(this)));
   }
   return true;
 }
@@ -588,7 +589,7 @@ void ShelfAppButton::Layout() {
 
   // If on the left or top 'invert' the inset so the constant gap is on
   // the interior (towards the center of display) edge of the shelf.
-  if (SHELF_ALIGNMENT_LEFT == shelf->alignment())
+  if (ShelfAlignment::kLeft == shelf->alignment())
     x_offset = button_bounds.width() - (icon_size + icon_padding);
 
   // Center icon with respect to the secondary axis.
@@ -626,17 +627,17 @@ void ShelfAppButton::Layout() {
   DCHECK_LE(icon_height, icon_size);
 
   switch (shelf->alignment()) {
-    case SHELF_ALIGNMENT_BOTTOM:
-    case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+    case ShelfAlignment::kBottom:
+    case ShelfAlignment::kBottomLocked:
       indicator_midpoint.set_y(button_bounds.bottom() -
                                kStatusIndicatorRadiusDip -
                                status_indicator_offet_from_shelf_edge);
       break;
-    case SHELF_ALIGNMENT_LEFT:
+    case ShelfAlignment::kLeft:
       indicator_midpoint.set_x(button_bounds.x() + kStatusIndicatorRadiusDip +
                                status_indicator_offet_from_shelf_edge);
       break;
-    case SHELF_ALIGNMENT_RIGHT:
+    case ShelfAlignment::kRight:
       indicator_midpoint.set_x(button_bounds.right() -
                                kStatusIndicatorRadiusDip -
                                status_indicator_offet_from_shelf_edge);
@@ -730,7 +731,7 @@ void ShelfAppButton::OnGestureEvent(ui::GestureEvent* event) {
 
 std::unique_ptr<views::InkDropRipple> ShelfAppButton::CreateInkDropRipple()
     const {
-  const int ink_drop_small_size = ash::ShelfConfig::Get()->hotseat_size();
+  const int ink_drop_small_size = ShelfConfig::Get()->hotseat_size();
   return std::make_unique<views::SquareInkDropRipple>(
       gfx::Size(GetInkDropLargeSize(), GetInkDropLargeSize()),
       ink_drop_large_corner_radius(),

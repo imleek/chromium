@@ -28,9 +28,6 @@ UsbInternalsTest.prototype = {
   isAsync: true,
 
   /** @override */
-  runAccessibilityChecks: false,
-
-  /** @override */
   extraLibraries: [
     '//third_party/mocha/mocha.js',
     '//chrome/test/data/webui/mocha_adapter.js',
@@ -271,7 +268,8 @@ UsbInternalsTest.prototype = {
 
     window.setupFn = () => {
       this.pageHandlerInterceptor = new MojoInterfaceInterceptor(
-          mojom.UsbInternalsPageHandler.$interfaceName);
+          mojom.UsbInternalsPageHandler.$interfaceName, 'context',
+          /*useBrowserInterfaceBroker=*/ true);
       this.pageHandlerInterceptor.oninterfacerequest = (e) => {
         this.pageHandler = new FakePageHandlerRemote(e.handle);
       };

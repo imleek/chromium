@@ -66,7 +66,8 @@ class NavigationURLLoaderTest : public testing::Test {
             GURL() /* searchable_form_url */,
             std::string() /* searchable_form_encoding */,
             GURL() /* client_side_redirect_url */,
-            base::nullopt /* devtools_initiator_info */);
+            base::nullopt /* devtools_initiator_info */,
+            false /* attach_same_site_cookies */);
     auto common_params = CreateCommonNavigationParams();
     common_params->url = url;
     common_params->initiator_origin = url::Origin::Create(url);
@@ -123,7 +124,7 @@ TEST_F(NavigationURLLoaderTest, RequestFailedCertError) {
 
   // Wait for the request to fail as expected.
   delegate.WaitForRequestFailed();
-  ASSERT_EQ(net::ERR_ABORTED, delegate.net_error());
+  ASSERT_EQ(net::ERR_CERT_COMMON_NAME_INVALID, delegate.net_error());
   net::SSLInfo ssl_info = delegate.ssl_info();
   EXPECT_TRUE(ssl_info.is_valid());
   EXPECT_TRUE(
@@ -157,7 +158,7 @@ TEST_F(NavigationURLLoaderTest, RequestFailedCertErrorFatal) {
 
   // Wait for the request to fail as expected.
   delegate.WaitForRequestFailed();
-  ASSERT_EQ(net::ERR_ABORTED, delegate.net_error());
+  ASSERT_EQ(net::ERR_CERT_COMMON_NAME_INVALID, delegate.net_error());
   net::SSLInfo ssl_info = delegate.ssl_info();
   EXPECT_TRUE(ssl_info.is_valid());
   EXPECT_TRUE(

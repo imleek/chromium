@@ -18,6 +18,7 @@ import org.chromium.android_webview.common.PlatformServiceBridge;
 import org.chromium.android_webview.metrics.AwMetricsServiceClient;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.components.metrics.ChromeUserMetricsExtensionProtos.ChromeUserMetricsExtension;
@@ -153,7 +154,7 @@ public class AwMetricsIntegrationTest {
     public void testMetadata_miscellaneousSystemProfileInfo() throws Throwable {
         ChromeUserMetricsExtension log = mPlatformServiceBridge.waitForNextMetricsLog();
         SystemProfileProto systemProfile = log.getSystemProfile();
-        // TODO(ntfschr): assert UMA enabled date when https://crbug.com/995544 is resolved.
+        Assert.assertTrue("Should have some uma_enabled_date", systemProfile.hasUmaEnabledDate());
         Assert.assertTrue("Should have some install_date", systemProfile.hasInstallDate());
         // Don't assert application_locale's value, because we don't want to enforce capitalization
         // requirements on the metrics service (ex. in case it switches from "en-US" to "en-us" for
@@ -232,6 +233,51 @@ public class AwMetricsIntegrationTest {
                 systemProfile.getHardware().getGpu().hasGlVendor());
         Assert.assertTrue("Should have some hardware.gpu.gl_renderer",
                 systemProfile.getHardware().getGpu().hasGlRenderer());
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AndroidWebView"})
+    public void testMetadata_hardwareDrive() throws Throwable {
+        ChromeUserMetricsExtension log = mPlatformServiceBridge.waitForNextMetricsLog();
+        SystemProfileProto systemProfile = log.getSystemProfile();
+        Assert.assertTrue("Should have some hardware.app_drive.has_seek_penalty",
+                systemProfile.getHardware().getAppDrive().hasHasSeekPenalty());
+        Assert.assertTrue("Should have some hardware.user_data_drive.has_seek_penalty",
+                systemProfile.getHardware().getUserDataDrive().hasHasSeekPenalty());
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AndroidWebView"})
+    public void testMetadata_network() throws Throwable {
+        ChromeUserMetricsExtension log = mPlatformServiceBridge.waitForNextMetricsLog();
+        SystemProfileProto systemProfile = log.getSystemProfile();
+        Assert.assertTrue("Should have some network.connection_type_is_ambiguous",
+                systemProfile.getNetwork().hasConnectionTypeIsAmbiguous());
+        Assert.assertTrue("Should have some network.connection_type",
+                systemProfile.getNetwork().hasConnectionType());
+        Assert.assertTrue("Should have some network.wifi_phy_layer_protocol_is_ambiguous",
+                systemProfile.getNetwork().hasWifiPhyLayerProtocolIsAmbiguous());
+        Assert.assertTrue("Should have some network.wifi_phy_layer_protocol",
+                systemProfile.getNetwork().hasWifiPhyLayerProtocol());
+        Assert.assertTrue("Should have some network.min_effective_connection_type",
+                systemProfile.getNetwork().hasMinEffectiveConnectionType());
+        Assert.assertTrue("Should have some network.max_effective_connection_type",
+                systemProfile.getNetwork().hasMaxEffectiveConnectionType());
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AndroidWebView"})
+    public void testMetadata_androidHistograms() throws Throwable {
+        // Wait for a metrics log, since AndroidMetricsProvider only logs this histogram during log
+        // collection. Do not assert anything about this histogram before this point (ex. do not
+        // assert total count == 0), because this would race with the initial metrics log.
+        mPlatformServiceBridge.waitForNextMetricsLog();
+
+        Assert.assertEquals(
+                1, RecordHistogram.getHistogramTotalCountForTesting("MemoryAndroid.LowRamDevice"));
     }
 
     @Test

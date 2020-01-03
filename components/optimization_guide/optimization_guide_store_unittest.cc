@@ -171,8 +171,7 @@ class OptimizationGuideStoreTest : public testing::Test {
         prediction_model = CreatePredictionModel();
     prediction_model->mutable_model_info()->set_optimization_target(
         optimization_target);
-    update_data->MovePredictionModelIntoUpdateData(
-        std::move(*prediction_model));
+    update_data->CopyPredictionModelIntoUpdateData(*prediction_model);
   }
 
   // Moves |host_model_features_count| into |update_data|.
@@ -186,8 +185,7 @@ class OptimizationGuideStoreTest : public testing::Test {
       model_feature->set_feature_name("host_feat1");
       model_feature->set_double_value(2.0);
       host_model_features.set_host(host_suffix);
-      update_data->MoveHostModelFeaturesIntoUpdateData(
-          std::move(host_model_features));
+      update_data->CopyHostModelFeaturesIntoUpdateData(host_model_features);
     }
   }
 
@@ -307,10 +305,27 @@ class OptimizationGuideStoreTest : public testing::Test {
     db()->LoadCallback(true);
   }
 
+  void ClearHostModelFeaturesFromDatabase() {
+    guide_store()->ClearHostModelFeaturesFromDatabase();
+    db()->UpdateCallback(true);
+    db()->LoadCallback(true);
+  }
+
   void PurgeExpiredFetchedHints() {
     guide_store()->PurgeExpiredFetchedHints();
 
-    // OnFetchedHintsLoadedToMaybePurge
+    // OnLoadExpiredEntriesToPurge
+    db()->LoadCallback(true);
+    // OnUpdateStore
+    db()->UpdateCallback(true);
+    // OnLoadEntryKeys callback
+    db()->LoadCallback(true);
+  }
+
+  void PurgeExpiredHostModelFeatures() {
+    guide_store()->PurgeExpiredHostModelFeatures();
+
+    // OnLoadExpiredEntriesToPurge
     db()->LoadCallback(true);
     // OnUpdateStore
     db()->UpdateCallback(true);
@@ -1541,6 +1556,8 @@ TEST_F(OptimizationGuideStoreTest, ClearFetchedHints) {
 
   // Remove the fetched hints from the OptimizationGuideStore.
   ClearFetchedHintsFromDatabase();
+  histogram_tester.ExpectBucketCount(
+      "OptimizationGuide.ClearFetchedHints.StoreAvailable", true, 1);
 
   host_suffix = "domain1.org";
   // Component hint should still exist.
@@ -1972,6 +1989,82 @@ TEST_F(OptimizationGuideStoreTest, LoadAllHostModelFeatures) {
   // Make sure all of the hosts of the host model features are returned.
   for (const auto& host_model_features : *all_host_model_features)
     EXPECT_NE(hosts.find(host_model_features.host()), hosts.end());
+}
+
+TEST_F(OptimizationGuideStoreTest, ClearHostModelFeatures) {
+  base::HistogramTester histogram_tester;
+  size_t update_host_model_features_count = 5;
+  MetadataSchemaState schema_state = MetadataSchemaState::kValid;
+  base::Time update_time = base::Time().Now();
+  SeedInitialData(schema_state, 0, base::Time().Now());
+  CreateDatabase();
+  InitializeStore(schema_state);
+
+  std::unique_ptr<StoreUpdateData> update_data =
+      guide_store()->CreateUpdateDataForHostModelFeatures(
+          update_time, update_time +
+                           optimization_guide::features::
+                               StoredHostModelFeaturesFreshnessDuration());
+  ASSERT_TRUE(update_data);
+  SeedHostModelFeaturesUpdateData(update_data.get(),
+                                  update_host_model_features_count);
+  UpdateHostModelFeatures(std::move(update_data));
+
+  for (size_t i = 0; i < update_host_model_features_count; ++i) {
+    std::string host_suffix = GetHostSuffix(i);
+    OptimizationGuideStore::EntryKey entry_key;
+    EXPECT_TRUE(
+        guide_store()->FindHostModelFeaturesEntryKey(host_suffix, &entry_key));
+  }
+
+  // Remove the host model features from the OptimizationGuideStore.
+  ClearHostModelFeaturesFromDatabase();
+  histogram_tester.ExpectBucketCount(
+      "OptimizationGuide.ClearHostModelFeatures.StoreAvailable", true, 1);
+
+  for (size_t i = 0; i < update_host_model_features_count; ++i) {
+    std::string host_suffix = GetHostSuffix(i);
+    OptimizationGuideStore::EntryKey entry_key;
+    EXPECT_FALSE(
+        guide_store()->FindHostModelFeaturesEntryKey(host_suffix, &entry_key));
+  }
+}
+
+TEST_F(OptimizationGuideStoreTest, PurgeExpiredHostModelFeatures) {
+  base::HistogramTester histogram_tester;
+  size_t update_host_model_features_count = 5;
+  MetadataSchemaState schema_state = MetadataSchemaState::kValid;
+  base::Time update_time = base::Time().Now();
+  SeedInitialData(schema_state, 0, base::Time().Now());
+  CreateDatabase();
+  InitializeStore(schema_state);
+
+  std::unique_ptr<StoreUpdateData> update_data =
+      guide_store()->CreateUpdateDataForHostModelFeatures(
+          update_time, update_time -
+                           optimization_guide::features::
+                               StoredHostModelFeaturesFreshnessDuration());
+  ASSERT_TRUE(update_data);
+  SeedHostModelFeaturesUpdateData(update_data.get(),
+                                  update_host_model_features_count);
+  UpdateHostModelFeatures(std::move(update_data));
+
+  for (size_t i = 0; i < update_host_model_features_count; ++i) {
+    std::string host_suffix = GetHostSuffix(i);
+    OptimizationGuideStore::EntryKey entry_key;
+    EXPECT_TRUE(
+        guide_store()->FindHostModelFeaturesEntryKey(host_suffix, &entry_key));
+  }
+
+  // Remove expired host model features from the opt. guide store.
+  PurgeExpiredHostModelFeatures();
+
+  for (size_t i = 0; i < update_host_model_features_count; ++i) {
+    std::string host_suffix = GetHostSuffix(i);
+    OptimizationGuideStore::EntryKey entry_key;
+    EXPECT_FALSE(
+        guide_store()->FindHostModelFeaturesEntryKey(host_suffix, &entry_key));
+  }
 }
 
 }  // namespace optimization_guide

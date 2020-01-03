@@ -244,8 +244,8 @@ TEST_F(AutocompleteResultTest, Swap) {
 
   // Swap with empty shouldn't do anything interesting.
   r1.Swap(&r2);
-  EXPECT_EQ(r1.end(), r1.default_match());
-  EXPECT_EQ(r2.end(), r2.default_match());
+  EXPECT_FALSE(r1.default_match());
+  EXPECT_FALSE(r2.default_match());
 
   // Swap with a single match.
   ACMatches matches;
@@ -258,13 +258,15 @@ TEST_F(AutocompleteResultTest, Swap) {
   matches.push_back(match);
   r1.AppendMatches(input, matches);
   r1.SortAndCull(input, template_url_service_.get());
-  EXPECT_EQ(r1.begin(), r1.default_match());
+  EXPECT_TRUE(r1.default_match());
+  EXPECT_EQ(&*r1.begin(), r1.default_match());
 
   r1.Swap(&r2);
   EXPECT_TRUE(r1.empty());
-  EXPECT_EQ(r1.end(), r1.default_match());
+  EXPECT_FALSE(r1.default_match());
   ASSERT_FALSE(r2.empty());
-  EXPECT_EQ(r2.begin(), r2.default_match());
+  EXPECT_TRUE(r2.default_match());
+  EXPECT_EQ(&*r2.begin(), r2.default_match());
 }
 
 TEST_F(AutocompleteResultTest, AlternateNavUrl) {
@@ -1456,7 +1458,10 @@ TEST_F(AutocompleteResultTest, SortAndCullPreferEntitiesFillIntoEditMustMatch) {
   // The entity suggestion won't be chosen in this case because it has a non-
   // matching value for fill_into_edit.
   EXPECT_EQ(1UL, result.size());
-  EXPECT_EQ(AutocompleteMatchType::SEARCH_SUGGEST, result.match_at(0)->type);
+  // But the final type will have the specialized Search History type, since
+  // that's consumed into the final match during the merge step.
+  EXPECT_EQ(AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED,
+            result.match_at(0)->type);
   EXPECT_EQ(1100, result.match_at(0)->relevance);
   EXPECT_TRUE(result.match_at(0)->allowed_to_be_default_match);
   EXPECT_EQ(base::ASCIIToUTF16("oo"),

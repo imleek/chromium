@@ -270,6 +270,10 @@ void LayoutText::DeleteTextBoxes() {
 
 void LayoutText::SetFirstInlineFragment(NGPaintFragment* first_fragment) {
   CHECK(IsInLayoutNGInlineFormattingContext());
+  // TODO(yosin): Once we remove |NGPaintFragment|, we should get rid of
+  // |!fragment|.
+  DCHECK(!first_fragment ||
+         !RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
   // TODO(layout-dev): Because We should call |WillDestroy()| once for
   // associated fragments, when you reuse fragments, you should construct
   // NGAbstractInlineTextBox for them.
@@ -281,6 +285,20 @@ void LayoutText::SetFirstInlineFragment(NGPaintFragment* first_fragment) {
   first_paint_fragment_ = first_fragment;
 }
 
+void LayoutText::ClearFirstInlineFragmentItemIndex() {
+  CHECK(IsInLayoutNGInlineFormattingContext()) << *this;
+  DCHECK(RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
+  first_fragment_item_index_ = 0u;
+}
+
+void LayoutText::SetFirstInlineFragmentItemIndex(wtf_size_t index) {
+  CHECK(IsInLayoutNGInlineFormattingContext());
+  // TODO(yosin): Call |NGAbstractInlineTextBox::WillDestroy()|.
+  DCHECK(RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
+  DCHECK_NE(index, 0u);
+  first_fragment_item_index_ = index;
+}
+
 void LayoutText::InLayoutNGInlineFormattingContextWillChange(bool new_value) {
   DeleteTextBoxes();
 
@@ -290,6 +308,10 @@ void LayoutText::InLayoutNGInlineFormattingContextWillChange(bool new_value) {
 }
 
 Vector<LayoutText::TextBoxInfo> LayoutText::GetTextBoxInfo() const {
+  // This function may kick the layout (e.g., |LocalRect()|), but Inspector may
+  // call this function outside of the layout phase.
+  FontCachePurgePreventer fontCachePurgePreventer;
+
   Vector<TextBoxInfo> results;
   if (const NGOffsetMapping* mapping = GetNGOffsetMapping()) {
     bool in_hidden_for_paint = false;
@@ -2412,7 +2434,7 @@ void LayoutText::InvalidateDisplayItemClients(
     PaintInvalidationReason invalidation_reason) const {
   ObjectPaintInvalidator paint_invalidator(*this);
 
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+  if (RuntimeEnabledFeatures::LayoutNGBlockFragmentationEnabled()) {
     auto fragments = NGPaintFragment::InlineFragmentsFor(this);
     if (fragments.IsInLayoutNGInlineFormattingContext()) {
       for (NGPaintFragment* fragment : fragments) {
@@ -2421,6 +2443,15 @@ void LayoutText::InvalidateDisplayItemClients(
       }
       return;
     }
+  }
+
+  if (IsInLayoutNGInlineFormattingContext()) {
+    NGInlineCursor cursor;
+    for (cursor.MoveTo(*this); cursor; cursor.MoveToNextForSameLayoutObject()) {
+      paint_invalidator.InvalidateDisplayItemClient(
+          *cursor.CurrentDisplayItemClient(), invalidation_reason);
+    }
+    return;
   }
 
   paint_invalidator.InvalidateDisplayItemClient(*this, invalidation_reason);

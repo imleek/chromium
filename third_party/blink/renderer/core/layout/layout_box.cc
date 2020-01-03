@@ -108,7 +108,8 @@ struct SameSizeAsLayoutBox : public LayoutBoxModelObject {
   LayoutUnit intrinsic_content_logical_height;
   LayoutRectOutsets margin_box_outsets;
   LayoutUnit preferred_logical_width[2];
-  void* pointers[5];
+  void* pointers[4];
+  Persistent<void*> rare_data;
 };
 
 static_assert(sizeof(LayoutBox) == sizeof(SameSizeAsLayoutBox),
@@ -134,6 +135,10 @@ LayoutBoxRareData::LayoutBoxRareData()
       percent_height_container_(nullptr),
       snap_container_(nullptr),
       snap_areas_(nullptr) {}
+
+void LayoutBoxRareData::Trace(Visitor* visitor) {
+  visitor->Trace(layout_child_);
+}
 
 LayoutBox::LayoutBox(ContainerNode* node)
     : LayoutBoxModelObject(node),
@@ -1157,11 +1162,7 @@ LayoutBox* LayoutBox::FindAutoscrollable(LayoutObject* layout_object,
 
 void LayoutBox::MayUpdateHoverWhenContentUnderMouseChanged(
     EventHandler& event_handler) {
-  const LayoutBoxModelObject& container = ContainerForPaintInvalidation();
-  PhysicalRect scroller_rect(VisualRectIncludingCompositedScrolling(container));
-  FloatQuad scroller_quad_in_frame =
-      container.LocalRectToAbsoluteQuad(scroller_rect);
-  event_handler.MayUpdateHoverAfterScroll(scroller_quad_in_frame);
+  event_handler.MayUpdateHoverAfterScroll(AbsoluteBoundingBoxFloatRect());
 }
 
 void LayoutBox::ScrollByRecursively(const ScrollOffset& delta) {
@@ -1211,6 +1212,12 @@ LayoutSize LayoutBox::ScrolledContentOffset() const {
   DCHECK(HasOverflowClip());
   DCHECK(GetScrollableArea());
   return LayoutSize(GetScrollableArea()->GetScrollOffset());
+}
+
+LayoutSize LayoutBox::PixelSnappedScrolledContentOffset() const {
+  DCHECK(HasOverflowClip());
+  DCHECK(GetScrollableArea());
+  return LayoutSize(GetScrollableArea()->ScrollOffsetInt());
 }
 
 PhysicalRect LayoutBox::ClippingRect(const PhysicalOffset& location) const {
@@ -2343,7 +2350,23 @@ void LayoutBox::DirtyLineBoxes(bool full_layout) {
 
 void LayoutBox::SetFirstInlineFragment(NGPaintFragment* fragment) {
   CHECK(IsInLayoutNGInlineFormattingContext()) << *this;
+  // TODO(yosin): Once we remove |NGPaintFragment|, we should get rid of
+  // |!fragment|.
+  DCHECK(!fragment || !RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
   first_paint_fragment_ = fragment;
+}
+
+void LayoutBox::ClearFirstInlineFragmentItemIndex() {
+  CHECK(IsInLayoutNGInlineFormattingContext()) << *this;
+  DCHECK(RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
+  first_fragment_item_index_ = 0u;
+}
+
+void LayoutBox::SetFirstInlineFragmentItemIndex(wtf_size_t index) {
+  CHECK(IsInLayoutNGInlineFormattingContext()) << *this;
+  DCHECK(RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
+  DCHECK_NE(index, 0u);
+  first_fragment_item_index_ = index;
 }
 
 void LayoutBox::InLayoutNGInlineFormattingContextWillChange(bool new_value) {
@@ -2364,10 +2387,23 @@ void LayoutBox::SetCachedLayoutResult(const NGLayoutResult& layout_result,
   if (layout_result.PhysicalFragment().BreakToken())
     return;
 
+  ClearCachedLayoutResult();
   cached_layout_result_ = &layout_result;
 }
 
 void LayoutBox::ClearCachedLayoutResult() {
+  if (!cached_layout_result_)
+    return;
+
+  // Invalidate if inline |DisplayItemClient|s will be destroyed.
+  if (const auto* box_fragment = DynamicTo<NGPhysicalBoxFragment>(
+          &cached_layout_result_->PhysicalFragment())) {
+    if (box_fragment->HasItems()) {
+      DCHECK_EQ(this, box_fragment->GetLayoutObject());
+      ObjectPaintInvalidator(*this).SlowSetPaintingLayerNeedsRepaint();
+    }
+  }
+
   cached_layout_result_ = nullptr;
 }
 
@@ -2746,6 +2782,10 @@ bool LayoutBox::PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const {
   if (HasNonCompositedScrollbars() || IsSelected() ||
       HasBoxDecorationBackground() || StyleRef().HasBoxDecorations() ||
       StyleRef().HasVisualOverflowingEffect())
+    return false;
+
+  // Hit tests rects are painted and depend on the size.
+  if (HasEffectiveAllowedTouchAction())
     return false;
 
   // Both mask and clip-path generates drawing display items that depends on
@@ -3327,10 +3367,11 @@ bool LayoutBox::SizesLogicalWidthToFitContent(
 }
 
 bool LayoutBox::AutoWidthShouldFitContent() const {
-  return GetNode() && (IsHTMLInputElement(*GetNode()) ||
-                       IsA<HTMLSelectElement>(*GetNode()) ||
-                       IsA<HTMLButtonElement>(*GetNode()) ||
-                       IsHTMLTextAreaElement(*GetNode()) || IsRenderedLegend());
+  return GetNode() &&
+         (IsA<HTMLInputElement>(*GetNode()) ||
+          IsA<HTMLSelectElement>(*GetNode()) ||
+          IsA<HTMLButtonElement>(*GetNode()) ||
+          IsA<HTMLTextAreaElement>(*GetNode()) || IsRenderedLegend());
 }
 
 void LayoutBox::ComputeMarginsForDirection(MarginDirection flow_direction,
@@ -3533,37 +3574,18 @@ void LayoutBox::ComputeLogicalHeight(
       return;
     }
 
-    // FIXME: Account for writing-mode in flexible boxes.
-    // https://bugs.webkit.org/show_bug.cgi?id=46418
-    bool in_horizontal_box =
-        Parent()->IsDeprecatedFlexibleBox() &&
-        Parent()->StyleRef().BoxOrient() == EBoxOrient::kHorizontal;
-    bool stretching =
-        Parent()->StyleRef().BoxAlign() == EBoxAlignment::kStretch;
-    bool treat_as_replaced =
-        ShouldComputeSizeAsReplaced() && (!in_horizontal_box || !stretching);
     bool check_min_max_height = false;
 
     // The parent box is flexing us, so it has increased or decreased our
     // height. We have to grab our cached flexible height.
     if (HasOverrideLogicalHeight()) {
       h = Length::Fixed(OverrideLogicalHeight());
-    } else if (treat_as_replaced) {
+    } else if (ShouldComputeSizeAsReplaced()) {
       h = Length::Fixed(ComputeReplacedLogicalHeight() +
                         BorderAndPaddingLogicalHeight());
     } else {
       h = StyleRef().LogicalHeight();
       check_min_max_height = true;
-    }
-
-    // Block children of horizontal flexible boxes fill the height of the box.
-    // FIXME: Account for writing-mode in flexible boxes.
-    // https://bugs.webkit.org/show_bug.cgi?id=46418
-    if (h.IsAuto() && in_horizontal_box &&
-        ToLayoutDeprecatedFlexibleBox(Parent())->IsStretchingChildren()) {
-      h = Length::Fixed(ParentBox()->ContentLogicalHeight() - MarginBefore() -
-                        MarginAfter());
-      check_min_max_height = false;
     }
 
     LayoutUnit height_result;
@@ -5442,7 +5464,7 @@ bool LayoutBox::ShouldBeConsideredAsReplaced() const {
     // treated as such.
     return !IsA<HTMLFieldSetElement>(element);
   }
-  return IsHTMLImageElement(element);
+  return IsA<HTMLImageElement>(element);
 }
 
 bool LayoutBox::HasNonCompositedScrollbars() const {
@@ -6282,14 +6304,15 @@ void LayoutBox::ClearSnapAreas() {
   }
 }
 
-void LayoutBox::AddSnapArea(const LayoutBox& snap_area) {
+void LayoutBox::AddSnapArea(LayoutBox& snap_area) {
   EnsureRareData().EnsureSnapAreas().insert(&snap_area);
 }
 
 void LayoutBox::RemoveSnapArea(const LayoutBox& snap_area) {
-  if (rare_data_ && rare_data_->snap_areas_) {
-    rare_data_->snap_areas_->erase(&snap_area);
-  }
+  // const_cast is safe here because we only need to modify the type to match
+  // the key type, and not actually mutate the object.
+  if (rare_data_ && rare_data_->snap_areas_)
+    rare_data_->snap_areas_->erase(const_cast<LayoutBox*>(&snap_area));
 }
 
 void LayoutBox::ReassignSnapAreas(LayoutBox& new_container) {

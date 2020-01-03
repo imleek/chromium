@@ -7,6 +7,7 @@
 #include <lib/fdio/directory.h>
 #include <lib/fdio/fdio.h>
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <utility>
@@ -181,7 +182,7 @@ class ContentDirectoryURLLoader : public network::mojom::URLLoader {
     }
 
     // Map the file into memory.
-    if (!mmap->Initialize(base::File(fd.release()),
+    if (!mmap->Initialize(base::File(std::move(fd)),
                           base::MemoryMappedFile::READ_ONLY)) {
       return false;
     }
@@ -428,12 +429,12 @@ void ContentDirectoryLoaderFactory::CreateLoaderAndStart(
   }
 
   // Load the resource on a blocking-capable TaskRunner.
-  task_runner_->PostTask(FROM_HERE,
-                         base::Bind(&ContentDirectoryURLLoader::CreateAndStart,
-                                    base::Passed(std::move(loader)), request,
-                                    base::Passed(std::move(client)),
-                                    base::Passed(std::move(file_handle)),
-                                    base::Passed(std::move(metadata_handle))));
+  task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&ContentDirectoryURLLoader::CreateAndStart,
+                                base::Passed(std::move(loader)), request,
+                                base::Passed(std::move(client)),
+                                base::Passed(std::move(file_handle)),
+                                base::Passed(std::move(metadata_handle))));
 }
 
 void ContentDirectoryLoaderFactory::Clone(

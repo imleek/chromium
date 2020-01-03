@@ -59,6 +59,7 @@
 #include "third_party/blink/renderer/modules/service_worker/service_worker.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_error.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_registration.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
@@ -80,14 +81,8 @@ void MaybeRecordThirdPartyServiceWorkerUsage(
   Document* document = To<Document>(execution_context);
   DCHECK(document);
 
-  // Don't record the use counter if the frame is same-origin to the top frame,
-  // or if we can't tell whether the frame was ever cross-origin or not.
-  if (!document->TopFrameOrigin() ||
-      document->TopFrameOrigin()->CanAccess(document->GetSecurityOrigin())) {
-    return;
-  }
-
-  UseCounter::Count(document, WebFeature::kThirdPartyServiceWorker);
+  if (document->IsCrossSiteSubframe())
+    UseCounter::Count(document, WebFeature::kThirdPartyServiceWorker);
 }
 
 bool HasFiredDomContentLoaded(const Document& document) {
@@ -477,17 +472,17 @@ void ServiceWorkerContainer::startMessages() {
   EnableClientMessageQueue();
 }
 
-ScriptPromise ServiceWorkerContainer::ready(ScriptState* caller_state) {
+ScriptPromise ServiceWorkerContainer::ready(ScriptState* caller_state,
+                                            ExceptionState& exception_state) {
   if (!GetExecutionContext())
     return ScriptPromise();
 
   if (!caller_state->World().IsMainWorld()) {
     // FIXME: Support .ready from isolated worlds when
     // ScriptPromiseProperty can vend Promises in isolated worlds.
-    return ScriptPromise::RejectWithDOMException(
-        caller_state, MakeGarbageCollected<DOMException>(
-                          DOMExceptionCode::kNotSupportedError,
-                          "'ready' is only supported in pages."));
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                      "'ready' is only supported in pages.");
+    return ScriptPromise();
   }
 
   if (!ready_) {
@@ -654,16 +649,32 @@ void ServiceWorkerContainer::DispatchMessageEvent(
       MessagePort::EntanglePorts(*GetExecutionContext(), std::move(msg.ports));
   ServiceWorker* service_worker =
       ServiceWorker::From(GetExecutionContext(), std::move(source));
-  MessageEvent* event;
-  if (!msg.locked_agent_cluster_id ||
-      GetExecutionContext()->IsSameAgentCluster(*msg.locked_agent_cluster_id)) {
-    event = MessageEvent::Create(
-        ports, std::move(msg.message),
-        GetExecutionContext()->GetSecurityOrigin()->ToString(),
-        String() /* lastEventId */, service_worker);
-  } else {
-    event = MessageEvent::CreateError(
-        GetExecutionContext()->GetSecurityOrigin()->ToString(), service_worker);
+  Event* event = nullptr;
+  // TODO(crbug.com/1018092): Factor out these security checks so they aren't
+  // duplicated in so many places.
+  if (msg.message->IsOriginCheckRequired()) {
+    const SecurityOrigin* target_origin =
+        GetExecutionContext()->GetSecurityOrigin();
+    if (!msg.sender_origin ||
+        !msg.sender_origin->IsSameOriginWith(target_origin)) {
+      event = MessageEvent::CreateError(
+          GetExecutionContext()->GetSecurityOrigin()->ToString(),
+          service_worker);
+    }
+  }
+  if (!event) {
+    if (!msg.locked_agent_cluster_id ||
+        GetExecutionContext()->IsSameAgentCluster(
+            *msg.locked_agent_cluster_id)) {
+      event = MessageEvent::Create(
+          ports, std::move(msg.message),
+          GetExecutionContext()->GetSecurityOrigin()->ToString(),
+          String() /* lastEventId */, service_worker);
+    } else {
+      event = MessageEvent::CreateError(
+          GetExecutionContext()->GetSecurityOrigin()->ToString(),
+          service_worker);
+    }
   }
   // Schedule the event to be dispatched on the correct task source:
   // https://w3c.github.io/ServiceWorker/#dfn-client-message-queue

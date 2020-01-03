@@ -59,8 +59,6 @@
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/notifications/notification_platform_bridge.h"
 #include "chrome/browser/notifications/system_notification_helper.h"
-#include "chrome/browser/plugins/chrome_plugin_service_filter.h"
-#include "chrome/browser/plugins/plugin_finder.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
@@ -122,7 +120,6 @@
 #include "content/public/browser/network_quality_observer_factory.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/notification_details.h"
-#include "content/public/browser/plugin_service.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
@@ -137,7 +134,6 @@
 #include "printing/buildflags/buildflags.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/network_switches.h"
-#include "services/preferences/public/cpp/in_process_service_factory.h"
 #include "ui/base/idle/idle.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
@@ -146,6 +142,7 @@
 #include "base/win/windows_version.h"
 #elif defined(OS_MACOSX)
 #include "chrome/browser/chrome_browser_main_mac.h"
+#include "chrome/browser/media/webrtc/system_media_capture_permissions_stats_mac.h"
 #endif
 
 #if !defined(OS_CHROMEOS)
@@ -157,6 +154,7 @@
 #include "chrome/browser/android/component_updater/background_task_update_scheduler.h"
 #else
 #include "chrome/browser/gcm/gcm_product_util.h"
+#include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "components/gcm_driver/gcm_client_factory.h"
 #include "components/gcm_driver/gcm_desktop_utils.h"
@@ -179,21 +177,16 @@
 #endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
+#include "chrome/browser/plugins/chrome_plugin_service_filter.h"
+#include "chrome/browser/plugins/plugin_finder.h"
 #include "chrome/browser/plugins/plugins_resource_service.h"
-#endif
-
-#if !defined(OS_ANDROID)
-#include "chrome/browser/resource_coordinator/tab_manager.h"
+#include "content/public/browser/plugin_service.h"
 #endif
 
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 #include "chrome/browser/first_run/upgrade_util.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/ui/user_manager.h"
-#endif
-
-#if defined(OS_MACOSX)
-#include "chrome/browser/media/webrtc/system_media_capture_permissions_stats_mac.h"
 #endif
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -217,7 +210,6 @@ static constexpr base::TimeDelta kEndSessionTimeout =
 
 using content::BrowserThread;
 using content::ChildProcessSecurityPolicy;
-using content::PluginService;
 
 rappor::RapporService* GetBrowserRapporService() {
   if (g_browser_process != nullptr)
@@ -1130,7 +1122,7 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
 #endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-  PluginService* plugin_service = PluginService::GetInstance();
+  auto* plugin_service = content::PluginService::GetInstance();
   plugin_service->SetFilter(ChromePluginServiceFilter::GetInstance());
 
   // Triggers initialization of the singleton instance on UI thread.
@@ -1143,10 +1135,7 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 #if !defined(OS_ANDROID)
-  storage_monitor::StorageMonitor::Create(
-      content::ServiceManagerConnection::GetForProcess()
-          ->GetConnector()
-          ->Clone());
+  storage_monitor::StorageMonitor::Create();
 #endif
 
   platform_part_->PreMainMessageLoopRun();
@@ -1311,6 +1300,7 @@ void BrowserProcessImpl::CreateGCMDriver() {
 
   gcm_driver_ = gcm::CreateGCMDriverDesktop(
       base::WrapUnique(new gcm::GCMClientFactory), local_state(), store_path,
+      /*remove_account_mappings_with_email_key=*/false,
       base::BindRepeating(&RequestProxyResolvingSocketFactory),
       system_network_context_manager()->GetSharedURLLoaderFactory(),
       content::GetNetworkConnectionTracker(), chrome::GetChannel(),

@@ -90,7 +90,7 @@ class Interface(UserDefinedType, WithExtendedAttributes, WithCodeGeneratorInfo,
             WithExtendedAttributes.__init__(self, extended_attributes)
             WithCodeGeneratorInfo.__init__(self)
             WithExposure.__init__(self)
-            WithComponent.__init__(self, component=component)
+            WithComponent.__init__(self, component)
             WithDebugInfo.__init__(self, debug_info)
 
             self.is_partial = is_partial
@@ -102,6 +102,7 @@ class Interface(UserDefinedType, WithExtendedAttributes, WithCodeGeneratorInfo,
             self.constructor_groups = []
             self.operations = list(operations)
             self.operation_groups = []
+            self.exposed_constructs = []
             self.stringifier = stringifier
             self.iterable = iterable
             self.maplike = maplike
@@ -123,12 +124,11 @@ class Interface(UserDefinedType, WithExtendedAttributes, WithCodeGeneratorInfo,
 
         ir = make_copy(ir)
         UserDefinedType.__init__(self, ir.identifier)
-        WithExtendedAttributes.__init__(self, ir.extended_attributes)
-        WithCodeGeneratorInfo.__init__(
-            self, CodeGeneratorInfo(ir.code_generator_info))
-        WithExposure.__init__(self, Exposure(ir.exposure))
-        WithComponent.__init__(self, components=ir.components)
-        WithDebugInfo.__init__(self, ir.debug_info)
+        WithExtendedAttributes.__init__(self, ir, readonly=True)
+        WithCodeGeneratorInfo.__init__(self, ir, readonly=True)
+        WithExposure.__init__(self, ir, readonly=True)
+        WithComponent.__init__(self, ir, readonly=True)
+        WithDebugInfo.__init__(self, ir)
 
         self._is_mixin = ir.is_mixin
         self._inherited = ir.inherited
@@ -163,6 +163,7 @@ class Interface(UserDefinedType, WithExtendedAttributes, WithCodeGeneratorInfo,
                        self._operations),
                 owner=self) for operation_group_ir in ir.operation_groups
         ])
+        self._exposed_constructs = tuple(ir.exposed_constructs)
         self._stringifier = None
         if ir.stringifier:
             operations = filter(lambda x: x.is_stringifier, self._operations)
@@ -191,6 +192,31 @@ class Interface(UserDefinedType, WithExtendedAttributes, WithCodeGeneratorInfo,
     def inherited(self):
         """Returns the inherited interface or None."""
         return self._inherited.target_object if self._inherited else None
+
+    @property
+    def inclusive_inherited_interfaces(self):
+        """
+        Returns the list of inclusive inherited interfaces.
+
+        https://heycam.github.io/webidl/#interface-inclusive-inherited-interfaces
+        """
+        result = []
+        interface = self
+        while interface is not None:
+            result.append(interface)
+            interface = interface.inherited
+        return result
+
+    def does_implement(self, identifier):
+        """
+        Returns True if this is or inherits from the given interface.
+        """
+        assert isinstance(identifier, str)
+
+        for interface in self.inclusive_inherited_interfaces:
+            if interface.identifier == identifier:
+                return True
+        return False
 
     @property
     def attributes(self):
@@ -241,19 +267,18 @@ class Interface(UserDefinedType, WithExtendedAttributes, WithCodeGeneratorInfo,
         return self._operation_groups
 
     @property
+    def exposed_constructs(self):
+        """
+        Returns a list of the constructs that are exposed on this global object.
+        """
+        return tuple(
+            map(lambda ref: ref.target_object, self._exposed_constructs))
+
+    @property
     def named_constructor(self):
         """Returns a named constructor or None."""
         assert False, "Not implemented yet."
 
-    @property
-    def exposed_interfaces(self):
-        """
-        Returns a tuple of interfaces that are exposed to this interface, if
-        this is a global interface.  Returns None otherwise.
-        """
-        assert False, "Not implemented yet."
-
-    # Special operations
     @property
     def indexed_property_handler(self):
         """
@@ -319,7 +344,7 @@ class Stringifier(WithOwner, WithDebugInfo):
         assert attribute is None or isinstance(attribute, Attribute)
 
         WithOwner.__init__(self, owner)
-        WithDebugInfo.__init__(self, ir.debug_info)
+        WithDebugInfo.__init__(self, ir)
 
         self._operation = operation
         self._attribute = attribute

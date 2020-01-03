@@ -286,7 +286,7 @@ class HttpStreamFactoryJobControllerTest : public TestWithTaskEnvironment {
     if (alternative_service.protocol == kProtoQUIC) {
       session_->http_server_properties()->SetQuicAlternativeService(
           server, NetworkIsolationKey(), alternative_service, expiration,
-          session_->params().quic_params.supported_versions);
+          quic_context_.params()->supported_versions);
     } else {
       session_->http_server_properties()->SetHttp2AlternativeService(
           server, NetworkIsolationKey(), alternative_service, expiration);
@@ -321,7 +321,7 @@ class HttpStreamFactoryJobControllerTest : public TestWithTaskEnvironment {
   void TestMainJobFailsAfterAltJobSucceeded(
       bool alt_job_retried_on_non_default_network);
 
-  BoundTestNetLog net_log_;
+  RecordingBoundTestNetLog net_log_;
   TestJobFactory job_factory_;
   MockHttpStreamRequestDelegate request_delegate_;
   MockQuicContext quic_context_;
@@ -333,14 +333,13 @@ class HttpStreamFactoryJobControllerTest : public TestWithTaskEnvironment {
   std::unique_ptr<SequencedSocketData> tcp_data_;
   std::unique_ptr<MockQuicData> quic_data_;
   MockCryptoClientStreamFactory crypto_client_stream_factory_;
-  QuicTestPacketMaker client_maker_{
-      HttpNetworkSession::Params().quic_params.supported_versions[0],
-      quic::QuicUtils::CreateRandomConnectionId(
-          quic_context_.random_generator()),
-      quic_context_.clock(),
-      kServerHostname,
-      quic::Perspective::IS_CLIENT,
-      false};
+  QuicTestPacketMaker client_maker_{kDefaultSupportedQuicVersion,
+                                    quic::QuicUtils::CreateRandomConnectionId(
+                                        quic_context_.random_generator()),
+                                    quic_context_.clock(),
+                                    kServerHostname,
+                                    quic::Perspective::IS_CLIENT,
+                                    false};
 
  protected:
   bool use_alternative_proxy_ = false;
@@ -369,8 +368,9 @@ TEST_F(HttpStreamFactoryJobControllerTest, ProxyResolutionFailsSync) {
 
   Initialize(request_info);
 
-  EXPECT_CALL(request_delegate_,
-              OnStreamFailed(ERR_MANDATORY_PROXY_CONFIGURATION_FAILED, _, _, _))
+  EXPECT_CALL(
+      request_delegate_,
+      OnStreamFailed(ERR_MANDATORY_PROXY_CONFIGURATION_FAILED, _, _, _, _))
       .Times(1);
   request_ =
       job_controller_->Start(&request_delegate_, nullptr, net_log_.bound(),
@@ -415,8 +415,9 @@ TEST_F(HttpStreamFactoryJobControllerTest, ProxyResolutionFailsAsync) {
   EXPECT_EQ(LOAD_STATE_RESOLVING_PROXY_FOR_URL,
             job_controller_->GetLoadState());
 
-  EXPECT_CALL(request_delegate_,
-              OnStreamFailed(ERR_MANDATORY_PROXY_CONFIGURATION_FAILED, _, _, _))
+  EXPECT_CALL(
+      request_delegate_,
+      OnStreamFailed(ERR_MANDATORY_PROXY_CONFIGURATION_FAILED, _, _, _, _))
       .Times(1);
   proxy_resolver_factory->pending_requests()[0]->CompleteNowWithForwarder(
       ERR_FAILED, &resolver);
@@ -437,7 +438,7 @@ TEST_F(HttpStreamFactoryJobControllerTest, NoSupportedProxies) {
   Initialize(request_info);
 
   EXPECT_CALL(request_delegate_,
-              OnStreamFailed(ERR_NO_SUPPORTED_PROXIES, _, _, _))
+              OnStreamFailed(ERR_NO_SUPPORTED_PROXIES, _, _, _, _))
       .Times(1);
   request_ =
       job_controller_->Start(&request_delegate_, nullptr, net_log_.bound(),
@@ -486,7 +487,7 @@ class JobControllerReconsiderProxyAfterErrorTest
 };
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     JobControllerReconsiderProxyAfterErrorTest,
     ::testing::Combine(::testing::Bool(),
                        testing::ValuesIn(proxy_test_mock_errors)));
@@ -676,7 +677,7 @@ TEST_F(JobControllerReconsiderProxyAfterErrorTest,
   Initialize(std::move(proxy_resolution_service));
 
   ProxyInfo used_proxy_info;
-  EXPECT_CALL(request_delegate_, OnStreamFailed(ERR_MSG_TOO_BIG, _, _, _))
+  EXPECT_CALL(request_delegate_, OnStreamFailed(ERR_MSG_TOO_BIG, _, _, _, _))
       .Times(1);
 
   std::unique_ptr<HttpStreamRequest> request =
@@ -721,8 +722,7 @@ TEST_F(JobControllerReconsiderProxyAfterErrorTest,
       NetworkIsolationKey(), stats1);
 
   // Prepare the mocked data.
-  MockQuicData quic_data(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  MockQuicData quic_data(kDefaultSupportedQuicVersion);
   quic_data.AddRead(ASYNC, ERR_QUIC_PROTOCOL_ERROR);
   quic_data.AddWrite(ASYNC, OK);
   quic_data.AddSocketDataToFactory(session_deps_.socket_factory.get());
@@ -745,7 +745,7 @@ TEST_F(JobControllerReconsiderProxyAfterErrorTest,
   SetAlternativeService(request_info, alternative_service);
 
   EXPECT_CALL(request_delegate_, OnStreamReadyImpl(_, _, _)).Times(1);
-  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _)).Times(0);
+  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _, _)).Times(0);
 
   // Create the job controller.
   std::unique_ptr<HttpStreamRequest> request =
@@ -780,7 +780,8 @@ TEST_F(HttpStreamFactoryJobControllerTest, OnStreamFailedWithNoAlternativeJob) {
 
   // There's no other alternative job. Thus when stream failed, it should
   // notify Request of the stream failure.
-  EXPECT_CALL(request_delegate_, OnStreamFailed(ERR_FAILED, _, _, _)).Times(1);
+  EXPECT_CALL(request_delegate_, OnStreamFailed(ERR_FAILED, _, _, _, _))
+      .Times(1);
   base::RunLoop().RunUntilIdle();
 }
 
@@ -812,8 +813,7 @@ TEST_F(HttpStreamFactoryJobControllerTest, CancelJobsBeforeBinding) {
   // Use COLD_START to make the alt job pending.
   crypto_client_stream_factory_.set_handshake_mode(
       MockCryptoClientStream::COLD_START);
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, OK);
 
   tcp_data_ = std::make_unique<SequencedSocketData>();
@@ -875,8 +875,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
        DoNotDelayMainJobIfQuicWasRecentlyBroken) {
   crypto_client_stream_factory_.set_handshake_mode(
       MockCryptoClientStream::COLD_START);
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   tcp_data_ = std::make_unique<SequencedSocketData>();
   tcp_data_->set_connect_data(MockConnect(SYNCHRONOUS, ERR_IO_PENDING));
@@ -891,7 +890,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
   base::Time expiration = base::Time::Now() + base::TimeDelta::FromDays(1);
   session_->http_server_properties()->SetQuicAlternativeService(
       server, NetworkIsolationKey(), alternative_service, expiration,
-      session_->params().quic_params.supported_versions);
+      quic_context_.params()->supported_versions);
 
   // Enable QUIC but mark the alternative service as recently broken.
   QuicStreamFactory* quic_stream_factory = session_->quic_stream_factory();
@@ -934,8 +933,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
        DelayMainJobAfterRecentlyBrokenQuicWasConfirmed) {
   crypto_client_stream_factory_.set_handshake_mode(
       MockCryptoClientStream::COLD_START);
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   tcp_data_ = std::make_unique<SequencedSocketData>();
   tcp_data_->set_connect_data(MockConnect(SYNCHRONOUS, ERR_IO_PENDING));
@@ -950,7 +948,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
   base::Time expiration = base::Time::Now() + base::TimeDelta::FromDays(1);
   session_->http_server_properties()->SetQuicAlternativeService(
       server, NetworkIsolationKey(), alternative_service, expiration,
-      session_->params().quic_params.supported_versions);
+      quic_context_.params()->supported_versions);
 
   // Enable QUIC but mark the alternative service as recently broken.
   QuicStreamFactory* quic_stream_factory = session_->quic_stream_factory();
@@ -997,8 +995,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 
 void HttpStreamFactoryJobControllerTest::TestOnStreamFailedForBothJobs(
     bool alt_job_retried_on_non_default_network) {
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddConnect(ASYNC, ERR_FAILED);
   tcp_data_ = std::make_unique<SequencedSocketData>();
   tcp_data_->set_connect_data(MockConnect(ASYNC, ERR_FAILED));
@@ -1026,7 +1023,7 @@ void HttpStreamFactoryJobControllerTest::TestOnStreamFailedForBothJobs(
 
   // The failure of second Job should be reported to Request as there's no more
   // pending Job to serve the Request.
-  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _)).Times(1);
+  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _, _)).Times(1);
   base::RunLoop().RunUntilIdle();
   VerifyBrokenAlternateProtocolMapping(request_info, false);
   request_.reset();
@@ -1049,8 +1046,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 
 void HttpStreamFactoryJobControllerTest::TestAltJobFailsAfterMainJobSucceeded(
     bool alt_job_retried_on_non_default_network) {
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(ASYNC, ERR_FAILED);
   crypto_client_stream_factory_.set_handshake_mode(
       MockCryptoClientStream::COLD_START);
@@ -1087,7 +1083,7 @@ void HttpStreamFactoryJobControllerTest::TestAltJobFailsAfterMainJobSucceeded(
   EXPECT_CALL(request_delegate_, OnStreamReadyImpl(_, _, _));
   // JobController shouldn't report the status of second job as request
   // is already successfully served.
-  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _)).Times(0);
+  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _, _)).Times(0);
 
   base::RunLoop().RunUntilIdle();
 
@@ -1119,8 +1115,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 
 // Tests that when alt job succeeds, main job is destroyed.
 TEST_F(HttpStreamFactoryJobControllerTest, AltJobSucceedsMainJobDestroyed) {
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   // Use cold start and complete alt job manually.
   crypto_client_stream_factory_.set_handshake_mode(
@@ -1168,11 +1163,8 @@ TEST_F(HttpStreamFactoryJobControllerTest, AltJobSucceedsMainJobDestroyed) {
 // Regression test for crbug.com/678768.
 TEST_F(HttpStreamFactoryJobControllerTest,
        AltJobSucceedsMainJobBlockedControllerDestroyed) {
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
-  if (VersionUsesHttp3(HttpNetworkSession::Params()
-                           .quic_params.supported_versions.front()
-                           .transport_version)) {
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
+  if (VersionUsesHttp3(kDefaultSupportedQuicVersion.transport_version)) {
     quic_data_->AddWrite(SYNCHRONOUS,
                          client_maker_.MakeInitialSettingsPacket(1));
   }
@@ -1252,8 +1244,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 // JobController will be cleaned up.
 TEST_F(HttpStreamFactoryJobControllerTest,
        OrphanedJobCompletesControllerDestroyed) {
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   // Use cold start and complete alt job manually.
   crypto_client_stream_factory_.set_handshake_mode(
@@ -1307,8 +1298,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 
 void HttpStreamFactoryJobControllerTest::TestAltJobSucceedsAfterMainJobFailed(
     bool alt_job_retried_on_non_default_network) {
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   // Use cold start and complete alt job manually.
   crypto_client_stream_factory_.set_handshake_mode(
@@ -1329,7 +1319,7 @@ void HttpStreamFactoryJobControllerTest::TestAltJobSucceedsAfterMainJobFailed(
   SetAlternativeService(request_info, alternative_service);
 
   // |main_job| fails but should not report status to Request.
-  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _)).Times(0);
+  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _, _)).Times(0);
 
   request_ =
       job_controller_->Start(&request_delegate_, nullptr, net_log_.bound(),
@@ -1376,8 +1366,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 void HttpStreamFactoryJobControllerTest::
     TestAltJobSucceedsAfterMainJobSucceeded(
         bool alt_job_retried_on_non_default_network) {
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   // Use cold start and complete alt job manually.
   crypto_client_stream_factory_.set_handshake_mode(
@@ -1399,7 +1388,7 @@ void HttpStreamFactoryJobControllerTest::
   SetAlternativeService(request_info, alternative_service);
 
   // |main_job| fails but should not report status to Request.
-  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _)).Times(0);
+  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _, _)).Times(0);
 
   request_ =
       job_controller_->Start(&request_delegate_, nullptr, net_log_.bound(),
@@ -1460,8 +1449,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 void HttpStreamFactoryJobControllerTest::
     TestMainJobSucceedsAfterAltJobSucceeded(
         bool alt_job_retried_on_non_default_network) {
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   // Use cold start and complete alt job manually.
   crypto_client_stream_factory_.set_handshake_mode(
@@ -1536,8 +1524,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 
 void HttpStreamFactoryJobControllerTest::TestMainJobFailsAfterAltJobSucceeded(
     bool alt_job_retried_on_non_default_network) {
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   // Use cold start and complete alt job manually.
   crypto_client_stream_factory_.set_handshake_mode(
@@ -1600,8 +1587,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 
 void HttpStreamFactoryJobControllerTest::TestMainJobSucceedsAfterAltJobFailed(
     bool alt_job_retried_on_non_default_network) {
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddConnect(SYNCHRONOUS, ERR_FAILED);
 
   tcp_data_ = std::make_unique<SequencedSocketData>();
@@ -1627,7 +1613,7 @@ void HttpStreamFactoryJobControllerTest::TestMainJobSucceedsAfterAltJobFailed(
   EXPECT_TRUE(job_controller_->alternative_job());
 
   // |alternative_job| fails but should not report status to Request.
-  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _)).Times(0);
+  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _, _)).Times(0);
   // |main_job| succeeds and should report status to Request.
   EXPECT_CALL(request_delegate_, OnStreamReadyImpl(_, _, _));
 
@@ -1669,8 +1655,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 // then the alternative service is not marked as broken.
 TEST_F(HttpStreamFactoryJobControllerTest,
        MainJobSucceedsAfterConnectionChanged) {
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddConnect(SYNCHRONOUS, ERR_NETWORK_CHANGED);
   tcp_data_ = std::make_unique<SequencedSocketData>();
   tcp_data_->set_connect_data(MockConnect(SYNCHRONOUS, OK));
@@ -1695,7 +1680,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
   EXPECT_TRUE(job_controller_->alternative_job());
 
   // |alternative_job| fails but should not report status to Request.
-  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _)).Times(0);
+  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _, _)).Times(0);
   // |main_job| succeeds and should report status to Request.
   EXPECT_CALL(request_delegate_, OnStreamReadyImpl(_, _, _));
   base::RunLoop().RunUntilIdle();
@@ -1712,8 +1697,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 // Get load state after main job fails and before alternative job succeeds.
 TEST_F(HttpStreamFactoryJobControllerTest, GetLoadStateAfterMainJobFailed) {
   // Use COLD_START to complete alt job manually.
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   crypto_client_stream_factory_.set_handshake_mode(
       MockCryptoClientStream::COLD_START);
@@ -1738,7 +1722,7 @@ TEST_F(HttpStreamFactoryJobControllerTest, GetLoadStateAfterMainJobFailed) {
 
   // |main_job| fails but should not report status to Request.
   // The alternative job will mark the main job complete.
-  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _)).Times(0);
+  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _, _)).Times(0);
 
   base::RunLoop().RunUntilIdle();
 
@@ -1760,8 +1744,7 @@ TEST_F(HttpStreamFactoryJobControllerTest, GetLoadStateAfterMainJobFailed) {
 
 TEST_F(HttpStreamFactoryJobControllerTest, ResumeMainJobWhenAltJobStalls) {
   // Use COLD_START to stall alt job.
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   crypto_client_stream_factory_.set_handshake_mode(
       MockCryptoClientStream::COLD_START);
@@ -1830,8 +1813,7 @@ TEST_F(HttpStreamFactoryJobControllerTest, HostResolutionHang) {
   Initialize(request_info);
 
   // handshake will fail asynchronously after mock data is unpaused.
-  MockQuicData quic_data(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  MockQuicData quic_data(kDefaultSupportedQuicVersion);
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // Pause
   quic_data.AddRead(ASYNC, ERR_FAILED);
   quic_data.AddWrite(ASYNC, ERR_FAILED);
@@ -1886,7 +1868,7 @@ TEST_F(HttpStreamFactoryJobControllerTest, HostResolutionHang) {
   // Unpause mock quic data.
   // Will cause |alternative_job| to fail, but its failure should not be
   // reported to Request.
-  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _)).Times(0);
+  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _, _)).Times(0);
   // OnStreamFailed will post a task to resume the main job immediately but
   // won't call Resume() on the main job since it's been resumed already.
   EXPECT_CALL(*job_factory_.main_job(), Resume()).Times(0);
@@ -1904,8 +1886,7 @@ TEST_F(HttpStreamFactoryJobControllerTest, DelayedTCP) {
   Initialize(request_info);
 
   // Handshake will fail asynchronously after mock data is unpaused.
-  MockQuicData quic_data(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  MockQuicData quic_data(kDefaultSupportedQuicVersion);
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // Pause
   quic_data.AddRead(ASYNC, ERR_FAILED);
   quic_data.AddWrite(ASYNC, ERR_FAILED);
@@ -2047,8 +2028,7 @@ TEST_F(HttpStreamFactoryJobControllerTest, DelayedTCPWithLargeSrtt) {
   Initialize(request_info);
 
   // handshake will fail asynchronously after mock data is unpaused.
-  MockQuicData quic_data(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  MockQuicData quic_data(kDefaultSupportedQuicVersion);
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // Pause
   quic_data.AddRead(ASYNC, ERR_FAILED);
   quic_data.AddWrite(ASYNC, ERR_FAILED);
@@ -2110,8 +2090,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
   Initialize(request_info);
 
   // handshake will fail asynchronously after mock data is unpaused.
-  MockQuicData quic_data(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  MockQuicData quic_data(kDefaultSupportedQuicVersion);
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // Pause
   quic_data.AddRead(ASYNC, ERR_FAILED);
   quic_data.AddWrite(ASYNC, ERR_FAILED);
@@ -2233,8 +2212,7 @@ TEST_F(HttpStreamFactoryJobControllerTest, DelayedTCPAlternativeProxy) {
   EXPECT_TRUE(test_proxy_delegate()->alternative_proxy_server().is_quic());
 
   // Handshake will fail asynchronously after mock data is unpaused.
-  MockQuicData quic_data(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  MockQuicData quic_data(kDefaultSupportedQuicVersion);
   quic_data.AddRead(ASYNC, ERR_IO_PENDING);  // Pause
   quic_data.AddRead(ASYNC, ERR_FAILED);
   quic_data.AddWrite(ASYNC, ERR_FAILED);
@@ -2293,8 +2271,7 @@ TEST_F(HttpStreamFactoryJobControllerTest, FailAlternativeProxy) {
   ProxyClientSocketDataProvider proxy_data(SYNCHRONOUS, OK);
   session_deps_.socket_factory->AddProxyClientSocketDataProvider(&proxy_data);
 
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddConnect(SYNCHRONOUS, ERR_FAILED);
   tcp_data_ = std::make_unique<SequencedSocketData>();
   tcp_data_->set_connect_data(MockConnect(SYNCHRONOUS, OK));
@@ -2348,8 +2325,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
   ProxyClientSocketDataProvider proxy_data(SYNCHRONOUS, OK);
   session_deps_.socket_factory->AddProxyClientSocketDataProvider(&proxy_data);
 
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddConnect(SYNCHRONOUS, ERR_INTERNET_DISCONNECTED);
   tcp_data_ = std::make_unique<SequencedSocketData>();
   tcp_data_->set_connect_data(MockConnect(SYNCHRONOUS, OK));
@@ -2403,8 +2379,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
   // Use COLD_START to make the alt job pending.
   crypto_client_stream_factory_.set_handshake_mode(
       MockCryptoClientStream::COLD_START);
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   tcp_data_ = std::make_unique<SequencedSocketData>();
   tcp_data_->set_connect_data(MockConnect(SYNCHRONOUS, OK));
@@ -2438,7 +2413,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 
   // JobController shouldn't report the status of alternative server job as
   // request is already successfully served.
-  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _)).Times(0);
+  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _, _, _, _)).Times(0);
   job_controller_->OnStreamFailed(job_factory_.alternative_job(), ERR_FAILED,
                                   SSLConfig());
 
@@ -2452,8 +2427,7 @@ TEST_F(HttpStreamFactoryJobControllerTest,
 }
 
 TEST_F(HttpStreamFactoryJobControllerTest, PreconnectToHostWithValidAltSvc) {
-  auto version =
-      HttpNetworkSession::Params().quic_params.supported_versions.front();
+  auto version = kDefaultSupportedQuicVersion;
   quic_data_ = std::make_unique<MockQuicData>(version);
   if (VersionUsesHttp3(version.transport_version)) {
     quic_data_->AddWrite(SYNCHRONOUS,
@@ -3075,8 +3049,7 @@ TEST_F(JobControllerLimitMultipleH2Requests, H1NegotiatedForFirstRequest) {
 TEST_F(JobControllerLimitMultipleH2Requests, QuicJobNotThrottled) {
   crypto_client_stream_factory_.set_handshake_mode(
       MockCryptoClientStream::COLD_START);
-  quic_data_ = std::make_unique<MockQuicData>(
-      HttpNetworkSession::Params().quic_params.supported_versions.front());
+  quic_data_ = std::make_unique<MockQuicData>(kDefaultSupportedQuicVersion);
   quic_data_->AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING)};
   tcp_data_ =
@@ -3132,7 +3105,7 @@ class HttpStreamFactoryJobControllerMisdirectedRequestRetry
       public ::testing::WithParamInterface<::testing::tuple<bool, bool>> {};
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     HttpStreamFactoryJobControllerMisdirectedRequestRetry,
     ::testing::Combine(::testing::Bool(), ::testing::Bool()));
 
@@ -3141,8 +3114,7 @@ TEST_P(HttpStreamFactoryJobControllerMisdirectedRequestRetry,
   const bool enable_ip_based_pooling = ::testing::get<0>(GetParam());
   const bool enable_alternative_services = ::testing::get<1>(GetParam());
   if (enable_alternative_services) {
-    auto version =
-        HttpNetworkSession::Params().quic_params.supported_versions.front();
+    auto version = kDefaultSupportedQuicVersion;
     quic_data_ = std::make_unique<MockQuicData>(version);
     quic_data_->AddConnect(SYNCHRONOUS, OK);
     if (VersionUsesHttp3(version.transport_version)) {
@@ -3228,7 +3200,7 @@ class HttpStreamFactoryJobControllerPreconnectTest
 };
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     HttpStreamFactoryJobControllerPreconnectTest,
     ::testing::Bool());
 
@@ -3283,7 +3255,7 @@ TEST_F(HttpStreamFactoryJobControllerTest, GetAlternativeServiceInfoFor) {
   // Set alternative service for the same server with the same list of versions
   // that is supported.
   quic::ParsedQuicVersionVector supported_versions =
-      session_->params().quic_params.supported_versions;
+      quic_context_.params()->supported_versions;
   session_->http_server_properties()->SetQuicAlternativeService(
       server, NetworkIsolationKey(), alternative_service, expiration,
       supported_versions);
@@ -3317,10 +3289,9 @@ TEST_F(HttpStreamFactoryJobControllerTest, GetAlternativeServiceInfoFor) {
   // Set alternative service for the same server with two QUIC versions:
   // - one unsupported version: |unsupported_version_1|,
   // - one supported version:
-  // session_->params().quic_params.supported_versions[0].
+  // quic_context_.params()->supported_versions[0].
   quic::ParsedQuicVersionVector mixed_quic_versions = {
-      unsupported_version_1,
-      session_->params().quic_params.supported_versions[0]};
+      unsupported_version_1, quic_context_.params()->supported_versions[0]};
   session_->http_server_properties()->SetQuicAlternativeService(
       server, NetworkIsolationKey(), alternative_service, expiration,
       mixed_quic_versions);
@@ -3364,13 +3335,13 @@ TEST_F(HttpStreamFactoryJobControllerTest, QuicHostAllowlist) {
   // Set HttpNetworkSession's QUIC host allowlist to only have www.example.com
   HttpNetworkSessionPeer session_peer(session_.get());
   session_peer.params()->quic_host_allowlist.insert("www.example.com");
-  session_peer.params()->quic_params.allow_remote_alt_svc = true;
+  quic_context_.params()->allow_remote_alt_svc = true;
 
   // Set alternative service for www.google.com to be www.example.com over QUIC.
   url::SchemeHostPort server(request_info.url);
   base::Time expiration = base::Time::Now() + base::TimeDelta::FromDays(1);
   quic::ParsedQuicVersionVector supported_versions =
-      session_->params().quic_params.supported_versions;
+      quic_context_.params()->supported_versions;
   session_->http_server_properties()->SetQuicAlternativeService(
       server, NetworkIsolationKey(),
       AlternativeService(kProtoQUIC, "www.example.com", 443), expiration,

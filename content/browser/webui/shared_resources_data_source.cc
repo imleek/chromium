@@ -15,6 +15,8 @@
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
+#include "content/browser/resources/media/grit/media_internals_resources.h"
+#include "content/browser/resources/media/grit/media_internals_resources_map.h"
 #include "content/grit/content_resources.h"
 #include "content/grit/content_resources_map.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -61,17 +63,20 @@ const std::map<std::string, std::string> CreatePathPrefixAliasesMap() {
   // TODO(rkc): Once we have a separate source for apps, remove '*/apps/'
   // aliases.
   std::map<std::string, std::string> aliases = {
-      {"../../../third_party/polymer/v1_0/components-chromium/",
-       "polymer/v1_0/"},
-      {"../../../third_party/polymer/v3_0/components-chromium/",
-       "polymer/v3_0/"},
-      {"../../../third_party/web-animations-js/sources/",
-       "polymer/v1_0/web-animations-js/"},
-      {"../../views/resources/default_100_percent/common/", "images/apps/"},
-      {"../../views/resources/default_200_percent/common/", "images/2x/apps/"},
-      {"../../webui/resources/cr_components/", "cr_components/"},
-      {"../../webui/resources/cr_elements/", "cr_elements/"},
-      {"@out_folder@/gen/ui/webui/resources/", ""},
+    {"../../../third_party/polymer/v1_0/components-chromium/", "polymer/v1_0/"},
+    {"../../../third_party/polymer/v3_0/components-chromium/", "polymer/v3_0/"},
+    {"../../../third_party/web-animations-js/sources/",
+     "polymer/v1_0/web-animations-js/"},
+    {"../../views/resources/default_100_percent/common/", "images/apps/"},
+    {"../../views/resources/default_200_percent/common/", "images/2x/apps/"},
+    {"../../webui/resources/cr_components/", "cr_components/"},
+    {"../../webui/resources/cr_elements/", "cr_elements/"},
+    {"@out_folder@/gen/ui/webui/resources/", ""},
+#if defined(OS_ANDROID)
+    // This is a temporary fix for `target_cpu = "arm64"`. See the bug for
+    // more context: crbug.com/1020284.
+    {"@out_folder@/android_clang_arm/gen/ui/webui/resources/", ""},
+#endif  // defined(OS_ANDROID)
   };
 
 #if defined(OS_CHROMEOS)
@@ -152,12 +157,6 @@ const std::map<int, std::string> CreateChromeosMojoResourceIdToAliasMap() {
       {IDR_MULTIDEVICE_MULTIDEVICE_SETUP_MOJOM_LITE_JS,
        "mojo/chromeos/services/multidevice_setup/public/mojom/"
        "multidevice_setup.mojom-lite.js"},
-      {IDR_MULTIDEVICE_MULTIDEVICE_SETUP_CONSTANTS_MOJOM_HTML,
-       "mojo/chromeos/services/multidevice_setup/public/mojom/"
-       "constants.mojom.html"},
-      {IDR_MULTIDEVICE_MULTIDEVICE_SETUP_CONSTANTS_MOJOM_LITE_JS,
-       "mojo/chromeos/services/multidevice_setup/public/mojom/"
-       "constants.mojom-lite.js"},
       {IDR_MULTIDEVICE_MULTIDEVICE_TYPES_MOJOM_HTML,
        "mojo/chromeos/components/multidevice/mojom/"
        "multidevice_types.mojom.html"},
@@ -254,6 +253,9 @@ const ResourcesMap* CreateResourcesMap() {
   AddResourcesToMap(result);
   AddAliasedResourcesToMap(CreateContentResourceIdToAliasMap(),
                            kContentResources, kContentResourcesSize, result);
+  AddAliasedResourcesToMap(CreateContentResourceIdToAliasMap(),
+                           kMediaInternalsResources,
+                           kMediaInternalsResourcesSize, result);
   AddAliasedResourcesToMap(CreateMojoResourceIdToAliasMap(),
                            kMojoBindingsResources, kMojoBindingsResourcesSize,
                            result);
@@ -291,7 +293,7 @@ std::string SharedResourcesDataSource::GetSource() {
 void SharedResourcesDataSource::StartDataRequest(
     const GURL& url,
     const WebContents::Getter& wc_getter,
-    const URLDataSource::GotDataCallback& callback) {
+    URLDataSource::GotDataCallback callback) {
   const std::string path = URLDataSource::URLToRequestPath(url);
   std::string updated_path = path;
 #if defined(OS_CHROMEOS)
@@ -318,7 +320,7 @@ void SharedResourcesDataSource::StartDataRequest(
     bytes = GetContentClient()->GetDataResourceBytes(idr);
   }
 
-  callback.Run(std::move(bytes));
+  std::move(callback).Run(std::move(bytes));
 }
 
 bool SharedResourcesDataSource::AllowCaching() {

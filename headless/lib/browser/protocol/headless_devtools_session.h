@@ -36,10 +36,8 @@ class HeadlessDevToolsSession : public FrontendChannel {
 
   void HandleCommand(
       const std::string& method,
-      const std::string& message,
+      base::span<const uint8_t> message,
       content::DevToolsManagerDelegate::NotHandledCallback callback);
-
-  UberDispatcher* dispatcher() { return dispatcher_.get(); }
 
  private:
   void AddHandler(std::unique_ptr<DomainHandler> handler);
@@ -51,13 +49,13 @@ class HeadlessDevToolsSession : public FrontendChannel {
   void flushProtocolNotifications() override;
   void fallThrough(int call_id,
                    const std::string& method,
-                   const std::string& message) override;
+                   crdtp::span<uint8_t> message) override;
 
   base::WeakPtr<HeadlessBrowserImpl> browser_;
   content::DevToolsAgentHost* const agent_host_;
   content::DevToolsAgentHostClient* const client_;
-  std::unique_ptr<UberDispatcher> dispatcher_;
-  base::flat_map<std::string, std::unique_ptr<DomainHandler>> handlers_;
+  UberDispatcher dispatcher_;
+  std::vector<std::unique_ptr<DomainHandler>> handlers_;
   base::flat_map<int, content::DevToolsManagerDelegate::NotHandledCallback>
       pending_commands_;
 

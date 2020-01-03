@@ -10,11 +10,6 @@ namespace features {
 const base::Feature kAcceptLanguageHeader{"AcceptLanguageHeader",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kCapRefererHeaderLength = {
-    "CapRefererHeaderLength", base::FEATURE_ENABLED_BY_DEFAULT};
-const base::FeatureParam<int> kMaxRefererHeaderLength = {
-    &kCapRefererHeaderLength, "MaxRefererHeaderLength", 4096};
-
 const base::Feature kEnableTLS13EarlyData{"EnableTLS13EarlyData",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -70,9 +65,34 @@ const base::Feature kCookiesWithoutSameSiteMustBeSecure{
 const base::Feature kShortLaxAllowUnsafeThreshold{
     "ShortLaxAllowUnsafeThreshold", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kSameSiteDefaultChecksMethodRigorously{
+    "SameSiteDefaultChecksMethodRigorously", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kRecentHttpSameSiteAccessGrantsLegacyCookieSemantics{
+    "RecentHttpSameSiteAccessGrantsLegacyCookieSemantics",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+const base::FeatureParam<int>
+    kRecentHttpSameSiteAccessGrantsLegacyCookieSemanticsMilliseconds{
+        &kRecentHttpSameSiteAccessGrantsLegacyCookieSemantics,
+        "RecentHttpSameSiteAccessGrantsLegacyCookieSemanticsMilliseconds", 0};
+
+const base::Feature kRecentCreationTimeGrantsLegacyCookieSemantics{
+    "RecentCreationTimeGrantsLegacyCookieSemantics",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+const base::FeatureParam<int>
+    kRecentCreationTimeGrantsLegacyCookieSemanticsMilliseconds{
+        &kRecentCreationTimeGrantsLegacyCookieSemantics,
+        "RecentCreationTimeGrantsLegacyCookieSemanticsMilliseconds", 0};
+
 #if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
-const base::Feature kCertVerifierBuiltinFeature{
-    "CertVerifierBuiltin", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kCertVerifierBuiltinFeature {
+  "CertVerifierBuiltin",
+#if defined(OS_CHROMEOS)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 #endif
 
 const base::Feature kAppendFrameOriginToNetworkIsolationKey{

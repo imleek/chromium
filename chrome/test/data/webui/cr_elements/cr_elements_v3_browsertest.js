@@ -27,18 +27,6 @@ var CrElementsV3BrowserTest = class extends PolymerTest {
   get webuiHost() {
     return 'dummyurl';
   }
-
-  /** @override */
-  get runAccessibilityChecks() {
-    return true;
-  }
-
-  /** @override */
-  setUp() {
-    PolymerTest.prototype.setUp.call(this);
-    // We aren't loading the main document.
-    this.accessibilityAuditConfig.ignoreSelectors('humanLangMissing', 'html');
-  }
 };
 
 // eslint-disable-next-line no-var
@@ -87,18 +75,16 @@ var CrElementsDrawerV3Test = class extends CrElementsV3BrowserTest {
   }
 };
 
-// https://crbug.com/1008122
-GEN('#if defined(OS_MACOSX) && defined(NDEBUG)');
-GEN('# define MAYBE_CrElementsDrawerV3Test_All \\');
-GEN('     DISABLED_All');
+// https://crbug.com/1008122 - Flaky on Linux CFI and Mac 10.10.
+GEN('#if (defined(OS_LINUX) && defined(IS_CFI)) || defined(OS_MACOSX)');
+GEN('#define MAYBE_Drawer DISABLED_Drawer');
 GEN('#else');
-GEN('# define MAYBE_CrElementsDrawerV3Test_All  \\');
-GEN('     All');
+GEN('#define MAYBE_Drawer Drawer');
 GEN('#endif');
-TEST_F(
-    'CrElementsDrawerV3Test', 'MAYBE_CrElementsDrawerV3Test_All', function() {
-      mocha.run();
-    });
+
+TEST_F('CrElementsDrawerV3Test', 'MAYBE_Drawer', function() {
+  mocha.run();
+});
 
 // eslint-disable-next-line no-var
 var CrElementsExpandButtonV3Test = class extends CrElementsV3BrowserTest {
@@ -183,6 +169,20 @@ var CrElementsSearchFieldV3Test = class extends CrElementsV3BrowserTest {
 TEST_F('CrElementsSearchFieldV3Test', 'All', function() {
   mocha.run();
 });
+
+GEN('#if defined(OS_CHROMEOS)');
+// eslint-disable-next-line no-var
+var CrElementsSearchableDropDownV3Test = class extends CrElementsV3BrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://test?module=cr_elements/cr_searchable_drop_down_tests.m.js';
+  }
+};
+
+TEST_F('CrElementsSearchableDropDownV3Test', 'All', function() {
+  mocha.run();
+});
+GEN('#endif');
 
 // eslint-disable-next-line no-var
 var CrElementsSplitterV3Test = class extends CrElementsV3BrowserTest {

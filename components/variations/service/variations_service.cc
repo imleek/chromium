@@ -614,8 +614,8 @@ bool VariationsService::StoreSeed(const std::string& seed_data,
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       client_->GetVersionForSimulationCallback(),
-      base::Bind(&VariationsService::PerformSimulationWithVersion,
-                 weak_ptr_factory_.GetWeakPtr(), base::Passed(&seed)));
+      base::BindOnce(&VariationsService::PerformSimulationWithVersion,
+                     weak_ptr_factory_.GetWeakPtr(), base::Passed(&seed)));
   return true;
 }
 
@@ -643,8 +643,8 @@ void VariationsService::StartRepeatedVariationsSeedFetch() {
 
   DCHECK(!request_scheduler_);
   request_scheduler_.reset(VariationsRequestScheduler::Create(
-      base::Bind(&VariationsService::FetchVariationsSeed,
-                 weak_ptr_factory_.GetWeakPtr()),
+      base::BindRepeating(&VariationsService::FetchVariationsSeed,
+                          weak_ptr_factory_.GetWeakPtr()),
       local_state_));
   // Note that the act of starting the scheduler will start the fetch, if the
   // scheduler deems appropriate.

@@ -36,9 +36,9 @@ import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.ui.DisableAnimationsTestRule;
 import org.chromium.payments.mojom.BasicCardNetwork;
 import org.chromium.payments.mojom.BasicCardType;
+import org.chromium.ui.test.util.DisableAnimationsTestRule;
 
 import java.util.concurrent.TimeoutException;
 
@@ -58,6 +58,19 @@ public class PaymentRequestPaymentAppAndBasicCardWithModifiersTest {
     @Rule
     public PaymentRequestTestRule mPaymentRequestTestRule = new PaymentRequestTestRule(
             "payment_request_bobpay_and_basic_card_with_modifiers_test.html");
+
+    /**
+     * Adds a credit cart to ensure that autofill app is available.
+     */
+    public void addCreditCard() throws TimeoutException {
+        AutofillTestHelper helper = new AutofillTestHelper();
+        String billingAddressId = helper.setProfile(new AutofillProfile("", "https://example.com",
+                true, "John Smith", "Google", "340 Main St", "CA", "Los Angeles", "", "90291", "",
+                "US", "310-310-6000", "john.smith@gmail.com", "en-US"));
+        helper.setCreditCard(new CreditCard("", "https://example.com", true, true, "Jon Doe",
+                "4111111111111111", "1111", "12", "2050", "visa", R.drawable.visa_card,
+                CardType.UNKNOWN, billingAddressId, "" /* serverId */));
+    }
 
     private AutofillTestHelper mHelper;
     private String mBillingAddressId;
@@ -288,6 +301,8 @@ public class PaymentRequestPaymentAppAndBasicCardWithModifiersTest {
     @MediumTest
     @Feature({"Payments"})
     public void testPaymentAppCanPayWithModifiers() throws TimeoutException {
+        // Add a credit card to force showing payment sheet UI.
+        addCreditCard();
         mPaymentRequestTestRule.installPaymentApp(HAVE_INSTRUMENTS, DELAYED_RESPONSE);
         mPaymentRequestTestRule.triggerUIAndWait(
                 "buy_with_bobpay_discount", mPaymentRequestTestRule.getReadyToPay());
@@ -340,7 +355,7 @@ public class PaymentRequestPaymentAppAndBasicCardWithModifiersTest {
                             bobpayMethodNames /* methodNames */, true /* explicitlyVerified */,
                             bobpayCapabilities /* capabilities */,
                             new String[0] /* preferredRelatedApplicationIds */,
-                            new ServiceWorkerPaymentApp.SupportedDelegations()));
+                            new SupportedDelegations()));
             callback.onPaymentAppCreated(
                     new ServiceWorkerPaymentApp(webContents, 0 /* registrationId */,
                             UriUtils.parseUriFromString("https://alicepay.com") /* scope */,
@@ -349,7 +364,7 @@ public class PaymentRequestPaymentAppAndBasicCardWithModifiersTest {
                             alicepayMethodNames /* methodNames */, true /* explicitlyVerified */,
                             alicepayCapabilities /* capabilities */,
                             new String[0] /* preferredRelatedApplicationIds */,
-                            new ServiceWorkerPaymentApp.SupportedDelegations()));
+                            new SupportedDelegations()));
             callback.onAllPaymentAppsCreated();
         });
         mPaymentRequestTestRule.triggerUIAndWait(

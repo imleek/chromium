@@ -34,8 +34,11 @@ import traceback
 from blinkpy.common import exit_codes
 from blinkpy.common.host import Host
 from blinkpy.common.system.log_utils import configure_logging
-from blinkpy.web_tests.models import test_expectations
+from blinkpy.web_tests.models.test_expectations import (
+    TestExpectations, TestExpectationLine, ParseError)
+
 from blinkpy.web_tests.port.factory import platform_options
+from blinkpy.web_tests.models.test_expectations import TestExpectationLine
 
 _log = logging.getLogger(__name__)
 
@@ -51,30 +54,118 @@ def lint(host, options):
     # (the default Port for this host) and it would work the same.
 
     failures = []
-    for port_to_lint in ports_to_lint:
-        expectations_dict = port_to_lint.all_expectations_dict()
+    wpt_overrides_exps_path = host.filesystem.join(
+        ports_to_lint[0].web_tests_dir(), 'WPTOverrideExpectations')
+    web_gpu_exps_path = host.filesystem.join(
+        ports_to_lint[0].web_tests_dir(), 'WebGPUExpectations')
+    paths = [wpt_overrides_exps_path, web_gpu_exps_path]
+    expectations_dict = {}
+    all_system_specifiers = set()
+    all_build_specifiers = set(ports_to_lint[0].ALL_BUILD_TYPES)
 
-        for path in port_to_lint.extra_expectations_files():
+    # TODO(crbug.com/986447) Remove the checks below after migrating the expectations
+    # parsing to Typ. All the checks below can be handled by Typ.
+    for path in paths:
+        if host.filesystem.exists(path):
+            expectations_dict[path] = host.filesystem.read_text_file(path)
+
+    for port in ports_to_lint:
+        expectations_dict.update(port.all_expectations_dict())
+        config_macro_dict = port.configuration_specifier_macros()
+        if config_macro_dict:
+            all_system_specifiers.update({s.lower() for s in config_macro_dict.keys()})
+            all_system_specifiers.update(
+                {s.lower() for s in reduce(lambda x, y: x + y, config_macro_dict.values())})
+        for path in port.extra_expectations_files():
             if host.filesystem.exists(path):
                 expectations_dict[path] = host.filesystem.read_text_file(path)
+    for path, content in expectations_dict.items():
+        try:
+            TestExpectations(
+                ports_to_lint[0],
+                expectations_dict={path: content},
+                is_lint_mode=True)
+        except ParseError as error:
+            _log.error('')
+            for warning in error.warnings:
+                _log.error(warning)
+                failures.append('%s: %s' % (path, warning))
+                _log.error('')
 
-        for expectations_file in expectations_dict:
-
-            if expectations_file in files_linted:
+        # check for expectations which start with the Bug(...) token
+        exp_lines = content.split('\n')
+        for lineno, line in enumerate(exp_lines, 1):
+            line = line.strip()
+            if not line or line.startswith('#'):
                 continue
+            if line.startswith('Bug('):
+                error = (("%s:%d Expectation '%s' has the Bug(...) token, "
+                          "The token has been removed in the new expectations format") %
+                          (host.filesystem.basename(path), lineno, line))
+                _log.error(error)
+                failures.append(error)
+                _log.error('')
 
-            try:
-                test_expectations.TestExpectations(
-                    port_to_lint,
-                    expectations_dict={expectations_file: expectations_dict[expectations_file]},
-                    is_lint_mode=True)
-            except test_expectations.ParseError as error:
+        # check for expectations which have more than one mutually exclusive specifier
+        for lineno, line in enumerate(exp_lines, 1):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            exp_line = TestExpectationLine.tokenize_line(
+                host.filesystem.basename(path), line, lineno, ports_to_lint[0])
+            specifiers = set(s.lower() for s in exp_line.specifiers)
+            system_intersection = specifiers & all_system_specifiers
+            build_intersection = specifiers & all_build_specifiers
+            for intersection in [system_intersection, build_intersection]:
+                if len(intersection) < 2:
+                    continue
+                error = (("%s:%d Expectation '%s' has multiple specifiers that are mutually exclusive.\n"
+                          "The mutually exclusive specifiers are %s") %
+                         (host.filesystem.basename(path), lineno, line, ', '.join(intersection)))
+                _log.error(error)
+                failures.append(error)
                 _log.error('')
-                for warning in error.warnings:
-                    _log.error(warning)
-                    failures.append('%s: %s' % (expectations_file, warning))
+
+        # check for expectations with test names which have glob's in the middle and not end
+        # of the test name
+        for lineno, line in enumerate(exp_lines, 1):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            exp_line = TestExpectationLine.tokenize_line(
+                host.filesystem.basename(path), line, lineno, ports_to_lint[0])
+            for i in range(len(exp_line.name)-1):
+                if exp_line.name[i] == '*' and ((i > 0 and exp_line.name[i-1] != '\\') or i == 0):
+                    error = (("%s:%d In Expectation '%s' a glob can only be at the end of a "
+                              "test name. You can use '\*' to represent an asterisk "
+                              "in a test name") %
+                             (host.filesystem.basename(path), lineno, line))
+                    _log.error(error)
+                    failures.append(error)
+                    _log.error('')
+
+
+        # check for directories in test expectations which do not have a glob at the end
+        for lineno, line in enumerate(exp_lines, 1):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            test_exp_line = TestExpectationLine.tokenize_line(
+                host.filesystem.basename(path), line, lineno, ports_to_lint[0])
+            if not test_exp_line.name or test_exp_line.name.endswith('*'):
+                continue
+            testname, _ = ports_to_lint[0].split_webdriver_test_name(test_exp_line.name)
+            index = testname.find('?')
+            if index != -1:
+                testname = testname[:index]
+            if ports_to_lint[0].test_isdir(testname):
+                error = (("%s:%d Expectation '%s' is for a directory, however "
+                          "the name in the expectation does not have a glob in the end") %
+                          (host.filesystem.basename(path), lineno, line))
+                _log.error(error)
+                failures.append(error)
                 _log.error('')
-            files_linted.add(expectations_file)
+
     return failures
 
 

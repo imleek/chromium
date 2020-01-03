@@ -76,12 +76,16 @@ class APP_LIST_EXPORT AppListMainView
   // Called when the app represented by |result| is installed.
   void OnResultInstalled(SearchResult* result);
 
+  // AppListModelObserver overrides:
+  void OnAppListStateChanged(AppListState new_state,
+                             AppListState old_state) override;
+
  private:
   // Adds the ContentsView.
   void AddContentsViews();
 
   // Gets the PaginationModel owned by the AppsGridView.
-  ash::PaginationModel* GetAppsPaginationModel();
+  PaginationModel* GetAppsPaginationModel();
 
   // Overridden from SearchBoxViewDelegate:
   void QueryChanged(search_box::SearchBoxViewBase* sender) override;

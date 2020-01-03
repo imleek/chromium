@@ -40,17 +40,18 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.CompositorView;
 import org.chromium.chrome.browser.flags.FeatureUtilities;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.page_info.PageInfoController;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabAssociatedApp;
-import org.chromium.chrome.browser.tab.TabBrowserControlsState;
+import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabRedirectHandler;
 import org.chromium.chrome.browser.tabmodel.ChromeTabCreator;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
@@ -477,7 +478,7 @@ public class VrShell extends GvrLayout
         if (mTab != null) {
             initializeTabForVR();
             mTab.addObserver(mTabObserver);
-            TabBrowserControlsState.update(mTab, BrowserControlsState.HIDDEN, false);
+            TabBrowserControlsConstraintsHelper.update(mTab, BrowserControlsState.HIDDEN, false);
         }
         mTabObserver.onContentChanged(mTab);
     }
@@ -561,7 +562,10 @@ public class VrShell extends GvrLayout
         Tab tab = mActivity.getActivityTab();
         if (tab == null) return;
 
-        PageInfoController.show(mActivity, tab, null, PageInfoController.OpenedFromSource.VR);
+        PageInfoController.show(mActivity, tab.getWebContents(), null,
+                PageInfoController.OpenedFromSource.VR,
+                /*offlinePageLoadUrlDelegate=*/
+                new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(tab));
     }
 
     // Called because showing audio permission dialog isn't supported in VR. This happens when
@@ -798,7 +802,7 @@ public class VrShell extends GvrLayout
                 View parent = mTab.getContentView();
                 mTab.getWebContents().setSize(parent.getWidth(), parent.getHeight());
             }
-            TabBrowserControlsState.update(mTab, BrowserControlsState.SHOWN, false);
+            TabBrowserControlsConstraintsHelper.update(mTab, BrowserControlsState.SHOWN, false);
         }
 
         mContentVirtualDisplay.destroy();

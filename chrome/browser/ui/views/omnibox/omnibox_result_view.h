@@ -34,6 +34,11 @@ namespace gfx {
 class Image;
 }
 
+namespace views {
+class Button;
+class FocusRing;
+}  // namespace views
+
 namespace ui {
 class ThemeProvider;
 }
@@ -59,11 +64,18 @@ class OmniboxResultView : public views::View,
 
   void Invalidate(bool force_reapply_styles = false);
 
-  // Invoked when this result view has been selected.
-  void OnSelected();
+  // Invoked when this result view has been selected or unselected.
+  void OnSelectionStateChanged();
 
   // Whether |this| matches the model's selected index.
   bool IsSelected() const;
+
+  // Returns the visible (and keyboard-focusable) secondary button, or nullptr
+  // if none exists for this suggestion.
+  views::Button* GetSecondaryButton();
+
+  // If this view has a secondary button, triggers the action and returns true.
+  bool MaybeTriggerSecondaryButton(const ui::Event& event);
 
   OmniboxPartState GetThemeState() const;
 
@@ -93,7 +105,7 @@ class OmniboxResultView : public views::View,
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
-  void OnMouseMoved(const ui::MouseEvent& event) override;
+  void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   gfx::Size CalculatePreferredSize() const override;
@@ -105,13 +117,18 @@ class OmniboxResultView : public views::View,
 
   gfx::Image GetIcon() const;
 
-  // Sets the hovered state of this result.
-  void SetHovered(bool hovered);
+  // Updates the highlight state of the row, as well as conditionally shows
+  // controls that are only visible on row hover.
+  void UpdateHoverState();
 
   // Call model's OpenMatch() with the selected index and provided disposition
   // and timestamp the match was selected (base::TimeTicks() if unknown).
   void OpenMatch(WindowOpenDisposition disposition,
                  base::TimeTicks match_selection_timestamp);
+
+  // Sets the visibility of the |remove_suggestion_button_| based on the current
+  // state.
+  void UpdateRemoveSuggestionVisibility();
 
   // views::View:
   const char* GetClassName() const override;
@@ -129,15 +146,6 @@ class OmniboxResultView : public views::View,
   // The theme provider associated with this view.
   const ui::ThemeProvider* theme_provider_;
 
-  // Whether this view is in the hovered state. Note: This is false when a
-  // child button is hovered, and therefore this is different from
-  // View::IsMouseHovered(). This is useful for a contrasting highlight between
-  // the tab-switch button and the row, but is a non-standard hover meaning.
-  //
-  // TODO(tommycli): Investigate if we can get the desired tab-switch button
-  // behavior while using just plain View::IsMouseHovered().
-  bool is_hovered_ = false;
-
   // The data this class is built to display (the "Omnibox Result").
   AutocompleteMatch match_;
 
@@ -154,6 +162,7 @@ class OmniboxResultView : public views::View,
 
   // The "X" button at the end of the match cell, used to remove suggestions.
   views::ImageButton* remove_suggestion_button_;
+  std::unique_ptr<views::FocusRing> remove_suggestion_focus_ring_;
 
   base::WeakPtrFactory<OmniboxResultView> weak_factory_{this};
 

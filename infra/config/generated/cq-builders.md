@@ -205,15 +205,6 @@ builder.
   Path regular expressions:
   * [`//chromecast/.+`](https://cs.chromium.org/chromium/src/chromecast/)
 
-* [gpu-fyi-try-android-p-pixel-2-skv-32](https://ci.chromium.org/p/chromium/builders/try/gpu-fyi-try-android-p-pixel-2-skv-32) ([definition](https://cs.chromium.org/search?q=package:%5Echromium$+file:/cq.star$+-file:/beta/+-file:/stable/+gpu-fyi-try-android-p-pixel-2-skv-32)) ([matching builders](https://cs.chromium.org/search?q=+file:trybots.py+gpu-fyi-try-android-p-pixel-2-skv-32))
-
-  Path regular expressions:
-  * [`//components/viz/.+`](https://cs.chromium.org/chromium/src/components/viz/)
-  * [`//content/test/gpu/gpu_tests/.+py`](https://cs.chromium.org/search?q=package:%5Echromium$+file:content/test/gpu/gpu_tests/.+py)
-  * [`//content/test/gpu/gpu_tests/test_expectations/pixel_expectations.txt`](https://cs.chromium.org/search?q=package:%5Echromium$+file:content/test/gpu/gpu_tests/test_expectations/pixel_expectations.txt)
-  * [`//gpu/vulkan/.+`](https://cs.chromium.org/chromium/src/gpu/vulkan/)
-  * [`//services/viz/.+`](https://cs.chromium.org/chromium/src/services/viz/)
-
 * [ios-simulator-cronet](https://ci.chromium.org/p/chromium/builders/try/ios-simulator-cronet) ([definition](https://cs.chromium.org/search?q=package:%5Echromium$+file:/cq.star$+-file:/beta/+-file:/stable/+ios-simulator-cronet)) ([matching builders](https://cs.chromium.org/search?q=+file:trybots.py+ios-simulator-cronet))
 
   Path regular expressions:
@@ -324,21 +315,9 @@ These builders are run on some percentage of builds. Their results are ignored
 by CQ. These are often used to test new configurations before they are added
 as required builders.
 
-* [android-marshmallow-arm64-coverage-rel](https://ci.chromium.org/p/chromium/builders/try/android-marshmallow-arm64-coverage-rel) ([definition](https://cs.chromium.org/search?q=package:%5Echromium$+file:/cq.star$+-file:/beta/+-file:/stable/+android-marshmallow-arm64-coverage-rel)) ([matching builders](https://cs.chromium.org/search?q=+file:trybots.py+android-marshmallow-arm64-coverage-rel))
-  * Experiment percentage: 10
-
 * [android-pie-arm64-rel](https://ci.chromium.org/p/chromium/builders/try/android-pie-arm64-rel) ([definition](https://cs.chromium.org/search?q=package:%5Echromium$+file:/cq.star$+-file:/beta/+-file:/stable/+android-pie-arm64-rel)) ([matching builders](https://cs.chromium.org/search?q=+file:trybots.py+android-pie-arm64-rel))
-  * Experiment percentage: 50
+  * Experiment percentage: 100
 
 * [fuchsia-compile-x64-dbg](https://ci.chromium.org/p/chromium/builders/try/fuchsia-compile-x64-dbg) ([definition](https://cs.chromium.org/search?q=package:%5Echromium$+file:/cq.star$+-file:/beta/+-file:/stable/+fuchsia-compile-x64-dbg)) ([matching builders](https://cs.chromium.org/search?q=+file:trybots.py+fuchsia-compile-x64-dbg))
   * Experiment percentage: 50
-
-* [ios-device](https://ci.chromium.org/p/chromium/builders/try/ios-device) ([definition](https://cs.chromium.org/search?q=package:%5Echromium$+file:/cq.star$+-file:/beta/+-file:/stable/+ios-device)) ([matching builders](https://cs.chromium.org/search?q=+file:trybots.py+ios-device))
-  * Experiment percentage: 10
-
-* [ios-device-xcode-clang](https://ci.chromium.org/p/chromium/builders/try/ios-device-xcode-clang) ([definition](https://cs.chromium.org/search?q=package:%5Echromium$+file:/cq.star$+-file:/beta/+-file:/stable/+ios-device-xcode-clang)) ([matching builders](https://cs.chromium.org/search?q=+file:trybots.py+ios-device-xcode-clang))
-  * Experiment percentage: 10
-
-* [ios-simulator-xcode-clang](https://ci.chromium.org/p/chromium/builders/try/ios-simulator-xcode-clang) ([definition](https://cs.chromium.org/search?q=package:%5Echromium$+file:/cq.star$+-file:/beta/+-file:/stable/+ios-simulator-xcode-clang)) ([matching builders](https://cs.chromium.org/search?q=+file:trybots.py+ios-simulator-xcode-clang))
-  * Experiment percentage: 10
 

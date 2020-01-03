@@ -38,7 +38,7 @@ import org.chromium.ui.widget.ChromeBulletSpan;
 public class SadTab extends EmptyTabObserver implements UserData {
     private static final Class<SadTab> USER_DATA_KEY = SadTab.class;
 
-    private final Tab mTab;
+    private final TabImpl mTab;
 
     private View mView;
 
@@ -68,7 +68,7 @@ public class SadTab extends EmptyTabObserver implements UserData {
 
     @VisibleForTesting
     public SadTab(Tab tab) {
-        mTab = tab;
+        mTab = (TabImpl) tab;
         mTab.addObserver(this);
     }
 

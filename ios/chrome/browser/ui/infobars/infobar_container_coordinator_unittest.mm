@@ -9,15 +9,17 @@
 #include "base/test/task_environment.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/infobars/confirm_infobar_controller.h"
-#include "ios/chrome/browser/infobars/infobar.h"
 #include "ios/chrome/browser/infobars/infobar_badge_tab_helper.h"
+#include "ios/chrome/browser/infobars/infobar_ios.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/infobars/infobar_type.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/infobars/coordinators/infobar_confirm_coordinator.h"
+#import "ios/chrome/browser/ui/infobars/coordinators/infobar_password_coordinator.h"
 #import "ios/chrome/browser/ui/infobars/infobar_constants.h"
 #import "ios/chrome/browser/ui/infobars/infobar_feature.h"
 #import "ios/chrome/browser/ui/infobars/infobar_positioner.h"
+#import "ios/chrome/browser/ui/infobars/test/test_infobar_password_delegate.h"
 #import "ios/chrome/browser/ui/infobars/test_infobar_delegate.h"
 #import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
@@ -87,9 +89,9 @@ class InfobarContainerCoordinatorTest : public PlatformTest {
     web_state_list_->ActivateWebStateAt(0);
 
     // Setup InfobarBadgeTabHelper and InfoBarManager
+    InfoBarManagerImpl::CreateForWebState(web_state_list_->GetActiveWebState());
     InfobarBadgeTabHelper::CreateForWebState(
         web_state_list_->GetActiveWebState());
-    InfoBarManagerImpl::CreateForWebState(web_state_list_->GetActiveWebState());
 
     // Setup the InfobarContainerCoordinator.
     infobar_container_coordinator_ = [[InfobarContainerCoordinator alloc]
@@ -134,15 +136,14 @@ class InfobarContainerCoordinatorTest : public PlatformTest {
   // presentation.
   void AddInfobar(bool high_priority_presentation) {
     // Setup the InfobarCoordinator and InfobarDelegate.
-    TestInfoBarDelegate* test_infobar_delegate =
-        new TestInfoBarDelegate(@"Title");
-    coordinator_ = [[InfobarConfirmCoordinator alloc]
+    TestInfobarPasswordDelegate* test_infobar_delegate =
+        new TestInfobarPasswordDelegate(@"Title");
+    coordinator_ = [[InfobarPasswordCoordinator alloc]
         initWithInfoBarDelegate:test_infobar_delegate
-                   badgeSupport:YES
-                           type:InfobarType::kInfobarTypeConfirm];
+                           type:InfobarType::kInfobarTypePasswordSave];
     coordinator_.highPriorityPresentation = high_priority_presentation;
-    infobar_delegate_ =
-        std::unique_ptr<ConfirmInfoBarDelegate>(test_infobar_delegate);
+    infobar_delegate_ = std::unique_ptr<IOSChromeSavePasswordInfoBarDelegate>(
+        test_infobar_delegate);
 
     GetInfobarManager()->AddInfoBar(std::make_unique<InfoBarIOS>(
         coordinator_, std::move(infobar_delegate_)));
@@ -152,27 +153,46 @@ class InfobarContainerCoordinatorTest : public PlatformTest {
   // presentation.
   void AddSecondInfobar(bool high_priority_presentation) {
     // Setup the InfobarCoordinator and InfobarDelegate.
-    TestInfoBarDelegate* test_infobar_delegate =
-        new TestInfoBarDelegate(@"Title 2");
-    second_coordinator_ = [[InfobarConfirmCoordinator alloc]
+    TestInfobarPasswordDelegate* test_infobar_delegate =
+        new TestInfobarPasswordDelegate(@"Title 2");
+    second_coordinator_ = [[InfobarPasswordCoordinator alloc]
         initWithInfoBarDelegate:test_infobar_delegate
-                   badgeSupport:YES
-                           type:InfobarType::kInfobarTypePasswordSave];
+                           type:InfobarType::kInfobarTypeSaveCard];
     second_coordinator_.highPriorityPresentation = high_priority_presentation;
-    std::unique_ptr<ConfirmInfoBarDelegate> infobar_delegate =
-        std::unique_ptr<ConfirmInfoBarDelegate>(test_infobar_delegate);
+    std::unique_ptr<IOSChromeSavePasswordInfoBarDelegate> infobar_delegate =
+        std::unique_ptr<IOSChromeSavePasswordInfoBarDelegate>(
+            test_infobar_delegate);
 
     GetInfobarManager()->AddInfoBar(std::make_unique<InfoBarIOS>(
         second_coordinator_, std::move(infobar_delegate)));
   }
 
+  // Adds a Confirm Infobar to the InfobarManager, triggering an InfobarBanner
+  // presentation.
+  void AddConfirmInfobar(bool high_priority_presentation) {
+    // Setup the InfobarCoordinator and InfobarDelegate.
+    TestInfoBarDelegate* test_infobar_delegate =
+        new TestInfoBarDelegate(@"Title 3");
+    confirm_coordinator_ = [[InfobarConfirmCoordinator alloc]
+        initWithInfoBarDelegate:test_infobar_delegate
+                   badgeSupport:NO
+                           type:InfobarType::kInfobarTypeConfirm];
+    confirm_coordinator_.highPriorityPresentation = high_priority_presentation;
+    std::unique_ptr<ConfirmInfoBarDelegate> infobar_delegate =
+        std::unique_ptr<ConfirmInfoBarDelegate>(test_infobar_delegate);
+
+    GetInfobarManager()->AddInfoBar(std::make_unique<InfoBarIOS>(
+        confirm_coordinator_, std::move(infobar_delegate)));
+  }
+
   void AddSecondWebstate() {
     std::unique_ptr<web::TestWebState> second_web_state =
         std::make_unique<web::TestWebState>();
+    InfoBarManagerImpl::CreateForWebState(second_web_state.get());
+    InfobarBadgeTabHelper::CreateForWebState(second_web_state.get());
     web_state_list_->InsertWebState(1, std::move(second_web_state),
                                     WebStateList::INSERT_NO_FLAGS,
                                     WebStateOpener());
-    InfobarBadgeTabHelper::CreateForWebState(web_state_list_->GetWebStateAt(1));
   }
 
   // Adds a Legacy Infobar to the InfobarManager, triggering an InfobarBanner
@@ -198,9 +218,10 @@ class InfobarContainerCoordinatorTest : public PlatformTest {
   ScopedKeyWindow scoped_key_window_;
   FakeBaseViewController* base_view_controller_;
   TestContainerCoordinatorPositioner* positioner_;
-  InfobarConfirmCoordinator* coordinator_;
-  InfobarConfirmCoordinator* second_coordinator_;
-  std::unique_ptr<ConfirmInfoBarDelegate> infobar_delegate_;
+  InfobarPasswordCoordinator* coordinator_;
+  InfobarPasswordCoordinator* second_coordinator_;
+  InfobarConfirmCoordinator* confirm_coordinator_;
+  std::unique_ptr<IOSChromeSavePasswordInfoBarDelegate> infobar_delegate_;
   ConfirmInfoBarController* legacy_controller_;
   std::unique_ptr<ConfirmInfoBarDelegate> legacy_infobar_delegate_;
 };
@@ -796,6 +817,34 @@ TEST_F(InfobarContainerCoordinatorTest, TestInfobarQueueHighPriority) {
             InfobarBannerPresentationState::Presented);
 
   ASSERT_EQ(NSUInteger(2),
+            infobar_container_coordinator_.childCoordinators.count);
+}
+
+// Tests that a Confirm Infobar is stopped after it has been dismissed.
+TEST_F(InfobarContainerCoordinatorTest, TestConfirmInfobarStoppedOnDismissal) {
+  AddConfirmInfobar(/*high_priority_presentation=*/false);
+  ASSERT_EQ(NSUInteger(1),
+            infobar_container_coordinator_.childCoordinators.count);
+
+  EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForUIElementTimeout, ^bool {
+        return confirm_coordinator_.infobarBannerState ==
+               InfobarBannerPresentationState::Presented;
+      }));
+  ASSERT_EQ(infobar_container_coordinator_.infobarBannerState,
+            InfobarBannerPresentationState::Presented);
+
+  [infobar_container_coordinator_ dismissInfobarBannerAnimated:NO
+                                                    completion:nil];
+  ASSERT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForUIElementTimeout, ^bool {
+        return confirm_coordinator_.infobarBannerState ==
+               InfobarBannerPresentationState::NotPresented;
+      }));
+
+  ASSERT_EQ(infobar_container_coordinator_.infobarBannerState,
+            InfobarBannerPresentationState::NotPresented);
+  ASSERT_EQ(NSUInteger(0),
             infobar_container_coordinator_.childCoordinators.count);
 }
 

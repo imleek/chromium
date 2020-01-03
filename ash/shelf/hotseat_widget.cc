@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "ash/shelf/hotseat_widget.h"
+#include <memory>
+#include <utility>
 
 #include "ash/focus_cycler.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
@@ -11,6 +13,7 @@
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/wallpaper_controller_observer.h"
 #include "ash/shelf/scrollable_shelf_view.h"
+#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
@@ -18,7 +21,8 @@
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "chromeos/constants/chromeos_switches.h"
-#include "ui/compositor/layer_animation_element.h"
+#include "ui/aura/scoped_window_targeter.h"
+#include "ui/aura/window_targeter.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/color_analysis.h"
 #include "ui/gfx/color_palette.h"
@@ -34,6 +38,53 @@ bool IsScrollableShelfEnabled() {
   return chromeos::switches::ShouldShowScrollableShelf();
 }
 
+// Custom window targeter for the hotseat. Used so the hotseat only processes
+// events that land on the visible portion of the hotseat, and only while the
+// hotseat is not animating.
+class HotseatWindowTargeter : public aura::WindowTargeter {
+ public:
+  explicit HotseatWindowTargeter(HotseatWidget* hotseat_widget)
+      : hotseat_widget_(hotseat_widget) {}
+  ~HotseatWindowTargeter() override = default;
+
+  HotseatWindowTargeter(const HotseatWindowTargeter& other) = delete;
+  HotseatWindowTargeter& operator=(const HotseatWindowTargeter& rhs) = delete;
+
+  // aura::WindowTargeter:
+  bool SubtreeShouldBeExploredForEvent(aura::Window* window,
+                                       const ui::LocatedEvent& event) override {
+    // Do not handle events if the hotseat window is animating as it may animate
+    // over other items which want to process events.
+    if (hotseat_widget_->GetLayer()->GetAnimator()->is_animating())
+      return false;
+    return aura::WindowTargeter::SubtreeShouldBeExploredForEvent(window, event);
+  }
+
+  bool GetHitTestRects(aura::Window* target,
+                       gfx::Rect* hit_test_rect_mouse,
+                       gfx::Rect* hit_test_rect_touch) const override {
+    // If the hotseat is not extended we can use the normal targeting as the
+    // hidden parts of the hotseat will not block non-shelf items from taking
+    // events.
+    if (target == hotseat_widget_->GetNativeWindow() &&
+        hotseat_widget_->state() == HotseatState::kExtended) {
+      // Shrink the hit bounds from the size of the window to the size of the
+      // hotseat opaque background.
+      gfx::Rect hit_bounds = target->bounds();
+      hit_bounds.ClampToCenteredSize(
+          hotseat_widget_->GetOpaqueBackgroundSize());
+      *hit_test_rect_mouse = *hit_test_rect_touch = hit_bounds;
+      return true;
+    }
+    return aura::WindowTargeter::GetHitTestRects(target, hit_test_rect_mouse,
+                                                 hit_test_rect_touch);
+  }
+
+ private:
+  // Unowned and guaranteed to be not null for the duration of |this|.
+  HotseatWidget* const hotseat_widget_;
+};
+
 }  // namespace
 
 class HotseatWidget::DelegateView : public views::WidgetDelegateView,
@@ -41,7 +92,9 @@ class HotseatWidget::DelegateView : public views::WidgetDelegateView,
  public:
   explicit DelegateView(WallpaperControllerImpl* wallpaper_controller)
       : opaque_background_(ui::LAYER_SOLID_COLOR),
-        wallpaper_controller_(wallpaper_controller) {}
+        wallpaper_controller_(wallpaper_controller) {
+    opaque_background_.SetName("hotseat/Background");
+  }
   ~DelegateView() override;
 
   // Initializes the view.
@@ -71,17 +124,12 @@ class HotseatWidget::DelegateView : public views::WidgetDelegateView,
     focus_cycler_ = focus_cycler;
   }
 
-  ui::Layer* opaque_background() { return &opaque_background_; }
-
  private:
   // Returns whether the hotseat background should be shown.
   bool ShouldShowHotseatBackground() const;
 
   void SetParentLayer(ui::Layer* layer);
 
-  // Whether |opaque_background_| should be hidden, used during transition
-  // animations.
-  bool hide_opaque_background_for_transition_ = false;
   FocusCycler* focus_cycler_ = nullptr;
   // A background layer that may be visible depending on HotseatState.
   ui::Layer opaque_background_;
@@ -115,10 +163,10 @@ void HotseatWidget::DelegateView::Init(
 }
 
 void HotseatWidget::DelegateView::UpdateOpaqueBackground() {
-  if (hide_opaque_background_for_transition_)
-    return;
   if (!ShouldShowHotseatBackground()) {
     opaque_background_.SetVisible(false);
+    if (features::IsBackgroundBlurEnabled())
+      opaque_background_.SetBackgroundBlur(0);
     return;
   }
 
@@ -145,29 +193,6 @@ void HotseatWidget::DelegateView::OnTabletModeChanged() {
   UpdateOpaqueBackground();
 }
 
-void HotseatWidget::DelegateView::HideOpaqueBackground(bool animate) {
-  hide_opaque_background_for_transition_ = true;
-  if (!animate) {
-    opaque_background_.SetVisible(false);
-    return;
-  }
-
-  ui::ScopedLayerAnimationSettings settings(opaque_background_.GetAnimator());
-  settings.SetTransitionDuration(
-      ShelfConfig::Get()->hotseat_background_animation_duration());
-  settings.SetTweenType(gfx::Tween::EASE_OUT);
-  settings.SetPreemptionStrategy(
-      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
-  opaque_background_.SetColor(
-      SkColorSetA(ShelfConfig::Get()->GetDefaultShelfColor(), 0x00));
-  opaque_background_.SetBackgroundBlur(0);
-}
-
-void HotseatWidget::DelegateView::ShowOpaqueBackground() {
-  hide_opaque_background_for_transition_ = false;
-  UpdateOpaqueBackground();
-}
-
 bool HotseatWidget::DelegateView::CanActivate() const {
   // We don't want mouse clicks to activate us, but we need to allow
   // activation when the user is using the keyboard (FocusCycler).
@@ -187,8 +212,7 @@ void HotseatWidget::DelegateView::OnWallpaperColorsChanged() {
 }
 
 bool HotseatWidget::DelegateView::ShouldShowHotseatBackground() const {
-  return !hide_opaque_background_for_transition_ &&
-         chromeos::switches::ShouldShowShelfHotseat() &&
+  return chromeos::switches::ShouldShowShelfHotseat() &&
          Shell::Get()->tablet_mode_controller() &&
          Shell::Get()->tablet_mode_controller()->InTabletMode();
 }
@@ -214,7 +238,7 @@ void HotseatWidget::Initialize(aura::Window* container, Shelf* shelf) {
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.name = "HotseatWidget";
   params.delegate = delegate_view_;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.parent = container;
   Init(std::move(params));
@@ -225,6 +249,9 @@ void HotseatWidget::Initialize(aura::Window* container, Shelf* shelf) {
     scrollable_shelf_view_ = GetContentsView()->AddChildView(
         std::make_unique<ScrollableShelfView>(ShelfModel::Get(), shelf));
     scrollable_shelf_view_->Init();
+
+    hotseat_window_targeter_ = std::make_unique<aura::ScopedWindowTargeter>(
+        GetNativeWindow(), std::make_unique<HotseatWindowTargeter>(this));
   } else {
     // The shelf view observes the shelf model and creates icons as items are
     // added to the model.
@@ -303,8 +330,35 @@ void HotseatWidget::OnTabletModeChanged() {
   delegate_view_->OnTabletModeChanged();
 }
 
+float HotseatWidget::CalculateOpacity() {
+  const float target_opacity =
+      GetShelfView()->shelf()->shelf_layout_manager()->GetOpacity();
+  return (state() == HotseatState::kExtended) ? 1.0f  // fully opaque
+                                              : target_opacity;
+}
+
 void HotseatWidget::UpdateOpaqueBackground() {
   delegate_view_->UpdateOpaqueBackground();
+}
+
+void HotseatWidget::UpdateLayout(bool animate) {
+  ui::Layer* layer = GetNativeView()->layer();
+  ui::ScopedLayerAnimationSettings animation_setter(layer->GetAnimator());
+  animation_setter.SetTransitionDuration(
+      animate ? ShelfConfig::Get()->shelf_animation_duration()
+              : base::TimeDelta::FromMilliseconds(0));
+  animation_setter.SetTweenType(gfx::Tween::EASE_OUT);
+  animation_setter.SetPreemptionStrategy(
+      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+
+  layer->SetOpacity(CalculateOpacity());
+  SetBounds(
+      GetShelfView()->shelf()->shelf_layout_manager()->GetHotseatBounds());
+}
+
+gfx::Size HotseatWidget::GetOpaqueBackgroundSize() const {
+  DCHECK(scrollable_shelf_view_);
+  return scrollable_shelf_view_->GetHotseatBackgroundBounds().size();
 }
 
 void HotseatWidget::SetFocusCycler(FocusCycler* focus_cycler) {
@@ -330,34 +384,6 @@ bool HotseatWidget::IsShowingShelfMenu() const {
 const ShelfView* HotseatWidget::GetShelfView() const {
   return const_cast<const ShelfView*>(
       const_cast<HotseatWidget*>(this)->GetShelfView());
-}
-
-void HotseatWidget::OnHotseatTransitionAnimationStarted(HotseatState from_state,
-                                                        HotseatState to_state) {
-  // When going to kShown from kExtended(ie. HomeLauncher -> Overview), the
-  // hotseat background should remain visible.
-  if (to_state != HotseatState::kExtended) {
-    // Only animate the hotseat background to hidden when it is kExtended.
-    // Otherwise snap it to hidden because it is either off-screen or
-    // the animating background will take it's place.
-    delegate_view_->HideOpaqueBackground(/*animate=*/from_state ==
-                                         HotseatState::kExtended);
-  }
-}
-
-void HotseatWidget::OnHotseatTransitionAnimationEnded(HotseatState from_state,
-                                                      HotseatState to_state) {
-  // Restore visibility of background layers that were temporarily hidden for
-  // the transition.
-  delegate_view_->ShowOpaqueBackground();
-}
-
-gfx::Rect HotseatWidget::GetHotseatBackgroundBounds() const {
-  return scrollable_shelf_view()->GetHotseatBackgroundBounds();
-}
-
-ui::Layer* HotseatWidget::GetOpaqueBackground() {
-  return delegate_view_->opaque_background();
 }
 
 void HotseatWidget::SetState(HotseatState state) {

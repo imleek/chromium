@@ -10,16 +10,14 @@
 #include "components/download/public/common/download_response_handler.h"
 #include "components/download/public/common/download_utils.h"
 #include "components/download/public/common/url_download_handler.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/cert/cert_status_flags.h"
 #include "services/device/public/mojom/wake_lock.mojom.h"
+#include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
-
-namespace service_manager {
-class Connector;
-}  // namespace service_manager
 
 namespace download {
 // Class for handing the download of a url. Lives on IO thread.
@@ -39,7 +37,7 @@ class COMPONENTS_DOWNLOAD_EXPORT ResourceDownloader
       const GURL& tab_referrer_url,
       bool is_new_download,
       bool is_parallel_request,
-      std::unique_ptr<service_manager::Connector> connector,
+      mojo::PendingRemote<device::mojom::WakeLockProvider> wake_lock_provider,
       bool is_background_mode,
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
 
@@ -56,12 +54,12 @@ class COMPONENTS_DOWNLOAD_EXPORT ResourceDownloader
       const GURL& tab_referrer_url,
       std::vector<GURL> url_chain,
       net::CertStatus cert_status,
-      const scoped_refptr<network::ResourceResponse>& response_head,
+      network::mojom::URLResponseHeadPtr response_head,
       mojo::ScopedDataPipeConsumerHandle response_body,
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const URLSecurityPolicy& url_security_policy,
-      std::unique_ptr<service_manager::Connector> connector,
+      mojo::PendingRemote<device::mojom::WakeLockProvider> wake_lock_provider,
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
 
   ResourceDownloader(
@@ -76,7 +74,7 @@ class COMPONENTS_DOWNLOAD_EXPORT ResourceDownloader
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const URLSecurityPolicy& url_security_policy,
-      std::unique_ptr<service_manager::Connector> connector);
+      mojo::PendingRemote<device::mojom::WakeLockProvider> wake_lock_provider);
   ~ResourceDownloader() override;
 
   // DownloadResponseHandler::Delegate
@@ -99,7 +97,7 @@ class COMPONENTS_DOWNLOAD_EXPORT ResourceDownloader
   void InterceptResponse(
       std::vector<GURL> url_chain,
       net::CertStatus cert_status,
-      const scoped_refptr<network::ResourceResponse>& response_head,
+      network::mojom::URLResponseHeadPtr response_head,
       mojo::ScopedDataPipeConsumerHandle response_body,
       network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints);
 
@@ -109,8 +107,8 @@ class COMPONENTS_DOWNLOAD_EXPORT ResourceDownloader
   // Ask the |delegate_| to destroy this object.
   void Destroy();
 
-  // Requests the wake lock using |connector|.
-  void RequestWakeLock(service_manager::Connector* connector);
+  // Requests the wake lock using |provider|.
+  void RequestWakeLock(device::mojom::WakeLockProvider* provider);
 
   base::WeakPtr<download::UrlDownloadHandler::Delegate> delegate_;
 
@@ -126,7 +124,7 @@ class COMPONENTS_DOWNLOAD_EXPORT ResourceDownloader
       url_loader_client_receiver_;
 
   // URLLoader for sending out the request.
-  network::mojom::URLLoaderPtr url_loader_;
+  mojo::Remote<network::mojom::URLLoader> url_loader_;
 
   // Whether this is a new download.
   bool is_new_download_;

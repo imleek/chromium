@@ -407,7 +407,11 @@ class ProgressCenterPanel {
         setTimeout(() => {
           this.feedbackHost_.attachPanelItem(panelItem);
         }, this.PENDING_TIME_MS_);
-        panelItem.panelType = panelItem.panelTypeProgress;
+        if (item.type === 'format') {
+          panelItem.panelType = panelItem.panelTypeFormatProgress;
+        } else {
+          panelItem.panelType = panelItem.panelTypeProgress;
+        }
         panelItem.userData = {
           'source': item.sourceMessage,
           'destination': item.destinationMessage,
@@ -431,14 +435,16 @@ class ProgressCenterPanel {
         }
         if (signal === 'dismiss') {
           this.feedbackHost_.removePanelItem(panelItem);
+          this.dismissErrorItemCallback(item.id);
         }
       };
       panelItem.progress = item.progressRateInPercent.toString();
       switch (item.state) {
         case 'completed':
-          // Create a completed panel for copies and moves.
+          // Create a completed panel for copies, moves and formats.
           // TODO(crbug.com/947388) decide if we want these for delete, etc.
-          if (item.type === 'copy' || item.type === 'move') {
+          if (item.type === 'copy' || item.type === 'move' ||
+              item.type === 'format') {
             const donePanelItem = this.feedbackHost_.addPanelItem(item.id);
             donePanelItem.panelType = donePanelItem.panelTypeDone;
             donePanelItem.primaryText =

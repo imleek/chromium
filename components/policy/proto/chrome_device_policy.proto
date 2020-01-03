@@ -117,6 +117,7 @@ message DeviceReportingProto {
   optional bool report_power_status = 12 [default = false];
   optional bool report_storage_status = 13 [default = false];
   optional bool report_board_status = 14 [default = false];
+  optional bool report_cpu_info = 15 [default = false];
 
   // Frequency to report device status, default to 3 hours.
   optional int64 device_status_frequency = 9 [default = 10800000];
@@ -808,6 +809,26 @@ message AccessibilitySettingsProto {
   // status on the login screen is persisted between users.
   optional int64 login_screen_screen_magnifier_type = 30;
   optional PolicyOptions login_screen_screen_magnifier_type_options = 31;
+
+  // Sets the state of the visibility of the accessibility options on quick
+  // settings accessibility feature on the login screen. If this policy is set
+  // to true, the accessibility options on quick settings will always be shown
+  // when the login screen is shown. If this policy is set to false, the
+  // accessibility options will never appear on system tray menu when the login
+  // screen is shown. If the PolicyOptions mode was being mandatory then the
+  // user won't be able to change these settings. Only if PolicyOptions was
+  // being set as recommended users can temporarily override this setting by
+  // enabling or disabling the accessibility options on system tray menu.
+  // However, the user's choice is not persistent and the default is restored
+  // whenever the login screen is shown anew or the user remains idle on the
+  // login screen for a minute. If this policy is left unset, accessibility
+  // options will not appear in the system tray menu, but the user can cause the
+  // accessibility options to appear via the Settings page.
+  // When accessiblity features are enabled by other means (e.g by a key
+  // combination), Accessibility options will always appear in system tray menu.
+  optional bool login_screen_show_options_in_system_tray_menu_enabled = 32;
+  optional PolicyOptions
+      login_screen_show_options_in_system_tray_menu_enabled_options = 33;
 }
 
 message SupervisedUsersSettingsProto {
@@ -1635,4 +1656,5 @@ message ChromeDeviceSettingsProto {
   optional BooleanPolicyProto device_login_screen_system_info_enforced = 93;
   optional StringListPolicyProto device_web_based_attestation_allowed_urls = 94;
   optional BooleanPolicyProto device_show_numeric_keyboard_for_password = 95;
+  optional BooleanPolicyProto login_screen_primary_mouse_button_switch = 96;
 }

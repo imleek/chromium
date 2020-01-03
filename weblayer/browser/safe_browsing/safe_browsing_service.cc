@@ -12,8 +12,10 @@
 #include "components/safe_browsing/browser/browser_url_loader_throttle.h"
 #include "components/safe_browsing/browser/mojo_safe_browsing_impl.h"
 #include "components/safe_browsing/browser/safe_browsing_network_context.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_context.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
@@ -78,7 +80,11 @@ SafeBrowsingService::CreateURLLoaderThrottle(
             return sb_service->GetSafeBrowsingUrlCheckerDelegate();
           },
           base::Unretained(this)),
-      wc_getter, frame_tree_node_id, resource_context);
+      wc_getter, frame_tree_node_id, resource_context,
+      // cache_manager is used to perform real time url check, which is gated by
+      // UKM opted in. Since WebLayer currently doesn't support UKM, this
+      // feature is not enabled.
+      /*cache_manager*/ nullptr);
 }
 
 scoped_refptr<safe_browsing::UrlCheckerDelegate>
@@ -131,7 +137,7 @@ SafeBrowsingService::GetURLLoaderFactoryOnIOThread() {
         FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(&SafeBrowsingService::CreateURLLoaderFactoryForIO,
                        base::Unretained(this),
-                       MakeRequest(&url_loader_factory_on_io_)));
+                       url_loader_factory_on_io_.BindNewPipeAndPassReceiver()));
     shared_url_loader_factory_on_io_ =
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             url_loader_factory_on_io_.get());
@@ -148,6 +154,21 @@ void SafeBrowsingService::CreateURLLoaderFactoryForIO(
   url_loader_factory_params->is_corb_enabled = false;
   network_context_->GetNetworkContext()->CreateURLLoaderFactory(
       std::move(receiver), std::move(url_loader_factory_params));
+}
+
+void SafeBrowsingService::AddInterface(
+    service_manager::BinderRegistry* registry,
+    content::RenderProcessHost* render_process_host) {
+  content::ResourceContext* resource_context =
+      render_process_host->GetBrowserContext()->GetResourceContext();
+  registry->AddInterface(
+      base::BindRepeating(
+          &safe_browsing::MojoSafeBrowsingImpl::MaybeCreate,
+          render_process_host->GetID(), resource_context,
+          base::BindRepeating(
+              &SafeBrowsingService::GetSafeBrowsingUrlCheckerDelegate,
+              base::Unretained(this))),
+      base::CreateSingleThreadTaskRunner({content::BrowserThread::IO}));
 }
 
 }  // namespace weblayer

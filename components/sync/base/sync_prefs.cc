@@ -56,34 +56,67 @@ const char kSyncMemoryPressureWarningCount[] = "sync.memory_warning_count";
 // Obsolete pref that stored if sync shutdown cleanly.
 const char kSyncShutdownCleanly[] = "sync.shutdown_cleanly";
 
+// Obsolete prefs for data types. Can be deleted after 2020-01-30.
+const char kSyncAppList[] = "sync.app_list";
+const char kSyncAppNotifications[] = "sync.app_notifications";
+const char kSyncAppSettings[] = "sync.app_settings";
+const char kSyncArcPackage[] = "sync.arc_package";
+const char kSyncArticles[] = "sync.articles";
+const char kSyncAutofillProfile[] = "sync.autofill_profile";
+const char kSyncAutofillWallet[] = "sync.autofill_wallet";
+const char kSyncAutofillWalletMetadata[] = "sync.autofill_wallet_metadata";
+const char kSyncDeviceInfo[] = "sync.device_info";
+const char kSyncDictionary[] = "sync.dictionary";
+const char kSyncExtensionSettings[] = "sync.extension_settings";
+const char kSyncFaviconImages[] = "sync.favicon_images";
+const char kSyncFaviconTracking[] = "sync.favicon_tracking";
+const char kSyncHistoryDeleteDirectives[] = "sync.history_delete_directives";
+const char kSyncMountainShares[] = "sync.mountain_shares";
+const char kSyncPriorityPreferences[] = "sync.priority_preferences";
+const char kSyncSearchEngines[] = "sync.search_engines";
+const char kSyncSessions[] = "sync.sessions";
+const char kSyncSupervisedUsers[] = "sync.managed_users";
+const char kSyncSupervisedUserSettings[] = "sync.managed_user_settings";
+const char kSyncSupervisedUserSharedSettings[] =
+    "sync.managed_user_shared_settings";
+const char kSyncSupervisedUserWhitelists[] = "sync.managed_user_whitelists";
+const char kSyncSyncedNotificationAppInfo[] =
+    "sync.synced_notification_app_info";
+const char kSyncSyncedNotifications[] = "sync.synced_notifications";
+const char kSyncUserEvents[] = "sync.user_events";
+const char kSyncWifiCredentials[] = "sync.wifi_credentials";
+
+// Obsolete pref. Can be deleted after 2020-09-09.
+const char kSyncUserConsents[] = "sync.user_consents";
+
 std::vector<std::string> GetObsoleteUserTypePrefs() {
-  return {prefs::kSyncAutofillProfile,
-          prefs::kSyncAutofillWallet,
-          prefs::kSyncAutofillWalletMetadata,
-          prefs::kSyncSearchEngines,
-          prefs::kSyncSessions,
-          prefs::kSyncAppSettings,
-          prefs::kSyncExtensionSettings,
-          prefs::kSyncAppNotifications,
-          prefs::kSyncHistoryDeleteDirectives,
-          prefs::kSyncSyncedNotifications,
-          prefs::kSyncSyncedNotificationAppInfo,
-          prefs::kSyncDictionary,
-          prefs::kSyncFaviconImages,
-          prefs::kSyncFaviconTracking,
-          prefs::kSyncDeviceInfo,
-          prefs::kSyncPriorityPreferences,
-          prefs::kSyncSupervisedUserSettings,
-          prefs::kSyncSupervisedUsers,
-          prefs::kSyncSupervisedUserSharedSettings,
-          prefs::kSyncArticles,
-          prefs::kSyncAppList,
-          prefs::kSyncWifiCredentials,
-          prefs::kSyncSupervisedUserWhitelists,
-          prefs::kSyncArcPackage,
-          prefs::kSyncUserEvents,
-          prefs::kSyncMountainShares,
-          prefs::kSyncUserConsents};
+  return {kSyncAutofillProfile,
+          kSyncAutofillWallet,
+          kSyncAutofillWalletMetadata,
+          kSyncSearchEngines,
+          kSyncSessions,
+          kSyncAppSettings,
+          kSyncExtensionSettings,
+          kSyncAppNotifications,
+          kSyncHistoryDeleteDirectives,
+          kSyncSyncedNotifications,
+          kSyncSyncedNotificationAppInfo,
+          kSyncDictionary,
+          kSyncFaviconImages,
+          kSyncFaviconTracking,
+          kSyncDeviceInfo,
+          kSyncPriorityPreferences,
+          kSyncSupervisedUserSettings,
+          kSyncSupervisedUsers,
+          kSyncSupervisedUserSharedSettings,
+          kSyncArticles,
+          kSyncAppList,
+          kSyncWifiCredentials,
+          kSyncSupervisedUserWhitelists,
+          kSyncArcPackage,
+          kSyncUserEvents,
+          kSyncMountainShares,
+          kSyncUserConsents};
 }
 
 void RegisterObsoleteUserTypePrefs(user_prefs::PrefRegistrySyncable* registry) {
@@ -92,44 +125,15 @@ void RegisterObsoleteUserTypePrefs(user_prefs::PrefRegistrySyncable* registry) {
   }
 }
 
-const char* GetPrefNameForType(UserSelectableType type) {
-  switch (type) {
-    case UserSelectableType::kBookmarks:
-      return prefs::kSyncBookmarks;
-    case UserSelectableType::kPreferences:
-      return prefs::kSyncPreferences;
-    case UserSelectableType::kPasswords:
-      return prefs::kSyncPasswords;
-    case UserSelectableType::kAutofill:
-      return prefs::kSyncAutofill;
-    case UserSelectableType::kThemes:
-      return prefs::kSyncThemes;
-    case UserSelectableType::kHistory:
-      // kSyncTypedUrls used here for historic reasons and pref backward
-      // compatibility.
-      return prefs::kSyncTypedUrls;
-    case UserSelectableType::kExtensions:
-      return prefs::kSyncExtensions;
-    case UserSelectableType::kApps:
-      return prefs::kSyncApps;
-    case UserSelectableType::kReadingList:
-      return prefs::kSyncReadingList;
-    case UserSelectableType::kTabs:
-      return prefs::kSyncTabs;
-    case UserSelectableType::kWifiConfigurations:
-      return prefs::kSyncWifiConfigurations;
-  }
-  NOTREACHED();
-  return nullptr;
-}
-
 #if defined(OS_CHROMEOS)
 const char* GetPrefNameForOsType(UserSelectableOsType type) {
   switch (type) {
+    case UserSelectableOsType::kOsApps:
+      return prefs::kSyncOsApps;
     case UserSelectableOsType::kOsPreferences:
       return prefs::kSyncOsPreferences;
-    case UserSelectableOsType::kPrinters:
-      return prefs::kSyncPrinters;
+    case UserSelectableOsType::kWifiConfigurations:
+      return prefs::kSyncWifiConfigurations;
   }
   NOTREACHED();
   return nullptr;
@@ -287,6 +291,7 @@ void SyncPrefs::RegisterProfilePrefs(
   for (UserSelectableOsType type : UserSelectableOsTypeSet::All()) {
     registry->RegisterBooleanPref(GetPrefNameForOsType(type), false);
   }
+  registry->RegisterBooleanPref(prefs::kSyncOsWallpaper, false);
 #endif
 
   // Internal or bookkeeping prefs.
@@ -452,18 +457,22 @@ bool SyncPrefs::HasKeepEverythingSynced() const {
 UserSelectableTypeSet SyncPrefs::GetSelectedTypes() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (pref_service_->GetBoolean(prefs::kSyncKeepEverythingSynced)) {
-    return UserSelectableTypeSet::All();
-  }
-
   UserSelectableTypeSet selected_types;
+
+  const bool sync_all_types =
+      pref_service_->GetBoolean(prefs::kSyncKeepEverythingSynced);
+
   for (UserSelectableType type : UserSelectableTypeSet::All()) {
     const char* pref_name = GetPrefNameForType(type);
     DCHECK(pref_name);
-    if (pref_service_->GetBoolean(pref_name)) {
+    // If the preference is managed, |sync_all_types| is ignored for this
+    // preference.
+    if (pref_service_->GetBoolean(pref_name) ||
+        (sync_all_types && !pref_service_->IsManagedPreference(pref_name))) {
       selected_types.Put(type);
     }
   }
+
   return selected_types;
 }
 
@@ -522,7 +531,7 @@ void SyncPrefs::SetSelectedOsTypes(bool sync_all_os_types,
   }
 }
 
-bool SyncPrefs::GetOsSyncFeatureEnabled() const {
+bool SyncPrefs::IsOsSyncFeatureEnabled() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return pref_service_->GetBoolean(prefs::kOsSyncFeatureEnabled);
 }
@@ -559,8 +568,33 @@ void SyncPrefs::SetKeystoreEncryptionBootstrapToken(const std::string& token) {
 }
 
 // static
-const char* SyncPrefs::GetPrefNameForTypeForTesting(UserSelectableType type) {
-  return GetPrefNameForType(type);
+const char* SyncPrefs::GetPrefNameForType(UserSelectableType type) {
+  switch (type) {
+    case UserSelectableType::kBookmarks:
+      return prefs::kSyncBookmarks;
+    case UserSelectableType::kPreferences:
+      return prefs::kSyncPreferences;
+    case UserSelectableType::kPasswords:
+      return prefs::kSyncPasswords;
+    case UserSelectableType::kAutofill:
+      return prefs::kSyncAutofill;
+    case UserSelectableType::kThemes:
+      return prefs::kSyncThemes;
+    case UserSelectableType::kHistory:
+      // kSyncTypedUrls used here for historic reasons and pref backward
+      // compatibility.
+      return prefs::kSyncTypedUrls;
+    case UserSelectableType::kExtensions:
+      return prefs::kSyncExtensions;
+    case UserSelectableType::kApps:
+      return prefs::kSyncApps;
+    case UserSelectableType::kReadingList:
+      return prefs::kSyncReadingList;
+    case UserSelectableType::kTabs:
+      return prefs::kSyncTabs;
+  }
+  NOTREACHED();
+  return nullptr;
 }
 
 void SyncPrefs::OnSyncManagedPrefChanged() {
@@ -729,11 +763,11 @@ UserDemographicsResult SyncPrefs::GetUserNoisedBirthYearAndGender(
 
 void MigrateSessionsToProxyTabsPrefs(PrefService* pref_service) {
   if (pref_service->GetUserPrefValue(prefs::kSyncTabs) == nullptr &&
-      pref_service->GetUserPrefValue(prefs::kSyncSessions) != nullptr &&
+      pref_service->GetUserPrefValue(kSyncSessions) != nullptr &&
       pref_service->IsUserModifiablePreference(prefs::kSyncTabs)) {
     // If there is no tab sync preference yet (i.e. newly enabled type),
     // default to the session sync preference value.
-    bool sessions_pref_value = pref_service->GetBoolean(prefs::kSyncSessions);
+    bool sessions_pref_value = pref_service->GetBoolean(kSyncSessions);
     pref_service->SetBoolean(prefs::kSyncTabs, sessions_pref_value);
   }
 }

@@ -9,6 +9,8 @@ import 'chrome://resources/cr_elements/hidden_style_css.m.js';
 import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
+import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {KeyboardShortcutDelegate} from './keyboard_shortcut_delegate.js';
@@ -27,6 +29,8 @@ Polymer({
   is: 'extensions-shortcut-input',
 
   _template: html`{__html_template__}`,
+
+  behaviors: [I18nBehavior],
 
   properties: {
     /** @type {!KeyboardShortcutDelegate} */
@@ -56,7 +60,7 @@ Polymer({
     /** @private {!ShortcutError} */
     error_: {
       type: Number,
-      value: 0,
+      value: ShortcutError.NO_ERROR,
     },
 
     /** @private */
@@ -94,7 +98,7 @@ Polymer({
     this.capturing_ = false;
     const input = this.$.input;
     input.blur();
-    input.invalid = false;
+    this.error_ = ShortcutError.NO_ERROR;
     this.delegate.setShortcutHandlingSuspended(false);
   },
 
@@ -103,11 +107,11 @@ Polymer({
    * @private
    */
   onKeyDown_: function(e) {
-    if (e.target == this.$.clear) {
+    if (e.target === this.$.clear) {
       return;
     }
 
-    if (e.keyCode == Key.Escape) {
+    if (e.keyCode === Key.Escape) {
       if (!this.capturing_) {
         // If we're not currently capturing, allow escape to propagate.
         return;
@@ -118,7 +122,7 @@ Polymer({
       e.stopPropagation();
       return;
     }
-    if (e.keyCode == Key.Tab) {
+    if (e.keyCode === Key.Tab) {
       // Allow tab propagation for keyboard navigation.
       return;
     }
@@ -139,11 +143,11 @@ Polymer({
     // case, the clear button disappears before key-up, so 'Enter's key-up
     // target becomes the input field, not the clear button, and needs to
     // be caught explicitly.
-    if (e.target == this.$.clear || e.key == 'Enter') {
+    if (e.target === this.$.clear || e.key === 'Enter') {
       return;
     }
 
-    if (e.keyCode == Key.Escape || e.keyCode == Key.Tab) {
+    if (e.keyCode === Key.Escape || e.keyCode === Key.Tab) {
       return;
     }
 
@@ -160,13 +164,17 @@ Polymer({
    */
   getErrorString_: function(
       error, includeStartModifier, tooManyModifiers, needCharacter) {
-    if (error == ShortcutError.TOO_MANY_MODIFIERS) {
-      return tooManyModifiers;
+    switch (this.error_) {
+      case ShortcutError.INCLUDE_START_MODIFIER:
+        return includeStartModifier;
+      case ShortcutError.TOO_MANY_MODIFIERS:
+        return tooManyModifiers;
+      case ShortcutError.NEED_CHARACTER:
+        return needCharacter;
+      default:
+        assert(this.error_ === ShortcutError.NO_ERROR);
+        return '';
     }
-    if (error == ShortcutError.NEED_CHARACTER) {
-      return needCharacter;
-    }
-    return includeStartModifier;
   },
 
   /**
@@ -185,22 +193,25 @@ Polymer({
     // but that requires updating the existing page as well.
     if (e.ctrlKey && e.altKey) {
       this.error_ = ShortcutError.TOO_MANY_MODIFIERS;
-      this.$.input.invalid = true;
       return;
     }
     if (!hasValidModifiers(e)) {
       this.pendingShortcut_ = '';
       this.error_ = ShortcutError.INCLUDE_START_MODIFIER;
-      this.$.input.invalid = true;
       return;
     }
     this.pendingShortcut_ = keystrokeToString(e);
     if (!isValidKeyCode(e.keyCode)) {
       this.error_ = ShortcutError.NEED_CHARACTER;
-      this.$.input.invalid = true;
       return;
     }
-    this.$.input.invalid = false;
+
+    this.error_ = ShortcutError.NO_ERROR;
+
+    IronA11yAnnouncer.requestAvailability();
+    this.fire('iron-announce', {
+      text: this.i18n('shortcutSet', this.computeText_()),
+    });
 
     this.commitPending_();
     this.endCapture_();
@@ -224,13 +235,29 @@ Polymer({
   },
 
   /**
+   * Invisible when capturing AND we have a shortcut.
+   * @return {boolean} Whether the clear button is invisible.
+   * @private
+   */
+  computeClearInvisible_: function() {
+    return this.capturing_ && !!this.shortcut;
+  },
+
+  /**
+   * Hidden when no shortcut is set.
    * @return {boolean} Whether the clear button is hidden.
    * @private
    */
   computeClearHidden_: function() {
-    // We don't want to show the clear button if the input is currently
-    // capturing a new shortcut or if there is no shortcut to clear.
-    return this.capturing_ || !this.shortcut;
+    return !this.shortcut;
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  getIsInvalid_: function() {
+    return this.error_ !== ShortcutError.NO_ERROR;
   },
 
   /** @private */

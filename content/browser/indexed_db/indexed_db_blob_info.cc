@@ -36,18 +36,21 @@ void IndexedDBBlobInfo::ConvertBlobInfo(
 }
 
 IndexedDBBlobInfo::IndexedDBBlobInfo()
-    : is_file_(false), size_(-1), key_(DatabaseMetaDataKey::kInvalidBlobKey) {
-}
+    : is_file_(false),
+      size_(-1),
+      key_(DatabaseMetaDataKey::kInvalidBlobNumber) {}
 
 IndexedDBBlobInfo::IndexedDBBlobInfo(
-    std::unique_ptr<storage::BlobDataHandle> blob_handle,
+    mojo::PendingRemote<blink::mojom::Blob> blob_remote,
+    const std::string& uuid,
     const base::string16& type,
     int64_t size)
     : is_file_(false),
-      blob_handle_(*blob_handle),
+      blob_remote_(std::move(blob_remote)),
+      uuid_(uuid),
       type_(type),
       size_(size),
-      key_(DatabaseMetaDataKey::kInvalidBlobKey) {}
+      key_(DatabaseMetaDataKey::kInvalidBlobNumber) {}
 
 IndexedDBBlobInfo::IndexedDBBlobInfo(const base::string16& type,
                                      int64_t size,
@@ -55,17 +58,19 @@ IndexedDBBlobInfo::IndexedDBBlobInfo(const base::string16& type,
     : is_file_(false), type_(type), size_(size), key_(key) {}
 
 IndexedDBBlobInfo::IndexedDBBlobInfo(
-    std::unique_ptr<storage::BlobDataHandle> blob_handle,
+    mojo::PendingRemote<blink::mojom::Blob> blob_remote,
+    const std::string& uuid,
     const base::FilePath& file_path,
     const base::string16& file_name,
     const base::string16& type)
     : is_file_(true),
-      blob_handle_(*blob_handle),
+      blob_remote_(std::move(blob_remote)),
+      uuid_(uuid),
       type_(type),
       size_(-1),
       file_name_(file_name),
       file_path_(file_path),
-      key_(DatabaseMetaDataKey::kInvalidBlobKey) {}
+      key_(DatabaseMetaDataKey::kInvalidBlobNumber) {}
 
 IndexedDBBlobInfo::IndexedDBBlobInfo(int64_t key,
                                      const base::string16& type,
@@ -82,6 +87,12 @@ IndexedDBBlobInfo::~IndexedDBBlobInfo() = default;
 
 IndexedDBBlobInfo& IndexedDBBlobInfo::operator=(
     const IndexedDBBlobInfo& other) = default;
+
+void IndexedDBBlobInfo::Clone(
+    mojo::PendingReceiver<blink::mojom::Blob> receiver) const {
+  DCHECK(is_remote_valid());
+  blob_remote_->Clone(std::move(receiver));
+}
 
 void IndexedDBBlobInfo::set_size(int64_t size) {
   DCHECK_EQ(-1, size_);
@@ -100,20 +111,20 @@ void IndexedDBBlobInfo::set_last_modified(const base::Time& time) {
 }
 
 void IndexedDBBlobInfo::set_key(int64_t key) {
-  DCHECK_EQ(DatabaseMetaDataKey::kInvalidBlobKey, key_);
+  DCHECK_EQ(DatabaseMetaDataKey::kInvalidBlobNumber, key_);
   key_ = key;
 }
 
 void IndexedDBBlobInfo::set_mark_used_callback(
-    const base::Closure& mark_used_callback) {
-  DCHECK(mark_used_callback_.is_null());
-  mark_used_callback_ = mark_used_callback;
+    base::RepeatingClosure mark_used_callback) {
+  DCHECK(!mark_used_callback_);
+  mark_used_callback_ = std::move(mark_used_callback);
 }
 
 void IndexedDBBlobInfo::set_release_callback(
-    const ReleaseCallback& release_callback) {
-  DCHECK(release_callback_.is_null());
-  release_callback_ = release_callback;
+    base::RepeatingClosure release_callback) {
+  DCHECK(!release_callback_);
+  release_callback_ = std::move(release_callback);
 }
 
 }  // namespace content

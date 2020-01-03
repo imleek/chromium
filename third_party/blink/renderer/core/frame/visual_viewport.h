@@ -92,9 +92,8 @@ struct PaintPropertyTreeBuilderFragmentContext;
 //  +- horizontal_scrollbar_effect_node_
 //  +- vertical_scrollbar_effect_node_
 //
-class CORE_EXPORT VisualViewport final
-    : public GarbageCollected<VisualViewport>,
-      public ScrollableArea {
+class CORE_EXPORT VisualViewport : public GarbageCollected<VisualViewport>,
+                                   public ScrollableArea {
   USING_GARBAGE_COLLECTED_MIXIN(VisualViewport);
 
  public:
@@ -178,6 +177,9 @@ class CORE_EXPORT VisualViewport final
                        ScrollType,
                        ScrollBehavior,
                        ScrollCallback on_finish) override;
+  void SetScrollOffset(const ScrollOffset&,
+                       ScrollType,
+                       ScrollBehavior = kScrollBehaviorInstant) override;
   PhysicalRect ScrollIntoView(const PhysicalRect&,
                               const WebScrollIntoViewParams&) override;
   bool IsThrottled() const override {
@@ -201,7 +203,7 @@ class CORE_EXPORT VisualViewport final
   bool ScrollbarsCanBeActive() const override { return false; }
   bool UserInputScrollable(ScrollbarOrientation) const override;
   bool ShouldPlaceVerticalScrollbarOnLeft() const override { return false; }
-  CompositorElementId GetCompositorElementId() const override;
+  CompositorElementId GetScrollElementId() const override;
   bool ScrollAnimatorEnabled() const override;
   void ScrollControlWasSetNeedsPaintInvalidation() override {}
   void UpdateScrollOffset(const ScrollOffset&, ScrollType) override;
@@ -213,7 +215,8 @@ class CORE_EXPORT VisualViewport final
   CompositorAnimationTimeline* GetCompositorAnimationTimeline() const override;
   IntRect VisibleContentRect(
       IncludeScrollbarsInRect = kExcludeScrollbars) const override;
-  scoped_refptr<base::SingleThreadTaskRunner> GetTimerTaskRunner() const final;
+  scoped_refptr<base::SingleThreadTaskRunner> GetTimerTaskRunner()
+      const override;
   WebColorScheme UsedColorScheme() const override;
 
   // VisualViewport scrolling may involve pinch zoom and gets routed through
@@ -291,7 +294,6 @@ class CORE_EXPORT VisualViewport final
   }
 
   PaintArtifactCompositor* GetPaintArtifactCompositor() const;
-  CompositorElementId GetCompositorScrollElementId() const;
 
   std::unique_ptr<TracedValue> ViewportToTracedValue() const;
 
@@ -339,7 +341,11 @@ class CORE_EXPORT VisualViewport final
   // only to report statistics about pinch-zoom usage.
   float max_page_scale_;
   bool track_pinch_zoom_stats_for_page_;
-  CompositorElementId element_id_;
+
+  // For page scale animation on page_scale_node_.
+  CompositorElementId page_scale_element_id_;
+  // For scrolling, on scroll_layer_, scroll_node_, and scroll element ids of
+  // scrollbar layers.
   CompositorElementId scroll_element_id_;
 
   bool needs_paint_property_update_;

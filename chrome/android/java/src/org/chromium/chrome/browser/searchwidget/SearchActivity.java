@@ -31,16 +31,16 @@ import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler;
 import org.chromium.chrome.browser.init.AsyncInitializationActivity;
 import org.chromium.chrome.browser.init.SingleWindowKeyboardVisibilityDelegate;
 import org.chromium.chrome.browser.locale.LocaleManager;
-import org.chromium.chrome.browser.modaldialog.AppModalPresenter;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarManageable;
 import org.chromium.chrome.browser.tab.BrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabBuilder;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.util.IntentUtils;
+import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
@@ -130,6 +130,10 @@ public class SearchActivity extends AsyncInitializationActivity
             protected ActivityKeyboardVisibilityDelegate createKeyboardVisibilityDelegate() {
                 return new SingleWindowKeyboardVisibilityDelegate(getActivity());
             }
+            @Override
+            public ModalDialogManager getModalDialogManager() {
+                return SearchActivity.this.getModalDialogManager();
+            }
         };
     }
 
@@ -141,7 +145,7 @@ public class SearchActivity extends AsyncInitializationActivity
 
     @Override
     protected void triggerLayoutInflation() {
-        mSnackbarManager = new SnackbarManager(this, null);
+        mSnackbarManager = new SnackbarManager(this, findViewById(android.R.id.content), null);
         mSearchBoxDataProvider = new SearchBoxDataProvider(getResources());
 
         mContentView = createContentView();

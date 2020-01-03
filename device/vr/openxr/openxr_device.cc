@@ -21,8 +21,6 @@ constexpr float kFov = 45.0f;
 constexpr unsigned int kRenderWidth = 1024;
 constexpr unsigned int kRenderHeight = 1024;
 
-constexpr float kStageSizeX = 0.0f;
-constexpr float kStageSizeZ = 0.0f;
 // OpenXR doesn't give out display info until you start a session.
 // However our mojo interface expects display info right away to support WebVR.
 // We create a fake display info to use, then notify the client that the display
@@ -49,11 +47,6 @@ mojom::VRDisplayInfoPtr CreateFakeVRDisplayInfo(device::mojom::XRDeviceId id) {
   display_info->left_eye->render_height = kRenderHeight;
   display_info->right_eye->render_width = kRenderWidth;
   display_info->right_eye->render_height = kRenderHeight;
-
-  display_info->stage_parameters = mojom::VRStageParameters::New();
-  display_info->stage_parameters->standing_transform = gfx::Transform();
-  display_info->stage_parameters->size_x = kStageSizeX;
-  display_info->stage_parameters->size_z = kStageSizeZ;
 
   return display_info;
 }
@@ -92,7 +85,7 @@ void OpenXrDevice::EnsureRenderLoop() {
 void OpenXrDevice::RequestSession(
     mojom::XRRuntimeSessionOptionsPtr options,
     mojom::XRRuntime::RequestSessionCallback callback) {
-  DCHECK(options->immersive);
+  DCHECK_EQ(options->mode, mojom::XRSessionMode::kImmersiveVr);
   EnsureRenderLoop();
 
   if (!render_loop_->IsRunning()) {
@@ -115,17 +108,19 @@ void OpenXrDevice::RequestSession(
       base::BindOnce(&OpenXrDevice::OnRequestSessionResult,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback));
 
+  auto on_visibility_state_changed = base::BindRepeating(
+      &OpenXrDevice::OnVisibilityStateChanged, weak_ptr_factory_.GetWeakPtr());
+
   // OpenXr doesn't need to handle anything when presentation has ended, but
   // the mojo interface to call to XRCompositorCommon::RequestSession requires
   // a method and cannot take nullptr, so passing in base::DoNothing::Once()
   // for on_presentation_ended
   render_loop_->task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&XRCompositorCommon::RequestSession,
-                     base::Unretained(render_loop_.get()),
-                     base::DoNothing::Once(),
-                     base::DoNothing::Repeatedly<mojom::XRVisibilityState>(),
-                     std::move(options), std::move(my_callback)));
+      FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestSession,
+                                base::Unretained(render_loop_.get()),
+                                base::DoNothing::Once(),
+                                std::move(on_visibility_state_changed),
+                                std::move(options), std::move(my_callback)));
 }
 
 void OpenXrDevice::OnRequestSessionResult(

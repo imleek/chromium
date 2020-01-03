@@ -189,6 +189,14 @@ void RendererImpl::SetCdm(CdmContext* cdm_context,
   InitializeAudioRenderer();
 }
 
+void RendererImpl::SetLatencyHint(
+    base::Optional<base::TimeDelta> latency_hint) {
+  DVLOG(1) << __func__;
+  DCHECK(!latency_hint || (*latency_hint >= base::TimeDelta()));
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  // TODO(chcunningham): Plumb to audio/video renderers in a follow up CL.
+}
+
 void RendererImpl::Flush(base::OnceClosure flush_cb) {
   DVLOG(1) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
@@ -492,8 +500,8 @@ void RendererImpl::FlushAudioRenderer() {
   if (!audio_renderer_ || !audio_playing_) {
     OnAudioRendererFlushDone();
   } else {
-    audio_renderer_->Flush(base::BindRepeating(
-        &RendererImpl::OnAudioRendererFlushDone, weak_this_));
+    audio_renderer_->Flush(
+        base::BindOnce(&RendererImpl::OnAudioRendererFlushDone, weak_this_));
   }
 }
 
@@ -528,8 +536,8 @@ void RendererImpl::FlushVideoRenderer() {
   if (!video_renderer_ || !video_playing_) {
     OnVideoRendererFlushDone();
   } else {
-    video_renderer_->Flush(base::BindRepeating(
-        &RendererImpl::OnVideoRendererFlushDone, weak_this_));
+    video_renderer_->Flush(
+        base::BindOnce(&RendererImpl::OnVideoRendererFlushDone, weak_this_));
   }
 }
 
@@ -976,7 +984,7 @@ void RendererImpl::OnSelectedVideoTracksChanged(
   }
 
   pending_video_track_change_ = true;
-  video_renderer_->Flush(base::BindRepeating(
+  video_renderer_->Flush(base::BindOnce(
       &RendererImpl::CleanUpTrackChange, weak_this_,
       base::Passed(&fix_stream_cb), &video_ended_, &video_playing_));
 }
@@ -1018,7 +1026,7 @@ void RendererImpl::OnEnabledAudioTracksChanged(
   if (audio_playing_)
     PausePlayback();
 
-  audio_renderer_->Flush(base::BindRepeating(
+  audio_renderer_->Flush(base::BindOnce(
       &RendererImpl::CleanUpTrackChange, weak_this_,
       base::Passed(&fix_stream_cb), &audio_ended_, &audio_playing_));
 }

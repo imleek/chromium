@@ -100,7 +100,7 @@ void NGLineBoxFragmentBuilder::AddChildren(ChildList& children) {
       AddChild(std::move(child.fragment), child.offset);
       DCHECK(!child.fragment);
     } else if (child.out_of_flow_positioned_box) {
-      AddOutOfFlowChildCandidate(
+      AddOutOfFlowInlineChildCandidate(
           NGBlockNode(ToLayoutBox(child.out_of_flow_positioned_box)),
           child.offset, child.container_direction);
       child.out_of_flow_positioned_box = nullptr;
@@ -112,9 +112,22 @@ void NGLineBoxFragmentBuilder::PropagateChildrenData(ChildList& children) {
   for (auto& child : children) {
     if (child.layout_result) {
       DCHECK(!child.fragment);
+      const NGPhysicalContainerFragment& fragment =
+          child.layout_result->PhysicalFragment();
+      if (fragment.IsFloating()) {
+        // Add positioned floating objects to the fragment tree, not to the
+        // fragment item list. Because they are not necessary for inline
+        // traversals, and leading floating objects are still in the fragment
+        // tree, this helps simplifying painting floats.
+        AddChild(fragment, child.offset);
+        child.layout_result.reset();
+        continue;
+      }
       PropagateChildData(child.layout_result->PhysicalFragment(), child.offset);
-    } else if (child.out_of_flow_positioned_box) {
-      AddOutOfFlowChildCandidate(
+      continue;
+    }
+    if (child.out_of_flow_positioned_box) {
+      AddOutOfFlowInlineChildCandidate(
           NGBlockNode(ToLayoutBox(child.out_of_flow_positioned_box)),
           child.offset, child.container_direction);
       child.out_of_flow_positioned_box = nullptr;
@@ -135,7 +148,9 @@ NGLineBoxFragmentBuilder::ToLineBoxFragment() {
   scoped_refptr<const NGPhysicalLineBoxFragment> fragment =
       NGPhysicalLineBoxFragment::Create(this);
 
-  return base::AdoptRef(new NGLayoutResult(std::move(fragment), this));
+  return base::AdoptRef(
+      new NGLayoutResult(NGLayoutResult::NGLineBoxFragmentBuilderPassKey(),
+                         std::move(fragment), this));
 }
 
 }  // namespace blink

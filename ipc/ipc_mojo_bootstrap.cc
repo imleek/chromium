@@ -107,8 +107,8 @@ struct MessageMemoryDumpInfo {
 
 struct MessageMemoryDumpInfoHash {
   size_t operator()(const MessageMemoryDumpInfo& info) const {
-    return base::HashInts32(
-        info.id, info.profiler_tag ? base::Hash(info.profiler_tag) : 0);
+    return base::HashInts(
+        info.id, info.profiler_tag ? base::FastHash(info.profiler_tag) : 0);
   }
 };
 
@@ -170,8 +170,8 @@ class ChannelAssociatedGroupController
         task_runner_));
     connector_->set_incoming_receiver(&dispatcher_);
     connector_->set_connection_error_handler(
-        base::Bind(&ChannelAssociatedGroupController::OnPipeError,
-                   base::Unretained(this)));
+        base::BindRepeating(&ChannelAssociatedGroupController::OnPipeError,
+                            base::Unretained(this)));
     connector_->set_enforce_errors_from_incoming_receiver(false);
     connector_->SetWatcherHeapProfilerTag("IPC Channel");
     if (quota_checker_)

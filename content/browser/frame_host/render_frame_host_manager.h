@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "content/browser/frame_host/back_forward_cache_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/frame_host/should_swap_browsing_instance.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/global_request_id.h"
@@ -257,7 +258,8 @@ class CONTENT_EXPORT RenderFrameHostManager
   // Called when a renderer's frame navigates.
   void DidNavigateFrame(RenderFrameHostImpl* render_frame_host,
                         bool was_caused_by_user_gesture,
-                        bool is_same_document_navigation);
+                        bool is_same_document_navigation,
+                        const blink::FramePolicy& frame_policy);
 
   // Called when this frame's opener is changed to the frame specified by
   // |opener_routing_id| in |source_site_instance|'s process.  This change
@@ -297,11 +299,6 @@ class CONTENT_EXPORT RenderFrameHostManager
   // BackForwardCache, making it active.
   void RestoreFromBackForwardCache(
       std::unique_ptr<BackForwardCacheImpl::Entry>);
-
-  // BackForwardCache:
-  // Unfreezes the current frame host. This is called after committing a
-  // navigation to a frame that was restored from the back-forward cache.
-  void UnfreezeCurrentFrameHost(base::TimeTicks navigation_start);
 
   // Deletes any proxy hosts associated with this node. Used during destruction
   // of WebContentsImpl.
@@ -467,7 +464,7 @@ class CONTENT_EXPORT RenderFrameHostManager
   // RenderFrame, since that will be handled as part of postMessage.
   void TransferUserActivationFrom(RenderFrameHostImpl* source_rfh);
 
-  void OnSetHasReceivedUserGestureBeforeNavigation(bool value);
+  void OnSetHadStickyUserActivationBeforeNavigation(bool value);
 
   // Sets up the necessary state for a new RenderViewHost.  If |proxy| is not
   // null, it creates a RenderFrameProxy in the target renderer process which is
@@ -578,7 +575,7 @@ class CONTENT_EXPORT RenderFrameHostManager
   // SiteInstance's site and when we later call IsSameSite.  If there is no
   // current NavigationEntry, check the current SiteInstance's site, which might
   // already be committed to a Web UI URL (such as the NTP).
-  bool ShouldSwapBrowsingInstancesForNavigation(
+  ShouldSwapBrowsingInstance ShouldSwapBrowsingInstancesForNavigation(
       const GURL& current_effective_url,
       bool current_is_view_source_mode,
       SiteInstance* destination_site_instance,
@@ -722,9 +719,8 @@ class CONTENT_EXPORT RenderFrameHostManager
                                 bool was_caused_by_user_gesture,
                                 bool is_same_document_navigation);
 
-  // Commits any pending sandbox flag or feature policy updates when the
-  // renderer's frame navigates.
-  void CommitPendingFramePolicy();
+  // Commits given frame policy when the renderer's frame navigates.
+  void CommitFramePolicy(const blink::FramePolicy& frame_policy);
 
   // Runs the unload handler in the old RenderFrameHost, after the new
   // RenderFrameHost has committed.  |old_render_frame_host| will either be

@@ -36,6 +36,7 @@
 #include <utility>
 
 #include "base/single_thread_task_runner.h"
+#include "base/util/type_safety/pass_key.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "third_party/blink/public/mojom/ad_tagging/ad_frame.mojom-blink-forward.h"
@@ -76,6 +77,7 @@ class WebLocalFrameClient;
 class WebFrameWidgetBase;
 class WebNode;
 class WebPerformance;
+class WebRemoteFrameImpl;
 class WebScriptExecutionCallback;
 class WebSpellCheckPanelHostClient;
 class WebView;
@@ -253,7 +255,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   void DidCallAddSearchProvider() override;
   void DidCallIsSearchProviderInstalled() override;
   WebSandboxFlags EffectiveSandboxFlagsForTesting() const override;
-  bool IsAllowedToDownloadWithoutUserActivation() const override;
+  bool IsAllowedToDownload() const override;
   bool FindForTesting(int identifier,
                       const WebString& search_text,
                       bool match_case,
@@ -312,8 +314,10 @@ class CORE_EXPORT WebLocalFrameImpl final
   void WasHidden() override;
   void WasShown() override;
   void SetAllowsCrossBrowsingInstanceFrameLookup() override;
-
-  void CollectGarbageForTesting();
+  void NotifyUserActivation() override;
+  bool HasStickyUserActivation() override;
+  bool HasTransientUserActivation() override;
+  bool ConsumeTransientUserActivation(UserActivationUpdateSource) override;
 
   // WebNavigationControl overrides:
   bool DispatchBeforeUnloadEvent(bool) override;
@@ -352,6 +356,7 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   void WillBeDetached();
   void WillDetachParent();
+  void CollectGarbageForTesting();
 
   static WebLocalFrameImpl* CreateMainFrame(WebView*,
                                             WebLocalFrameClient*,
@@ -365,7 +370,12 @@ class CORE_EXPORT WebLocalFrameImpl final
                                               WebFrame*,
                                               const FramePolicy&);
 
-  WebLocalFrameImpl(WebTreeScopeType,
+  WebLocalFrameImpl(util::PassKey<WebLocalFrameImpl>,
+                    WebTreeScopeType,
+                    WebLocalFrameClient*,
+                    blink::InterfaceRegistry*);
+  WebLocalFrameImpl(util::PassKey<WebRemoteFrameImpl>,
+                    WebTreeScopeType,
                     WebLocalFrameClient*,
                     blink::InterfaceRegistry*);
   ~WebLocalFrameImpl() override;

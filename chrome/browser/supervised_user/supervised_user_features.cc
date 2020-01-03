@@ -7,10 +7,9 @@
 namespace supervised_users {
 
 const base::Feature kSupervisedUserIframeFilter{
-    "SupervisedUserIframeFilter", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SupervisedUserIframeFilter", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSupervisedUserInitiatedExtensionInstall{
     "SupervisedUserInitiatedExtensionInstall",
     base::FEATURE_DISABLED_BY_DEFAULT};
-
 }

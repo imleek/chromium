@@ -336,22 +336,21 @@ void RTCRtpTransceiverImpl::set_state(RtpTransceiverState transceiver_state,
   internal_->set_state(std::move(transceiver_state), update_mode);
 }
 
-blink::WebRTCRtpTransceiverImplementationType
+RTCRtpTransceiverPlatformImplementationType
 RTCRtpTransceiverImpl::ImplementationType() const {
-  return blink::WebRTCRtpTransceiverImplementationType::kFullTransceiver;
+  return RTCRtpTransceiverPlatformImplementationType::kFullTransceiver;
 }
 
 uintptr_t RTCRtpTransceiverImpl::Id() const {
   return GetId(internal_->state().webrtc_transceiver().get());
 }
 
-blink::WebString RTCRtpTransceiverImpl::Mid() const {
+String RTCRtpTransceiverImpl::Mid() const {
   const auto& mid = internal_->state().mid();
-  return mid ? blink::WebString::FromUTF8(*mid)
-             : blink::WebString();  // IsNull()
+  return mid ? String::FromUTF8(*mid) : String();
 }
 
-void RTCRtpTransceiverImpl::SetMid(base::Optional<blink::WebString> mid) {
+void RTCRtpTransceiverImpl::SetMid(base::Optional<String> mid) {
   internal_->set_mid(mid ? base::Optional<std::string>(mid->Utf8())
                          : base::nullopt);
 }
@@ -361,7 +360,7 @@ std::unique_ptr<blink::RTCRtpSenderPlatform> RTCRtpTransceiverImpl::Sender()
   return internal_->content_sender()->ShallowCopy();
 }
 
-std::unique_ptr<blink::WebRTCRtpReceiver> RTCRtpTransceiverImpl::Receiver()
+std::unique_ptr<RTCRtpReceiverPlatform> RTCRtpTransceiverImpl::Receiver()
     const {
   return internal_->content_receiver()->ShallowCopy();
 }
@@ -390,7 +389,11 @@ RTCRtpTransceiverImpl::FiredDirection() const {
 }
 
 webrtc::RTCError RTCRtpTransceiverImpl::SetCodecPreferences(
-    blink::WebVector<webrtc::RtpCodecCapability> codec_preferences) {
-  return internal_->setCodecPreferences(codec_preferences.ReleaseVector());
+    Vector<webrtc::RtpCodecCapability> codec_preferences) {
+  std::vector<webrtc::RtpCodecCapability> std_codec_preferences(
+      codec_preferences.size());
+  std::move(codec_preferences.begin(), codec_preferences.end(),
+            std_codec_preferences.begin());
+  return internal_->setCodecPreferences(std_codec_preferences);
 }
 }  // namespace blink

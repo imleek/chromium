@@ -23,6 +23,7 @@
 #include "third_party/blink/renderer/platform/geometry/float_quad.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/stroke_data.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
 
@@ -186,16 +187,17 @@ void BaseRenderingContext2D::setStrokeStyle(
       ModifiableState().SetUnparsedStrokeColor(color_string);
       return;
     }
-    canvas_style = CanvasStyle::CreateFromRGBA(parsed_color.Rgb());
+    canvas_style = MakeGarbageCollected<CanvasStyle>(parsed_color.Rgb());
   } else if (style.IsCanvasGradient()) {
-    canvas_style = CanvasStyle::CreateFromGradient(style.GetAsCanvasGradient());
+    canvas_style =
+        MakeGarbageCollected<CanvasStyle>(style.GetAsCanvasGradient());
   } else if (style.IsCanvasPattern()) {
     CanvasPattern* canvas_pattern = style.GetAsCanvasPattern();
 
     if (!origin_tainted_by_content_ && !canvas_pattern->OriginClean())
       SetOriginTaintedByContent();
 
-    canvas_style = CanvasStyle::CreateFromPattern(canvas_pattern);
+    canvas_style = MakeGarbageCollected<CanvasStyle>(canvas_pattern);
   }
 
   DCHECK(canvas_style);
@@ -227,16 +229,17 @@ void BaseRenderingContext2D::setFillStyle(
       ModifiableState().SetUnparsedFillColor(color_string);
       return;
     }
-    canvas_style = CanvasStyle::CreateFromRGBA(parsed_color.Rgb());
+    canvas_style = MakeGarbageCollected<CanvasStyle>(parsed_color.Rgb());
   } else if (style.IsCanvasGradient()) {
-    canvas_style = CanvasStyle::CreateFromGradient(style.GetAsCanvasGradient());
+    canvas_style =
+        MakeGarbageCollected<CanvasStyle>(style.GetAsCanvasGradient());
   } else if (style.IsCanvasPattern()) {
     CanvasPattern* canvas_pattern = style.GetAsCanvasPattern();
 
     if (!origin_tainted_by_content_ && !canvas_pattern->OriginClean()) {
       SetOriginTaintedByContent();
     }
-    canvas_style = CanvasStyle::CreateFromPattern(canvas_pattern);
+    canvas_style = MakeGarbageCollected<CanvasStyle>(canvas_pattern);
   }
 
   DCHECK(canvas_style);
@@ -609,7 +612,7 @@ bool BaseRenderingContext2D::IsFullCanvasCompositeMode(SkBlendMode op) {
 void BaseRenderingContext2D::DrawPathInternal(
     const Path& path,
     CanvasRenderingContext2DState::PaintType paint_type,
-    SkPath::FillType fill_type) {
+    SkPathFillType fill_type) {
   if (path.IsEmpty())
     return;
 
@@ -633,14 +636,14 @@ void BaseRenderingContext2D::DrawPathInternal(
        bounds, paint_type);
 }
 
-static SkPath::FillType ParseWinding(const String& winding_rule_string) {
+static SkPathFillType ParseWinding(const String& winding_rule_string) {
   if (winding_rule_string == "nonzero")
-    return SkPath::kWinding_FillType;
+    return SkPathFillType::kWinding;
   if (winding_rule_string == "evenodd")
-    return SkPath::kEvenOdd_FillType;
+    return SkPathFillType::kEvenOdd;
 
   NOTREACHED();
-  return SkPath::kEvenOdd_FillType;
+  return SkPathFillType::kEvenOdd;
 }
 
 void BaseRenderingContext2D::fill(const String& winding_rule_string) {
@@ -1102,8 +1105,7 @@ void BaseRenderingContext2D::DrawImageInternal(cc::PaintCanvas* c,
 
   if (!image_source->IsVideoElement()) {
     image_flags.setAntiAlias(ShouldDrawImageAntialiased(dst_rect));
-    image->Draw(c, image_flags, dst_rect, src_rect,
-                kDoNotRespectImageOrientation,
+    image->Draw(c, image_flags, dst_rect, src_rect, kRespectImageOrientation,
                 Image::kDoNotClampImageToSourceRect, Image::kSyncDecode);
   } else {
     c->save();
@@ -1448,7 +1450,7 @@ ImageDataColorSettings*
 BaseRenderingContext2D::GetColorSettingsAsImageDataColorSettings() const {
   ImageDataColorSettings* color_settings = ImageDataColorSettings::Create();
   color_settings->setColorSpace(ColorSpaceAsString());
-  if (PixelFormat() == kF16CanvasPixelFormat)
+  if (PixelFormat() == CanvasPixelFormat::kF16)
     color_settings->setStorageFormat(kFloat32ArrayStorageFormatName);
   return color_settings;
 }
@@ -1588,10 +1590,13 @@ ImageData* BaseRenderingContext2D::getImageData(
   if (IsAccelerated())
     DisableAcceleration();
 
-  size_t size_in_bytes =
-      StaticBitmapImage::GetSizeInBytes(image_data_rect, color_params);
-  if (size_in_bytes > v8::TypedArray::kMaxLength)
+  size_t size_in_bytes;
+  if (!StaticBitmapImage::GetSizeInBytes(image_data_rect, color_params)
+           .AssignIfValid(&size_in_bytes) ||
+      size_in_bytes > v8::TypedArray::kMaxLength) {
+    exception_state.ThrowRangeError("Out of memory at ImageData creation");
     return nullptr;
+  }
 
   bool may_have_stray_area =
       IsAccelerated()  // GPU readback may fail silently.
@@ -1617,7 +1622,7 @@ ImageData* BaseRenderingContext2D::getImageData(
   }
 
   // Convert pixels to proper storage format if needed
-  if (PixelFormat() != kRGBA8CanvasPixelFormat) {
+  if (PixelFormat() != CanvasColorParams::GetNativeCanvasPixelFormat()) {
     ImageDataStorageFormat storage_format =
         ImageData::GetImageDataStorageFormat(color_settings->storageFormat());
     DOMArrayBufferView* array_buffer_view =
@@ -1738,10 +1743,9 @@ void BaseRenderingContext2D::putImageData(ImageData* data,
   // additional swizzling is needed.
   CanvasColorParams data_color_params = data->GetCanvasColorParams();
   CanvasColorParams context_color_params =
-      CanvasColorParams(ColorParams().ColorSpace(), PixelFormat(), kNonOpaque,
-                        CanvasForceRGBA::kNotForced);
+      CanvasColorParams(ColorParams().ColorSpace(), PixelFormat(), kNonOpaque);
   if (data_color_params.NeedsColorConversion(context_color_params) ||
-      PixelFormat() == kF16CanvasPixelFormat) {
+      PixelFormat() == CanvasPixelFormat::kF16) {
     size_t data_length;
     if (!base::CheckMul(data->Size().Area(),
                         context_color_params.BytesPerPixel())

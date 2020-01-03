@@ -560,16 +560,16 @@ void FragmentPaintPropertyTreeBuilder::UpdateStickyTranslation() {
         constraint->is_anchored_right = layout_constraint.is_anchored_right;
         constraint->is_anchored_top = layout_constraint.is_anchored_top;
         constraint->is_anchored_bottom = layout_constraint.is_anchored_bottom;
-        constraint->left_offset = layout_constraint.left_offset;
-        constraint->right_offset = layout_constraint.right_offset;
-        constraint->top_offset = layout_constraint.top_offset;
-        constraint->bottom_offset = layout_constraint.bottom_offset;
+
+        constraint->left_offset = layout_constraint.left_offset.ToFloat();
+        constraint->right_offset = layout_constraint.right_offset.ToFloat();
+        constraint->top_offset = layout_constraint.top_offset.ToFloat();
+        constraint->bottom_offset = layout_constraint.bottom_offset.ToFloat();
         constraint->constraint_box_rect =
-            RoundedIntRect(box_model.ComputeStickyConstrainingRect());
-        constraint->scroll_container_relative_sticky_box_rect = RoundedIntRect(
+            FloatRect(box_model.ComputeStickyConstrainingRect());
+        constraint->scroll_container_relative_sticky_box_rect = FloatRect(
             layout_constraint.scroll_container_relative_sticky_box_rect);
-        constraint
-            ->scroll_container_relative_containing_block_rect = RoundedIntRect(
+        constraint->scroll_container_relative_containing_block_rect = FloatRect(
             layout_constraint.scroll_container_relative_containing_block_rect);
         if (PaintLayer* sticky_box_shifting_ancestor =
                 layout_constraint.nearest_sticky_layer_shifting_sticky_box) {
@@ -776,9 +776,7 @@ void FragmentPaintPropertyTreeBuilder::UpdateTransform() {
           style.IsRunningTransformAnimationOnCompositor();
       auto effective_change_type = properties_->UpdateTransform(
           *context_.current.transform, std::move(state), animation_state);
-      // TODO(crbug.com/953322): We need to fix this to work with CAP as well.
-      if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
-          effective_change_type ==
+      if (effective_change_type ==
               PaintPropertyChangeType::kChangedOnlySimpleValues &&
           properties_->Transform()->HasDirectCompositingReasons()) {
         if (auto* paint_artifact_compositor =
@@ -1077,9 +1075,7 @@ void FragmentPaintPropertyTreeBuilder::UpdateEffect() {
       // If we have simple value change, which means opacity, we should try to
       // directly update it on the PaintArtifactCompositor in order to avoid
       // doing a full rebuild.
-      // TODO(crbug.com/953322): We need to fix this to work with CAP as well.
-      if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
-          effective_change_type ==
+      if (effective_change_type ==
               PaintPropertyChangeType::kChangedOnlySimpleValues &&
           properties_->Effect()->HasDirectCompositingReasons()) {
         if (auto* paint_artifact_compositor =
@@ -1858,7 +1854,7 @@ void FragmentPaintPropertyTreeBuilder::UpdateScrollAndScrollTranslation() {
         }
       }
 
-      state.compositor_element_id = scrollable_area->GetCompositorElementId();
+      state.compositor_element_id = scrollable_area->GetScrollElementId();
 
       state.overscroll_behavior = cc::OverscrollBehavior(
           static_cast<cc::OverscrollBehavior::OverscrollBehaviorType>(

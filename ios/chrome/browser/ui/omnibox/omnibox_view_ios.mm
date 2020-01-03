@@ -288,8 +288,8 @@ void OmniboxViewIOS::OnDidBeginEditing() {
       model()->set_focus_source(OmniboxFocusSource::OMNIBOX);
     }
 
-    model()->OnSetFocus(/*control_down=*/false,
-                        /*suppress_on_focus_suggestions=*/false);
+    model()->ShowOnFocusSuggestionsIfAutocompleteIdle();
+    model()->OnSetFocus(/*control_down=*/false);
   }
 
   // If the omnibox is displaying a URL and the popup is not showing, set the
@@ -702,13 +702,18 @@ void OmniboxViewIOS::EmphasizeURLComponents() {
 
 #pragma mark - OmniboxPopupViewSuggestionsDelegate
 
-void OmniboxViewIOS::OnTopmostSuggestionImageChanged(
+void OmniboxViewIOS::OnSelectedMatchImageChanged(
+    bool has_match,
     AutocompleteMatchType::Type match_type,
     base::Optional<SuggestionAnswer::AnswerType> answer_type,
     GURL favicon_url) {
-  [left_image_consumer_ setLeftImageForAutocompleteType:match_type
-                                             answerType:answer_type
-                                             faviconURL:favicon_url];
+  if (has_match) {
+    [left_image_consumer_ setLeftImageForAutocompleteType:match_type
+                                               answerType:answer_type
+                                               faviconURL:favicon_url];
+  } else {
+    [left_image_consumer_ setDefaultLeftImage];
+  }
 }
 
 void OmniboxViewIOS::OnResultsChanged(const AutocompleteResult& result) {

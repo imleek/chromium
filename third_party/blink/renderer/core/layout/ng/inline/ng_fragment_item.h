@@ -95,8 +95,17 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
     return layout_object_->EffectiveStyle(StyleVariant());
   }
   const LayoutObject* GetLayoutObject() const { return layout_object_; }
+  LayoutObject* GetMutableLayoutObject() const {
+    return const_cast<LayoutObject*>(layout_object_);
+  }
   Node* GetNode() const { return layout_object_->GetNode(); }
+  Node* NodeForHitTest() const { return layout_object_->NodeForHitTest(); }
   bool HasSameParent(const NGFragmentItem& other) const;
+
+  wtf_size_t DeltaToNextForSameLayoutObject() const {
+    return delta_to_next_for_same_layout_object_;
+  }
+  void SetDeltaToNextForSameLayoutObject(wtf_size_t delta);
 
   const PhysicalRect& Rect() const { return rect_; }
   const PhysicalOffset& Offset() const { return rect_.offset; }
@@ -204,7 +213,7 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
   static PhysicalRect LocalVisualRectFor(const LayoutObject& layout_object);
 
   // Re-compute the ink overflow for the |cursor| until its end.
-  static PhysicalRect RecalcInkOverflowAll(NGInlineCursor* cursor);
+  static PhysicalRect RecalcInkOverflowForCursor(NGInlineCursor* cursor);
 
   // Re-compute the ink overflow for this item. |cursor| should be at |this|,
   // and is advanced to the next item on return.
@@ -238,7 +247,6 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
   }
 
   WritingMode GetWritingMode() const {
-    DCHECK(Type() == kText || Type() == kGeneratedText) << this;
     return Style().GetWritingMode();
   }
 
@@ -331,8 +339,16 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
   // Converts the given point, relative to the fragment itself, into a position
   // in DOM tree.
   PositionWithAffinity PositionForPoint(const PhysicalOffset&) const;
+  PositionWithAffinity PositionForPointInText(
+      const PhysicalOffset& point,
+      const NGInlineCursor& cursor) const;
+  unsigned TextOffsetForPoint(const PhysicalOffset& point,
+                              const NGFragmentItems& items) const;
 
  private:
+  const LayoutBox* InkOverflowOwnerBox() const;
+  LayoutBox* MutableInkOverflowOwnerBox();
+
   const LayoutObject* layout_object_;
 
   // TODO(kojii): We can make them sub-classes if we need to make the vector of
@@ -350,7 +366,7 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
   std::unique_ptr<NGInkOverflow> ink_overflow_;
 
   // Item index delta to the next item for the same |LayoutObject|.
-  // wtf_size_t delta_to_next_for_same_layout_object_ = 0;
+  wtf_size_t delta_to_next_for_same_layout_object_ = 0;
 
   // Note: We should not add |bidi_level_| because it is used only for layout.
   unsigned type_ : 2;           // ItemType
@@ -364,6 +380,9 @@ class CORE_EXPORT NGFragmentItem : public DisplayItemClient {
   // Note: For |TextItem| and |GeneratedTextItem|, |text_direction_| equals to
   // |ShapeResult::Direction()|.
   unsigned text_direction_ : 1;  // TextDirection.
+
+  // Used only when |IsText()| to avoid re-computing ink overflow.
+  unsigned ink_overflow_computed_ : 1;
 };
 
 }  // namespace blink

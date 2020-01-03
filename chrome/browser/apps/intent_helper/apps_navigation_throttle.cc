@@ -413,7 +413,7 @@ bool AppsNavigationThrottle::ShouldShowPersistenceOptions(
   return !ContainsOnlyPwasAndMacApps(apps);
 }
 
-bool AppsNavigationThrottle::ShouldDeferNavigationForArc(
+bool AppsNavigationThrottle::ShouldDeferNavigation(
     content::NavigationHandle* handle) {
   return false;
 }
@@ -494,7 +494,7 @@ AppsNavigationThrottle::HandleRequest() {
   constexpr bool kAllowFormSubmit = false;
 
   // Ignore navigations with the CLIENT_REDIRECT qualifier on.
-  constexpr bool kAllowClientRedirect = false;
+  constexpr bool kAllowClientRedirect = true;
 
   ui::PageTransition page_transition = handle->GetPageTransition();
   content::WebContents* web_contents = handle->GetWebContents();
@@ -510,7 +510,7 @@ AppsNavigationThrottle::HandleRequest() {
   if (!ShouldOverrideUrlLoading(starting_url_, url))
     return content::NavigationThrottle::PROCEED;
 
-  if (ShouldDeferNavigationForArc(handle)) {
+  if (ShouldDeferNavigation(handle)) {
     // Handling is now deferred to ArcIntentPickerAppFetcher, which
     // asynchronously queries ARC for apps, and runs
     // OnDeferredNavigationProcessed() with an action based on whether an

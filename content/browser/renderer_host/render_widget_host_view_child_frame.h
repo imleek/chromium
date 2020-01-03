@@ -41,7 +41,6 @@ namespace content {
 class FrameConnectorDelegate;
 class RenderWidgetHost;
 class RenderWidgetHostViewChildFrameTest;
-class RenderWidgetHostViewGuestSurfaceTest;
 class TouchSelectionControllerClientChildFrame;
 
 // RenderWidgetHostViewChildFrame implements the view for a RenderWidgetHost
@@ -175,8 +174,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   InputEventAckState FilterInputEvent(
       const blink::WebInputEvent& input_event) override;
-  InputEventAckState FilterChildGestureEvent(
-      const blink::WebGestureEvent& gesture_event) override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate,
       bool for_root_frame) override;
@@ -228,7 +225,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
  protected:
   friend class RenderWidgetHostView;
   friend class RenderWidgetHostViewChildFrameTest;
-  friend class RenderWidgetHostViewGuestSurfaceTest;
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewChildFrameTest,
                            ForwardsBeginFrameAcks);
 

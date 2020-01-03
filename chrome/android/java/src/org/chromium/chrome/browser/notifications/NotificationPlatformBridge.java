@@ -40,10 +40,10 @@ import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
 import org.chromium.chrome.browser.permissions.PermissionFieldTrial;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.website.SingleCategoryPreferences;
-import org.chromium.chrome.browser.preferences.website.SingleWebsitePreferences;
-import org.chromium.chrome.browser.preferences.website.SiteSettingsCategory;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.website.SingleCategorySettings;
+import org.chromium.chrome.browser.settings.website.SingleWebsiteSettings;
+import org.chromium.chrome.browser.settings.website.SiteSettingsCategory;
 import org.chromium.chrome.browser.usage_stats.NotificationSuspender;
 import org.chromium.chrome.browser.webapps.ChromeWebApkHost;
 import org.chromium.chrome.browser.webapps.WebApkServiceClient;
@@ -267,21 +267,21 @@ public class NotificationPlatformBridge {
             RecordUserAction.record("Notifications.ShowSiteSettings");
 
             // All preferences for a specific origin.
-            fragmentArguments = SingleWebsitePreferences.createFragmentArgsForSite(origin);
+            fragmentArguments = SingleWebsiteSettings.createFragmentArgsForSite(origin);
         } else {
             // Notification preferences for all origins.
             fragmentArguments = new Bundle();
-            fragmentArguments.putString(SingleCategoryPreferences.EXTRA_CATEGORY,
+            fragmentArguments.putString(SingleCategorySettings.EXTRA_CATEGORY,
                     SiteSettingsCategory.preferenceKey(SiteSettingsCategory.Type.NOTIFICATIONS));
-            fragmentArguments.putString(SingleCategoryPreferences.EXTRA_TITLE,
+            fragmentArguments.putString(SingleCategorySettings.EXTRA_TITLE,
                     applicationContext.getResources().getString(
                             R.string.push_notifications_permission_title));
         }
 
         Class<? extends PreferenceFragmentCompat> fragment = launchSingleWebsitePreferences
-                ? SingleWebsitePreferences.class
-                : SingleCategoryPreferences.class;
-        PreferencesLauncher.launchSettingsPage(applicationContext, fragment, fragmentArguments);
+                ? SingleWebsiteSettings.class
+                : SingleCategorySettings.class;
+        SettingsLauncher.launchSettingsPage(applicationContext, fragment, fragmentArguments);
     }
 
     /**
@@ -592,6 +592,7 @@ public class NotificationPlatformBridge {
                         .setHideLargeIcon(notificationType == NotificationType.PERMISSION_REQUEST);
 
         if (notificationType == NotificationType.PERMISSION_REQUEST) {
+            assert false; // Notification permission requests are not used anymore.
             @PermissionFieldTrial.UIFlavor
             int ui_flavor = PermissionFieldTrial.uiFlavorToUse();
 
@@ -651,19 +652,19 @@ public class NotificationPlatformBridge {
         // TODO(knollr): Generalize the NotificationPlatformBridge sufficiently to not need
         // to care about the individual notification types.
         String fragmentName = notificationType == NotificationType.PERMISSION_REQUEST
-                ? SingleCategoryPreferences.class.getName()
-                : SingleWebsitePreferences.class.getName();
+                ? SingleCategorySettings.class.getName()
+                : SingleWebsiteSettings.class.getName();
         Bundle fragmentArguments = notificationType == NotificationType.PERMISSION_REQUEST
                 ? new Bundle()
-                : SingleWebsitePreferences.createFragmentArgsForSite(origin);
+                : SingleWebsiteSettings.createFragmentArgsForSite(origin);
         if (notificationType == NotificationType.PERMISSION_REQUEST) {
             // TODO(andypaicu): this needs to be content settings type agnostic, to support
             // future permission requests that are not for the notification permission.
-            fragmentArguments.putString(SingleCategoryPreferences.EXTRA_CATEGORY,
+            fragmentArguments.putString(SingleCategorySettings.EXTRA_CATEGORY,
                     SiteSettingsCategory.preferenceKey(SiteSettingsCategory.Type.NOTIFICATIONS));
         }
         // Set up a pending intent for going to the settings screen for |origin|.
-        Intent settingsIntent = PreferencesLauncher.createIntentForSettingsPage(
+        Intent settingsIntent = SettingsLauncher.createIntentForSettingsPage(
                 context, fragmentName, fragmentArguments);
         settingsIntent.setData(makeIntentData(notificationId, origin, -1 /* actionIndex */));
         PendingIntent pendingSettingsIntent = PendingIntent.getActivity(context,

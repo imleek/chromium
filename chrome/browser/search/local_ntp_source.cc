@@ -293,6 +293,8 @@ std::unique_ptr<base::DictionaryValue> GetTranslatedStrings(bool is_google) {
               IDS_NEW_TAB_VOICE_OTHER_ERROR);
     AddString(translated_strings.get(), "voiceCloseTooltip",
               IDS_NEW_TAB_VOICE_CLOSE_TOOLTIP);
+    AddString(translated_strings.get(), "voiceSearchClosed",
+              IDS_NEW_TAB_VOICE_SEARCH_CLOSED);
 
     // Realbox
     AddString(translated_strings.get(), "realboxSeparator",
@@ -329,10 +331,9 @@ std::string ReadBackgroundImageData(const base::FilePath& profile_path) {
   return data_string;
 }
 
-void ServeBackgroundImageData(
-    const content::URLDataSource::GotDataCallback& callback,
-    std::string data_string) {
-  callback.Run(base::RefCountedString::TakeString(&data_string));
+void ServeBackgroundImageData(content::URLDataSource::GotDataCallback callback,
+                              std::string data_string) {
+  std::move(callback).Run(base::RefCountedString::TakeString(&data_string));
 }
 
 std::string GetLocalNtpPath() {
@@ -343,7 +344,6 @@ std::string GetLocalNtpPath() {
 base::Value ConvertCollectionInfoToDict(
     const std::vector<CollectionInfo>& collection_info) {
   base::Value collections(base::Value::Type::LIST);
-  collections.GetList().reserve(collection_info.size());
   for (const CollectionInfo& collection : collection_info) {
     base::Value dict(base::Value::Type::DICTIONARY);
     dict.SetKey("collectionId", base::Value(collection.collection_id));
@@ -358,7 +358,6 @@ base::Value ConvertCollectionInfoToDict(
 base::Value ConvertCollectionImageToDict(
     const std::vector<CollectionImage>& collection_image) {
   base::Value images(base::Value::Type::LIST);
-  images.GetList().reserve(collection_image.size());
   for (const CollectionImage& image : collection_image) {
     base::Value dict(base::Value::Type::DICTIONARY);
     dict.SetKey("thumbnailImageUrl",
@@ -405,7 +404,7 @@ scoped_refptr<base::RefCountedString> GetPromoString(
     dict.SetString("promoHtml", promo->promo_html);
     dict.SetString("promoLogUrl", promo->promo_log_url.spec());
     dict.SetString("promoId", promo->promo_id);
-    dict.SetBoolean("canOpenPrivilegedLinks", promo->can_open_privileged_links);
+    dict.SetBoolean("canOpenExtensionsPage", promo->can_open_extensions_page);
   }
 
   std::string js;
@@ -665,8 +664,8 @@ class LocalNtpSource::DesktopLogoObserver {
 
   // Get the cached logo.
   void GetCachedLogo(LogoService* service,
-                     const content::URLDataSource::GotDataCallback& callback) {
-    StartGetLogo(service, callback, /*from_cache=*/true);
+                     content::URLDataSource::GotDataCallback callback) {
+    StartGetLogo(service, std::move(callback), /*from_cache=*/true);
   }
 
   // Get the fresh logo corresponding to a previous request for a cached logo.
@@ -679,13 +678,13 @@ class LocalNtpSource::DesktopLogoObserver {
   // request, or perhaps one newer.
   void GetFreshLogo(LogoService* service,
                     int requested_version,
-                    const content::URLDataSource::GotDataCallback& callback) {
+                    content::URLDataSource::GotDataCallback callback) {
     bool from_cache = (requested_version <= version_finished_);
-    StartGetLogo(service, callback, from_cache);
+    StartGetLogo(service, std::move(callback), from_cache);
   }
 
  private:
-  void OnLogoAvailable(const content::URLDataSource::GotDataCallback& callback,
+  void OnLogoAvailable(content::URLDataSource::GotDataCallback callback,
                        LogoCallbackReason type,
                        const base::Optional<EncodedLogo>& logo) {
     scoped_refptr<base::RefCountedString> response;
@@ -714,21 +713,19 @@ class LocalNtpSource::DesktopLogoObserver {
     base::JSONWriter::Write(*ddl, &js);
     js = "var ddl = " + js + ";";
     response = base::RefCountedString::TakeString(&js);
-    callback.Run(response);
+    std::move(callback).Run(response);
   }
 
-  void OnCachedLogoAvailable(
-      const content::URLDataSource::GotDataCallback& callback,
-      LogoCallbackReason type,
-      const base::Optional<EncodedLogo>& logo) {
-    OnLogoAvailable(callback, type, logo);
+  void OnCachedLogoAvailable(content::URLDataSource::GotDataCallback callback,
+                             LogoCallbackReason type,
+                             const base::Optional<EncodedLogo>& logo) {
+    OnLogoAvailable(std::move(callback), type, logo);
   }
 
-  void OnFreshLogoAvailable(
-      const content::URLDataSource::GotDataCallback& callback,
-      LogoCallbackReason type,
-      const base::Optional<EncodedLogo>& logo) {
-    OnLogoAvailable(callback, type, logo);
+  void OnFreshLogoAvailable(content::URLDataSource::GotDataCallback callback,
+                            LogoCallbackReason type,
+                            const base::Optional<EncodedLogo>& logo) {
+    OnLogoAvailable(std::move(callback), type, logo);
     OnRequestCompleted(type, logo);
   }
 
@@ -738,21 +735,21 @@ class LocalNtpSource::DesktopLogoObserver {
   }
 
   void StartGetLogo(LogoService* service,
-                    const content::URLDataSource::GotDataCallback& callback,
+                    content::URLDataSource::GotDataCallback callback,
                     bool from_cache) {
     EncodedLogoCallback cached, fresh;
     LogoCallbacks callbacks;
     if (from_cache) {
       callbacks.on_cached_encoded_logo_available =
           base::BindOnce(&DesktopLogoObserver::OnCachedLogoAvailable,
-                         weak_ptr_factory_.GetWeakPtr(), callback);
+                         weak_ptr_factory_.GetWeakPtr(), std::move(callback));
       callbacks.on_fresh_encoded_logo_available =
           base::BindOnce(&DesktopLogoObserver::OnRequestCompleted,
                          weak_ptr_factory_.GetWeakPtr());
     } else {
       callbacks.on_fresh_encoded_logo_available =
           base::BindOnce(&DesktopLogoObserver::OnFreshLogoAvailable,
-                         weak_ptr_factory_.GetWeakPtr(), callback);
+                         weak_ptr_factory_.GetWeakPtr(), std::move(callback));
     }
     if (!observing()) {
       ++version_started_;
@@ -826,7 +823,7 @@ std::string LocalNtpSource::GetSource() {
 void LocalNtpSource::StartDataRequest(
     const GURL& url,
     const content::WebContents::Getter& wc_getter,
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // TODO(crbug/1009127): Simplify usages of |path| since |url| is available.
@@ -834,12 +831,13 @@ void LocalNtpSource::StartDataRequest(
   std::string stripped_path = StripParameters(path);
   if (stripped_path == kConfigDataFilename) {
     std::string config_data_js = search_config_provider_->config_data_js();
-    callback.Run(base::RefCountedString::TakeString(&config_data_js));
+    std::move(callback).Run(
+        base::RefCountedString::TakeString(&config_data_js));
     return;
   }
   if (stripped_path == kThemeCSSFilename) {
     std::string theme_css = GetThemeCSS(profile_);
-    callback.Run(base::RefCountedString::TakeString(&theme_css));
+    std::move(callback).Run(base::RefCountedString::TakeString(&theme_css));
     return;
   }
 
@@ -849,24 +847,24 @@ void LocalNtpSource::StartDataRequest(
         {base::ThreadPool(), base::TaskPriority::USER_VISIBLE,
          base::MayBlock()},
         base::BindOnce(&ReadBackgroundImageData, profile_->GetPath()),
-        base::BindOnce(&ServeBackgroundImageData, callback));
+        base::BindOnce(&ServeBackgroundImageData, std::move(callback)));
     return;
   }
 
   if (stripped_path == kNtpBackgroundCollectionScriptFilename) {
     if (!ntp_background_service_) {
-      callback.Run(nullptr);
+      std::move(callback).Run(nullptr);
       return;
     }
     ntp_background_collections_requests_.emplace_back(base::TimeTicks::Now(),
-                                                      callback);
+                                                      std::move(callback));
     ntp_background_service_->FetchCollectionInfo();
     return;
   }
 
   if (stripped_path == kNtpBackgroundImageScriptFilename) {
     if (!ntp_background_service_) {
-      callback.Run(nullptr);
+      std::move(callback).Run(nullptr);
       return;
     }
     std::string collection_id_param;
@@ -874,28 +872,28 @@ void LocalNtpSource::StartDataRequest(
     if (net::GetValueForKeyInQuery(path_url, "collection_id",
                                    &collection_id_param)) {
       ntp_background_image_info_requests_.emplace_back(base::TimeTicks::Now(),
-                                                       callback);
+                                                       std::move(callback));
       ntp_background_service_->FetchCollectionImageInfo(collection_id_param);
     } else {
-      callback.Run(nullptr);
+      std::move(callback).Run(nullptr);
     }
     return;
   }
 
   if (stripped_path == kOneGoogleBarScriptFilename) {
     if (!one_google_bar_service_) {
-      callback.Run(nullptr);
+      std::move(callback).Run(nullptr);
     } else {
-      ServeOneGoogleBarWhenAvailable(callback);
+      ServeOneGoogleBarWhenAvailable(std::move(callback));
     }
     return;
   }
 
   if (stripped_path == kPromoScriptFilename) {
     if (!promo_service_) {
-      callback.Run(nullptr);
+      std::move(callback).Run(nullptr);
     } else {
-      ServePromoWhenAvailable(callback);
+      ServePromoWhenAvailable(std::move(callback));
     }
     return;
   }
@@ -904,7 +902,7 @@ void LocalNtpSource::StartDataRequest(
   // refresh the data until the old data is used.
   if (stripped_path == kSearchSuggestionsScriptFilename) {
     if (!search_suggest_service_) {
-      callback.Run(nullptr);
+      std::move(callback).Run(nullptr);
       return;
     }
 
@@ -914,11 +912,12 @@ void LocalNtpSource::StartDataRequest(
     if (one_google_bar_service_->language_code() != kEnUSLanguageCode) {
       std::string no_suggestions =
           "var searchSuggestions = {suggestionsHtml: ''}";
-      callback.Run(base::RefCountedString::TakeString(&no_suggestions));
+      std::move(callback).Run(
+          base::RefCountedString::TakeString(&no_suggestions));
       return;
     }
 
-    ServeSearchSuggestionsIfAvailable(callback);
+    ServeSearchSuggestionsIfAvailable(std::move(callback));
 
     pending_search_suggest_request_ = base::TimeTicks::Now();
     search_suggest_service_->Refresh();
@@ -927,7 +926,7 @@ void LocalNtpSource::StartDataRequest(
 
   if (stripped_path == kDoodleScriptFilename) {
     if (!logo_service_) {
-      callback.Run(nullptr);
+      std::move(callback).Run(nullptr);
       return;
     }
 
@@ -936,9 +935,9 @@ void LocalNtpSource::StartDataRequest(
     GURL url = GURL(chrome::kChromeSearchLocalNtpUrl).Resolve(path);
     if (net::GetValueForKeyInQuery(url, "v", &version_string) &&
         base::StringToInt(version_string, &version)) {
-      logo_observer_->GetFreshLogo(logo_service_, version, callback);
+      logo_observer_->GetFreshLogo(logo_service_, version, std::move(callback));
     } else {
-      logo_observer_->GetCachedLogo(logo_service_, callback);
+      logo_observer_->GetCachedLogo(logo_service_, std::move(callback));
     }
     return;
   }
@@ -996,6 +995,8 @@ void LocalNtpSource::StartDataRequest(
         l10n_util::GetStringUTF8(IDS_NTP_CUSTOM_LINKS_DONE);
     replacements["backgroundsOption"] =
         l10n_util::GetStringUTF8(IDS_NTP_CUSTOMIZE_MENU_BACKGROUND_LABEL);
+    replacements["customBackgroundDisabled"] = l10n_util::GetStringUTF8(
+        IDS_NTP_CUSTOMIZE_MENU_BACKGROUND_DISABLED_LABEL);
     replacements["shortcutsOption"] =
         l10n_util::GetStringUTF8(IDS_NTP_CUSTOMIZE_MENU_SHORTCUTS_LABEL);
     replacements["colorsOption"] =
@@ -1049,7 +1050,7 @@ void LocalNtpSource::StartDataRequest(
     ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
     base::StringPiece html = bundle.GetRawDataResource(IDR_LOCAL_NTP_HTML);
     std::string replaced = ui::ReplaceTemplateExpressions(html, replacements);
-    callback.Run(base::RefCountedString::TakeString(&replaced));
+    std::move(callback).Run(base::RefCountedString::TakeString(&replaced));
     return;
   }
 
@@ -1064,11 +1065,11 @@ void LocalNtpSource::StartDataRequest(
       scoped_refptr<base::RefCountedMemory> response(
           ui::ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
               kResources[i].identifier, scale_factor));
-      callback.Run(response.get());
+      std::move(callback).Run(response.get());
       return;
     }
   }
-  callback.Run(nullptr);
+  std::move(callback).Run(nullptr);
 }
 
 std::string LocalNtpSource::GetMimeType(const std::string& path) {
@@ -1149,8 +1150,8 @@ void LocalNtpSource::OnCollectionInfoAvailable() {
   result = base::RefCountedString::TakeString(&js);
 
   base::TimeTicks now = base::TimeTicks::Now();
-  for (const auto& request : ntp_background_collections_requests_) {
-    request.callback.Run(result);
+  for (auto& request : ntp_background_collections_requests_) {
+    std::move(request.callback).Run(result);
     base::TimeDelta delta = now - request.start_time;
     UMA_HISTOGRAM_MEDIUM_TIMES(
         "NewTabPage.BackgroundService.Collections.RequestLatency", delta);
@@ -1187,8 +1188,8 @@ void LocalNtpSource::OnCollectionImagesAvailable() {
   result = base::RefCountedString::TakeString(&js);
 
   base::TimeTicks now = base::TimeTicks::Now();
-  for (const auto& request : ntp_background_image_info_requests_) {
-    request.callback.Run(result);
+  for (auto& request : ntp_background_image_info_requests_) {
+    std::move(request.callback).Run(result);
     base::TimeDelta delta = now - request.start_time;
     UMA_HISTOGRAM_MEDIUM_TIMES(
         "NewTabPage.BackgroundService.Images.RequestLatency", delta);
@@ -1292,7 +1293,7 @@ void LocalNtpSource::OnSearchSuggestServiceShuttingDown() {
 }
 
 void LocalNtpSource::ServeSearchSuggestionsIfAvailable(
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
   base::Optional<SearchSuggestData> data =
       search_suggest_service_->search_suggest_data();
 
@@ -1305,7 +1306,7 @@ void LocalNtpSource::ServeSearchSuggestionsIfAvailable(
   base::JSONWriter::Write(*ConvertSearchSuggestDataToDict(data), &js);
   js = "var searchSuggestions  = " + js + ";";
   result = base::RefCountedString::TakeString(&js);
-  callback.Run(result);
+  std::move(callback).Run(result);
 }
 
 void LocalNtpSource::ServeOneGoogleBar(
@@ -1331,22 +1332,22 @@ void LocalNtpSource::ServeOneGoogleBar(
     UMA_HISTOGRAM_MEDIUM_TIMES("NewTabPage.OneGoogleBar.RequestLatency.Failure",
                                delta);
   }
-  for (const auto& callback : one_google_bar_callbacks_) {
-    callback.Run(result);
+  for (auto& callback : one_google_bar_callbacks_) {
+    std::move(callback).Run(result);
   }
   pending_one_google_bar_request_ = base::nullopt;
   one_google_bar_callbacks_.clear();
 }
 
 void LocalNtpSource::ServeOneGoogleBarWhenAvailable(
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
   base::Optional<OneGoogleBarData> data =
       one_google_bar_service_->one_google_bar_data();
 
   if (!pending_one_google_bar_request_.has_value()) {
-    callback.Run(GetOGBString(data));
+    std::move(callback).Run(GetOGBString(data));
   } else {
-    one_google_bar_callbacks_.emplace_back(callback);
+    one_google_bar_callbacks_.push_back(std::move(callback));
   }
 }
 
@@ -1376,21 +1377,21 @@ void LocalNtpSource::ServePromo(const base::Optional<PromoData>& data) {
     UMA_HISTOGRAM_MEDIUM_TIMES("NewTabPage.Promos.RequestLatency2.Failure",
                                delta);
   }
-  for (const auto& callback : promo_callbacks_) {
-    callback.Run(result);
+  for (auto& callback : promo_callbacks_) {
+    std::move(callback).Run(result);
   }
   pending_promo_request_ = base::nullopt;
   promo_callbacks_.clear();
 }
 
 void LocalNtpSource::ServePromoWhenAvailable(
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
   base::Optional<PromoData> data = promo_service_->promo_data();
 
   if (!pending_promo_request_.has_value()) {
-    callback.Run(GetPromoString(data));
+    std::move(callback).Run(GetPromoString(data));
   } else {
-    promo_callbacks_.emplace_back(callback);
+    promo_callbacks_.push_back(std::move(callback));
   }
 }
 
@@ -1407,10 +1408,12 @@ void LocalNtpSource::InitiatePromoAndOGBRequests() {
 
 LocalNtpSource::NtpBackgroundRequest::NtpBackgroundRequest(
     base::TimeTicks start_time,
-    const content::URLDataSource::GotDataCallback& callback)
-    : start_time(start_time), callback(callback) {}
+    content::URLDataSource::GotDataCallback callback)
+    : start_time(start_time), callback(std::move(callback)) {}
 
 LocalNtpSource::NtpBackgroundRequest::NtpBackgroundRequest(
-    const NtpBackgroundRequest&) = default;
+    NtpBackgroundRequest&&) = default;
+LocalNtpSource::NtpBackgroundRequest& LocalNtpSource::NtpBackgroundRequest::
+operator=(NtpBackgroundRequest&&) = default;
 
 LocalNtpSource::NtpBackgroundRequest::~NtpBackgroundRequest() = default;

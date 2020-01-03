@@ -17,7 +17,6 @@
 #include "build/build_config.h"
 #include "components/download/public/common/download_file.h"
 #include "components/download/public/common/input_stream.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace download {
@@ -46,7 +45,7 @@ class MockDownloadFile : public DownloadFile {
                DownloadInterruptReason(const base::FilePath& full_path));
   MOCK_METHOD2(RenameAndUniquify,
                void(const base::FilePath& full_path,
-                    const RenameCompletionCallback& callback));
+                    RenameCompletionCallback callback));
   MOCK_METHOD6(
       RenameAndAnnotate,
       void(const base::FilePath& full_path,
@@ -54,7 +53,7 @@ class MockDownloadFile : public DownloadFile {
            const GURL& source_url,
            const GURL& referrer_url,
            mojo::PendingRemote<quarantine::mojom::Quarantine> remote_quarantine,
-           const RenameCompletionCallback& callback));
+           RenameCompletionCallback callback));
   MOCK_METHOD0(Detach, void());
   MOCK_METHOD0(Cancel, void());
   MOCK_METHOD1(SetPotentialFileLength, void(int64_t length));
@@ -76,8 +75,8 @@ class MockDownloadFile : public DownloadFile {
                     const base::FilePath& file_name,
                     const std::string& mime_type,
                     const base::FilePath& current_path,
-                    const RenameCompletionCallback& callback));
-  MOCK_METHOD1(PublishDownload, void(const RenameCompletionCallback& callback));
+                    RenameCompletionCallback callback));
+  MOCK_METHOD1(PublishDownload, void(RenameCompletionCallback callback));
   MOCK_METHOD0(GetDisplayName, base::FilePath());
 #endif  // defined(OS_ANDROID)
 };

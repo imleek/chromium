@@ -7,7 +7,6 @@
 #include "net/quic/platform/impl/quic_chromium_clock.h"
 #include "net/quic/quic_chromium_alarm_factory.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/web/modules/peerconnection/peer_connection_dependency_factory.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
@@ -16,6 +15,7 @@
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/modules/peerconnection/adapters/p2p_quic_transport.h"
 #include "third_party/blink/renderer/modules/peerconnection/adapters/p2p_quic_transport_factory_impl.h"
+#include "third_party/blink/renderer/modules/peerconnection/peer_connection_dependency_factory.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_certificate.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_ice_transport.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_quic_stream.h"
@@ -203,7 +203,7 @@ void RTCQuicTransport::connect(ExceptionState& exception_state) {
 
 void RTCQuicTransport::listen(const DOMArrayPiece& remote_key,
                               ExceptionState& exception_state) {
-  if (remote_key.ByteLength() == 0u) {
+  if (remote_key.ByteLengthAsSizeT() == 0u) {
     exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                       "Cannot listen with an empty key.");
     return;
@@ -216,7 +216,7 @@ void RTCQuicTransport::listen(const DOMArrayPiece& remote_key,
   }
   start_reason_ = StartReason::kServerListening;
   std::string pre_shared_key(static_cast<const char*>(remote_key.Data()),
-                             remote_key.ByteLength());
+                             remote_key.ByteLengthAsSizeT());
   StartConnection(quic::Perspective::IS_SERVER,
                   P2PQuicTransport::StartConfig(pre_shared_key));
 }
@@ -397,17 +397,17 @@ void RTCQuicTransport::sendDatagram(const DOMArrayPiece& data,
         "Cannot send datagram because not readyToSend()");
     return;
   }
-  if (data.ByteLength() > max_datagram_length_) {
+  if (data.ByteLengthAsSizeT() > max_datagram_length_) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
-        "data of size " + String::Number(data.ByteLength()) +
+        "data of size " + String::Number(data.ByteLengthAsSizeT()) +
             " is too large to fit into a datagram of max size: " +
             String::Number(max_datagram_length_.value_or(0)));
     return;
   }
 
-  Vector<uint8_t> datagram(data.ByteLength());
-  memcpy(datagram.data(), data.Data(), data.ByteLength());
+  Vector<uint8_t> datagram(static_cast<wtf_size_t>(data.ByteLengthAsSizeT()));
+  memcpy(datagram.data(), data.Data(), data.ByteLengthAsSizeT());
   proxy_->SendDatagram(std::move(datagram));
   num_buffered_sent_datagrams_++;
 }

@@ -72,11 +72,11 @@ SharingService::SharingDeviceList SharingService::GetDeviceCandidates(
 }
 
 void SharingService::SendMessageToDevice(
-    const std::string& device_guid,
+    const syncer::DeviceInfo& device,
     base::TimeDelta response_timeout,
     chrome_browser_sharing::SharingMessage message,
     SharingMessageSender::ResponseCallback callback) {
-  message_sender_->SendMessageToDevice(device_guid, response_timeout,
+  message_sender_->SendMessageToDevice(device, response_timeout,
                                        std::move(message), std::move(callback));
 }
 
@@ -103,19 +103,9 @@ void SharingService::OnSyncShutdown(syncer::SyncService* sync) {
 }
 
 void SharingService::OnStateChanged(syncer::SyncService* sync) {
-  if (IsSyncEnabledForSharing(sync_service_)) {
-    if (base::FeatureList::IsEnabled(kSharingDeviceRegistration)) {
-      if (state_ == State::DISABLED) {
-        state_ = State::REGISTERING;
-        RegisterDevice();
-      }
-    } else {
-      // Unregister the device once and stop listening for sync state changes.
-      // If feature is turned back on, Chrome needs to be restarted.
-      if (sync_service_ && sync_service_->HasObserver(this))
-        sync_service_->RemoveObserver(this);
-      UnregisterDevice();
-    }
+  if (IsSyncEnabledForSharing(sync_service_) && state_ == State::DISABLED) {
+    state_ = State::REGISTERING;
+    RegisterDevice();
   } else if (IsSyncDisabledForSharing(sync_service_) &&
              state_ == State::ACTIVE) {
     state_ = State::UNREGISTERING;
@@ -214,8 +204,7 @@ void SharingService::OnDeviceRegistered(
 void SharingService::OnDeviceUnregistered(
     SharingDeviceRegistrationResult result) {
   LogSharingUnegistrationResult(result);
-  if (IsSyncEnabledForSharing(sync_service_) &&
-      base::FeatureList::IsEnabled(kSharingDeviceRegistration)) {
+  if (IsSyncEnabledForSharing(sync_service_)) {
     // In case sync is enabled during un-registration, register it.
     state_ = State::REGISTERING;
     RegisterDevice();
@@ -244,7 +233,9 @@ void SharingService::OnDeviceUnregistered(
 SharingService::SharingDeviceList SharingService::FilterDeviceCandidates(
     SharingDeviceList devices,
     sync_pb::SharingSpecificFields::EnabledFeatures required_feature) const {
-  const base::Time min_updated_time = base::Time::Now() - kDeviceExpiration;
+  const base::Time min_updated_time =
+      base::Time::Now() -
+      base::TimeDelta::FromHours(kSharingDeviceExpirationHours.Get());
   base::EraseIf(devices,
                 [this, required_feature, min_updated_time](const auto& device) {
                   // Checks if |last_updated_timestamp| is not too old.

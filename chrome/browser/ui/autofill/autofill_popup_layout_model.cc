@@ -101,7 +101,8 @@ int GetRowHeightFromId(int identifier) {
 }  // namespace
 
 AutofillPopupLayoutModel::AutofillPopupLayoutModel(
-    AutofillPopupViewDelegate* delegate, bool is_credit_card_popup)
+    AutofillPopupViewDelegate* delegate,
+    bool is_credit_card_popup)
     : delegate_(delegate), is_credit_card_popup_(is_credit_card_popup) {
 #if !defined(OS_ANDROID)
   smaller_font_list_ =
@@ -191,8 +192,12 @@ const gfx::FontList& AutofillPopupLayoutModel::GetValueFontListForRow(
     case POPUP_ITEM_ID_TITLE:
     case POPUP_ITEM_ID_PASSWORD_ENTRY:
     case POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY:
+    case POPUP_ITEM_ID_HIDE_AUTOFILL_SUGGESTIONS:
     case POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY:
     case POPUP_ITEM_ID_SHOW_ACCOUNT_CARDS:
+    case POPUP_ITEM_ID_PASSWORD_ACCOUNT_STORAGE_OPTIN:
+    case POPUP_ITEM_ID_USE_VIRTUAL_CARD:
+    case POPUP_ITEM_ID_ONE_TIME_CODE:
       return normal_font_list_;
     case POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY:
     case POPUP_ITEM_ID_DATALIST_ENTRY:

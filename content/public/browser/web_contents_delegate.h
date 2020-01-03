@@ -199,6 +199,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   // A message was added to the console of a frame of the page. Returning true
   // indicates that the delegate handled the message. If false is returned the
   // default logging mechanism will be used for the message.
+  // NOTE: If you only need to monitor messages added to the console, rather
+  // than change the behavior when they are added, prefer using
+  // WebContentsObserver::OnDidAddMessageToConsole().
   virtual bool DidAddMessageToConsole(
       WebContents* source,
       blink::mojom::ConsoleMessageLevel log_level,
@@ -592,13 +595,17 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void SetTopControlsShownRatio(WebContents* web_contents,
                                         float ratio) {}
 
-  // Requests to get browser controls info such as the height of the top/bottom
-  // controls, and whether they will shrink the Blink's view size.
-  // Note that they are not complete in the sense that there is no API to tell
-  // content to poll these values again, except part of resize. But this is not
-  // needed by embedder because it's always accompanied by view size change.
+  // Requests to get browser controls info such as the height/min height of the
+  // top/bottom controls, and whether to animate these changes to height or
+  // whether they will shrink the Blink's view size. Note that they are not
+  // complete in the sense that there is no API to tell content to poll these
+  // values again, except part of resize. But this is not needed by embedder
+  // because it's always accompanied by view size change.
   virtual int GetTopControlsHeight();
+  virtual int GetTopControlsMinHeight();
   virtual int GetBottomControlsHeight();
+  virtual int GetBottomControlsMinHeight();
+  virtual bool ShouldAnimateBrowserControlsHeightChanges();
   virtual bool DoBrowserControlsShrinkRendererSize(
       const WebContents* web_contents);
 

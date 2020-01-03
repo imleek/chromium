@@ -79,7 +79,8 @@ class URLLoaderInterceptor {
   // Function signature for intercept method.
   // Return true if the request was intercepted. Otherwise this class will
   // forward the request to the original URLLoaderFactory.
-  using InterceptCallback = base::Callback<bool(RequestParams* params)>;
+  using InterceptCallback =
+      base::RepeatingCallback<bool(RequestParams* params)>;
 
   // Function signature for a loading completion method.
   // This class will listen on loading completion responses from the network,
@@ -94,9 +95,9 @@ class URLLoaderInterceptor {
   // and instead |ready_callback| is called after the interceptor is installed.
   // If provided, |completion_status_callback| is called when the load
   // completes.
-  explicit URLLoaderInterceptor(const InterceptCallback& callback);
+  explicit URLLoaderInterceptor(InterceptCallback callback);
   URLLoaderInterceptor(
-      const InterceptCallback& callback,
+      InterceptCallback callback,
       const URLLoaderCompletionStatusCallback& completion_status_callback,
       base::OnceClosure ready_callback);
 
@@ -144,12 +145,12 @@ class URLLoaderInterceptor {
   class BrowserProcessWrapper;
   class Interceptor;
   class IOState;
-  class SubresourceWrapper;
+  class RenderProcessHostWrapper;
   class URLLoaderFactoryGetterWrapper;
   class URLLoaderFactoryNavigationWrapper;
 
-  // Used to create a factory for subresources in the network service case.
-  void CreateURLLoaderFactoryForSubresources(
+  // Used to create a factory associated with a specific RenderProcessHost.
+  void CreateURLLoaderFactoryForRenderProcessHost(
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
       int process_id,
       mojo::PendingRemote<network::mojom::URLLoaderFactory> original_factory);

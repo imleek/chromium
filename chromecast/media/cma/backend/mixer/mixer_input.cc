@@ -14,7 +14,7 @@
 #include "base/bind_helpers.h"
 #include "base/logging.h"
 #include "base/numerics/ranges.h"
-#include "chromecast/media/cma/backend/audio_fader.h"
+#include "chromecast/media/audio/audio_fader.h"
 #include "chromecast/media/cma/backend/mixer/audio_output_redirector_input.h"
 #include "chromecast/media/cma/backend/mixer/filter_group.h"
 #include "media/base/audio_bus.h"
@@ -40,7 +40,7 @@ int RoundUpMultiple(int value, int multiple) {
 MixerInput::MixerInput(Source* source, FilterGroup* filter_group)
     : source_(source),
       num_channels_(source->num_channels()),
-      input_samples_per_second_(source->input_samples_per_second()),
+      input_samples_per_second_(source->sample_rate()),
       output_samples_per_second_(filter_group->input_samples_per_second()),
       primary_(source->primary()),
       device_id_(source->device_id()),
@@ -211,9 +211,13 @@ int MixerInput::FillAudioData(int num_frames,
   previous_ended_in_silence_ = redirected;
   first_buffer_ = false;
 
-  if (source_->playout_channel() != kChannelAll) {
-    DCHECK_LT(source_->playout_channel(), num_channels_);
-
+  // TODO(kmackay): If we ever support channel selections other than L and R,
+  // we should remix channels to a format that includes the selected channel
+  // and then do channel selection. Currently if the input is mono we don't
+  // bother doing channel selection since the result would be the same as
+  // doing nothing anyway.
+  if (source_->playout_channel() != kChannelAll &&
+      source_->playout_channel() < num_channels_) {
     // Duplicate selected channel to all channels.
     for (int c = 0; c < num_channels_; ++c) {
       if (c != source_->playout_channel()) {

@@ -12,7 +12,6 @@
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_browser_main_parts.h"
 #include "android_webview/browser/aw_content_browser_overlay_manifest.h"
-#include "android_webview/browser/aw_content_renderer_overlay_manifest.h"
 #include "android_webview/browser/aw_contents.h"
 #include "android_webview/browser/aw_contents_client_bridge.h"
 #include "android_webview/browser/aw_contents_io_thread_client.h"
@@ -92,6 +91,7 @@
 #include "media/mojo/buildflags.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/android/network_library.h"
 #include "net/http/http_util.h"
 #include "net/net_buildflags.h"
@@ -102,7 +102,6 @@
 #include "services/network/public/mojom/cookie_manager.mojom-forward.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "storage/browser/quota/quota_settings.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/resource/resource_bundle_android.h"
@@ -497,15 +496,6 @@ AwContentBrowserClient::CreateQuotaPermissionContext() {
   return new AwQuotaPermissionContext;
 }
 
-void AwContentBrowserClient::GetQuotaSettings(
-    content::BrowserContext* context,
-    content::StoragePartition* partition,
-    storage::OptionalQuotaSettingsCallback callback) {
-  storage::GetNominalDynamicSettings(
-      partition->GetPath(), context->IsOffTheRecord(),
-      storage::GetDefaultDeviceInfoHelper(), std::move(callback));
-}
-
 content::GeneratedCodeCacheSettings
 AwContentBrowserClient::GetGeneratedCodeCacheSettings(
     content::BrowserContext* context) {
@@ -524,19 +514,24 @@ void AwContentBrowserClient::AllowCertificateError(
     const GURL& request_url,
     bool is_main_frame_request,
     bool strict_enforcement,
-    const base::Callback<void(content::CertificateRequestResultType)>&
-        callback) {
+    base::OnceCallback<void(content::CertificateRequestResultType)> callback) {
   AwContentsClientBridge* client =
       AwContentsClientBridge::FromWebContents(web_contents);
   bool cancel_request = true;
-  if (client)
-    client->AllowCertificateError(cert_error,
-                                  ssl_info.cert.get(),
-                                  request_url,
-                                  callback,
+  // We only call the callback once but we must pass ownership to a function
+  // that conditionally calls it.
+  // TODO(estaab): Change AwContentsClientBridge::AllowCertificateError to
+  //               return the callback if it doesn't call it.
+  base::RepeatingCallback<void(content::CertificateRequestResultType)>
+      repeating_callback = base::AdaptCallbackForRepeating(std::move(callback));
+  if (client) {
+    client->AllowCertificateError(cert_error, ssl_info.cert.get(), request_url,
+                                  base::BindOnce(repeating_callback),
                                   &cancel_request);
-  if (cancel_request)
-    callback.Run(content::CERTIFICATE_REQUEST_RESULT_TYPE_DENY);
+  }
+  if (cancel_request) {
+    repeating_callback.Run(content::CERTIFICATE_REQUEST_RESULT_TYPE_DENY);
+  }
 }
 
 base::OnceClosure AwContentBrowserClient::SelectClientCertificate(
@@ -697,8 +692,6 @@ base::Optional<service_manager::Manifest>
 AwContentBrowserClient::GetServiceManifestOverlay(base::StringPiece name) {
   if (name == content::mojom::kBrowserServiceName)
     return GetAWContentBrowserOverlayManifest();
-  if (name == content::mojom::kRendererServiceName)
-    return GetAWContentRendererOverlayManifest();
   return base::nullopt;
 }
 
@@ -748,8 +741,13 @@ void AwContentBrowserClient::ExposeInterfacesToRenderer(
       base::CreateSingleThreadTaskRunner({BrowserThread::IO}));
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
+  auto create_spellcheck_host =
+      [](mojo::PendingReceiver<spellcheck::mojom::SpellCheckHost> receiver) {
+        mojo::MakeSelfOwnedReceiver(std::make_unique<SpellCheckHostImpl>(),
+                                    std::move(receiver));
+      };
   registry->AddInterface(
-      base::BindRepeating(&SpellCheckHostImpl::Create),
+      base::BindRepeating(create_spellcheck_host),
       base::CreateSingleThreadTaskRunner({BrowserThread::UI}));
 #endif
 }
@@ -771,7 +769,11 @@ AwContentBrowserClient::CreateURLLoaderThrottles(
             return client->GetSafeBrowsingUrlCheckerDelegate();
           },
           base::Unretained(this)),
-      wc_getter, frame_tree_node_id, browser_context->GetResourceContext()));
+      wc_getter, frame_tree_node_id, browser_context->GetResourceContext(),
+      // TODO(crbug.com/1033760): cache manager is used to perform real time url
+      // check, which is gated by UKM opted in. Since AW currently doesn't
+      // support UKM, this feature is not enabled.
+      /* cache_manager */ nullptr));
 
   if (request.resource_type ==
       static_cast<int>(content::ResourceType::kMainFrame)) {
@@ -885,7 +887,7 @@ AwContentBrowserClient::CreateLoginDelegate(
 
 bool AwContentBrowserClient::HandleExternalProtocol(
     const GURL& url,
-    content::WebContents::Getter web_contents_getter,
+    content::WebContents::OnceGetter web_contents_getter,
     int child_id,
     content::NavigationUIData* navigation_data,
     bool is_main_frame,
@@ -963,15 +965,35 @@ bool AwContentBrowserClient::WillCreateURLLoaderFactory(
     int render_process_id,
     URLLoaderFactoryType type,
     const url::Origin& request_initiator,
+    base::Optional<int64_t> navigation_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
-    bool* bypass_redirect_checks) {
+    bool* bypass_redirect_checks,
+    network::mojom::URLLoaderFactoryOverridePtr* factory_override) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  auto proxied_receiver = std::move(*factory_receiver);
+  mojo::PendingReceiver<network::mojom::URLLoaderFactory> proxied_receiver;
   mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_remote;
-  *factory_receiver = target_factory_remote.InitWithNewPipeAndPassReceiver();
+
+  if (factory_override) {
+    // We are interested in factories "inside" of CORS, so use
+    // |factory_override|.
+    *factory_override = network::mojom::URLLoaderFactoryOverride::New();
+    proxied_receiver =
+        (*factory_override)
+            ->overriding_factory.InitWithNewPipeAndPassReceiver();
+    (*factory_override)->overridden_factory_receiver =
+        target_factory_remote.InitWithNewPipeAndPassReceiver();
+  } else {
+    // In this case, |factory_override| is not given. But all callers of
+    // ContentBrowserClient::WillCreateURLLoaderFactory guarantee that
+    // |factory_override| is null only when the security features on the network
+    // service is no-op for requests coming to the URLLoaderFactory. Hence we
+    // can use |factory_receiver| here.
+    proxied_receiver = std::move(*factory_receiver);
+    *factory_receiver = target_factory_remote.InitWithNewPipeAndPassReceiver();
+  }
   int process_id =
       type == URLLoaderFactoryType::kNavigation ? 0 : render_process_id;
 

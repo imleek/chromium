@@ -53,15 +53,18 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_impl.h"
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/buildflags.h"
 #include "chrome/browser/chrome_browser_field_trials.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/component_updater/crl_set_component_installer.h"
+#include "chrome/browser/component_updater/crowd_deny_component_installer.h"
 #include "chrome/browser/component_updater/file_type_policies_component_installer.h"
+#include "chrome/browser/component_updater/games_component_installer.h"
 #include "chrome/browser/component_updater/mei_preload_component_installer.h"
 #include "chrome/browser/component_updater/optimization_hints_component_installer.h"
 #include "chrome/browser/component_updater/origin_trials_component_installer.h"
-#include "chrome/browser/component_updater/pepper_flash_component_installer.h"
 #include "chrome/browser/component_updater/safety_tips_component_installer.h"
+#include "chrome/browser/component_updater/soda_component_installer.h"
 #include "chrome/browser/component_updater/ssl_error_assistant_component_installer.h"
 #include "chrome/browser/component_updater/sth_set_component_remover.h"
 #include "chrome/browser/component_updater/subresource_filter_component_installer.h"
@@ -81,7 +84,6 @@
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/performance_monitor/process_monitor.h"
 #include "chrome/browser/performance_monitor/system_monitor.h"
-#include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/prefs/chrome_command_line_pref_store.h"
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
@@ -120,8 +122,8 @@
 #include "chrome/common/media/media_resource_provider.h"
 #include "chrome/common/net/net_resource_provider.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/stack_sampling_configuration.h"
-#include "chrome/common/thread_profiler.h"
+#include "chrome/common/profiler/stack_sampling_configuration.h"
+#include "chrome/common/profiler/thread_profiler.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/component_updater/component_updater_service.h"
@@ -184,6 +186,7 @@
 #include "net/cookies/cookie_monster.h"
 #include "net/http/http_network_layer.h"
 #include "net/http/http_stream_factory.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "rlz/buildflags/buildflags.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -283,6 +286,10 @@
 #include "extensions/components/javascript_dialog_extensions_client/javascript_dialog_extension_client_impl.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
+#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
+#include "chrome/browser/media/kaleidoscope/internal/kaleidoscope_web_ui_controller_factory.h"
+#endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
+
 #if BUILDFLAG(ENABLE_NACL)
 #include "chrome/browser/component_updater/pnacl_component_installer.h"
 #include "components/nacl/browser/nacl_process_host.h"
@@ -290,6 +297,11 @@
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
 #include "chrome/browser/offline_pages/offline_page_info_handler.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+#include "chrome/browser/component_updater/pepper_flash_component_installer.h"
+#include "chrome/browser/plugins/plugin_prefs.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
@@ -464,9 +476,9 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
   RegisterRecoveryComponent(cus, g_browser_process->local_state());
 #endif  // defined(OS_WIN)
 
-#if !defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_PLUGINS)
   RegisterPepperFlashComponent(cus);
-#endif  // !defined(OS_ANDROID)
+#endif
 
 #if BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT)
   RegisterWidevineCdmComponent(cus);
@@ -508,13 +520,12 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
     component_updater::DeleteLegacySTHSet(path);
 #endif
 
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+#if !defined(OS_CHROMEOS)
     // CRLSetFetcher attempts to load a CRL set from either the local disk or
     // network.
     // For Chrome OS this registration is delayed until user login.
-    // On Android, we do not register at all.
     component_updater::RegisterCRLSetComponent(cus, path);
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+#endif  // !defined(OS_CHROMEOS)
 
     RegisterOriginTrialsComponent(cus, path);
 
@@ -547,6 +558,15 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
 #endif
 
   RegisterSafetyTipsComponent(cus, path);
+  RegisterCrowdDenyComponent(cus, path);
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && defined(OS_ANDROID)
+  component_updater::RegisterGamesComponent(cus, profile_prefs);
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && defined(OS_ANDROID)
+
+  if (profile_prefs->GetBoolean(prefs::kLiveCaptionEnabled))
+    component_updater::RegisterSODAComponent(cus, profile_prefs,
+                                             base::OnceClosure());
 }
 
 #if !defined(OS_ANDROID)
@@ -1539,7 +1559,6 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
       language::GetOverrideLanguageModel() ==
           language::OverrideLanguageModel::GEO) {
     language::GeoLanguageProvider::GetInstance()->StartUp(
-        content::GetSystemConnector()->Clone(),
         browser_process_->local_state());
   }
 
@@ -1547,6 +1566,11 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // called inside PostProfileInit.
   content::WebUIControllerFactory::RegisterFactory(
       ChromeWebUIControllerFactory::GetInstance());
+
+#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
+  content::WebUIControllerFactory::RegisterFactory(
+      KaleidoscopeWebUIControllerFactory::GetInstance());
+#endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
 
 #if BUILDFLAG(ENABLE_NACL)
   // NaClBrowserDelegateImpl is accessed inside PostProfileInit().
@@ -1793,7 +1817,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // In that case we Run() it here, and set a flag to avoid running the main
   // message loop later, as the test will do so as needed from the |ui_task|.
   if (parameters().ui_task) {
-    parameters().ui_task->Run();
+    std::move(*parameters().ui_task).Run();
     delete parameters().ui_task;
     run_message_loop_ = false;
   }

@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "ui/ozone/common/linux/gbm_wrapper.h"
+#include "ui/gfx/linux/gbm_wrapper.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_generator.h"
 #include "ui/ozone/platform/drm/gpu/drm_thread_message_proxy.h"
@@ -150,7 +150,7 @@ void DrmThreadProxy::SetClearOverlayCacheCallback(
 void DrmThreadProxy::CheckOverlayCapabilities(
     gfx::AcceleratedWidget widget,
     const std::vector<OverlaySurfaceCandidate>& candidates,
-    OverlayCapabilitiesCallback callback) {
+    DrmThread::OverlayCapabilitiesCallback callback) {
   DCHECK(drm_thread_.task_runner());
   base::OnceClosure task = base::BindOnce(
       &DrmThread::CheckOverlayCapabilities, base::Unretained(&drm_thread_),

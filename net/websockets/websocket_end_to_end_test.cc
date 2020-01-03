@@ -294,7 +294,8 @@ class WebSocketEndToEndTest : public TestWithTaskEnvironment {
       InitialiseContext();
     }
     url::Origin origin = url::Origin::Create(GURL("http://localhost"));
-    GURL site_for_cookies("http://localhost/");
+    net::SiteForCookies site_for_cookies =
+        net::SiteForCookies::FromOrigin(origin);
     net::NetworkIsolationKey network_isolation_key(origin, origin);
     event_interface_ = new ConnectTestingEventInterface();
     channel_ = std::make_unique<WebSocketChannel>(
@@ -465,10 +466,9 @@ TEST_F(WebSocketEndToEndTest, MAYBE_ProxyPacUsed) {
   proxy_config.set_pac_mandatory(true);
   auto proxy_config_service = std::make_unique<ProxyConfigServiceFixed>(
       ProxyConfigWithAnnotation(proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS));
-  NetLog net_log;
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service(
       ProxyResolutionService::CreateUsingSystemProxyResolver(
-          std::move(proxy_config_service), &net_log));
+          std::move(proxy_config_service), NetLog::Get()));
   ASSERT_EQ(ws_server.host_port_pair().host(), "127.0.0.1");
   context_.set_proxy_resolution_service(proxy_resolution_service.get());
   InitialiseContext();

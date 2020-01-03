@@ -149,7 +149,6 @@ HTMLDocumentParser::HTMLDocumentParser(Document& document,
       should_use_threading_(sync_policy == kAllowAsynchronousParsing),
       end_was_delayed_(false),
       have_background_parser_(false),
-      tasks_were_paused_(false),
       pump_session_nesting_level_(0),
       pump_speculations_session_nesting_level_(0),
       is_parsing_at_line_number_(false),
@@ -387,12 +386,8 @@ void HTMLDocumentParser::EnqueueTokenizedChunk(
 
   speculations_.push_back(std::move(chunk));
 
-  if (!IsPaused() && !IsScheduledForUnpause()) {
-    if (tasks_were_paused_)
-      parser_scheduler_->ForceUnpauseAfterYield();
-    else
-      parser_scheduler_->ScheduleForUnpause();
-  }
+  if (!IsPaused() && !IsScheduledForUnpause())
+    parser_scheduler_->ScheduleForUnpause();
 }
 
 void HTMLDocumentParser::DidReceiveEncodingDataFromBackgroundParser(
@@ -1114,20 +1109,6 @@ void HTMLDocumentParser::ParseDocumentFragment(
   parser->Finish();
   // Allows ~DocumentParser to assert it was detached before destruction.
   parser->Detach();
-}
-
-void HTMLDocumentParser::PauseScheduledTasks() {
-  DCHECK(!tasks_were_paused_);
-  tasks_were_paused_ = true;
-  if (parser_scheduler_)
-    parser_scheduler_->Pause();
-}
-
-void HTMLDocumentParser::UnpauseScheduledTasks() {
-  DCHECK(tasks_were_paused_);
-  tasks_were_paused_ = false;
-  if (parser_scheduler_)
-    parser_scheduler_->Unpause();
 }
 
 void HTMLDocumentParser::AppendBytes(const char* data, size_t length) {

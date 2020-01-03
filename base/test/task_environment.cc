@@ -13,6 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_pump.h"
 #include "base/message_loop/message_pump_type.h"
+#include "base/no_destructor.h"
 #include "base/run_loop.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
@@ -44,6 +45,12 @@ namespace base {
 namespace test {
 
 namespace {
+
+ObserverList<TaskEnvironment::DestructionObserver>& GetDestructionObservers() {
+  static NoDestructor<ObserverList<TaskEnvironment::DestructionObserver>>
+      instance;
+  return *instance;
+}
 
 base::MessagePumpType GetMessagePumpTypeForMainThreadType(
     TaskEnvironment::MainThreadType main_thread_type) {
@@ -471,6 +478,8 @@ TaskEnvironment::~TaskEnvironment() {
   // If we've been moved then bail out.
   if (!owns_instance_)
     return;
+  for (auto& observer : GetDestructionObservers())
+    observer.WillDestroyCurrentTaskEnvironment();
   DestroyThreadPool();
   task_queue_ = nullptr;
   NotifyDestructionObserversAndReleaseSequenceManager();
@@ -717,6 +726,16 @@ void TaskEnvironment::DescribePendingMainThreadTasks() const {
   LOG(INFO) << sequence_manager_->DescribeAllPendingTasks();
 }
 
+// static
+void TaskEnvironment::AddDestructionObserver(DestructionObserver* observer) {
+  GetDestructionObservers().AddObserver(observer);
+}
+
+// static
+void TaskEnvironment::RemoveDestructionObserver(DestructionObserver* observer) {
+  GetDestructionObservers().RemoveObserver(observer);
+}
+
 TaskEnvironment::TestTaskTracker::TestTaskTracker()
     : internal::ThreadPoolImpl::TaskTrackerImpl(std::string()),
       can_run_tasks_cv_(&lock_),
@@ -763,8 +782,23 @@ void TaskEnvironment::TestTaskTracker::RunTask(internal::Task task,
     ++num_tasks_running_;
   }
 
-  internal::ThreadPoolImpl::TaskTrackerImpl::RunTask(std::move(task), sequence,
-                                                     traits);
+  {
+    // Using TimeTicksNowIgnoringOverride() because in tests that mock time,
+    // Now() can advance very far very fast, and that's not a problem. This is
+    // watching for tests that have actually long running tasks which cause our
+    // test suites to run slowly.
+    base::TimeTicks before = base::subtle::TimeTicksNowIgnoringOverride();
+    internal::ThreadPoolImpl::TaskTrackerImpl::RunTask(std::move(task),
+                                                       sequence, traits);
+    base::TimeTicks after = base::subtle::TimeTicksNowIgnoringOverride();
+
+    if ((after - before) > TestTimeouts::action_max_timeout()) {
+      ADD_FAILURE() << "TaskEnvironment: RunTask took more than "
+                    << TestTimeouts::action_max_timeout().InSeconds()
+                    << " seconds. "
+                    << "Posted from " << task.posted_from.ToString();
+    }
+  }
 
   {
     AutoLock auto_lock(lock_);

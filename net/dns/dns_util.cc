@@ -177,7 +177,7 @@ const std::vector<DohUpgradeEntry>& GetDohUpgradeList() {
           DohUpgradeEntry("Comcast",
                           {"75.75.75.75", "75.75.76.76", "2001:558:feed::1",
                            "2001:558:feed::2"},
-                          {""} /* DoT hostname */,
+                          {"dot.xfinity.com"} /* DoT hostname */,
                           {"https://doh.xfinity.com/dns-query{?dns}",
                            false /* use_post */}),
           DohUpgradeEntry(
@@ -475,6 +475,20 @@ std::string GetDohProviderIdForHistogramFromNameserver(
     return "Other";
   else
     return entries[0]->provider;
+}
+
+std::map<std::string, std::string> GetDohServerTemplatesListForTesting() {
+  const std::vector<DohUpgradeEntry>& upgradable_servers = GetDohUpgradeList();
+  std::map<std::string, std::string> server_templates;
+  for (const auto& upgrade_entry : upgradable_servers) {
+    auto return_val = server_templates.insert(
+        std::make_pair(upgrade_entry.provider,
+                       upgrade_entry.dns_over_https_config.server_template));
+    // Check that the new element was inserted. The map's key is the DoH
+    // provider name which should be unique.
+    DCHECK(return_val.second);
+  }
+  return server_templates;
 }
 
 std::string SecureDnsModeToString(

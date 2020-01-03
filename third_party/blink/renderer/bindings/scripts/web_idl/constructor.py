@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import functools
+
 from .code_generator_info import CodeGeneratorInfo
 from .composition_parts import Identifier
 from .composition_parts import WithCodeGeneratorInfo
@@ -10,18 +12,20 @@ from .composition_parts import WithDebugInfo
 from .composition_parts import WithExposure
 from .composition_parts import WithExtendedAttributes
 from .composition_parts import WithOwner
+from .composition_parts import WithOwnerMixin
 from .exposure import Exposure
 from .function_like import FunctionLike
+from .function_like import OverloadGroup
 from .make_copy import make_copy
-from .overload_group import OverloadGroup
 
 
 class Constructor(FunctionLike, WithExtendedAttributes, WithCodeGeneratorInfo,
-                  WithExposure, WithOwner, WithComponent, WithDebugInfo):
+                  WithExposure, WithOwner, WithOwnerMixin, WithComponent,
+                  WithDebugInfo):
     """https://heycam.github.io/webidl/#idl-constructors"""
 
     class IR(FunctionLike.IR, WithExtendedAttributes, WithCodeGeneratorInfo,
-             WithExposure, WithComponent, WithDebugInfo):
+             WithExposure, WithOwnerMixin, WithComponent, WithDebugInfo):
         def __init__(self,
                      arguments,
                      return_type,
@@ -36,38 +40,42 @@ class Constructor(FunctionLike, WithExtendedAttributes, WithCodeGeneratorInfo,
             WithExtendedAttributes.__init__(self, extended_attributes)
             WithCodeGeneratorInfo.__init__(self)
             WithExposure.__init__(self)
-            WithComponent.__init__(self, component=component)
+            WithOwnerMixin.__init__(self)
+            WithComponent.__init__(self, component)
             WithDebugInfo.__init__(self, debug_info)
 
     def __init__(self, ir, owner):
         assert isinstance(ir, Constructor.IR)
 
         FunctionLike.__init__(self, ir)
-        WithExtendedAttributes.__init__(self, ir.extended_attributes)
-        WithCodeGeneratorInfo.__init__(
-            self, CodeGeneratorInfo(ir.code_generator_info))
-        WithExposure.__init__(self, Exposure(ir.exposure))
+        WithExtendedAttributes.__init__(self, ir, readonly=True)
+        WithCodeGeneratorInfo.__init__(self, ir, readonly=True)
+        WithExposure.__init__(self, ir, readonly=True)
         WithOwner.__init__(self, owner)
-        WithComponent.__init__(self, components=ir.components)
-        WithDebugInfo.__init__(self, ir.debug_info)
+        WithOwnerMixin.__init__(self, ir)
+        WithComponent.__init__(self, ir, readonly=True)
+        WithDebugInfo.__init__(self, ir)
 
 
-class ConstructorGroup(OverloadGroup, WithCodeGeneratorInfo, WithExposure,
-                       WithOwner, WithDebugInfo):
+class ConstructorGroup(OverloadGroup, WithExtendedAttributes,
+                       WithCodeGeneratorInfo, WithExposure, WithOwner,
+                       WithComponent, WithDebugInfo):
     """
-    Represents a group of constructors for an interface.
+    Represents a group of constructors of an interface.
 
     The number of constructors in this group may be 1 or 2+.  In the latter
     case, the constructors are overloaded.
     """
 
-    class IR(OverloadGroup.IR, WithCodeGeneratorInfo, WithExposure,
-             WithDebugInfo):
+    class IR(OverloadGroup.IR, WithExtendedAttributes, WithCodeGeneratorInfo,
+             WithExposure, WithDebugInfo):
         def __init__(self,
                      constructors,
+                     extended_attributes=None,
                      code_generator_info=None,
                      debug_info=None):
             OverloadGroup.IR.__init__(self, constructors)
+            WithExtendedAttributes.__init__(self, extended_attributes)
             WithCodeGeneratorInfo.__init__(self, code_generator_info)
             WithExposure.__init__(self)
             WithDebugInfo.__init__(self, debug_info)
@@ -81,36 +89,15 @@ class ConstructorGroup(OverloadGroup, WithCodeGeneratorInfo, WithExposure,
         assert all(constructor.identifier == ir.identifier
                    for constructor in constructors)
 
+        components = functools.reduce(
+            lambda s, constructor: s.union(constructor.components),
+            constructors, set())
+
         ir = make_copy(ir)
         OverloadGroup.__init__(self, functions=constructors)
-        WithCodeGeneratorInfo.__init__(
-            self, CodeGeneratorInfo(ir.code_generator_info))
-        WithExposure.__init__(self, Exposure(ir.exposure))
+        WithExtendedAttributes.__init__(self, ir, readonly=True)
+        WithCodeGeneratorInfo.__init__(self, ir, readonly=True)
+        WithExposure.__init__(self, ir, readonly=True)
         WithOwner.__init__(self, owner)
-        WithDebugInfo.__init__(self, ir.debug_info)
-
-
-class NamedConstructor(object):
-    @property
-    def return_type(self):
-        """
-        Returns IDL type to construct.
-        @return IdlInterfaceType
-        """
-        raise exceptions.NotImplementedError()
-
-    @property
-    def name(self):
-        """
-        Returns the name to be visible as.
-        @return Identifier
-        """
-        raise exceptions.NotImplementedError()
-
-    @property
-    def arguments(self):
-        """
-        Returns a list of arguments.
-        @return tuple(Argument)
-        """
-        raise exceptions.NotImplementedError()
+        WithComponent.__init__(self, sorted(components))
+        WithDebugInfo.__init__(self, ir)

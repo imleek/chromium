@@ -28,6 +28,8 @@
 #include "chrome/browser/ui/in_product_help/reopen_tab_in_product_help.h"
 #include "chrome/browser/ui/in_product_help/reopen_tab_in_product_help_factory.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
+#include "chrome/browser/ui/tabs/tab_group.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_menu_model.h"
 #include "chrome/browser/ui/tabs/tab_network_state.h"
 #include "chrome/browser/ui/tabs/tab_renderer_data.h"
@@ -44,6 +46,9 @@
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/prefs/pref_service.h"
+#include "components/tab_groups/tab_group_color.h"
+#include "components/tab_groups/tab_group_id.h"
+#include "components/tab_groups/tab_group_visual_data.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -53,6 +58,7 @@
 #include "ipc/ipc_message.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "ui/base/models/list_selection_model.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
@@ -314,11 +320,12 @@ void BrowserTabStripController::CloseTab(int model_index,
                              TabStripModel::CLOSE_CREATE_HISTORICAL_TAB);
 }
 
-void BrowserTabStripController::UngroupAllTabsInGroup(TabGroupId group) {
+void BrowserTabStripController::UngroupAllTabsInGroup(
+    tab_groups::TabGroupId group) {
   model_->RemoveFromGroup(ListTabsInGroup(group));
 }
 
-void BrowserTabStripController::AddNewTabInGroup(TabGroupId group) {
+void BrowserTabStripController::AddNewTabInGroup(tab_groups::TabGroupId group) {
   const std::vector<int> tabs = ListTabsInGroup(group);
   model_->delegate()->AddTabAt(GURL(), tabs.back() + 1, true, group);
 }
@@ -430,20 +437,25 @@ void BrowserTabStripController::OnKeyboardFocusedTabChanged(
       index);
 }
 
-const TabGroupVisualData* BrowserTabStripController::GetVisualDataForGroup(
-    TabGroupId group) const {
-  return model_->GetVisualDataForGroup(group);
+base::string16 BrowserTabStripController::GetGroupTitle(
+    tab_groups::TabGroupId group) const {
+  return model_->group_model()->GetTabGroup(group)->visual_data()->title();
+}
+
+tab_groups::TabGroupColorId BrowserTabStripController::GetGroupColorId(
+    tab_groups::TabGroupId group) const {
+  return model_->group_model()->GetTabGroup(group)->visual_data()->color();
 }
 
 void BrowserTabStripController::SetVisualDataForGroup(
-    TabGroupId group,
-    TabGroupVisualData visual_data) {
-  model_->SetVisualDataForGroup(group, visual_data);
+    tab_groups::TabGroupId group,
+    tab_groups::TabGroupVisualData visual_data) {
+  model_->group_model()->GetTabGroup(group)->SetVisualData(visual_data);
 }
 
 std::vector<int> BrowserTabStripController::ListTabsInGroup(
-    TabGroupId group) const {
-  return model_->ListTabsInGroup(group);
+    tab_groups::TabGroupId group) const {
+  return model_->group_model()->GetTabGroup(group)->ListTabs();
 }
 
 bool BrowserTabStripController::IsFrameCondensed() const {
@@ -535,12 +547,6 @@ void BrowserTabStripController::OnTabStripModelChanged(
       SetTabDataAt(replace->new_contents, replace->index);
       break;
     }
-    case TabStripModelChange::kGroupChanged: {
-      auto* group_change = change.GetGroupChange();
-      tabstrip_->ChangeTabGroup(group_change->index, group_change->old_group,
-                                group_change->new_group);
-      break;
-    }
     case TabStripModelChange::kSelectionOnly:
       break;
   }
@@ -564,11 +570,26 @@ void BrowserTabStripController::OnTabStripModelChanged(
     tabstrip_->SetSelection(selection.new_model);
 }
 
-void BrowserTabStripController::OnTabGroupVisualDataChanged(
-    TabStripModel* tab_strip_model,
-    TabGroupId group,
-    const TabGroupVisualData* visual_data) {
-  tabstrip_->GroupVisualsChanged(group);
+void BrowserTabStripController::OnTabGroupChanged(
+    const TabGroupChange& change) {
+  switch (change.type) {
+    case TabGroupChange::kCreated: {
+      tabstrip_->OnGroupCreated(change.group);
+      break;
+    }
+    case TabGroupChange::kContentsChanged: {
+      tabstrip_->OnGroupContentsChanged(change.group);
+      break;
+    }
+    case TabGroupChange::kVisualsChanged: {
+      tabstrip_->OnGroupVisualsChanged(change.group);
+      break;
+    }
+    case TabGroupChange::kClosed: {
+      tabstrip_->OnGroupClosed(change.group);
+      break;
+    }
+  }
 }
 
 void BrowserTabStripController::TabChangedAt(WebContents* contents,
@@ -587,6 +608,12 @@ void BrowserTabStripController::TabPinnedStateChanged(
 void BrowserTabStripController::TabBlockedStateChanged(WebContents* contents,
                                                        int model_index) {
   SetTabDataAt(contents, model_index);
+}
+
+void BrowserTabStripController::TabGroupedStateChanged(
+    base::Optional<tab_groups::TabGroupId> group,
+    int index) {
+  tabstrip_->AddTabToGroup(group, index);
 }
 
 void BrowserTabStripController::SetTabNeedsAttentionAt(int index,

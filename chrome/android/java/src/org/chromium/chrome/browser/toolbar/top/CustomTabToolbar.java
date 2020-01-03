@@ -45,10 +45,12 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.WindowDelegate;
 import org.chromium.chrome.browser.native_page.NativePage;
 import org.chromium.chrome.browser.native_page.NativePageFactory;
 import org.chromium.chrome.browser.ntp.NewTabPage;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.LocationBarVoiceRecognitionHandler;
 import org.chromium.chrome.browser.omnibox.UrlBar;
@@ -58,13 +60,14 @@ import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.page_info.PageInfoController;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tab.TrustedCdn;
 import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
-import org.chromium.chrome.browser.ui.styles.ChromeColors;
 import org.chromium.chrome.browser.ui.widget.TintedDrawable;
 import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -217,6 +220,9 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
     void setCloseButtonImageResource(Drawable drawable) {
         mCloseButton.setVisibility(drawable != null ? View.VISIBLE : View.GONE);
         mCloseButton.setImageDrawable(drawable);
+        if (drawable != null) {
+            updateButtonTint(mCloseButton);
+        }
     }
 
     @Override
@@ -529,7 +535,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         if (v == mTitleUrlContainer) {
             Tab tab = getCurrentTab();
             if (tab == null) return false;
-            Clipboard.getInstance().copyUrlToClipboard(tab.getOriginalUrl());
+            Clipboard.getInstance().copyUrlToClipboard(((TabImpl) tab).getOriginalUrl());
             return true;
         }
         return false;
@@ -590,8 +596,10 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
                 if (currentTab == null || currentTab.getWebContents() == null) return;
                 Activity activity = currentTab.getWindowAndroid().getActivity().get();
                 if (activity == null) return;
-                PageInfoController.show(activity, currentTab, getContentPublisher(),
-                        PageInfoController.OpenedFromSource.TOOLBAR);
+                PageInfoController.show((ChromeActivity) activity, currentTab.getWebContents(),
+                        getContentPublisher(), PageInfoController.OpenedFromSource.TOOLBAR,
+                        /*offlinePageLoadUrlDelegate=*/
+                        new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(currentTab));
             });
         }
 

@@ -172,15 +172,6 @@ void LocalCardMigrationManager::OnUserAcceptedMainMigrationDialog(
       "Autofill.StrikeDatabase.StrikesPresentWhenLocalCardMigrationAccepted",
       GetLocalCardMigrationStrikeDatabase()->GetStrikes());
 
-  // If there are cards which aren't selected, add
-  // kStrikesToAddWhenCardsDeselectedAtMigration strikes to
-  // LocalCardMigrationStrikeDatabase.
-  if (selected_card_guids.size() < migratable_credit_cards_.size()) {
-    GetLocalCardMigrationStrikeDatabase()->AddStrikes(
-        LocalCardMigrationStrikeDatabase::
-            kStrikesToAddWhenCardsDeselectedAtMigration);
-  }
-
   // Update the |migratable_credit_cards_| with the |selected_card_guids|. This
   // will remove any card from |migratable_credit_cards_| of which the GUID is
   // not in |selected_card_guids|.
@@ -243,9 +234,7 @@ void LocalCardMigrationManager::OnDidGetUploadDetails(
       // Check if an imported local card is listed in
       // |supported_card_bin_ranges|. Abort the migration when the user uses an
       // unsupported local card.
-      if (base::FeatureList::IsEnabled(
-              features::kAutofillDoNotMigrateUnsupportedLocalCards) &&
-          !supported_card_bin_ranges.empty() &&
+      if (!supported_card_bin_ranges.empty() &&
           imported_credit_card_record_type_ ==
               FormDataImporter::ImportedCreditCardRecordType::LOCAL_CARD &&
           imported_credit_card_number_.has_value() &&
@@ -447,9 +436,7 @@ void LocalCardMigrationManager::GetMigratableCreditCards() {
 
 void LocalCardMigrationManager::FilterOutUnsupportedLocalCards(
     const std::vector<std::pair<int, int>>& supported_card_bin_ranges) {
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillDoNotMigrateUnsupportedLocalCards) &&
-      !supported_card_bin_ranges.empty()) {
+  if (!supported_card_bin_ranges.empty()) {
     // Update the |migratable_credit_cards_| with the
     // |supported_card_bin_ranges|. This will remove any card from
     // |migratable_credit_cards_| of which the card number is not in

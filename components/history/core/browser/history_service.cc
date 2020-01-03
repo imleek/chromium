@@ -301,18 +301,19 @@ base::CancelableTaskTracker::TaskId HistoryService::ScheduleDBTask(
   return task_id;
 }
 
-void HistoryService::FlushForTest(const base::Closure& flushed) {
-  backend_task_runner_->PostTaskAndReply(FROM_HERE, base::DoNothing(), flushed);
+void HistoryService::FlushForTest(base::OnceClosure flushed) {
+  backend_task_runner_->PostTaskAndReply(FROM_HERE, base::DoNothing(),
+                                         std::move(flushed));
 }
 
-void HistoryService::SetOnBackendDestroyTask(const base::Closure& task) {
+void HistoryService::SetOnBackendDestroyTask(base::OnceClosure task) {
   TRACE_EVENT0("browser", "HistoryService::SetOnBackendDestroyTask");
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
   ScheduleTask(
       PRIORITY_NORMAL,
       base::BindOnce(&HistoryBackend::SetOnBackendDestroyTask, history_backend_,
-                     base::ThreadTaskRunnerHandle::Get(), task));
+                     base::ThreadTaskRunnerHandle::Get(), std::move(task)));
 }
 
 void HistoryService::GetCountsAndLastVisitForOriginsForTesting(
@@ -474,7 +475,9 @@ base::CancelableTaskTracker::TaskId HistoryService::GetFavicon(
     favicon_base::FaviconResultsCallback callback,
     base::CancelableTaskTracker* tracker) {
   TRACE_EVENT0("browser", "HistoryService::GetFavicons");
-  DCHECK(backend_task_runner_) << "History service being called after cleanup";
+  CHECK(backend_task_runner_) << "History service being called after cleanup";
+  // TODO(https://crbug.com/1024959): convert to DCHECK once crash is resolved.
+  CHECK(tracker);
   DCHECK(thread_checker_.CalledOnValidThread());
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
@@ -491,10 +494,8 @@ base::CancelableTaskTracker::TaskId HistoryService::GetFaviconsForURL(
     favicon_base::FaviconResultsCallback callback,
     base::CancelableTaskTracker* tracker) {
   TRACE_EVENT0("browser", "HistoryService::GetFaviconsForURL");
-  // TODO(crbug.com/1009795): Return the CHECKs to DCHECKs after the bug is
-  // fixed.
-  CHECK(thread_checker_.CalledOnValidThread());
-  CHECK(backend_task_runner_) << "History service being called after cleanup";
+  DCHECK(backend_task_runner_) << "History service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&HistoryBackend::GetFaviconsForURL, history_backend_,
@@ -642,10 +643,8 @@ void HistoryService::SetOnDemandFavicons(
     const GURL& icon_url,
     const std::vector<SkBitmap>& bitmaps,
     base::OnceCallback<void(bool)> callback) {
-  // TODO(crbug.com/1009795): Return the CHECKs to DCHECKs after the bug is
-  // fixed.
-  CHECK(thread_checker_.CalledOnValidThread());
-  CHECK(backend_task_runner_) << "History service being called after cleanup";
+  DCHECK(backend_task_runner_) << "History service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
   if (history_client_ && !history_client_->CanAddURL(page_url)) {
     std::move(callback).Run(false);
     return;
@@ -727,6 +726,23 @@ void HistoryService::CountUniqueHostsVisitedLastMonth(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&HistoryBackend::CountUniqueHostsVisitedLastMonth,
                      history_backend_),
+      std::move(callback));
+}
+
+void HistoryService::GetDomainDiversity(
+    base::Time report_time,
+    int number_of_days_to_report,
+    DomainMetricBitmaskType metric_type_bitmask,
+    DomainDiversityCallback callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "History service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  tracker->PostTaskAndReplyWithResult(
+      backend_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&HistoryBackend::GetDomainDiversity, history_backend_,
+                     report_time, number_of_days_to_report,
+                     metric_type_bitmask),
       std::move(callback));
 }
 

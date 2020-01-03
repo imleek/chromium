@@ -38,7 +38,10 @@ const char* const kExtensions[] = {"GL_EXT_stencil_wrap",
                                    "GL_OES_rgb8_rgba8",
                                    "GL_EXT_texture_norm16",
                                    "GL_CHROMIUM_framebuffer_multisample",
-                                   "GL_CHROMIUM_renderbuffer_format_BGRA8888"};
+                                   "GL_CHROMIUM_renderbuffer_format_BGRA8888",
+                                   "GL_OES_texture_half_float",
+                                   "GL_OES_texture_half_float_linear",
+                                   "GL_EXT_color_buffer_half_float"};
 
 class TestGLES2InterfaceForContextProvider : public TestGLES2Interface {
  public:
@@ -124,6 +127,7 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     uint32_t usage) {
+  base::AutoLock locked(lock_);
   auto mailbox = gpu::Mailbox::GenerateForSharedImage();
   shared_images_.insert(mailbox);
   most_recent_size_ = size;
@@ -136,6 +140,7 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
     const gfx::ColorSpace& color_space,
     uint32_t usage,
     base::span<const uint8_t> pixel_data) {
+  base::AutoLock locked(lock_);
   auto mailbox = gpu::Mailbox::GenerateForSharedImage();
   shared_images_.insert(mailbox);
   return mailbox;
@@ -146,6 +151,7 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     const gfx::ColorSpace& color_space,
     uint32_t usage) {
+  base::AutoLock locked(lock_);
   auto mailbox = gpu::Mailbox::GenerateForSharedImage();
   shared_images_.insert(mailbox);
   most_recent_size_ = gpu_memory_buffer->GetSize();
@@ -155,6 +161,7 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
 void TestSharedImageInterface::UpdateSharedImage(
     const gpu::SyncToken& sync_token,
     const gpu::Mailbox& mailbox) {
+  base::AutoLock locked(lock_);
   DCHECK(shared_images_.find(mailbox) != shared_images_.end());
 }
 
@@ -162,12 +169,14 @@ void TestSharedImageInterface::UpdateSharedImage(
     const gpu::SyncToken& sync_token,
     std::unique_ptr<gfx::GpuFence> acquire_fence,
     const gpu::Mailbox& mailbox) {
+  base::AutoLock locked(lock_);
   DCHECK(shared_images_.find(mailbox) != shared_images_.end());
 }
 
 void TestSharedImageInterface::DestroySharedImage(
     const gpu::SyncToken& sync_token,
     const gpu::Mailbox& mailbox) {
+  base::AutoLock locked(lock_);
   shared_images_.erase(mailbox);
   most_recent_destroy_token_ = sync_token;
 }
@@ -177,15 +186,16 @@ TestSharedImageInterface::CreateSwapChain(ResourceFormat format,
                                           const gfx::Size& size,
                                           const gfx::ColorSpace& color_space,
                                           uint32_t usage) {
-  NOTREACHED();
-  return {};
+  auto front_buffer = gpu::Mailbox::GenerateForSharedImage();
+  auto back_buffer = gpu::Mailbox::GenerateForSharedImage();
+  shared_images_.insert(front_buffer);
+  shared_images_.insert(back_buffer);
+  return {front_buffer, back_buffer};
 }
 
 void TestSharedImageInterface::PresentSwapChain(
     const gpu::SyncToken& sync_token,
-    const gpu::Mailbox& mailbox) {
-  NOTREACHED();
-}
+    const gpu::Mailbox& mailbox) {}
 
 #if defined(OS_FUCHSIA)
 void TestSharedImageInterface::RegisterSysmemBufferCollection(
@@ -201,6 +211,7 @@ void TestSharedImageInterface::ReleaseSysmemBufferCollection(
 #endif  // defined(OS_FUCHSIA)
 
 gpu::SyncToken TestSharedImageInterface::GenVerifiedSyncToken() {
+  base::AutoLock locked(lock_);
   most_recent_generated_token_ =
       gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO,
                      gpu::CommandBufferId(), ++release_id_);
@@ -209,6 +220,7 @@ gpu::SyncToken TestSharedImageInterface::GenVerifiedSyncToken() {
 }
 
 gpu::SyncToken TestSharedImageInterface::GenUnverifiedSyncToken() {
+  base::AutoLock locked(lock_);
   most_recent_generated_token_ =
       gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO,
                      gpu::CommandBufferId(), ++release_id_);
@@ -221,6 +233,7 @@ void TestSharedImageInterface::Flush() {
 
 bool TestSharedImageInterface::CheckSharedImageExists(
     const gpu::Mailbox& mailbox) const {
+  base::AutoLock locked(lock_);
   return shared_images_.contains(mailbox);
 }
 

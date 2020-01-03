@@ -31,7 +31,7 @@
 #include "chrome/browser/ui/tabs/test_tab_strip_model_delegate.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/performance_manager/performance_manager_tab_helper.h"
+#include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "components/performance_manager/public/performance_manager.h"
 #include "components/performance_manager/test_support/graph_impl.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -635,39 +635,12 @@ TEST_F(TabLifecycleUnitSourceTest, CannotFreezeOriginTrialOptOut) {
             decision_details.FailureReason());
 }
 
-TEST_F(TabLifecycleUnitSourceTest, CannotFreezeOriginTrialUnknown) {
-  LifecycleUnit* background_lifecycle_unit = nullptr;
-  LifecycleUnit* foreground_lifecycle_unit = nullptr;
-  CreateTwoTabs(true /* focus_tab_strip */, &background_lifecycle_unit,
-                &foreground_lifecycle_unit);
-  content::WebContents* background_contents =
-      tab_strip_model_->GetWebContentsAt(0);
-  TabLoadTracker::Get()->TransitionStateForTesting(
-      background_contents, TabLoadTracker::LoadingState::LOADED);
-
-  DecisionDetails decision_details;
-  EXPECT_TRUE(background_lifecycle_unit->CanFreeze(&decision_details));
-  EXPECT_TRUE(decision_details.IsPositive());
-  EXPECT_EQ(DecisionSuccessReason::HEURISTIC_OBSERVED_TO_BE_SAFE,
-            decision_details.SuccessReason());
-  decision_details.Clear();
-
-  // Tab cannot be frozen if its origin trial policy is still unknown.
-  TabLifecycleUnitSource::OnOriginTrialFreezePolicyChanged(
-      background_contents,
-      performance_manager::mojom::InterventionPolicy::kUnknown);
-  EXPECT_FALSE(background_lifecycle_unit->CanFreeze(&decision_details));
-  EXPECT_FALSE(decision_details.IsPositive());
-  EXPECT_EQ(DecisionFailureReason::ORIGIN_TRIAL_UNKNOWN,
-            decision_details.FailureReason());
-}
-
 namespace {
 
-void NotifyUsesNotificationsInBackground(content::WebContents* web_contents) {
+void NotifyUsesAudioInBackground(content::WebContents* web_contents) {
   auto* observer = ResourceCoordinatorTabHelper::FromWebContents(web_contents)
                        ->local_site_characteristics_wc_observer();
-  observer->GetWriterForTesting()->NotifyUsesNotificationsInBackground();
+  observer->GetWriterForTesting()->NotifyUsesAudioInBackground();
 }
 
 }  // namespace
@@ -687,17 +660,17 @@ TEST_F(TabLifecycleUnitSourceTest, CanFreezeOriginTrialOptIn) {
       foreground_contents, TabLoadTracker::LoadingState::LOADED);
 
   // Prevent freezing of the background tab by pretending that it uses
-  // notifications in background.
-  NotifyUsesNotificationsInBackground(background_contents);
+  // audio in background.
+  NotifyUsesAudioInBackground(background_contents);
   DecisionDetails decision_details;
   EXPECT_FALSE(background_lifecycle_unit->CanFreeze(&decision_details));
   EXPECT_FALSE(decision_details.IsPositive());
-  EXPECT_EQ(DecisionFailureReason::HEURISTIC_NOTIFICATIONS,
+  EXPECT_EQ(DecisionFailureReason::HEURISTIC_AUDIO,
             decision_details.FailureReason());
   decision_details.Clear();
 
   // The background tab can be frozen if it opted-in via origin trial, even if
-  // it uses notifications in background.
+  // it uses audio in background.
   TabLifecycleUnitSource::OnOriginTrialFreezePolicyChanged(
       background_contents,
       performance_manager::mojom::InterventionPolicy::kOptIn);
@@ -826,8 +799,8 @@ TEST_F(TabLifecycleUnitSourceTest, AsyncInitialization) {
   std::unique_ptr<content::WebContents> web_contents =
       CreateAndNavigateWebContents();
   content::WebContents* raw_web_contents = web_contents.get();
-  performance_manager::PerformanceManagerTabHelper::CreateForWebContents(
-      raw_web_contents);
+  performance_manager::PerformanceManagerRegistry::GetInstance()
+      ->CreatePageNodeForWebContents(raw_web_contents);
 
   auto page_node =
       performance_manager::PerformanceManager::GetPageNodeForWebContents(

@@ -54,6 +54,7 @@ class Base(unittest.TestCase):
                 'failures/expected/crash.html',
                 'failures/expected/image.html',
                 'failures/expected/timeout.html',
+                'failures/unexpected/*/text.html',
                 'passes/text.html',
                 'reftests/failures/expected/has_unused_expectation.html']
 
@@ -112,6 +113,10 @@ class MiscTests(Base):
         port.expectations_dict = lambda: expectations_dict
         expectations = TestExpectations(port, self.get_basic_tests())
         self.assertEqual(expectations.get_expectations('failures/expected/text.html'), set([PASS]))
+
+    def test_can_escape_asterisk_in_test_expectations(self):
+        self.parse_exp('Bug(x) failures/unexpected/\*/text.html [ Crash Failure ]')
+        self.assertEqual(self._exp.get_expectations('failures/unexpected/*/text.html'), set([FAIL, CRASH]))
 
     def test_multiple_results(self):
         self.parse_exp('Bug(x) failures/expected/text.html [ Crash Failure ]')
@@ -520,7 +525,8 @@ Bug(y) [ Win Mac Debug ] failures/expected/foo.html [ Crash ]
 
         actual_expectations = expectations.remove_configurations([('failures/expected/foo.html', test_config)])
 
-        self.assertEqual("""Bug(x) [ Linux Win10 Release ] failures/expected/foo.html [ Failure ]
+        self.assertEqual("""Bug(x) [ Win10 Release ] failures/expected/foo.html [ Failure ]
+Bug(x) [ Linux Release ] failures/expected/foo.html [ Failure ]
 Bug(y) [ Win Mac Debug ] failures/expected/foo.html [ Crash ]
 """, actual_expectations)
 
@@ -713,7 +719,6 @@ Bug(y) [ Mac ] failures/expected/foo.html [ Crash ]
         actual_expectations = expectations.remove_configurations([('failures/expected/foo.html', test_config)])
         actual_expectations = expectations.remove_configurations(
             [('failures/expected/foo.html', host.port_factory.get('test-win-win10', None).test_configuration())])
-
         self.assertEqual("""Bug(x) [ Win Debug ] failures/expected/foo.html [ Failure Timeout ]
 Bug(y) [ Mac ] failures/expected/foo.html [ Crash ]
 """, actual_expectations)
@@ -775,24 +780,24 @@ class TestExpectationSerializationTests(unittest.TestCase):
     def test_unparsed_to_string(self):
         expectation = TestExpectationLine()
 
-        self.assertEqual(expectation.to_string(self._converter), '')
+        self.assertEqual(expectation.to_string(), '')
         expectation.comment = ' Qux.'
-        self.assertEqual(expectation.to_string(self._converter), '# Qux.')
+        self.assertEqual(expectation.to_string(), '# Qux.')
         expectation.name = 'bar'
-        self.assertEqual(expectation.to_string(self._converter), 'bar # Qux.')
+        self.assertEqual(expectation.to_string(), 'bar # Qux.')
         expectation.specifiers = ['foo']
         # FIXME: case should be preserved here but we can't until we drop the old syntax.
-        self.assertEqual(expectation.to_string(self._converter), '[ FOO ] bar # Qux.')
+        self.assertEqual(expectation.to_string(), '[ FOO ] bar # Qux.')
         expectation.expectations = ['bAz']
-        self.assertEqual(expectation.to_string(self._converter), '[ FOO ] bar [ BAZ ] # Qux.')
+        self.assertEqual(expectation.to_string(), '[ FOO ] bar [ BAZ ] # Qux.')
         expectation.expectations = ['bAz1', 'baZ2']
-        self.assertEqual(expectation.to_string(self._converter), '[ FOO ] bar [ BAZ1 BAZ2 ] # Qux.')
+        self.assertEqual(expectation.to_string(), '[ FOO ] bar [ BAZ1 BAZ2 ] # Qux.')
         expectation.specifiers = ['foo1', 'foO2']
-        self.assertEqual(expectation.to_string(self._converter), '[ FOO1 FOO2 ] bar [ BAZ1 BAZ2 ] # Qux.')
+        self.assertEqual(expectation.to_string(), '[ FOO1 FOO2 ] bar [ BAZ1 BAZ2 ] # Qux.')
         expectation.warnings.append('Oh the horror.')
-        self.assertEqual(expectation.to_string(self._converter), '')
+        self.assertEqual(expectation.to_string(), '')
         expectation.original_string = 'Yes it is!'
-        self.assertEqual(expectation.to_string(self._converter), 'Yes it is!')
+        self.assertEqual(expectation.to_string(), 'Yes it is!')
 
     def test_unparsed_list_to_string(self):
         expectation = TestExpectationLine()

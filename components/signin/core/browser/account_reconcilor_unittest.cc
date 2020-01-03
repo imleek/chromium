@@ -88,8 +88,7 @@ class SpyReconcilorDelegate : public signin::AccountReconcilorDelegate {
     return chrome_accounts;
   }
 
-  void OnReconcileFinished(const CoreAccountId& first_account,
-                           bool reconcile_is_noop) override {
+  void OnReconcileFinished(const CoreAccountId& first_account) override {
     ++num_reconcile_finished_calls_;
   }
 
@@ -153,11 +152,10 @@ class DummyAccountReconcilorWithDelegate : public AccountReconcilor {
             identity_manager);
       case signin::AccountConsistencyMethod::kDisabled:
         return std::make_unique<signin::AccountReconcilorDelegate>();
-      case signin::AccountConsistencyMethod::kDiceMigration:
       case signin::AccountConsistencyMethod::kDice:
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
         return std::make_unique<signin::DiceAccountReconcilorDelegate>(
-            signin_client, account_consistency, dice_migration_completed);
+            signin_client, dice_migration_completed);
 #else
         NOTREACHED();
         return nullptr;
@@ -838,7 +836,7 @@ std::vector<Cookie> FakeSetAccountsInCookie(
   if (parameters.mode ==
       gaia::MultiloginMode::MULTILOGIN_UPDATE_COOKIE_ACCOUNTS_ORDER) {
     for (const CoreAccountId& account : parameters.accounts_to_send) {
-      cookies_after_reconcile.push_back({account.id, true});
+      cookies_after_reconcile.push_back({account.ToString(), true});
     }
   } else {
     std::set<CoreAccountId> accounts_set(parameters.accounts_to_send.begin(),
@@ -854,7 +852,7 @@ std::vector<Cookie> FakeSetAccountsInCookie(
       }
     }
     for (const CoreAccountId& account : accounts_set) {
-      cookies_after_reconcile.push_back({account.id, true});
+      cookies_after_reconcile.push_back({account.ToString(), true});
     }
   }
   return cookies_after_reconcile;
@@ -1054,47 +1052,6 @@ TEST_P(AccountReconcilorTestTable, TableRowTest) {
   RunReconcile();
   histogram_tester()->ExpectTotalCount("ForceDiceMigration.RevokeTokenAction",
                                        0);
-}
-
-// Checks one row of the kDiceParams table above.
-TEST_P(AccountReconcilorTestTable, InconsistencyReasonLogging) {
-  // Enable Dice Migration.
-  SetAccountConsistency(signin::AccountConsistencyMethod::kDiceMigration);
-  // Setup cookies.
-  std::vector<Cookie> cookies = ParseCookieString(cookies_);
-  ConfigureCookieManagerService(cookies);
-  // Setup tokens. This triggers listing cookies so we need to setup cookies
-  // before that.
-  SetupTokens(tokens_);
-  // Call list accounts now so that the next call completes synchronously.
-  identity_test_env()->identity_manager()->GetAccountsInCookieJar();
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_CALL(*GetMockReconcilor(), PerformMergeAction(testing::_))
-      .WillRepeatedly(testing::Return());
-  EXPECT_CALL(*GetMockReconcilor(), PerformLogoutAllAccountsAction())
-      .WillRepeatedly(testing::Return());
-  // Reconcile.
-  AccountReconcilor* reconcilor = GetMockReconcilor();
-  bool first_execution =
-      GetParam().is_first_reconcile == IsFirstReconcile::kFirst;
-  reconcilor->first_execution_ = first_execution;
-  reconcilor->StartReconcile();
-  reconcilor->add_to_cookie_.clear();
-  reconcilor->CalculateIfReconcileIsDone();
-  ASSERT_FALSE(reconcilor->is_reconcile_started_);
-  std::string histogram_name_suffix =
-      first_execution ? "FirstExecution" : "NotFirstExecution";
-
-  histogram_tester()->ExpectUniqueSample(
-      "Signin.DiceMigrationNotReady.Reason." + histogram_name_suffix,
-      GetParam().inconsistency_reason, 1);
-
-  histogram_tester()->ExpectTotalCount("ForceDiceMigration.RevokeTokenAction",
-                                       0);
-
-  ConfigureCookieManagerService({});
-  base::RunLoop().RunUntilIdle();
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1585,198 +1542,6 @@ TEST_P(AccountReconcilorDiceEndpointParamTest, UnverifiedAccountMerge) {
   }
   ASSERT_FALSE(reconcilor->is_reconcile_started_);
   ASSERT_EQ(signin_metrics::ACCOUNT_RECONCILOR_OK, reconcilor->GetState());
-}
-
-// Tests that the Dice migration happens after a no-op reconcile.
-TEST_P(AccountReconcilorDiceEndpointParamTest, DiceMigrationAfterNoop) {
-  // Enable Dice migration.
-  SetAccountConsistency(signin::AccountConsistencyMethod::kDiceMigration);
-  pref_service()->SetBoolean(prefs::kTokenServiceDiceCompatible, true);
-
-  // Chrome account is consistent with the cookie. Making account available
-  // (setting a refresh token) triggers listing cookies so we need to setup
-  // cookies before that.
-  signin::SetListAccountsResponseOneAccount(
-      "user@gmail.com", signin::GetTestGaiaIdForEmail("user@gmail.com"),
-      &test_url_loader_factory_);
-  AccountInfo account_info =
-      identity_test_env()->MakeAccountAvailable("user@gmail.com");
-  AccountReconcilor* reconcilor = GetMockReconcilor();
-  // Dice is not enabled by default.
-  EXPECT_FALSE(reconcilor->delegate_->IsAccountConsistencyEnforced());
-
-  // No-op reconcile.
-  EXPECT_CALL(*GetMockReconcilor(), PerformMergeAction(testing::_)).Times(0);
-  EXPECT_CALL(*GetMockReconcilor(), PerformLogoutAllAccountsAction()).Times(0);
-  EXPECT_CALL(*GetMockReconcilor(), PerformSetCookiesAction(testing::_))
-      .Times(0);
-  reconcilor->StartReconcile();
-  ASSERT_TRUE(reconcilor->is_reconcile_started_);
-  base::RunLoop().RunUntilIdle();
-  ASSERT_FALSE(reconcilor->is_reconcile_started_);
-  ASSERT_EQ(signin_metrics::ACCOUNT_RECONCILOR_OK, reconcilor->GetState());
-
-  // Migration will happen on next startup.
-  EXPECT_TRUE(test_signin_client()->is_ready_for_dice_migration());
-}
-
-// Tests that the Dice no migration happens if the token service is not ready.
-TEST_P(AccountReconcilorDiceEndpointParamTest,
-       DiceNoMigrationWhenTokensNotReady) {
-  // Enable Dice migration.
-  SetAccountConsistency(signin::AccountConsistencyMethod::kDiceMigration);
-
-  // Chrome account is consistent with the cookie. Making account available
-  // (setting a refresh token) triggers listing cookies so we need to setup
-  // cookies before that.
-  signin::SetListAccountsResponseOneAccount(
-      "user@gmail.com", signin::GetTestGaiaIdForEmail("user@gmail.com"),
-      &test_url_loader_factory_);
-  AccountInfo account_info =
-      identity_test_env()->MakeAccountAvailable("user@gmail.com");
-  AccountReconcilor* reconcilor = GetMockReconcilor();
-  // Dice is not enabled by default.
-  EXPECT_FALSE(reconcilor->delegate_->IsAccountConsistencyEnforced());
-
-  // No-op reconcile.
-  EXPECT_CALL(*GetMockReconcilor(), PerformMergeAction(testing::_)).Times(0);
-  EXPECT_CALL(*GetMockReconcilor(), PerformLogoutAllAccountsAction()).Times(0);
-  EXPECT_CALL(*GetMockReconcilor(), PerformSetCookiesAction(testing::_))
-      .Times(0);
-  reconcilor->StartReconcile();
-  ASSERT_TRUE(reconcilor->is_reconcile_started_);
-  base::RunLoop().RunUntilIdle();
-  ASSERT_FALSE(reconcilor->is_reconcile_started_);
-  ASSERT_EQ(signin_metrics::ACCOUNT_RECONCILOR_OK, reconcilor->GetState());
-
-  // Migration did not happen.
-  EXPECT_FALSE(test_signin_client()->is_ready_for_dice_migration());
-}
-
-// Tests that the Dice migration does not happen after a busy reconcile.
-TEST_P(AccountReconcilorDiceEndpointParamTest, DiceNoMigrationAfterReconcile) {
-  // Enable Dice migration.
-  SetAccountConsistency(signin::AccountConsistencyMethod::kDiceMigration);
-  pref_service()->SetBoolean(prefs::kTokenServiceDiceCompatible, true);
-
-  // Add a token in Chrome.
-  const CoreAccountId account_id =
-      ConnectProfileToAccount("user@gmail.com").account_id;
-  signin::SetListAccountsResponseNoAccounts(&test_url_loader_factory_);
-  AccountReconcilor* reconcilor = GetMockReconcilor();
-
-  // Dice is not enabled by default.
-  EXPECT_FALSE(reconcilor->delegate_->IsAccountConsistencyEnforced());
-
-  // Busy reconcile
-  if (!IsMultiloginEnabled()) {
-    EXPECT_CALL(*GetMockReconcilor(), PerformMergeAction(account_id));
-  } else {
-    EXPECT_CALL(*GetMockReconcilor(), PerformSetCookiesAction(::testing::_))
-        .Times(1);
-  }
-  reconcilor->StartReconcile();
-  base::RunLoop().RunUntilIdle();
-  ASSERT_TRUE(reconcilor->is_reconcile_started_);
-  if (!IsMultiloginEnabled()) {
-    SimulateAddAccountToCookieCompleted(
-        reconcilor, account_id, GoogleServiceAuthError::AuthErrorNone());
-  } else {
-    SimulateSetAccountsInCookieCompleted(
-        reconcilor, signin::SetAccountsInCookieResult::kSuccess);
-  }
-  ASSERT_FALSE(reconcilor->is_reconcile_started_);
-  ASSERT_EQ(signin_metrics::ACCOUNT_RECONCILOR_OK, reconcilor->GetState());
-
-  // Migration did not happen.
-  EXPECT_FALSE(test_signin_client()->is_ready_for_dice_migration());
-}
-
-// Tests that secondary refresh tokens are cleared when cookie is empty during
-// Dice migration.
-TEST_P(AccountReconcilorDiceEndpointParamTest, MigrationClearSecondaryTokens) {
-  // Enable Dice migration.
-  SetAccountConsistency(signin::AccountConsistencyMethod::kDiceMigration);
-  pref_service()->SetBoolean(prefs::kTokenServiceDiceCompatible, true);
-
-  // Add a tokens in Chrome, signin to Sync, but no Gaia cookies.
-  const CoreAccountId account_id_1 =
-      ConnectProfileToAccount("user@gmail.com").account_id;
-  const CoreAccountId account_id_2 =
-      identity_test_env()->MakeAccountAvailable("other@gmail.com").account_id;
-  signin::SetListAccountsResponseNoAccounts(&test_url_loader_factory_);
-
-  auto* identity_manager = identity_test_env()->identity_manager();
-  ASSERT_TRUE(identity_manager->HasAccountWithRefreshToken(account_id_1));
-  ASSERT_TRUE(identity_manager->HasAccountWithRefreshToken(account_id_2));
-
-  // Reconcile should revoke the secondary account.
-  AccountReconcilor* reconcilor = GetMockReconcilor();
-  if (!IsMultiloginEnabled()) {
-    EXPECT_CALL(*GetMockReconcilor(), PerformMergeAction(account_id_1));
-  } else {
-    std::vector<CoreAccountId> accounts_to_send = {account_id_1};
-    const signin::MultiloginParameters params(
-        gaia::MultiloginMode::MULTILOGIN_UPDATE_COOKIE_ACCOUNTS_ORDER,
-        accounts_to_send);
-    EXPECT_CALL(*GetMockReconcilor(), PerformSetCookiesAction(params)).Times(1);
-    ;
-  }
-  reconcilor->StartReconcile();
-  ASSERT_TRUE(reconcilor->is_reconcile_started_);
-  base::RunLoop().RunUntilIdle();
-  if (!IsMultiloginEnabled()) {
-    SimulateAddAccountToCookieCompleted(
-        reconcilor, account_id_1, GoogleServiceAuthError::AuthErrorNone());
-  } else {
-    SimulateSetAccountsInCookieCompleted(
-        reconcilor, signin::SetAccountsInCookieResult::kSuccess);
-  }
-  ASSERT_FALSE(reconcilor->is_reconcile_started_);
-  ASSERT_EQ(signin_metrics::ACCOUNT_RECONCILOR_SCHEDULED,
-            reconcilor->GetState());
-
-  EXPECT_TRUE(identity_manager->HasAccountWithRefreshToken(account_id_1));
-  EXPECT_FALSE(identity_manager->HasAccountWithRefreshToken(account_id_2));
-
-  // Profile was not migrated.
-  EXPECT_FALSE(test_signin_client()->is_ready_for_dice_migration());
-}
-
-// Tests that all refresh tokens are cleared when cookie is empty during
-// Dice migration, if Sync is not enabled.
-TEST_P(AccountReconcilorDiceEndpointParamTest, MigrationClearAllTokens) {
-  // Enable Dice migration.
-  SetAccountConsistency(signin::AccountConsistencyMethod::kDiceMigration);
-  pref_service()->SetBoolean(prefs::kTokenServiceDiceCompatible, true);
-
-  // Add a tokens in Chrome but no Gaia cookies. Making account available
-  // (setting a refresh token) triggers listing cookies so we need to setup
-  // cookies before that.
-  signin::SetListAccountsResponseNoAccounts(&test_url_loader_factory_);
-  const CoreAccountId account_id_1 =
-      identity_test_env()->MakeAccountAvailable("user@gmail.com").account_id;
-  const CoreAccountId account_id_2 =
-      identity_test_env()->MakeAccountAvailable("other@gmail.com").account_id;
-
-  auto* identity_manager = identity_test_env()->identity_manager();
-  ASSERT_TRUE(identity_manager->HasAccountWithRefreshToken(account_id_1));
-  ASSERT_TRUE(identity_manager->HasAccountWithRefreshToken(account_id_2));
-
-  // Reconcile should revoke the secondary account.
-  AccountReconcilor* reconcilor = GetMockReconcilor();
-  reconcilor->StartReconcile();
-  ASSERT_TRUE(reconcilor->is_reconcile_started_);
-  base::RunLoop().RunUntilIdle();
-  ASSERT_FALSE(reconcilor->is_reconcile_started_);
-  ASSERT_EQ(signin_metrics::ACCOUNT_RECONCILOR_OK, reconcilor->GetState());
-
-  EXPECT_FALSE(identity_manager->HasAccountWithRefreshToken(account_id_1));
-  EXPECT_FALSE(identity_manager->HasAccountWithRefreshToken(account_id_2));
-
-  // Profile is now ready for migration on next startup.
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(test_signin_client()->is_ready_for_dice_migration());
 }
 
 INSTANTIATE_TEST_SUITE_P(TestDiceEndpoint,
@@ -2953,7 +2718,6 @@ TEST_P(AccountReconcilorMethodParamTest,
         break;
       }
       case signin::AccountConsistencyMethod::kDisabled:
-      case signin::AccountConsistencyMethod::kDiceMigration:
         NOTREACHED();
         break;
     }
@@ -3019,7 +2783,6 @@ TEST_P(AccountReconcilorMethodParamTest, AccountReconcilorStateScheduled) {
         break;
       }
       case signin::AccountConsistencyMethod::kDisabled:
-      case signin::AccountConsistencyMethod::kDiceMigration:
         NOTREACHED();
         break;
     }

@@ -25,6 +25,7 @@ class CreditCard;
 class FormStructure;
 class MigratableCreditCard;
 class PersonalDataManager;
+class SmsClient;
 class StrikeDatabase;
 }
 
@@ -68,6 +69,7 @@ class AwAutofillClient : public autofill::AutofillClient,
   syncer::SyncService* GetSyncService() override;
   signin::IdentityManager* GetIdentityManager() override;
   autofill::FormDataImporter* GetFormDataImporter() override;
+  autofill::SmsClient* GetSmsClient() override;
   autofill::payments::PaymentsClient* GetPaymentsClient() override;
   autofill::StrikeDatabase* GetStrikeDatabase() override;
   ukm::UkmRecorder* GetUkmRecorder() override;
@@ -94,7 +96,6 @@ class AwAutofillClient : public autofill::AutofillClient,
       const std::vector<autofill::MigratableCreditCard>&
           migratable_credit_cards,
       MigrationDeleteCardCallback delete_local_card_callback) override;
-  void ShowWebauthnOfferDialog(WebauthnOfferDialogCallback callback) override;
   void ConfirmSaveAutofillProfile(const autofill::AutofillProfile& profile,
                                   base::OnceClosure callback) override;
   void ConfirmSaveCreditCardLocally(
@@ -116,7 +117,7 @@ class AwAutofillClient : public autofill::AutofillClient,
   void ConfirmCreditCardFillAssist(const autofill::CreditCard& card,
                                    base::OnceClosure callback) override;
   bool HasCreditCardScanFeature() override;
-  void ScanCreditCard(const CreditCardScanCallback& callback) override;
+  void ScanCreditCard(CreditCardScanCallback callback) override;
   void ShowAutofillPopup(
       const gfx::RectF& element_bounds,
       base::i18n::TextDirection text_direction,

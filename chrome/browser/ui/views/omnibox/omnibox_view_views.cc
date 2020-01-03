@@ -26,6 +26,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
+#include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feature_engagement/buildflags.h"
 #include "components/omnibox/browser/autocomplete_input.h"
@@ -419,6 +420,8 @@ void OmniboxViewViews::RevertAll() {
 }
 
 void OmniboxViewViews::SetFocus(bool is_user_initiated) {
+  const bool already_focused = HasFocus();
+
   // Temporarily reveal the top-of-window views (if not already revealed) so
   // that the location bar view is visible and is considered focusable. When it
   // actually receives focus, ImmersiveFocusWatcher will add another lock to
@@ -431,9 +434,11 @@ void OmniboxViewViews::SetFocus(bool is_user_initiated) {
             ->GetRevealedLock(ImmersiveModeController::ANIMATE_REVEAL_YES));
   }
 
-  suppress_on_focus_suggestions_ = !is_user_initiated;
   RequestFocus();
-  suppress_on_focus_suggestions_ = false;
+
+  // |is_user_initiated| is true for focus events from keyboard accelerators.
+  if (is_user_initiated)
+    model()->ShowOnFocusSuggestionsIfAutocompleteIdle();
 
   // Restore caret visibility if focus is explicitly requested. This is
   // necessary because if we already have invisible focus, the RequestFocus()
@@ -446,6 +451,17 @@ void OmniboxViewViews::SetFocus(bool is_user_initiated) {
   // re-pressed. This occurs even if the omnibox is already focused and we
   // re-request focus (e.g. pressing ctrl-l twice).
   model()->ConsumeCtrlKey();
+
+  if (already_focused)
+    model()->ClearKeyword();
+
+  if (is_user_initiated) {
+    SelectAll(true);
+
+    // Only exit Query in Omnibox mode on focus command if the location bar was
+    // already focused to begin with, i.e. user presses Ctrl+L twice.
+    model()->Unelide(/*exit_query_in_omnibox=*/already_focused);
+  }
 }
 
 int OmniboxViewViews::GetTextWidth() const {
@@ -651,7 +667,7 @@ bool OmniboxViewViews::HandleEarlyTabActions(const ui::KeyEvent& event) {
   // If tabbing forwards (shift is not pressed) and suggestion button is not
   // selected, select it.
   if (!event.IsShiftDown()) {
-    if (MaybeFocusTabButton())
+    if (MaybeFocusSecondaryButton())
       return true;
   }
 
@@ -659,16 +675,37 @@ bool OmniboxViewViews::HandleEarlyTabActions(const ui::KeyEvent& event) {
   // the tab switch button.
   if (event.IsShiftDown()) {
     // If tab switch button is focused, unfocus it.
-    if (MaybeUnfocusTabButton())
+    if (MaybeUnfocusSecondaryButton())
       return true;
+  }
+
+  // If suggestion removal buttons are enabled, make Tab and Shift+Tab less
+  // exotic and allow it to traverse the focus out of the popup. We do this
+  // because removal buttons dramatically increase the number of child buttons.
+  if (base::FeatureList::IsEnabled(
+          omnibox::kOmniboxSuggestionTransparencyOptions)) {
+    // Close the popup if tab traversal exits the list.
+    size_t selected_line = model()->popup_model()->selected_line();
+    bool close_popup = event.IsShiftDown()
+                           ? selected_line == 0
+                           : selected_line == (model()->result().size() - 1);
+    if (close_popup) {
+      CloseOmniboxPopup();
+
+      // When we close the popup, we also want to restore the user's text back
+      // to the state it was before the popup opened.
+      model()->RevertTemporaryTextAndPopup();
+
+      // Return false so the focus manager will go to the next element.
+      return false;
+    }
   }
 
   // Translate tab and shift-tab into down and up respectively.
   model()->OnUpOrDownKeyPressed(event.IsShiftDown() ? -1 : 1);
   // If we shift-tabbed (and actually moved) to a suggestion with a tab
   // switch button, select it.
-  if (event.IsShiftDown() &&
-      model()->popup_model()->SelectedLineHasTabMatch()) {
+  if (event.IsShiftDown() && GetSecondaryButtonForSelectedLine()) {
     model()->popup_model()->SetSelectedLineState(
         OmniboxPopupModel::BUTTON_FOCUSED);
   }
@@ -696,9 +733,16 @@ bool OmniboxViewViews::TextAndUIDirectionMatch() const {
           base::i18n::RIGHT_TO_LEFT) == base::i18n::IsRTL();
 }
 
-bool OmniboxViewViews::SelectedSuggestionHasTabMatch() const {
-  return model()->popup_model() &&  // Can be null in tests.
-         model()->popup_model()->SelectedLineHasTabMatch();
+views::Button* OmniboxViewViews::GetSecondaryButtonForSelectedLine() const {
+  OmniboxPopupModel* popup_model = model()->popup_model();
+  if (!popup_model)
+    return nullptr;
+
+  size_t selected_line = popup_model->selected_line();
+  if (selected_line == OmniboxPopupModel::kNoMatch)
+    return nullptr;
+
+  return popup_view_->result_view_at(selected_line)->GetSecondaryButton();
 }
 
 bool OmniboxViewViews::DirectionAwareSelectionAtEnd() const {
@@ -707,8 +751,8 @@ bool OmniboxViewViews::DirectionAwareSelectionAtEnd() const {
   return TextAndUIDirectionMatch() ? SelectionAtEnd() : SelectionAtBeginning();
 }
 
-bool OmniboxViewViews::MaybeFocusTabButton() {
-  if (SelectedSuggestionHasTabMatch() &&
+bool OmniboxViewViews::MaybeFocusSecondaryButton() {
+  if (GetSecondaryButtonForSelectedLine() &&
       model()->popup_model()->selected_line_state() ==
           OmniboxPopupModel::NORMAL) {
     model()->popup_model()->SetSelectedLineState(
@@ -718,8 +762,8 @@ bool OmniboxViewViews::MaybeFocusTabButton() {
   return false;
 }
 
-bool OmniboxViewViews::MaybeUnfocusTabButton() {
-  if (SelectedSuggestionHasTabMatch() &&
+bool OmniboxViewViews::MaybeUnfocusSecondaryButton() {
+  if (GetSecondaryButtonForSelectedLine() &&
       model()->popup_model()->selected_line_state() ==
           OmniboxPopupModel::BUTTON_FOCUSED) {
     model()->popup_model()->SetSelectedLineState(OmniboxPopupModel::NORMAL);
@@ -728,13 +772,21 @@ bool OmniboxViewViews::MaybeUnfocusTabButton() {
   return false;
 }
 
-bool OmniboxViewViews::MaybeSwitchToTab(const ui::KeyEvent& event) {
+bool OmniboxViewViews::MaybeTriggerSecondaryButton(const ui::KeyEvent& event) {
   if (model()->popup_model()->selected_line_state() !=
       OmniboxPopupModel::BUTTON_FOCUSED)
     return false;
-  popup_view_->OpenMatch(WindowOpenDisposition::SWITCH_TO_TAB,
-                         event.time_stamp());
-  return true;
+
+  OmniboxPopupModel* popup_model = model()->popup_model();
+  if (!popup_model)
+    return false;
+
+  size_t selected_line = popup_model->selected_line();
+  if (selected_line == OmniboxPopupModel::kNoMatch)
+    return false;
+
+  return popup_view_->result_view_at(selected_line)
+      ->MaybeTriggerSecondaryButton(event);
 }
 
 void OmniboxViewViews::SetWindowTextAndCaretPos(const base::string16& text,
@@ -842,6 +894,10 @@ void OmniboxViewViews::SetAccessibilityLabel(const base::string16& display_text,
   // announced, so we need to explicitly announce the suggestion text.
   GetViewAccessibility().AnnounceText(friendly_suggestion_text_);
 #endif
+}
+
+void OmniboxViewViews::AnnounceText(const base::string16& message) {
+  GetViewAccessibility().AnnounceText(message);
 }
 
 void OmniboxViewViews::SelectAllForUserGesture() {
@@ -1064,11 +1120,10 @@ base::string16 OmniboxViewViews::GetLabelForCommandId(int command_id) const {
   // number of characters, the pixel width at which the url begins to elide is
   // derived from the truncated selection text. However, ideally there would be
   // a better way to do this.
-  const float kMaxSelectionPixelWidth = GetStringWidthF(
-      selection_text, Textfield::GetFontList(), gfx::Typesetter::BROWSER);
+  const float kMaxSelectionPixelWidth =
+      GetStringWidthF(selection_text, Textfield::GetFontList());
   base::string16 url = url_formatter::ElideUrl(
-      match.destination_url, Textfield::GetFontList(), kMaxSelectionPixelWidth,
-      gfx::Typesetter::BROWSER);
+      match.destination_url, Textfield::GetFontList(), kMaxSelectionPixelWidth);
 
   return l10n_util::GetStringFUTF16(IDS_PASTE_AND_GO, url);
 }
@@ -1103,6 +1158,12 @@ bool OmniboxViewViews::OnMousePressed(const ui::MouseEvent& event) {
     saved_selection_for_focus_change_ = gfx::Range::InvalidRange();
   }
 
+  // Show on-focus suggestions if either:
+  //  - The textfield doesn't already have focus.
+  //  - Or if the textfield is empty, to cover the NTP ZeroSuggest case.
+  if (event.IsOnlyLeftMouseButton() && (!HasFocus() || GetText().empty()))
+    model()->ShowOnFocusSuggestionsIfAutocompleteIdle();
+
   bool handled = views::Textfield::OnMousePressed(event);
 
   // This ensures that when the user makes a double-click partial select, we
@@ -1112,13 +1173,6 @@ bool OmniboxViewViews::OnMousePressed(const ui::MouseEvent& event) {
       UnapplySteadyStateElisions(UnelisionGesture::OTHER)) {
     TextChanged();
     filter_drag_events_for_unelision_ = true;
-  }
-
-  // This is intended to cover the NTP case where the omnibox starts focused.
-  // The user can explicitly request on-focus suggestions by clicking or tapping
-  // the omnibox. Restricted to empty textfield to avoid disrupting selections.
-  if (HasFocus() && GetText().empty() && event.IsOnlyLeftMouseButton()) {
-    model()->ShowOnFocusSuggestionsIfAutocompleteIdle();
   }
 
   return handled;
@@ -1171,6 +1225,12 @@ void OmniboxViewViews::OnGestureEvent(ui::GestureEvent* event) {
     saved_selection_for_focus_change_ = gfx::Range::InvalidRange();
   }
 
+  // Show on-focus suggestions if either:
+  //  - The textfield doesn't already have focus.
+  //  - Or if the textfield is empty, to cover the NTP ZeroSuggest case.
+  if (!HasFocus() || GetText().empty())
+    model()->ShowOnFocusSuggestionsIfAutocompleteIdle();
+
   views::Textfield::OnGestureEvent(event);
 
   if (select_all_on_gesture_tap_ && event->type() == ui::ET_GESTURE_TAP) {
@@ -1185,13 +1245,6 @@ void OmniboxViewViews::OnGestureEvent(ui::GestureEvent* event) {
       event->type() == ui::ET_GESTURE_LONG_PRESS ||
       event->type() == ui::ET_GESTURE_LONG_TAP) {
     select_all_on_gesture_tap_ = false;
-  }
-
-  // This is intended to cover the NTP case where the omnibox starts focused.
-  // The user can explicitly request on-focus suggestions by clicking or tapping
-  // the omnibox. Restricted to empty textfield to avoid disrupting selections.
-  if (HasFocus() && GetText().empty() && event->type() == ui::ET_GESTURE_TAP) {
-    model()->ShowOnFocusSuggestionsIfAutocompleteIdle();
   }
 }
 
@@ -1298,6 +1351,7 @@ bool OmniboxViewViews::HandleAccessibleAction(
     ui::AXActionData set_selection_action_data;
     set_selection_action_data.action = ax::mojom::Action::kSetSelection;
     set_selection_action_data.anchor_node_id = action_data.anchor_node_id;
+    set_selection_action_data.focus_node_id = action_data.focus_node_id;
     set_selection_action_data.focus_offset =
         action_data.focus_offset - friendly_suggestion_text_prefix_length_;
     set_selection_action_data.anchor_offset =
@@ -1314,14 +1368,8 @@ void OmniboxViewViews::OnFocus() {
   // Investigate why it's needed and see if we can remove it.
   model()->ResetDisplayTexts();
 
-  bool suppress = suppress_on_focus_suggestions_;
-  if (GetFocusManager() &&
-      GetFocusManager()->focus_change_reason() !=
-          views::FocusManager::FocusChangeReason::kDirectFocusChange) {
-    suppress = true;
-  }
   // TODO(oshima): Get control key state.
-  model()->OnSetFocus(false, suppress);
+  model()->OnSetFocus(false);
   // Don't call controller()->OnSetFocus, this view has already acquired focus.
 
   // Restore the selection we saved in OnBlur() if it's still valid.
@@ -1559,24 +1607,24 @@ bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
   const bool command = event.IsCommandDown();
   switch (event.key_code()) {
     case ui::VKEY_RETURN:
-      if (!MaybeSwitchToTab(event)) {
-        if (alt || (shift && command)) {
-          model()->AcceptInput(WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                               event.time_stamp());
-        } else if (command) {
-          model()->AcceptInput(WindowOpenDisposition::NEW_BACKGROUND_TAB,
-                               event.time_stamp());
-        } else if (shift) {
-          model()->AcceptInput(WindowOpenDisposition::NEW_WINDOW,
+      if (MaybeTriggerSecondaryButton(event)) {
+        return true;
+      } else if ((alt && !shift) || (shift && command)) {
+        model()->AcceptInput(WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             event.time_stamp());
+      } else if (alt || command) {
+        model()->AcceptInput(WindowOpenDisposition::NEW_BACKGROUND_TAB,
+                             event.time_stamp());
+      } else if (shift) {
+        model()->AcceptInput(WindowOpenDisposition::NEW_WINDOW,
+                             event.time_stamp());
+      } else {
+        if (model()->popup_model()->SelectedLineIsTabSwitchSuggestion()) {
+          model()->AcceptInput(WindowOpenDisposition::SWITCH_TO_TAB,
                                event.time_stamp());
         } else {
-          if (model()->popup_model()->SelectedLineIsTabSwitchSuggestion()) {
-            model()->AcceptInput(WindowOpenDisposition::SWITCH_TO_TAB,
-                                 event.time_stamp());
-          } else {
-            model()->AcceptInput(WindowOpenDisposition::CURRENT_TAB,
-                                 event.time_stamp());
-          }
+          model()->AcceptInput(WindowOpenDisposition::CURRENT_TAB,
+                               event.time_stamp());
         }
       }
       return true;
@@ -1648,10 +1696,10 @@ bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
           model()->AcceptKeyword(OmniboxEventProto::SELECT_SUGGESTION);
           OnAfterPossibleChange(true);
           return true;
-        } else if (MaybeFocusTabButton()) {
+        } else if (MaybeFocusSecondaryButton()) {
           return true;
         }
-      } else if (MaybeUnfocusTabButton()) {
+      } else if (MaybeUnfocusSecondaryButton()) {
         return true;
       }
       break;
@@ -1704,7 +1752,7 @@ bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
 
     case ui::VKEY_SPACE:
       if (!control && !alt && !shift && SelectionAtEnd() &&
-          MaybeSwitchToTab(event))
+          MaybeTriggerSecondaryButton(event))
         return true;
       break;
 

@@ -44,8 +44,9 @@ EmbeddedWorkerTestHelper::EmbeddedWorkerTestHelper(
       user_data_directory, std::move(database_task_runner), nullptr, nullptr,
       nullptr, url_loader_factory_getter_.get(),
       blink::ServiceWorkerUtils::IsImportedScriptUpdateCheckEnabled()
-          ? wrapper_->CreateNonNetworkURLLoaderFactoryBundleInfoForUpdateCheck(
-                browser_context_.get())
+          ? wrapper_
+                ->CreateNonNetworkPendingURLLoaderFactoryBundleForUpdateCheck(
+                    browser_context_.get())
           : nullptr);
   wrapper_->process_manager()->SetProcessIdForTest(mock_render_process_id());
   wrapper_->process_manager()->SetNewProcessIdForTest(new_render_process_id());
@@ -60,18 +61,6 @@ EmbeddedWorkerTestHelper::EmbeddedWorkerTestHelper(
       blink::mojom::EmbeddedWorkerInstanceClient::Name_,
       base::BindRepeating(&EmbeddedWorkerTestHelper::OnInstanceClientRequest,
                           base::Unretained(this)));
-
-  // Set a basic network URL loader factory so tests don't crash. Tests that
-  // want to customize further should use URLLoaderInterceptor which will
-  // override this.
-  // TODO(falken): Just make all MockRenderProcessHosts create and own
-  // their own url loader factory.
-  default_network_loader_factory_ =
-      std::make_unique<FakeNetworkURLLoaderFactory>();
-  render_process_host_->OverrideURLLoaderFactory(
-      default_network_loader_factory_.get());
-  new_render_process_host_->OverrideURLLoaderFactory(
-      default_network_loader_factory_.get());
 }
 
 void EmbeddedWorkerTestHelper::AddPendingInstanceClient(
@@ -112,9 +101,7 @@ void EmbeddedWorkerTestHelper::OnInstanceClientRequest(
 }
 
 void EmbeddedWorkerTestHelper::OnServiceWorkerRequest(
-    blink::mojom::ServiceWorkerRequest request) {
-  mojo::PendingReceiver<blink::mojom::ServiceWorker> receiver(
-      std::move(request));
+    mojo::PendingReceiver<blink::mojom::ServiceWorker> receiver) {
   OnServiceWorkerReceiver(std::move(receiver));
 }
 

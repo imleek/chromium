@@ -43,6 +43,11 @@ namespace content {
 struct FrameReplicationState;
 class TimeoutMonitor;
 
+// A callback which will be called immediately before EnterBackForwardCache
+// starts.
+using WillEnterBackForwardCacheCallbackForTesting =
+    base::RepeatingCallback<void()>;
+
 // This implements the RenderViewHost interface that is exposed to
 // embedders of content, and adds things only visible to content.
 //
@@ -210,7 +215,10 @@ class CONTENT_EXPORT RenderViewHostImpl
   // Called when the RenderFrameHostImpls/RenderFrameProxyHosts that own this
   // RenderViewHost leave the BackForwardCache. This occurs immediately before a
   // restored document is committed.
-  void LeaveBackForwardCache();
+  // |navigation_start| is the timestamp corresponding to the start of the
+  // back-forward cached navigation, which would be communicated to the page
+  // to allow it to record the latency of this navigation.
+  void LeaveBackForwardCache(base::TimeTicks navigation_start);
 
   // Called during frame eviction to return all SurfaceIds in the frame tree.
   // Marks all views in the frame tree as evicted.
@@ -240,6 +248,9 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   // Manual RTTI to ensure safe downcasts in tests.
   virtual bool IsTestRenderViewHost() const;
+
+  void SetWillEnterBackForwardCacheCallbackForTesting(
+      const WillEnterBackForwardCacheCallbackForTesting& callback);
 
   // NOTE: Do not add functions that just send an IPC message that are called in
   // one or two places. Have the caller send the IPC message directly (unless
@@ -402,6 +413,9 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   // True if the current main document finished executing onload() handler.
   bool is_document_on_load_completed_in_main_frame_ = false;
+
+  WillEnterBackForwardCacheCallbackForTesting
+      will_enter_back_forward_cache_callback_for_testing_;
 
   base::WeakPtrFactory<RenderViewHostImpl> weak_factory_{this};
 

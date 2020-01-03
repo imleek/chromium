@@ -27,8 +27,6 @@ class BookmarkAppRegistrar : public web_app::AppRegistrar,
   // AppRegistrar:
   bool IsInstalled(const web_app::AppId& app_id) const override;
   bool IsLocallyInstalled(const web_app::AppId& app_id) const override;
-  bool WasExternalAppUninstalledByUser(
-      const web_app::AppId& app_id) const override;
   bool WasInstalledByUser(const web_app::AppId& app_id) const override;
   int CountUserInstalledApps() const override;
   std::string GetAppShortName(const web_app::AppId& app_id) const override;
@@ -41,7 +39,10 @@ class BookmarkAppRegistrar : public web_app::AppRegistrar,
       const web_app::AppId& app_id) const override;
   web_app::DisplayMode GetAppUserDisplayMode(
       const web_app::AppId& app_id) const override;
+  std::vector<WebApplicationIconInfo> GetAppIconInfos(
+      const web_app::AppId& app_id) const override;
   std::vector<web_app::AppId> GetAppIds() const override;
+  web_app::WebAppRegistrar* AsWebAppRegistrar() override;
 
   // ExtensionRegistryObserver:
   void OnExtensionUninstalled(content::BrowserContext* browser_context,
@@ -53,6 +54,7 @@ class BookmarkAppRegistrar : public web_app::AppRegistrar,
   void OnShutdown(ExtensionRegistry* registry) override;
 
  private:
+  const Extension* GetBookmarkApp(const web_app::AppId& app_id) const;
   const Extension* GetExtension(const web_app::AppId& app_id) const;
 
   ScopedObserver<ExtensionRegistry, ExtensionRegistryObserver>

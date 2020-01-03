@@ -6,12 +6,16 @@
 
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/util/values/values_util.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
+#include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/account_id/account_id.h"
+#include "components/policy/core/common/mock_policy_service.h"
+#include "components/policy/core/common/policy_map.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -22,6 +26,7 @@ namespace {
 constexpr char kProfile[] = "Profile";
 constexpr char kIdleProfile[] = "IdleProfile";
 constexpr char kExtensionId[] = "abcdefghijklmnopabcdefghijklmnop";
+constexpr int kFakeTime = 123456;
 
 }  // namespace
 
@@ -33,10 +38,33 @@ class ProfileReportGeneratorTest : public ::testing::Test {
 
   void SetUp() override {
     ASSERT_TRUE(profile_manager_.SetUp());
+    InitMockPolicyService();
+    InitPolicyMap();
+
     profile_ = profile_manager_.CreateTestingProfile(
         kProfile, {}, base::UTF8ToUTF16(kProfile), 0, {},
         IdentityTestEnvironmentProfileAdaptor::
-            GetIdentityTestEnvironmentFactories());
+            GetIdentityTestEnvironmentFactories(),
+        base::nullopt, std::move(policy_service_));
+  }
+
+  void InitMockPolicyService() {
+    policy_service_ = std::make_unique<policy::MockPolicyService>();
+
+    ON_CALL(*policy_service_.get(),
+            GetPolicies(::testing::Eq(policy::PolicyNamespace(
+                policy::POLICY_DOMAIN_CHROME, std::string()))))
+        .WillByDefault(::testing::ReturnRef(policy_map_));
+  }
+
+  void InitPolicyMap() {
+    policy_map_.Set("kPolicyName1", policy::POLICY_LEVEL_MANDATORY,
+                    policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
+                    std::make_unique<base::Value>(std::vector<base::Value>()),
+                    nullptr);
+    policy_map_.Set("kPolicyName2", policy::POLICY_LEVEL_RECOMMENDED,
+                    policy::POLICY_SCOPE_MACHINE, policy::POLICY_SOURCE_MERGED,
+                    std::make_unique<base::Value>(true), nullptr);
   }
 
   std::unique_ptr<em::ChromeUserProfileInfo> GenerateReport(
@@ -59,12 +87,17 @@ class ProfileReportGeneratorTest : public ::testing::Test {
   }
 
   void SetExtensionToPendingList(const std::vector<std::string>& ids) {
-    base::Value::ListStorage id_values;
-    for (auto id : ids)
-      id_values.push_back(base::Value(id));
+    std::unique_ptr<base::Value> id_values =
+        std::make_unique<base::Value>(base::Value::Type::DICTIONARY);
+    for (const auto& id : ids) {
+      base::Value request_data(base::Value::Type::DICTIONARY);
+      request_data.SetKey(
+          extension_misc::kExtensionRequestTimestamp,
+          ::util::TimeToValue(base::Time::FromJavaTime(kFakeTime)));
+      id_values->SetKey(id, std::move(request_data));
+    }
     profile()->GetTestingPrefService()->SetUserPref(
-        prefs::kCloudExtensionRequestIds,
-        std::make_unique<base::Value>(std::move(id_values)));
+        prefs::kCloudExtensionRequestIds, std::move(id_values));
   }
 
   TestingProfile* profile() { return profile_; }
@@ -76,6 +109,9 @@ class ProfileReportGeneratorTest : public ::testing::Test {
   content::BrowserTaskEnvironment task_environment_;
   TestingProfileManager profile_manager_;
   TestingProfile* profile_;
+
+  std::unique_ptr<policy::MockPolicyService> policy_service_;
+  policy::PolicyMap policy_map_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileReportGeneratorTest);
 };
@@ -108,14 +144,32 @@ TEST_F(ProfileReportGeneratorTest, SignedInProfile) {
             report->chrome_signed_in_user().obfudscated_gaia_id());
 }
 
+TEST_F(ProfileReportGeneratorTest, PoliciesDisabled) {
+  // Users' profile info is collected by default.
+  std::unique_ptr<em::ChromeUserProfileInfo> report = GenerateReport();
+  EXPECT_EQ(2, report->chrome_policies_size());
+
+  // Stop to collect profile info after |set_policies_enabled| is set as false.
+  generator_.set_policies_enabled(false);
+  report = GenerateReport();
+  EXPECT_EQ(0, report->chrome_policies_size());
+
+  // Start to collect profile info again after |set_policies_enabled| is set as
+  // true.
+  generator_.set_policies_enabled(true);
+  report = GenerateReport();
+  EXPECT_EQ(2, report->chrome_policies_size());
+}
+
 TEST_F(ProfileReportGeneratorTest, PendingRequest) {
   generator_.set_extension_request_enabled(true);
   std::vector<std::string> ids = {kExtensionId};
   SetExtensionToPendingList(ids);
 
   auto report = GenerateReport();
-  EXPECT_EQ(1, report->extension_requests_size());
+  ASSERT_EQ(1, report->extension_requests_size());
   EXPECT_EQ(kExtensionId, report->extension_requests(0).id());
+  EXPECT_EQ(kFakeTime, report->extension_requests(0).request_timestamp());
 }
 
 TEST_F(ProfileReportGeneratorTest, NoPendingRequestWhenItsDisabled) {

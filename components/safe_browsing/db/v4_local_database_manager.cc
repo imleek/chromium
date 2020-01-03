@@ -335,7 +335,10 @@ bool V4LocalDatabaseManager::CheckBrowseUrl(const GURL& url,
       CreateStoresToCheckFromSBThreatTypeSet(threat_types),
       std::vector<GURL>(1, url));
 
-  return HandleCheck(std::move(check));
+  bool safe_synchronously = HandleCheck(std::move(check));
+  UMA_HISTOGRAM_BOOLEAN("SafeBrowsing.CheckBrowseUrl.HasLocalMatch",
+                        !safe_synchronously);
+  return safe_synchronously;
 }
 
 bool V4LocalDatabaseManager::CheckDownloadUrl(
@@ -516,8 +519,8 @@ void V4LocalDatabaseManager::StartOnIOThread(
     const V4ProtocolConfig& config) {
   SafeBrowsingDatabaseManager::StartOnIOThread(url_loader_factory, config);
 
-  db_updated_callback_ = base::Bind(&V4LocalDatabaseManager::DatabaseUpdated,
-                                    weak_factory_.GetWeakPtr());
+  db_updated_callback_ = base::BindRepeating(
+      &V4LocalDatabaseManager::DatabaseUpdated, weak_factory_.GetWeakPtr());
 
   SetupRealTimeUrlLookupService(url_loader_factory);
   SetupUpdateProtocolManager(url_loader_factory, config);
@@ -578,8 +581,8 @@ void V4LocalDatabaseManager::DatabaseReadyForChecks(
     // callback with the stores to reset, if any, and then we can schedule the
     // database updates.
     v4_database_->VerifyChecksum(
-        base::Bind(&V4LocalDatabaseManager::DatabaseReadyForUpdates,
-                   weak_factory_.GetWeakPtr()));
+        base::BindOnce(&V4LocalDatabaseManager::DatabaseReadyForUpdates,
+                       weak_factory_.GetWeakPtr()));
 
     ProcessQueuedChecks();
   } else {
@@ -890,8 +893,8 @@ void V4LocalDatabaseManager::PerformFullHashCheck(
       check->full_hash_to_store_and_hash_prefixes;
   v4_get_hash_protocol_manager_->GetFullHashes(
       full_hash_to_store_and_hash_prefixes, list_client_states_,
-      base::Bind(&V4LocalDatabaseManager::OnFullHashResponse,
-                 weak_factory_.GetWeakPtr(), base::Passed(std::move(check))));
+      base::BindOnce(&V4LocalDatabaseManager::OnFullHashResponse,
+                     weak_factory_.GetWeakPtr(), std::move(check)));
 }
 
 void V4LocalDatabaseManager::ProcessQueuedChecks() {
@@ -993,9 +996,10 @@ void V4LocalDatabaseManager::SetupDatabase() {
   // operation. Instead, do that on the task_runner and when the new database
   // has been created, swap it out on the IO thread.
   NewDatabaseReadyCallback db_ready_callback =
-      base::Bind(&V4LocalDatabaseManager::DatabaseReadyForChecks,
-                 weak_factory_.GetWeakPtr());
-  V4Database::Create(task_runner_, base_path_, list_infos_, db_ready_callback);
+      base::BindOnce(&V4LocalDatabaseManager::DatabaseReadyForChecks,
+                     weak_factory_.GetWeakPtr());
+  V4Database::Create(task_runner_, base_path_, list_infos_,
+                     std::move(db_ready_callback));
 }
 
 void V4LocalDatabaseManager::SetupRealTimeUrlLookupService(
@@ -1010,8 +1014,8 @@ void V4LocalDatabaseManager::SetupUpdateProtocolManager(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const V4ProtocolConfig& config) {
   V4UpdateCallback update_callback =
-      base::Bind(&V4LocalDatabaseManager::UpdateRequestCompleted,
-                 weak_factory_.GetWeakPtr());
+      base::BindRepeating(&V4LocalDatabaseManager::UpdateRequestCompleted,
+                          weak_factory_.GetWeakPtr());
 
   v4_update_protocol_manager_ = V4UpdateProtocolManager::Create(
       url_loader_factory, config, update_callback,

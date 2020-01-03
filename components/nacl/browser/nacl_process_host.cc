@@ -190,7 +190,7 @@ class NaClSandboxedProcessLauncherDelegate
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
   service_manager::SandboxType GetSandboxType() override {
-    return service_manager::SANDBOX_TYPE_PPAPI;
+    return service_manager::SandboxType::kPpapi;
   }
 };
 
@@ -236,6 +236,7 @@ NaClProcessHost::NaClProcessHost(
   process_ = content::BrowserChildProcessHost::Create(
       static_cast<content::ProcessType>(PROCESS_TYPE_NACL_LOADER), this,
       content::ChildProcessHost::IpcMode::kLegacy);
+  process_->SetMetricsName("NaCl Loader");
 
   // Set the display name so the user knows what plugin the process is running.
   // We aren't on the UI thread so getting the pref locale for language

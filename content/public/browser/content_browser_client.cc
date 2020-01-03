@@ -11,6 +11,7 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "base/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/browser_accessibility_state.h"
@@ -56,7 +57,7 @@ std::unique_ptr<BrowserMainParts> ContentBrowserClient::CreateBrowserMainParts(
 
 void ContentBrowserClient::PostAfterStartupTask(
     const base::Location& from_here,
-    const scoped_refptr<base::TaskRunner>& task_runner,
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     base::OnceClosure task) {
   task_runner->PostTask(from_here, std::move(task));
 }
@@ -129,11 +130,6 @@ bool ContentBrowserClient::ShouldLockToOrigin(BrowserContext* browser_context,
   return true;
 }
 
-const char*
-ContentBrowserClient::GetInitiatorSchemeBypassingDocumentBlocking() {
-  return nullptr;
-}
-
 bool ContentBrowserClient::ShouldTreatURLSchemeAsFirstPartyWhenTopLevel(
     base::StringPiece scheme,
     bool is_embedded_origin_secure) {
@@ -146,17 +142,11 @@ bool ContentBrowserClient::ShouldIgnoreSameSiteCookieRestrictionsWhenTopLevel(
   return false;
 }
 
-mojo::PendingRemote<network::mojom::URLLoaderFactory>
-ContentBrowserClient::CreateURLLoaderFactoryForNetworkRequests(
-    RenderProcessHost* process,
-    network::mojom::NetworkContext* network_context,
-    mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
-        header_client,
+void ContentBrowserClient::OverrideURLLoaderFactoryParams(
+    BrowserContext* browser_context,
     const url::Origin& origin,
-    const url::Origin& main_world_origin,
-    const base::Optional<net::NetworkIsolationKey>& network_isolation_key) {
-  return mojo::NullRemote();
-}
+    bool is_for_isolated_world,
+    network::mojom::URLLoaderFactoryParams* factory_params) {}
 
 void ContentBrowserClient::GetAdditionalViewSourceSchemes(
     std::vector<std::string>* additional_schemes) {
@@ -405,16 +395,6 @@ ContentBrowserClient::CreateQuotaPermissionContext() {
   return nullptr;
 }
 
-void ContentBrowserClient::GetQuotaSettings(
-    BrowserContext* context,
-    StoragePartition* partition,
-    storage::OptionalQuotaSettingsCallback callback) {
-  DCHECK(context);
-
-  // By default, no quota is provided, embedders should override.
-  std::move(callback).Run(storage::GetNoQuotaSettings());
-}
-
 GeneratedCodeCacheSettings ContentBrowserClient::GetGeneratedCodeCacheSettings(
     BrowserContext* context) {
   // By default, code cache is disabled, embedders should override.
@@ -428,8 +408,8 @@ void ContentBrowserClient::AllowCertificateError(
     const GURL& request_url,
     bool is_main_frame_request,
     bool strict_enforcement,
-    const base::Callback<void(CertificateRequestResultType)>& callback) {
-  callback.Run(CERTIFICATE_REQUEST_RESULT_TYPE_DENY);
+    base::OnceCallback<void(CertificateRequestResultType)> callback) {
+  std::move(callback).Run(CERTIFICATE_REQUEST_RESULT_TYPE_DENY);
 }
 
 base::OnceClosure ContentBrowserClient::SelectClientCertificate(
@@ -628,6 +608,11 @@ bool ContentBrowserClient::IsPluginAllowedToUseDevChannelAPIs(
   return false;
 }
 
+mojo::Remote<media::mojom::MediaService>
+ContentBrowserClient::RunSecondaryMediaService() {
+  return mojo::Remote<media::mojom::MediaService>();
+}
+
 bool ContentBrowserClient::BindAssociatedReceiverFromFrame(
     RenderFrameHost* render_frame_host,
     const std::string& interface_name,
@@ -677,7 +662,7 @@ bool ContentBrowserClient::PreSpawnRenderer(sandbox::TargetPolicy* policy,
 }
 
 base::string16 ContentBrowserClient::GetAppContainerSidForSandboxType(
-    int sandbox_type) {
+    service_manager::SandboxType sandbox_type) {
   // Embedders should override this method and return different SIDs for each
   // sandbox type. Note: All content level tests will run child processes in the
   // same AppContainer.
@@ -754,10 +739,12 @@ bool ContentBrowserClient::WillCreateURLLoaderFactory(
     int render_process_id,
     URLLoaderFactoryType type,
     const url::Origin& request_initiator,
+    base::Optional<int64_t> navigation_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
-    bool* bypass_redirect_checks) {
+    bool* bypass_redirect_checks,
+    network::mojom::URLLoaderFactoryOverridePtr* factory_override) {
   DCHECK(browser_context);
   return false;
 }
@@ -906,7 +893,7 @@ std::unique_ptr<LoginDelegate> ContentBrowserClient::CreateLoginDelegate(
 
 bool ContentBrowserClient::HandleExternalProtocol(
     const GURL& url,
-    WebContents::Getter web_contents_getter,
+    WebContents::OnceGetter web_contents_getter,
     int child_id,
     NavigationUIData* navigation_data,
     bool is_main_frame,

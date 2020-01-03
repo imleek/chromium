@@ -30,14 +30,15 @@ import org.chromium.chrome.browser.document.ChromeIntentUtil;
 import org.chromium.chrome.browser.document.DocumentWebContentsDelegate;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
+import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.media.PictureInPicture;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
 import org.chromium.chrome.browser.policy.PolicyAuditor.AuditEvent;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
@@ -81,7 +82,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         return mActivity != null ? mActivity.getTabCreator(mTab.isIncognito()) : null;
     }
 
-    private FullscreenManager getFullscreenManager() {
+    private ChromeFullscreenManager getFullscreenManager() {
         return mActivity != null && !mActivity.isActivityFinishingOrDestroyed()
                 ? mActivity.getFullscreenManager()
                 : null;
@@ -304,15 +305,47 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
     }
 
     @Override
+    public int getTopControlsMinHeight() {
+        FullscreenManager manager = getFullscreenManager();
+        return manager != null ? manager.getTopControlsMinHeight() : 0;
+    }
+
+    @Override
     public int getBottomControlsHeight() {
         FullscreenManager manager = getFullscreenManager();
         return manager != null ? manager.getBottomControlsHeight() : 0;
     }
 
     @Override
-    public boolean controlsResizeView() {
+    public int getBottomControlsMinHeight() {
         FullscreenManager manager = getFullscreenManager();
-        return manager != null ? ((ChromeFullscreenManager) manager).controlsResizeView() : false;
+        return manager != null ? manager.getBottomControlsMinHeight() : 0;
+    }
+
+    @Override
+    public boolean shouldAnimateBrowserControlsHeightChanges() {
+        FullscreenManager manager = getFullscreenManager();
+        return manager != null && manager.shouldAnimateBrowserControlsHeightChanges();
+    }
+
+    @Override
+    public boolean controlsResizeView() {
+        ChromeFullscreenManager manager = getFullscreenManager();
+        return manager != null ? manager.controlsResizeView() : false;
+    }
+
+    @Override
+    public void enterFullscreenModeForTab(boolean prefersNavigationBar) {
+        ChromeFullscreenManager manager = getFullscreenManager();
+        if (manager != null) {
+            manager.onEnterFullscreen(mTab, new FullscreenOptions(prefersNavigationBar));
+        }
+    }
+
+    @Override
+    public void exitFullscreenModeForTab() {
+        ChromeFullscreenManager manager = getFullscreenManager();
+        if (manager != null) manager.onExitFullscreen(mTab);
     }
 
     @Override

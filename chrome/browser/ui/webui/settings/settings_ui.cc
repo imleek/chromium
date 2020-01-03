@@ -192,7 +192,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
 
   AddSettingsPageUIHandler(std::make_unique<AccessibilityMainHandler>());
   AddSettingsPageUIHandler(std::make_unique<BrowserLifetimeHandler>());
-  AddSettingsPageUIHandler(std::make_unique<ClearBrowsingDataHandler>(web_ui));
+  AddSettingsPageUIHandler(
+      std::make_unique<ClearBrowsingDataHandler>(web_ui, profile));
   AddSettingsPageUIHandler(std::make_unique<CookiesViewHandler>());
   AddSettingsPageUIHandler(std::make_unique<DownloadsHandler>(profile));
   AddSettingsPageUIHandler(std::make_unique<ExtensionControlHandler>());
@@ -278,18 +279,16 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   html_source->AddBoolean(
       "showParentalControls",
       chromeos::settings::ShouldShowParentalControls(profile));
+  html_source->AddBoolean("splitSettingsSyncEnabled",
+                          chromeos::features::IsSplitSettingsSyncEnabled());
 #endif
 
 #if defined(OS_CHROMEOS)
   // This is the browser settings page.
   html_source->AddBoolean("isOSSettings", false);
-  // If false, hides OS-specific settings (like networks) in browser settings.
-  html_source->AddBoolean(
-      "showOSSettings",
-      !base::FeatureList::IsEnabled(chromeos::features::kSplitSettings));
-#else
-  html_source->AddBoolean("showOSSettings", false);
 #endif
+  // TODO(crbug.com/1026455): Delete this as part of the SplitSettings cleanup.
+  html_source->AddBoolean("showOSSettings", false);
 
   AddSettingsPageUIHandler(
       base::WrapUnique(AboutHandler::Create(html_source, profile)));
@@ -336,11 +335,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   content::URLDataSource::Add(
       profile, std::make_unique<FaviconSource>(
                    profile, chrome::FaviconUrlFormat::kFavicon2));
-
-#if defined(OS_CHROMEOS)
-  AddHandlerToRegistry(base::BindRepeating(&SettingsUI::BindCrosNetworkConfig,
-                                           base::Unretained(this)));
-#endif  // defined (OS_CHROMEOS)
 }
 
 SettingsUI::~SettingsUI() = default;
@@ -388,11 +382,16 @@ void SettingsUI::InitOSWebUIHandlers(Profile* profile,
       std::make_unique<chromeos::settings::FingerprintHandler>(profile));
   web_ui->AddMessageHandler(
       std::make_unique<chromeos::settings::GoogleAssistantHandler>(profile));
-  if (g_browser_process->local_state()->GetBoolean(prefs::kKerberosEnabled)) {
-    // Note that UI is also dependent on this pref.
-    web_ui->AddMessageHandler(
-        std::make_unique<chromeos::settings::KerberosAccountsHandler>());
+
+  std::unique_ptr<chromeos::settings::KerberosAccountsHandler>
+      kerberos_accounts_handler =
+          chromeos::settings::KerberosAccountsHandler::CreateIfKerberosEnabled(
+              profile);
+  if (kerberos_accounts_handler) {
+    // Note that the UI is enabled only if Kerberos is enabled.
+    web_ui->AddMessageHandler(std::move(kerberos_accounts_handler));
   }
+
   web_ui->AddMessageHandler(
       std::make_unique<chromeos::settings::KeyboardHandler>());
 
@@ -525,11 +524,13 @@ void SettingsUI::AddSettingsPageUIHandler(
 }
 
 #if defined(OS_CHROMEOS)
-void SettingsUI::BindCrosNetworkConfig(
+void SettingsUI::BindInterface(
     mojo::PendingReceiver<chromeos::network_config::mojom::CrosNetworkConfig>
         receiver) {
   ash::GetNetworkConfigService(std::move(receiver));
 }
+
+WEB_UI_CONTROLLER_TYPE_IMPL(SettingsUI)
 #endif  // defined(OS_CHROMEOS)
 
 }  // namespace settings

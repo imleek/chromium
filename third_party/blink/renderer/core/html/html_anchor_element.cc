@@ -28,7 +28,6 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_prescient_networking.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
@@ -80,13 +79,8 @@ bool ShouldInterveneDownloadByFramePolicy(LocalFrame* frame) {
   }
   if (document.IsSandboxed(WebSandboxFlags::kDownloads)) {
     UseCounter::Count(document, WebFeature::kDownloadInSandbox);
-    if (!has_gesture) {
-      UseCounter::Count(document,
-                        WebFeature::kDownloadInSandboxWithoutUserGesture);
-      if (RuntimeEnabledFeatures::
-              BlockingDownloadsInSandboxWithoutUserActivationEnabled())
-        should_intervene_download = true;
-    }
+    if (RuntimeEnabledFeatures::BlockingDownloadsInSandboxEnabled())
+      should_intervene_download = true;
   }
   if (!should_intervene_download)
     UseCounter::Count(document, WebFeature::kDownloadPostPolicyCheck);
@@ -145,14 +139,11 @@ static void AppendServerMapMousePosition(StringBuilder& url, Event* event) {
   DCHECK(event->target());
   Node* target = event->target()->ToNode();
   DCHECK(target);
-  if (!IsHTMLImageElement(*target))
+  auto* image_element = DynamicTo<HTMLImageElement>(target);
+  if (!image_element || !image_element->IsServerMap())
     return;
 
-  HTMLImageElement& image_element = ToHTMLImageElement(*target);
-  if (!image_element.IsServerMap())
-    return;
-
-  LayoutObject* layout_object = image_element.GetLayoutObject();
+  LayoutObject* layout_object = image_element->GetLayoutObject();
   if (!layout_object || !layout_object->IsBox())
     return;
 
@@ -188,9 +179,10 @@ void HTMLAnchorElement::DefaultEventHandler(Event& event) {
       DispatchSimulatedClick(&event);
       return;
     }
-
-    if (IsLinkClick(event) && IsLiveLink()) {
-      HandleClick(event);
+    Event* click_event = GetClickEventOrNull(event);
+    if (click_event && IsLiveLink()) {
+      HandleClick(*click_event);
+      event.SetDefaultHandled();
       return;
     }
   }
@@ -233,11 +225,14 @@ void HTMLAnchorElement::ParseAttribute(
     }
     if (IsLink()) {
       String parsed_url = StripLeadingAndTrailingHTMLSpaces(params.new_value);
-      if (GetDocument().IsDNSPrefetchEnabled()) {
+      // GetDocument().GetFrame() could be null if this method is called from
+      // DOMParser::parseFromString(), which internally creates a document
+      // and eventually calls this.
+      if (GetDocument().IsDNSPrefetchEnabled() && GetDocument().GetFrame()) {
         if (ProtocolIs(parsed_url, "http") || ProtocolIs(parsed_url, "https") ||
             parsed_url.StartsWith("//")) {
           WebPrescientNetworking* web_prescient_networking =
-              Platform::Current()->PrescientNetworking();
+              GetDocument().GetFrame()->PrescientNetworking();
           if (web_prescient_networking) {
             web_prescient_networking->PrefetchDNS(
                 GetDocument().CompleteURL(parsed_url).Host());
@@ -433,13 +428,6 @@ void HTMLAnchorElement::HandleClick(Event& event) {
   }
   if (HasRel(kRelationNoOpener))
     frame_request.SetNoOpener();
-  if (RuntimeEnabledFeatures::HrefTranslateEnabled(&GetDocument()) &&
-      FastHasAttribute(html_names::kHreftranslateAttr)) {
-    frame_request.SetHrefTranslate(
-        FastGetAttribute(html_names::kHreftranslateAttr));
-    UseCounter::Count(GetDocument(),
-                      WebFeature::kHTMLAnchorElementHrefTranslateAttribute);
-  }
   frame_request.SetTriggeringEventInfo(
       event.isTrusted() ? TriggeringEventInfo::kFromTrustedEvent
                         : TriggeringEventInfo::kFromUntrustedEvent);
@@ -453,6 +441,18 @@ void HTMLAnchorElement::HandleClick(Event& event) {
               frame_request,
               target.IsEmpty() ? GetDocument().BaseTarget() : target)
           .frame;
+
+  // If hrefTranslate is enabled and set restrict processing it
+  // to same frame or navigations with noopener set.
+  if (RuntimeEnabledFeatures::HrefTranslateEnabled(&GetDocument()) &&
+      FastHasAttribute(html_names::kHreftranslateAttr) &&
+      (target_frame == frame || frame_request.GetWindowFeatures().noopener)) {
+    frame_request.SetHrefTranslate(
+        FastGetAttribute(html_names::kHreftranslateAttr));
+    UseCounter::Count(GetDocument(),
+                      WebFeature::kHTMLAnchorElementHrefTranslateAttribute);
+  }
+
   if (target_frame)
     target_frame->Navigate(frame_request, WebFrameLoadType::kStandard);
 }
@@ -463,17 +463,26 @@ bool IsEnterKeyKeydownEvent(Event& event) {
          !ToKeyboardEvent(event).repeat();
 }
 
-bool IsLinkClick(Event& event) {
-  if ((event.type() != event_type_names::kClick &&
-       event.type() != event_type_names::kAuxclick) ||
-      !event.IsMouseEvent()) {
-    return false;
+Event* GetClickEventOrNull(Event& event) {
+  // HTMLElement embedded in anchor tag dispatches a DOMActivate event when
+  // clicked on. The original click event is set as underlying event.
+  bool use_underlying_event = event.type() == event_type_names::kDOMActivate &&
+                              event.UnderlyingEvent() &&
+                              !event.UnderlyingEvent()->DefaultHandled() &&
+                              event.UnderlyingEvent()->target();
+  Event* process_event =
+      use_underlying_event ? event.UnderlyingEvent() : &event;
+  if ((process_event->type() != event_type_names::kClick &&
+       process_event->type() != event_type_names::kAuxclick) ||
+      !process_event->IsMouseEvent()) {
+    return nullptr;
   }
-  auto& mouse_event = ToMouseEvent(event);
+  auto& mouse_event = ToMouseEvent(*process_event);
   int16_t button = mouse_event.button();
   return (button == static_cast<int16_t>(WebPointerProperties::Button::kLeft) ||
-          button ==
-              static_cast<int16_t>(WebPointerProperties::Button::kMiddle));
+          button == static_cast<int16_t>(WebPointerProperties::Button::kMiddle))
+             ? process_event
+             : nullptr;
 }
 
 bool HTMLAnchorElement::WillRespondToMouseClickEvents() {

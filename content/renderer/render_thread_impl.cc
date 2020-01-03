@@ -53,8 +53,6 @@
 #include "components/discardable_memory/client/client_discardable_shared_memory_manager.h"
 #include "components/metrics/public/mojom/single_sample_metrics.mojom.h"
 #include "components/metrics/single_sample_metrics.h"
-#include "components/viz/client/hit_test_data_provider.h"
-#include "components/viz/client/hit_test_data_provider_draw_quad.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/switches.h"
@@ -77,7 +75,6 @@
 #include "content/public/renderer/render_thread_observer.h"
 #include "content/public/renderer/render_view_visitor.h"
 #include "content/renderer/browser_exposed_renderer_interfaces.h"
-#include "content/renderer/browser_plugin/browser_plugin_manager.h"
 #include "content/renderer/categorized_worker_pool.h"
 #include "content/renderer/effective_connection_type_helper.h"
 #include "content/renderer/frame_swap_message_queue.h"
@@ -113,9 +110,6 @@
 #include "media/media_buildflags.h"
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
-#include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
-#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "net/base/net_errors.h"
@@ -611,9 +605,6 @@ void RenderThreadImpl::Init() {
 
   vc_manager_.reset(new blink::WebVideoCaptureImplManager());
 
-  browser_plugin_manager_.reset(new BrowserPluginManager());
-  AddObserver(browser_plugin_manager_.get());
-
   unfreezable_message_filter_ = new UnfreezableMessageFilter(this);
   AddFilter(unfreezable_message_filter_.get());
 
@@ -991,10 +982,14 @@ void RenderThreadImpl::InitializeWebKit(mojo::BinderMap* binders) {
 
   blink_platform_impl_.reset(
       new RendererBlinkPlatformImpl(main_thread_scheduler_.get()));
-  SetRuntimeFeaturesDefaultsAndUpdateFromArgs(command_line);
+  // This, among other things, enables any feature marked "test" in
+  // runtime_enabled_features. It is run before
+  // SetRuntimeFeaturesDefaultsAndUpdateFromArgs() so that command line
+  // arguments take precedence over (and can disable) "test" features.
   GetContentClient()
       ->renderer()
       ->SetRuntimeFeaturesDefaultsBeforeBlinkInitialization();
+  SetRuntimeFeaturesDefaultsAndUpdateFromArgs(command_line);
   blink::Initialize(blink_platform_impl_.get(), binders,
                     main_thread_scheduler_.get());
 
@@ -1070,9 +1065,9 @@ void RenderThreadImpl::RegisterExtension(
   WebScriptController::RegisterExtension(std::move(extension));
 }
 
-int RenderThreadImpl::PostTaskToAllWebWorkers(
-    const base::RepeatingClosure& closure) {
-  return WorkerThreadRegistry::Instance()->PostTaskToAllThreads(closure);
+int RenderThreadImpl::PostTaskToAllWebWorkers(base::RepeatingClosure closure) {
+  return WorkerThreadRegistry::Instance()->PostTaskToAllThreads(
+      std::move(closure));
 }
 
 bool RenderThreadImpl::ResolveProxy(const GURL& url, std::string* proxy_list) {
@@ -1149,15 +1144,17 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
   mojo::PendingRemote<media::mojom::InterfaceFactory> interface_factory;
   BindHostReceiver(interface_factory.InitWithNewPipeAndPassReceiver());
 
-  media::mojom::VideoEncodeAcceleratorProviderPtr vea_provider;
-  gpu_->CreateVideoEncodeAcceleratorProvider(mojo::MakeRequest(&vea_provider));
+  mojo::PendingRemote<media::mojom::VideoEncodeAcceleratorProvider>
+      vea_provider;
+  gpu_->CreateVideoEncodeAcceleratorProvider(
+      vea_provider.InitWithNewPipeAndPassReceiver());
 
   gpu_factories_.push_back(GpuVideoAcceleratorFactoriesImpl::Create(
       std::move(gpu_channel_host), base::ThreadTaskRunnerHandle::Get(),
       GetMediaThreadTaskRunner(), std::move(media_context_provider),
       enable_video_gpu_memory_buffers, enable_media_stream_gpu_memory_buffers,
       enable_video_accelerator, std::move(interface_factory),
-      vea_provider.PassInterface()));
+      std::move(vea_provider)));
   gpu_factories_.back()->SetRenderingColorSpace(rendering_color_space_);
   return gpu_factories_.back().get();
 }
@@ -1290,6 +1287,10 @@ blink::WebString RenderThreadImpl::GetUserAgent() {
 
 const blink::UserAgentMetadata& RenderThreadImpl::GetUserAgentMetadata() {
   return user_agent_metadata_;
+}
+
+bool RenderThreadImpl::IsUseZoomForDSF() {
+  return IsUseZoomForDSFEnabled();
 }
 
 void RenderThreadImpl::OnAssociatedInterfaceRequest(
@@ -1683,12 +1684,6 @@ void RenderThreadImpl::RequestNewLayerTreeFrameSink(
     // Set it to be our thread's task runner instead.
     params.compositor_task_runner = main_thread_compositor_task_runner_;
   }
-  if (!features::IsVizHitTestingSurfaceLayerEnabled()) {
-    params.hit_test_data_provider =
-        std::make_unique<viz::HitTestDataProviderDrawQuad>(
-            true /* should_ask_for_child_region */,
-            true /* root_accepts_events */);
-  }
 
   // The renderer runs animations and layout for animate_only BeginFrames.
   params.wants_animate_only_begin_frames = true;
@@ -1777,6 +1772,12 @@ void RenderThreadImpl::RequestNewLayerTreeFrameSink(
 #if defined(OS_ANDROID)
   if (GetContentClient()->UsingSynchronousCompositing()) {
     // TODO(ericrk): Collapse with non-webview registration below.
+    if (features::IsUsingVizForWebView()) {
+      frame_sink_provider_->CreateForWidget(
+          render_widget->routing_id(),
+          std::move(compositor_frame_sink_receiver),
+          std::move(compositor_frame_sink_client));
+    }
     frame_sink_provider_->RegisterRenderFrameMetadataObserver(
         render_widget->routing_id(),
         std::move(render_frame_metadata_observer_client_receiver),
@@ -1790,7 +1791,9 @@ void RenderThreadImpl::RequestNewLayerTreeFrameSink(
         std::move(params.synthetic_begin_frame_source),
         render_widget->widget_input_handler_manager()
             ->GetSynchronousCompositorRegistry(),
-        std::move(frame_swap_message_queue)));
+        std::move(frame_swap_message_queue),
+        std::move(params.pipes.compositor_frame_sink_remote),
+        std::move(params.pipes.client_receiver)));
     return;
   }
 #endif
@@ -1848,8 +1851,9 @@ void RenderThreadImpl::DestroyView(int32_t view_id) {
 
 void RenderThreadImpl::CreateFrame(mojom::CreateFrameParamsPtr params) {
   CompositorDependencies* compositor_deps = this;
-  service_manager::mojom::InterfaceProviderPtr interface_provider(
-      std::move(params->interface_bundle->interface_provider));
+  mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
+      interface_provider(
+          std::move(params->interface_bundle->interface_provider));
   mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
       browser_interface_broker(
           std::move(params->interface_bundle->browser_interface_broker));

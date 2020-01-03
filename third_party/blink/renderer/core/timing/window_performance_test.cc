@@ -34,10 +34,6 @@ class WindowPerformanceTest : public testing::Test {
   void SetUp() override {
     test_task_runner_ = base::MakeRefCounted<base::TestMockTimeTaskRunner>();
     ResetPerformance();
-
-    // Create another dummy page holder and pretend this is the iframe.
-    another_page_holder_ = std::make_unique<DummyPageHolder>(IntSize(400, 300));
-    another_page_holder_->GetDocument().SetURL(KURL("https://iframed.com/bar"));
   }
 
   bool ObservingLongTasks() {
@@ -73,12 +69,6 @@ class WindowPerformanceTest : public testing::Test {
 
   Document* GetDocument() const { return &page_holder_->GetDocument(); }
 
-  LocalFrame* AnotherFrame() const { return &another_page_holder_->GetFrame(); }
-
-  Document* AnotherDocument() const {
-    return &another_page_holder_->GetDocument();
-  }
-
   String SanitizedAttribution(ExecutionContext* context,
                               bool has_multiple_contexts,
                               LocalFrame* observer_frame) {
@@ -101,24 +91,22 @@ class WindowPerformanceTest : public testing::Test {
 
   Persistent<WindowPerformance> performance_;
   std::unique_ptr<DummyPageHolder> page_holder_;
-  std::unique_ptr<DummyPageHolder> another_page_holder_;
   scoped_refptr<base::TestMockTimeTaskRunner> test_task_runner_;
   std::unique_ptr<Performance::UnifiedClock> unified_clock_;
 };
 
 TEST_F(WindowPerformanceTest, LongTaskObserverInstrumentation) {
-  performance_->UpdateLongTaskInstrumentation();
-  EXPECT_FALSE(ObservingLongTasks());
-
-  // Adding LongTask observer (with filer option) enables instrumentation.
-  AddLongTaskObserver();
-  performance_->UpdateLongTaskInstrumentation();
+  // Check that we're always observing longtasks
   EXPECT_TRUE(ObservingLongTasks());
 
-  // Removing LongTask observer disables instrumentation.
+  // Adding LongTask observer.
+  AddLongTaskObserver();
+  EXPECT_TRUE(ObservingLongTasks());
+
+  // Removing LongTask observer doeos not cause us to stop observing. We still
+  // observe because entries should still be added to the longtasks buffer.
   RemoveLongTaskObserver();
-  performance_->UpdateLongTaskInstrumentation();
-  EXPECT_FALSE(ObservingLongTasks());
+  EXPECT_TRUE(ObservingLongTasks());
 }
 
 TEST_F(WindowPerformanceTest, SanitizedLongTaskName) {
@@ -134,12 +122,17 @@ TEST_F(WindowPerformanceTest, SanitizedLongTaskName) {
 }
 
 TEST_F(WindowPerformanceTest, SanitizedLongTaskName_CrossOrigin) {
+  // Create another dummy page holder and pretend it is an iframe.
+  DummyPageHolder another_page(IntSize(400, 300));
+  another_page.GetDocument().SetURL(KURL("https://iframed.com/bar"));
+
   // Unable to attribute, when no execution contents are available.
   EXPECT_EQ("unknown", SanitizedAttribution(nullptr, false, GetFrame()));
 
   // Attribute for same context (and same origin).
-  EXPECT_EQ("cross-origin-unreachable",
-            SanitizedAttribution(AnotherDocument(), false, GetFrame()));
+  EXPECT_EQ(
+      "cross-origin-unreachable",
+      SanitizedAttribution(&another_page.GetDocument(), false, GetFrame()));
 }
 
 // https://crbug.com/706798: Checks that after navigation that have replaced the
@@ -147,7 +140,6 @@ TEST_F(WindowPerformanceTest, SanitizedLongTaskName_CrossOrigin) {
 // to the old window do not cause a crash.
 TEST_F(WindowPerformanceTest, NavigateAway) {
   AddLongTaskObserver();
-  performance_->UpdateLongTaskInstrumentation();
   EXPECT_TRUE(ObservingLongTasks());
 
   // Simulate navigation commit.

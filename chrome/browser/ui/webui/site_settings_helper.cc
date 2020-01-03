@@ -79,7 +79,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::BACKGROUND_SYNC, "background-sync"},
     {ContentSettingsType::ADS, "ads"},
     {ContentSettingsType::SOUND, "sound"},
-    {ContentSettingsType::CLIPBOARD_READ, "clipboard"},
+    {ContentSettingsType::CLIPBOARD_READ_WRITE, "clipboard"},
     {ContentSettingsType::SENSORS, "sensors"},
     {ContentSettingsType::PAYMENT_HANDLER, "payment-handler"},
     {ContentSettingsType::USB_GUARD, "usb-devices"},
@@ -113,7 +113,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::MEDIA_ENGAGEMENT, nullptr},
     {ContentSettingsType::CLIENT_HINTS, nullptr},
     {ContentSettingsType::ACCESSIBILITY_EVENTS, nullptr},
-    {ContentSettingsType::CLIPBOARD_WRITE, nullptr},
+    {ContentSettingsType::CLIPBOARD_SANITIZED_WRITE, nullptr},
     {ContentSettingsType::PLUGINS_DATA, nullptr},
     {ContentSettingsType::BACKGROUND_FETCH, nullptr},
     {ContentSettingsType::INTENT_PICKER_DISPLAY, nullptr},
@@ -123,6 +123,10 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::LEGACY_COOKIE_ACCESS, nullptr},
     {ContentSettingsType::INSTALLED_WEB_APP_METADATA, nullptr},
     {ContentSettingsType::NFC, nullptr},
+    {ContentSettingsType::BLUETOOTH_CHOOSER_DATA, nullptr},
+    {ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA, nullptr},
+    {ContentSettingsType::VR, nullptr},
+    {ContentSettingsType::AR, nullptr},
 };
 static_assert(base::size(kContentSettingsTypeGroupNames) ==
                   // ContentSettingsType starts at -1, so add 1 here.

@@ -58,6 +58,8 @@ DEFAULT_WPT = os.path.join(SRC_DIR, 'third_party', 'blink', 'web_tests',
                            'external', 'wpt', 'wpt')
 
 SYSTEM_WEBVIEW_SHELL_PKG = 'org.chromium.webview_shell'
+WEBLAYER_SHELL_PKG = 'org.chromium.weblayer.shell'
+WEBLAYER_SUPPORT_PKG = 'org.chromium.weblayer.support'
 
 # This avoids having to update the hosts file on device.
 HOST_RESOLVER_ARGS = ['--host-resolver-rules=MAP nonexistent.*.test ~NOTFOUND,'
@@ -65,7 +67,8 @@ HOST_RESOLVER_ARGS = ['--host-resolver-rules=MAP nonexistent.*.test ~NOTFOUND,'
 
 # Browsers on debug and eng devices read command-line-flags from special files
 # during startup.
-FLAGS_FILE_MAP = {'android_webview': 'webview-command-line',
+FLAGS_FILE_MAP = {'android_weblayer': 'weblayer-command-line',
+                  'android_webview': 'webview-command-line',
                   'chrome_android': 'chrome-command-line'}
 
 
@@ -74,12 +77,17 @@ class PassThroughArgs(argparse.Action):
   def __call__(self, parser, namespace, values, option_string=None):
     if option_string:
       if self.nargs == 0:
-        self.pass_through_args.append(option_string)
+        self.add_unique_pass_through_arg(option_string)
       elif self.nargs is None:
-        self.pass_through_args.append('{}={}'.format(option_string, values))
+        self.add_unique_pass_through_arg('{}={}'.format(option_string, values))
       else:
         raise ValueError("nargs {} not supported: {} {}".format(
             self.nargs, option_string, values))
+
+  @classmethod
+  def add_unique_pass_through_arg(cls, arg):
+    if arg not in cls.pass_through_args:
+      cls.pass_through_args.append(arg)
 
 
 class WPTAndroidAdapter(common.BaseIsolatedScriptArgsAdapter):
@@ -133,6 +141,14 @@ class WPTAndroidAdapter(common.BaseIsolatedScriptArgsAdapter):
     else:
       rest_args.extend(['--package-name', self.options.package_name])
 
+    if self.options.verbose >= 3:
+      rest_args.extend(["--log-mach=-", "--log-mach-level=debug",
+                        "--log-mach-verbose"])
+
+    if self.options.verbose >= 4:
+      rest_args.extend(['--webdriver-arg=--verbose',
+                        '--webdriver-arg="--log-path=-"'])
+
     rest_args.extend(self.pass_through_wpt_args)
 
     return rest_args
@@ -161,6 +177,10 @@ class WPTAndroidAdapter(common.BaseIsolatedScriptArgsAdapter):
     parser.add_argument('--system-webview-shell', help='System'
                         ' WebView Shell apk to install during test.  Defaults'
                         ' to the on-device WebView Shell apk.')
+    parser.add_argument('--weblayer-shell', help='WebLayer'
+                        ' Shell apk to install during test.')
+    parser.add_argument('--weblayer-support', help='WebLayer'
+                        ' Support apk to install during test.')
     parser.add_argument('--package-name', help='The package name of Chrome'
                         ' to test, defaults to that of the --apk.')
     parser.add_argument('--verbose', '-v', action='count',
@@ -171,6 +191,8 @@ class WPTAndroidAdapter(common.BaseIsolatedScriptArgsAdapter):
     parser.add_argument('--list-tests', action=WPTPassThroughArgs, nargs=0,
                         help="Don't run any tests, just print out a list of"
                         ' tests that would be run.')
+    parser.add_argument('--webdriver-arg', action=WPTPassThroughArgs,
+                        help='WebDriver args.')
     parser.add_argument('--log-wptreport', metavar='WPT_REPORT_FILE',
                         action=WPTPassThroughArgs,
                         help="Log wptreport with subtest details.")
@@ -195,6 +217,30 @@ class WPTAndroidAdapter(common.BaseIsolatedScriptArgsAdapter):
     parser.add_argument('--force-fieldtrial-params',
                         action=BinaryPassThroughArgs,
                         help='Force trial params for Chromium features.')
+
+
+def run_android_weblayer(device, adapter):
+  if adapter.options.package_name:
+    logger.warn('--package-name has no effect for weblayer, provider'
+          'will be set to the --apk if it is provided.')
+
+  install_weblayer_shell_as_needed = maybe_install_user_apk(
+      device, adapter.options.weblayer_shell, WEBLAYER_SHELL_PKG)
+
+  install_weblayer_support_as_needed = maybe_install_user_apk(
+      device, adapter.options.weblayer_support, WEBLAYER_SUPPORT_PKG)
+
+  if adapter.options.apk:
+    install_webview_as_needed = webview_app.UseWebViewProvider(device,
+        adapter.options.apk)
+    logger.info('Will install WebView apk at ' + adapter.options.apk)
+  else:
+    install_webview_as_needed = no_op()
+
+  with install_weblayer_shell_as_needed,\
+       install_weblayer_support_as_needed,\
+       install_webview_as_needed:
+    return adapter.run_test()
 
 
 def run_android_webview(device, adapter):
@@ -231,6 +277,29 @@ def run_chrome_android(device, adapter):
       return adapter.run_test()
   else:
     return adapter.run_test()
+
+
+def maybe_install_user_apk(device, apk, expected_pkg=None):
+  """contextmanager to install apk on device.
+
+  Args:
+    device: DeviceUtils instance on which to install the apk.
+    apk: Apk file path on host.
+    expected_pkg:  Optional, check that apk's package name matches.
+  Returns:
+    If apk evaluates to false, returns a do-nothing contextmanager.
+    Otherwise, returns a contextmanager to install apk on device.
+  """
+  if apk:
+    pkg = apk_helper.GetPackageName(apk)
+    if expected_pkg and pkg != expected_pkg:
+      raise ValueError('{} has incorrect package name: {}, expected {}.'.format(
+          apk, pkg, expected_pkg))
+    install_as_needed = app_installed(device, apk)
+    logger.info('Will install ' + pkg + ' at ' + apk)
+  else:
+    install_as_needed = no_op()
+  return install_as_needed
 
 
 @contextlib.contextmanager
@@ -282,7 +351,9 @@ def main():
                                 os.environ['PATH'].split(':'))
 
   with flags:
-    if adapter.options.product == 'android_webview':
+    if adapter.options.product == 'android_weblayer':
+      run_android_weblayer(device, adapter)
+    elif adapter.options.product == 'android_webview':
       run_android_webview(device, adapter)
     elif adapter.options.product == 'chrome_android':
       run_chrome_android(device, adapter)

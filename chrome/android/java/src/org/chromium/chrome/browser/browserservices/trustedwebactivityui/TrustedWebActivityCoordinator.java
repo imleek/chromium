@@ -4,6 +4,10 @@
 
 package org.chromium.chrome.browser.browserservices.trustedwebactivityui;
 
+import androidx.annotation.Nullable;
+import androidx.browser.trusted.TrustedWebActivityDisplayMode;
+import androidx.browser.trusted.TrustedWebActivityDisplayMode.ImmersiveMode;
+
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.Origin;
@@ -18,9 +22,9 @@ import org.chromium.chrome.browser.browserservices.trustedwebactivityui.controll
 import org.chromium.chrome.browser.browserservices.trustedwebactivityui.controller.Verifier;
 import org.chromium.chrome.browser.browserservices.trustedwebactivityui.splashscreen.TwaSplashController;
 import org.chromium.chrome.browser.browserservices.trustedwebactivityui.view.TrustedWebActivityDisclosureView;
-import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.CustomTabStatusBarColorProvider;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
+import org.chromium.chrome.browser.customtabs.ExternalIntentsPolicyProvider;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityNavigationController;
 import org.chromium.chrome.browser.customtabs.features.ImmersiveModeController;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
@@ -46,6 +50,9 @@ public class TrustedWebActivityCoordinator implements InflationObserver {
     private final TwaRegistrar mTwaRegistrar;
     private final ClientPackageNameProvider mClientPackageNameProvider;
 
+    @Nullable
+    private final TrustedWebActivityDisplayMode mDisplayMode;
+
     private boolean mInTwaMode = true;
 
     @Inject
@@ -56,8 +63,9 @@ public class TrustedWebActivityCoordinator implements InflationObserver {
             CurrentPageVerifier currentPageVerifier,
             Verifier verifier,
             CustomTabActivityNavigationController navigationController,
+            ExternalIntentsPolicyProvider externalIntentsPolicyProvider,
             Lazy<TwaSplashController> splashController,
-            CustomTabIntentDataProvider intentDataProvider,
+            BrowserServicesIntentDataProvider intentDataProvider,
             TrustedWebActivityUmaRecorder umaRecorder,
             CustomTabStatusBarColorProvider statusBarColorProvider,
             ActivityLifecycleDispatcher lifecycleDispatcher,
@@ -74,9 +82,13 @@ public class TrustedWebActivityCoordinator implements InflationObserver {
         mImmersiveModeController = immersiveModeController;
         mTwaRegistrar = twaRegistrar;
         mClientPackageNameProvider = clientPackageNameProvider;
+        mDisplayMode = intentDataProvider.getTwaDisplayMode();
 
         navigationController.setLandingPageOnCloseCriterion(
                 verifier::wasPreviouslyVerified);
+        externalIntentsPolicyProvider.setPolicyCriteria(
+                verifier::shouldIgnoreExternalIntentHandlers);
+
         initSplashScreen(splashController, intentDataProvider, umaRecorder);
 
         currentPageVerifier.addVerificationObserver(this::onVerificationUpdate);
@@ -102,7 +114,7 @@ public class TrustedWebActivityCoordinator implements InflationObserver {
     }
 
     private void initSplashScreen(Lazy<TwaSplashController> splashController,
-            CustomTabIntentDataProvider intentDataProvider,
+            BrowserServicesIntentDataProvider intentDataProvider,
             TrustedWebActivityUmaRecorder umaRecorder) {
         boolean showSplashScreen =
                 TwaSplashController.intentIsForTwaWithSplashScreen(intentDataProvider.getIntent());
@@ -138,7 +150,16 @@ public class TrustedWebActivityCoordinator implements InflationObserver {
     }
 
     private void updateImmersiveMode(boolean inTwaMode) {
-        // TODO(pshmakov): implement this once we can depend on tip-of-tree of androidx-browser.
+        if (!(mDisplayMode instanceof ImmersiveMode)) {
+            return;
+        }
+        if (inTwaMode) {
+            ImmersiveMode immersiveMode = (ImmersiveMode) mDisplayMode;
+            mImmersiveModeController.get().enterImmersiveMode(
+                    immersiveMode.layoutInDisplayCutoutMode(), immersiveMode.isSticky());
+        } else {
+            mImmersiveModeController.get().exitImmersiveMode();
+        }
     }
 
     // This doesn't belong here, but doesn't deserve a separate class. Do extract it if more

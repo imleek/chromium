@@ -6,6 +6,7 @@ from page_sets.system_health import platforms
 from page_sets.system_health import story_tags
 from page_sets.system_health import system_health_story
 from page_sets.system_health.loading_stories import LoadGmailMobileStory
+from page_sets.system_health import browsing_stories
 
 _WAIT_FOR_VIDEO_SECONDS = 5
 
@@ -39,12 +40,29 @@ class BackgroundGoogleStory(_BackgroundStory):
     action_runner.TapElement(selector='g-fab')
 
 
+class BackgroundGoogleStory2019(_BackgroundStory):
+  NAME = 'background:search:google:2019'
+  URL = 'https://www.google.co.uk/#q=tom+cruise+movies'
+  TAGS = [story_tags.HEALTH_CHECK, story_tags.YEAR_2019]
+
+  def _DidLoadDocument(self, action_runner):
+    # Activte the immersive movie browsing experience
+    action_runner.WaitForElement(selector='.knHJyb')
+    action_runner.ScrollPageToElement(selector='.knHJyb')
+    action_runner.ClickElement(selector='.knHJyb')
+
+
 class BackgroundFacebookMobileStory(_BackgroundStory):
   NAME = 'background:social:facebook'
   URL = 'https://www.facebook.com/rihanna'
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
   TAGS = [story_tags.YEAR_2016]
 
+class BackgroundFacebookMobileStory2019(_BackgroundStory):
+  NAME = 'background:social:facebook:2019'
+  URL = 'https://www.facebook.com/rihanna'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  TAGS = [story_tags.YEAR_2019]
 
 class BackgroundNytimesMobileStory(_BackgroundStory):
   NAME = 'background:news:nytimes'
@@ -77,11 +95,31 @@ class BackgroundNytimesMobileStory(_BackgroundStory):
     action_runner.Wait(_WAIT_FOR_VIDEO_SECONDS)
 
 
+class BackgroundNytimesMobileStory2019(browsing_stories.NytimesMobileStory2019):
+  NAME = 'background:news:nytimes:2019'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  TAGS = [story_tags.JAVASCRIPT_HEAVY, story_tags.YEAR_2019]
+  ITEMS_TO_VISIT = 1
+  ITEM_SCROLL_REPEAT = 1
+  ITEM_READ_TIME_IN_SECONDS = 1
+
+  def _Measure(self, action_runner):
+    action_runner.tab.browser.Background()
+    super(BackgroundNytimesMobileStory2019, self)._Measure(action_runner)
+
+
 class BackgroundImgurMobileStory(_BackgroundStory):
   NAME = 'background:media:imgur'
   URL = 'http://imgur.com/gallery/hUita'
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
   TAGS = [story_tags.HEALTH_CHECK, story_tags.YEAR_2016]
+
+
+class BackgroundImgurMobileStory2019(_BackgroundStory):
+  NAME = 'background:media:imgur:2019'
+  URL = 'http://imgur.com/gallery/hUita'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  TAGS = [story_tags.HEALTH_CHECK, story_tags.YEAR_2019]
 
 
 class BackgroundGmailMobileStory(LoadGmailMobileStory):

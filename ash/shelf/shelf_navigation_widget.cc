@@ -8,6 +8,7 @@
 #include "ash/shelf/back_button.h"
 #include "ash/shelf/home_button.h"
 #include "ash/shelf/shelf.h"
+#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
@@ -20,13 +21,14 @@
 #include "ui/views/animation/bounds_animator.h"
 #include "ui/views/background.h"
 #include "ui/views/view.h"
+#include "ui/wm/core/coordinate_conversion.h"
 
 namespace ash {
 namespace {
 
-// Duration of the back button's opacity animation.
-constexpr auto kBackButtonOpacityAnimationDuration =
-    base::TimeDelta::FromMilliseconds(200);
+// The duration of the back button opacity animation.
+constexpr base::TimeDelta kBackButtonOpacityAnimationDuration =
+    base::TimeDelta::FromMilliseconds(50);
 
 bool IsTabletMode() {
   return Shell::Get()->tablet_mode_controller() &&
@@ -124,6 +126,7 @@ ShelfNavigationWidget::Delegate::Delegate(Shelf* shelf, ShelfView* shelf_view)
   GetViewAccessibility().OverrideNextFocus(
       shelf->shelf_widget()->hotseat_widget());
   GetViewAccessibility().OverridePreviousFocus(shelf->GetStatusAreaWidget());
+  opaque_background_.SetName("shelfNavigation/Background");
 }
 
 ShelfNavigationWidget::Delegate::~Delegate() = default;
@@ -203,7 +206,6 @@ ShelfNavigationWidget::ShelfNavigationWidget(Shelf* shelf,
       delegate_(new ShelfNavigationWidget::Delegate(shelf, shelf_view)),
       bounds_animator_(std::make_unique<views::BoundsAnimator>(delegate_)) {
   DCHECK(shelf_);
-  bounds_animator_->SetAnimationDuration(kBackButtonOpacityAnimationDuration);
   Shell::Get()->tablet_mode_controller()->AddObserver(this);
   Shell::Get()->AddShellObserver(this);
   ShelfConfig::Get()->AddObserver(this);
@@ -223,7 +225,7 @@ void ShelfNavigationWidget::Initialize(aura::Window* container) {
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.name = "ShelfNavigationWidget";
   params.delegate = delegate_;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.parent = container;
   Init(std::move(params));
@@ -233,7 +235,7 @@ void ShelfNavigationWidget::Initialize(aura::Window* container) {
   SetContentsView(delegate_);
   GetBackButton()->SetBoundsRect(GetFirstButtonBounds());
   SetSize(GetIdealSize());
-  UpdateLayout();
+  UpdateLayout(/*animate=*/false);
 }
 
 gfx::Size ShelfNavigationWidget::GetIdealSize() const {
@@ -266,7 +268,15 @@ bool ShelfNavigationWidget::OnNativeWidgetActivationChanged(bool active) {
 }
 
 void ShelfNavigationWidget::OnGestureEvent(ui::GestureEvent* event) {
-  if (shelf_->ProcessGestureEvent(*event)) {
+  // Shelf::ProcessGestureEvent expects an event whose location is in screen
+  // coordinates - create a copy of the event with the location in screen
+  // coordinate system.
+  ui::GestureEvent copy_event(*event);
+  gfx::Point location_in_screen(copy_event.location());
+  wm::ConvertPointToScreen(GetNativeWindow(), &location_in_screen);
+  copy_event.set_location(location_in_screen);
+
+  if (shelf_->ProcessGestureEvent(copy_event)) {
     event->StopPropagation();
     return;
   }
@@ -294,15 +304,15 @@ void ShelfNavigationWidget::SetDefaultLastFocusableChild(
 }
 
 void ShelfNavigationWidget::OnTabletModeStarted() {
-  UpdateLayout();
+  UpdateLayout(/*animate=*/true);
 }
 
 void ShelfNavigationWidget::OnTabletModeEnded() {
-  UpdateLayout();
+  UpdateLayout(/*animate=*/true);
 }
 
 void ShelfNavigationWidget::OnShelfAlignmentChanged(aura::Window* root_window) {
-  UpdateLayout();
+  UpdateLayout(/*animate=*/false);
 }
 
 void ShelfNavigationWidget::OnImplicitAnimationsCompleted() {
@@ -312,11 +322,25 @@ void ShelfNavigationWidget::OnImplicitAnimationsCompleted() {
 }
 
 void ShelfNavigationWidget::OnShelfConfigUpdated() {
-  UpdateLayout();
+  UpdateLayout(/*animate=*/true);
 }
 
-void ShelfNavigationWidget::UpdateLayout() {
+void ShelfNavigationWidget::UpdateLayout(bool animate) {
   bool is_back_button_shown = IsBackButtonShown();
+  // Use the same duration for all parts of the upcoming animation.
+  const auto animation_duration =
+      animate ? ShelfConfig::Get()->shelf_animation_duration()
+              : base::TimeDelta::FromMilliseconds(0);
+  bounds_animator_->SetAnimationDuration(animation_duration);
+
+  ui::ScopedLayerAnimationSettings nav_animation_setter(
+      GetNativeView()->layer()->GetAnimator());
+  nav_animation_setter.SetTransitionDuration(animation_duration);
+  nav_animation_setter.SetTweenType(gfx::Tween::EASE_OUT);
+  nav_animation_setter.SetPreemptionStrategy(
+      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+
+  SetBounds(shelf_->shelf_layout_manager()->GetNavigationBounds());
 
   // Show the back button right away so that the animation is visible.
   if (is_back_button_shown)
@@ -327,6 +351,8 @@ void ShelfNavigationWidget::UpdateLayout() {
   ui::ScopedLayerAnimationSettings settings(
       GetBackButton()->layer()->GetAnimator());
   settings.SetTransitionDuration(kBackButtonOpacityAnimationDuration);
+  settings.SetPreemptionStrategy(
+      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
   settings.AddObserver(this);
   GetBackButton()->layer()->SetOpacity(is_back_button_shown ? 1 : 0);
 

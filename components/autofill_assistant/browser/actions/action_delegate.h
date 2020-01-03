@@ -80,8 +80,11 @@ class ActionDelegate {
       base::OnceCallback<void(const ClientStatus&)> callback) = 0;
 
   // Wait for up to |max_wait_time| for element conditions to match on the page,
-  // then call |callback| with a successful status if at least an element
-  // matched, an error status otherwise.
+  // then call |callback| with the last status.
+  //
+  // |check_elements| should register the elements to check, process their state
+  // and reports its decision to the callback it's passed. WaitForDom retries as
+  // long as the decision is not OK, and max_wait_time is not reached.
   //
   // If |allow_interrupt| interrupts can run while waiting.
   virtual void WaitForDom(
@@ -112,15 +115,13 @@ class ActionDelegate {
 
   // Asks the user to provide the requested user data.
   virtual void CollectUserData(
-      std::unique_ptr<CollectUserDataOptions> collect_user_data_options,
-      std::unique_ptr<UserData> user_data) = 0;
+      CollectUserDataOptions* collect_user_data_options) = 0;
 
   // Executes |write_callback| on the currently stored user_data and
   // user_data_options.
   virtual void WriteUserData(
-      base::OnceCallback<void(const CollectUserDataOptions*,
-                              UserData*,
-                              UserData::FieldChange*)> write_callback) = 0;
+      base::OnceCallback<void(UserData*, UserData::FieldChange*)>
+          write_callback) = 0;
 
   using GetFullCardCallback =
       base::OnceCallback<void(std::unique_ptr<autofill::CreditCard> card,
@@ -276,6 +277,9 @@ class ActionDelegate {
   // string.
   virtual std::string GetAccountEmailAddress() = 0;
 
+  // Returns the locale for the current device or platform.
+  virtual std::string GetLocale() = 0;
+
   // Sets or updates contextual information.
   // Passing nullptr clears the contextual information.
   virtual void SetDetails(std::unique_ptr<Details> details) = 0;
@@ -311,14 +315,15 @@ class ActionDelegate {
   // Returns the current client settings.
   virtual const ClientSettings& GetSettings() = 0;
 
-  // Show a form to the user and call |callback| with its values whenever there
-  // is a change. |callback| will be called directly with the initial values of
-  // the form directly after this call. Returns true if the form was correctly
-  // set, false otherwise. The latter can happen if the form contains
-  // unsupported or invalid inputs.
+  // Show a form to the user and call |changed_callback| with its values
+  // whenever there is a change. |changed_callback| will be called directly with
+  // the initial values of the form directly after this call. Returns true if
+  // the form was correctly set, false otherwise. The latter can happen if the
+  // form contains unsupported or invalid inputs.
   virtual bool SetForm(
       std::unique_ptr<FormProto> form,
-      base::RepeatingCallback<void(const FormProto::Result*)> callback) = 0;
+      base::RepeatingCallback<void(const FormProto::Result*)> changed_callback,
+      base::OnceCallback<void(const ClientStatus&)> cancel_callback) = 0;
 
   // Force showing the UI if no UI is shown. This is useful when executing a
   // direct action which realizes it needs to interact with the user. Once

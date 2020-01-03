@@ -63,8 +63,8 @@ class SVGImageTest : public testing::Test {
     PaintFlags flags;
     FloatRect dummy_rect(0, 0, 100, 100);
     image->Draw(&canvas, flags, dummy_rect, dummy_rect,
-                kDoNotRespectImageOrientation,
-                Image::kDoNotClampImageToSourceRect, Image::kSyncDecode);
+                kRespectImageOrientation, Image::kDoNotClampImageToSourceRect,
+                Image::kSyncDecode);
   }
 
   // Loads the image from |file_name|, computes features into |features|,
@@ -330,10 +330,10 @@ TEST_F(SVGImageSimTest, PageVisibilityHiddenToVisible) {
   test::RunPendingTasks();
 
   Element* element = GetDocument().getElementById("image");
-  ASSERT_TRUE(IsHTMLImageElement(element));
+  ASSERT_TRUE(IsA<HTMLImageElement>(element));
 
   ImageResourceContent* image_content =
-      ToHTMLImageElement(*element).CachedImage();
+      To<HTMLImageElement>(*element).CachedImage();
   ASSERT_TRUE(image_content);
   ASSERT_TRUE(image_content->IsLoaded());
   ASSERT_TRUE(image_content->HasImage());

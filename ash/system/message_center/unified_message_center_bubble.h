@@ -6,6 +6,7 @@
 #define ASH_SYSTEM_MESSAGE_CENTER_UNIFIED_MESSAGE_CENTER_BUBBLE_H_
 
 #include "ash/system/tray/tray_bubble_base.h"
+#include "ash/system/tray/tray_bubble_view.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/widget/widget_observer.h"
 
@@ -15,13 +16,13 @@ class Widget;
 
 namespace ash {
 
-class TrayBubbleView;
 class UnifiedSystemTray;
 class UnifiedMessageCenterView;
 
 // Manages the bubble that contains UnifiedMessageCenterView.
 // Shows the bubble on the constructor, and closes the bubble on the destructor.
 class ASH_EXPORT UnifiedMessageCenterBubble : public TrayBubbleBase,
+                                              public TrayBubbleView::Delegate,
                                               public views::ViewObserver,
                                               public views::WidgetObserver {
  public:
@@ -63,6 +64,10 @@ class ASH_EXPORT UnifiedMessageCenterBubble : public TrayBubbleBase,
   TrayBackgroundView* GetTray() const override;
   TrayBubbleView* GetBubbleView() const override;
   views::Widget* GetBubbleWidget() const override;
+
+  // TrayBubbleView::Delegate:
+  base::string16 GetAccessibleNameForBubble() override;
+  bool ShouldEnableExtraKeyboardAccessibility() override;
 
   // views::ViewObserver:
   void OnViewPreferredSizeChanged(views::View* observed_view) override;

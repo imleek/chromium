@@ -21,15 +21,17 @@
 #include "device/bluetooth/bluetooth_device_android.h"
 #include "device/bluetooth/bluetooth_discovery_session_outcome.h"
 #include "device/bluetooth/jni_headers/ChromeBluetoothAdapter_jni.h"
+#include "device/bluetooth/jni_headers/ChromeBluetoothScanFilterBuilder_jni.h"
+#include "device/bluetooth/jni_headers/ChromeBluetoothScanFilterList_jni.h"
 
+using base::android::AppendJavaStringArrayToStringVector;
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
-using base::android::AppendJavaStringArrayToStringVector;
+using base::android::JavaArrayOfByteArrayToBytesVector;
+using base::android::JavaByteArrayToByteVector;
+using base::android::JavaIntArrayToIntVector;
 using base::android::JavaParamRef;
 using base::android::JavaRef;
-using base::android::JavaByteArrayToByteVector;
-using base::android::JavaArrayOfByteArrayToStringVector;
-using base::android::JavaIntArrayToIntVector;
 
 namespace {
 // The poll interval in ms when there is no active discovery. This
@@ -206,31 +208,28 @@ void BluetoothAdapterAndroid::CreateOrUpdateDeviceOnScan(
   }
 
   std::vector<std::string> service_data_keys_vector;
-  std::vector<std::string> service_data_values_vector;
+  std::vector<std::vector<uint8_t>> service_data_values_vector;
   AppendJavaStringArrayToStringVector(env, service_data_keys,
                                       &service_data_keys_vector);
-  JavaArrayOfByteArrayToStringVector(env, service_data_values,
-                                     &service_data_values_vector);
+  JavaArrayOfByteArrayToBytesVector(env, service_data_values,
+                                    &service_data_values_vector);
   BluetoothDeviceAndroid::ServiceDataMap service_data_map;
   for (size_t i = 0; i < service_data_keys_vector.size(); i++) {
-    service_data_map.insert(
-        {BluetoothUUID(service_data_keys_vector[i]),
-         std::vector<uint8_t>(service_data_values_vector[i].begin(),
-                              service_data_values_vector[i].end())});
+    service_data_map.insert({BluetoothUUID(service_data_keys_vector[i]),
+                             service_data_values_vector[i]});
   }
 
   std::vector<jint> manufacturer_data_keys_vector;
-  std::vector<std::string> manufacturer_data_values_vector;
+  std::vector<std::vector<uint8_t>> manufacturer_data_values_vector;
   JavaIntArrayToIntVector(env, manufacturer_data_keys,
                           &manufacturer_data_keys_vector);
-  JavaArrayOfByteArrayToStringVector(env, manufacturer_data_values,
-                                     &manufacturer_data_values_vector);
+  JavaArrayOfByteArrayToBytesVector(env, manufacturer_data_values,
+                                    &manufacturer_data_values_vector);
   BluetoothDeviceAndroid::ManufacturerDataMap manufacturer_data_map;
   for (size_t i = 0; i < manufacturer_data_keys_vector.size(); i++) {
     manufacturer_data_map.insert(
         {static_cast<uint16_t>(manufacturer_data_keys_vector[i]),
-         std::vector<uint8_t>(manufacturer_data_values_vector[i].begin(),
-                              manufacturer_data_values_vector[i].end())});
+         manufacturer_data_values_vector[i]});
   }
 
   int8_t clamped_tx_power = BluetoothDevice::ClampPower(tx_power);
@@ -322,6 +321,43 @@ void BluetoothAdapterAndroid::UpdateFilter(
   }
 }
 
+base::android::ScopedJavaLocalRef<jobject>
+BluetoothAdapterAndroid::CreateAndroidFilter(
+    const BluetoothDiscoveryFilter* discovery_filter) {
+  base::android::ScopedJavaLocalRef<jobject> android_filters =
+      Java_ChromeBluetoothScanFilterList_create(AttachCurrentThread());
+  const base::flat_set<device::BluetoothDiscoveryFilter::DeviceInfoFilter>*
+      device_filters = discovery_filter->GetDeviceFilters();
+  for (const auto& device_filter : *device_filters) {
+    base::android::ScopedJavaLocalRef<jobject> filter_builder =
+        Java_ChromeBluetoothScanFilterBuilder_create(AttachCurrentThread());
+    if (!device_filter.uuids.empty()) {
+      // Set the service UUID to the first UUID in the list because Android does
+      // not support filtering for multiple UUIDs. This will return a superset
+      // of the devices that advertise all UUIDs in the list and it will be
+      // filtered internally when returned.
+      Java_ChromeBluetoothScanFilterBuilder_setServiceUuid(
+          AttachCurrentThread(), filter_builder,
+          base::android::ConvertUTF8ToJavaString(
+              AttachCurrentThread(), device_filter.uuids.begin()->value()));
+    }
+    if (!device_filter.name.empty()) {
+      Java_ChromeBluetoothScanFilterBuilder_setDeviceName(
+          AttachCurrentThread(), filter_builder,
+          base::android::ConvertUTF8ToJavaString(AttachCurrentThread(),
+                                                 device_filter.name));
+    }
+    base::android::ScopedJavaLocalRef<jobject> scan_filter =
+        Java_ChromeBluetoothScanFilterBuilder_build(AttachCurrentThread(),
+                                                    filter_builder);
+    Java_ChromeBluetoothScanFilterList_addFilter(AttachCurrentThread(),
+                                                 android_filters, scan_filter);
+  }
+
+  return Java_ChromeBluetoothScanFilterList_getList(AttachCurrentThread(),
+                                                    android_filters);
+}
+
 void BluetoothAdapterAndroid::StartScanWithFilter(
     std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter,
     DiscoverySessionResultCallback callback) {
@@ -330,10 +366,9 @@ void BluetoothAdapterAndroid::StartScanWithFilter(
   DCHECK_EQ(NumDiscoverySessions(), 1);
   bool session_added = false;
   if (IsPowered()) {
-    // TODO(jameshollyer): convert discovery filter into java scan filter and
-    // add to start scan call
-    if (Java_ChromeBluetoothAdapter_startScan(AttachCurrentThread(),
-                                              j_adapter_)) {
+    auto android_scan_filter = CreateAndroidFilter(discovery_filter.get());
+    if (Java_ChromeBluetoothAdapter_startScan(AttachCurrentThread(), j_adapter_,
+                                              android_scan_filter)) {
       session_added = true;
 
       // Using a delayed task in order to give the adapter some time

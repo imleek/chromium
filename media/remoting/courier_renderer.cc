@@ -158,6 +158,9 @@ void CourierRenderer::SetCdm(CdmContext* cdm_context,
   NOTIMPLEMENTED();
 }
 
+void CourierRenderer::SetLatencyHint(
+    base::Optional<base::TimeDelta> latency_hint) {}
+
 void CourierRenderer::Flush(base::OnceClosure flush_cb) {
   VLOG(2) << __func__;
   DCHECK(media_task_runner_->BelongsToCurrentThread());
@@ -289,8 +292,8 @@ void CourierRenderer::OnDataPipeCreatedOnMainThread(
     scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
     base::WeakPtr<CourierRenderer> self,
     base::WeakPtr<RpcBroker> rpc_broker,
-    mojom::RemotingDataStreamSenderPtrInfo audio,
-    mojom::RemotingDataStreamSenderPtrInfo video,
+    mojo::PendingRemote<mojom::RemotingDataStreamSender> audio,
+    mojo::PendingRemote<mojom::RemotingDataStreamSender> video,
     mojo::ScopedDataPipeProducerHandle audio_handle,
     mojo::ScopedDataPipeProducerHandle video_handle) {
   media_task_runner->PostTask(
@@ -305,8 +308,8 @@ void CourierRenderer::OnDataPipeCreatedOnMainThread(
 }
 
 void CourierRenderer::OnDataPipeCreated(
-    mojom::RemotingDataStreamSenderPtrInfo audio,
-    mojom::RemotingDataStreamSenderPtrInfo video,
+    mojo::PendingRemote<mojom::RemotingDataStreamSender> audio,
+    mojo::PendingRemote<mojom::RemotingDataStreamSender> video,
     mojo::ScopedDataPipeProducerHandle audio_handle,
     mojo::ScopedDataPipeProducerHandle video_handle,
     int audio_rpc_handle,

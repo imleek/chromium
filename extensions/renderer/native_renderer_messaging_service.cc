@@ -5,7 +5,10 @@
 #include "extensions/renderer/native_renderer_messaging_service.h"
 
 #include <map>
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -34,9 +37,7 @@
 #include "gin/per_context_data.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_local_frame.h"
-#include "third_party/blink/public/web/web_scoped_user_gesture.h"
 #include "third_party/blink/public/web/web_scoped_window_focus_allowed_indicator.h"
-#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "v8/include/v8.h"
 
 namespace extensions {
@@ -316,19 +317,14 @@ void NativeRendererMessagingService::DeliverMessageToScriptContext(
   if (!ContextHasMessagePort(script_context, target_port_id))
     return;
 
-  std::unique_ptr<blink::WebScopedUserGesture> web_user_gesture;
   std::unique_ptr<blink::WebScopedWindowFocusAllowedIndicator>
       allow_window_focus;
-  if (message.user_gesture) {
-    web_user_gesture = std::make_unique<blink::WebScopedUserGesture>(
-        script_context->web_frame());
-
-    if (script_context->web_frame()) {
-      blink::WebDocument document = script_context->web_frame()->GetDocument();
-      allow_window_focus =
-          std::make_unique<blink::WebScopedWindowFocusAllowedIndicator>(
-              &document);
-    }
+  if (message.user_gesture && script_context->web_frame()) {
+    script_context->web_frame()->NotifyUserActivation();
+    blink::WebDocument document = script_context->web_frame()->GetDocument();
+    allow_window_focus =
+        std::make_unique<blink::WebScopedWindowFocusAllowedIndicator>(
+            &document);
   }
 
   DispatchOnMessageToListeners(script_context, message, target_port_id);
@@ -377,6 +373,8 @@ void NativeRendererMessagingService::DispatchOnConnectToListeners(
   }
   if (!info.source_url.is_empty())
     sender_builder.Set("url", info.source_url.spec());
+  if (info.source_origin)
+    sender_builder.Set("origin", info.source_origin->Serialize());
   if (source->frame_id >= 0)
     sender_builder.Set("frameId", source->frame_id);
 

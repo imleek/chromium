@@ -87,6 +87,7 @@
 #include "chrome/browser/ui/views/frame/contents_layout_manager.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
+#include "chrome/browser/ui/views/frame/top_container_loading_bar.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
 #include "chrome/browser/ui/views/frame/web_contents_close_handler.h"
 #include "chrome/browser/ui/views/frame/web_footer_experiment_view.h"
@@ -99,7 +100,7 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/location_bar/star_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
-#include "chrome/browser/ui/views/page_action/page_action_icon_container_view.h"
+#include "chrome/browser/ui/views/page_action/page_action_icon_controller.h"
 #include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
 #include "chrome/browser/ui/views/profiles/profile_menu_view_base.h"
 #include "chrome/browser/ui/views/qrcode_generator/qrcode_generator_bubble.h"
@@ -312,8 +313,11 @@ class ContentsSeparator : public views::Separator {
   void AddedToWidget() override { UpdateColor(); }
 
   void UpdateColor() {
-    SetColor(GetThemeProvider()->GetColor(
-        ThemeProperties::COLOR_TOOLBAR_CONTENT_AREA_SEPARATOR));
+    const ui::ThemeProvider* const theme_provider = GetThemeProvider();
+    SetColor(color_utils::GetResultingPaintColor(
+        theme_provider->GetColor(
+            ThemeProperties::COLOR_TOOLBAR_CONTENT_AREA_SEPARATOR),
+        theme_provider->GetColor(ThemeProperties::COLOR_TOOLBAR)));
   }
 };
 
@@ -509,6 +513,10 @@ BrowserView* BrowserView::GetBrowserViewForBrowser(const Browser* browser) {
 // static
 void BrowserView::SetDisableRevealerDelayForTesting(bool disable) {
   g_disable_revealer_delay_for_testing = disable;
+}
+
+void BrowserView::DisableTopControlsSlideForTesting() {
+  top_controls_slide_controller_.reset();
 }
 
 void BrowserView::InitStatusBubble() {
@@ -891,6 +899,8 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
       // read out to screen readers, even if focus doesn't actually change.
       GetWidget()->GetFocusManager()->ClearFocus();
     }
+    if (loading_bar_)
+      loading_bar_->SetWebContents(nullptr);
     contents_web_view_->SetWebContents(nullptr);
     devtools_web_view_->SetWebContents(nullptr);
   }
@@ -932,6 +942,8 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
     }
 
     web_contents_close_handler_->ActiveTabChanged();
+    if (loading_bar_)
+      loading_bar_->SetWebContents(new_contents);
     contents_web_view_->SetWebContents(new_contents);
     SadTabHelper* sad_tab_helper = SadTabHelper::FromWebContents(new_contents);
     if (sad_tab_helper)
@@ -961,6 +973,8 @@ void BrowserView::OnTabDetached(content::WebContents* contents,
     // freed. This is because the focus manager performs some operations
     // on the selected WebContents when it is removed.
     web_contents_close_handler_->ActiveTabChanged();
+    if (loading_bar_)
+      loading_bar_->SetWebContents(nullptr);
     contents_web_view_->SetWebContents(nullptr);
     infobar_container_->ChangeInfoBarManager(nullptr);
     app_banner_manager_observer_.RemoveAll();
@@ -1043,18 +1057,20 @@ void BrowserView::Restore() {
 }
 
 void BrowserView::EnterFullscreen(const GURL& url,
-                                  ExclusiveAccessBubbleType bubble_type) {
+                                  ExclusiveAccessBubbleType bubble_type,
+                                  const int64_t display_id) {
   if (IsFullscreen())
     return;  // Nothing to do.
 
-  ProcessFullscreen(true, url, bubble_type);
+  ProcessFullscreen(true, url, bubble_type, display_id);
 }
 
 void BrowserView::ExitFullscreen() {
   if (!IsFullscreen())
     return;  // Nothing to do.
 
-  ProcessFullscreen(false, GURL(), EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE);
+  ProcessFullscreen(false, GURL(), EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE,
+                    display::kInvalidDisplayId);
 }
 
 void BrowserView::UpdateExclusiveAccessExitBubbleContent(
@@ -1122,7 +1138,8 @@ void BrowserView::FullscreenStateChanged() {
       fullscreen, GURL(),
       fullscreen
           ? GetExclusiveAccessManager()->GetExclusiveAccessExitBubbleType()
-          : EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE);
+          : EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE,
+      display::kInvalidDisplayId);
   frame_->GetFrameView()->OnFullscreenStateChanged();
 }
 
@@ -1134,10 +1151,11 @@ void BrowserView::SetToolbarButtonProvider(ToolbarButtonProvider* provider) {
           browser_.get(), toolbar_button_provider_);
 }
 
-bool BrowserView::UpdatePageActionIcon(PageActionIconType type) {
+void BrowserView::UpdatePageActionIcon(PageActionIconType type) {
   PageActionIconView* icon =
       toolbar_button_provider_->GetPageActionIconView(type);
-  return icon ? icon->Update() : false;
+  if (icon)
+    icon->Update();
 }
 
 autofill::AutofillBubbleHandler* BrowserView::GetAutofillBubbleHandler() {
@@ -1212,18 +1230,14 @@ void BrowserView::FocusToolbar() {
   toolbar_button_provider_->FocusToolbar();
 }
 
-ToolbarActionsBar* BrowserView::GetToolbarActionsBar() {
-  CHECK(!base::FeatureList::IsEnabled(features::kExtensionsToolbarMenu));
-
-  BrowserActionsContainer* container =
-      toolbar_button_provider_->GetBrowserActionsContainer();
-  return container ? container->toolbar_actions_bar() : nullptr;
-}
-
 ExtensionsContainer* BrowserView::GetExtensionsContainer() {
   if (toolbar_ && toolbar_->extensions_container())
     return toolbar_->extensions_container();
-  return GetToolbarActionsBar();
+
+  CHECK(!base::FeatureList::IsEnabled(features::kExtensionsToolbarMenu));
+  BrowserActionsContainer* container =
+      toolbar_button_provider_->GetBrowserActionsContainer();
+  return container ? container->toolbar_actions_bar() : nullptr;
 }
 
 void BrowserView::ToolbarSizeChanged(bool is_animating) {
@@ -1282,7 +1296,7 @@ void BrowserView::FocusInactivePopupForAccessibility() {
 
   if (toolbar_ && toolbar_->toolbar_account_icon_container() &&
       toolbar_->toolbar_account_icon_container()
-          ->page_action_icon_container()
+          ->page_action_icon_controller()
           ->ActivateFirstInactiveBubbleForAccessibility()) {
     return;
   }
@@ -1770,6 +1784,9 @@ void BrowserView::OnTabStripModelChanged(
   if (selection.selection_changed())
     toolbar_->InvalidateLayout();
 
+  if (loading_bar_)
+    loading_bar_->SetWebContents(GetActiveWebContents());
+
   if (change.type() != TabStripModelChange::kInserted)
     return;
 
@@ -1979,6 +1996,9 @@ base::string16 BrowserView::GetAccessibleTabLabel(bool include_app_name,
     case TabAlertState::BLUETOOTH_CONNECTED:
       return l10n_util::GetStringFUTF16(
           IDS_TAB_AX_LABEL_BLUETOOTH_CONNECTED_FORMAT, title);
+    case TabAlertState::HID_CONNECTED:
+      return l10n_util::GetStringFUTF16(IDS_TAB_AX_LABEL_HID_CONNECTED_FORMAT,
+                                        title);
     case TabAlertState::SERIAL_CONNECTED:
       return l10n_util::GetStringFUTF16(
           IDS_TAB_AX_LABEL_SERIAL_CONNECTED_FORMAT, title);
@@ -2099,7 +2119,7 @@ gfx::ImageSkia BrowserView::GetWindowIcon() {
     return rb.GetImageNamed(override_window_icon_resource_id).AsImageSkia();
 #endif
 
-  if (browser_->deprecated_is_app())
+  if (browser_->deprecated_is_app() || browser_->is_type_popup())
     return browser_->GetCurrentPageIcon().AsImageSkia();
 
   return gfx::ImageSkia();
@@ -2408,6 +2428,17 @@ void BrowserView::Layout() {
   if (!initialized_ || in_process_fullscreen_)
     return;
 
+  // Allow only a single layout operation once top controls sliding begins.
+  if (top_controls_slide_controller_ &&
+      top_controls_slide_controller_->IsEnabled() &&
+      top_controls_slide_controller_->IsTopControlsSlidingInProgress()) {
+    if (did_first_layout_while_top_controls_are_sliding_)
+      return;
+    did_first_layout_while_top_controls_are_sliding_ = true;
+  } else {
+    did_first_layout_while_top_controls_are_sliding_ = false;
+  }
+
   views::View::Layout();
 
   // TODO(jamescook): Why was this in the middle of layout code?
@@ -2425,6 +2456,11 @@ void BrowserView::Layout() {
   WebContents* contents = browser_->tab_strip_model()->GetActiveWebContents();
   if (contents && PermissionRequestManager::FromWebContents(contents))
     PermissionRequestManager::FromWebContents(contents)->UpdateAnchorPosition();
+
+#if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
+  if (webui_tab_strip_)
+    webui_tab_strip_->UpdatePromoBubbleBounds();
+#endif  // BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
 }
 
 void BrowserView::OnGestureEvent(ui::GestureEvent* event) {
@@ -2659,7 +2695,8 @@ void BrowserView::InitViews() {
 
 void BrowserView::MaybeInitializeWebUITabStrip() {
 #if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
-  if (WebUITabStripContainerView::UseTouchableTabStrip()) {
+  if (browser_->SupportsWindowFeature(Browser::FEATURE_TABSTRIP) &&
+      WebUITabStripContainerView::UseTouchableTabStrip()) {
     if (!webui_tab_strip_) {
       // We use |contents_container_| here so that enabling or disabling
       // devtools won't affect the tab sizes. We still use only
@@ -2670,13 +2707,21 @@ void BrowserView::MaybeInitializeWebUITabStrip() {
       webui_tab_strip_ = top_container_->AddChildView(
           std::make_unique<WebUITabStripContainerView>(browser_.get(),
                                                        contents_container_));
+      loading_bar_ = top_container_->AddChildView(
+          std::make_unique<TopContainerLoadingBar>());
+      loading_bar_->SetWebContents(GetActiveWebContents());
     }
   } else if (webui_tab_strip_) {
     top_container_->RemoveChildView(webui_tab_strip_);
     delete webui_tab_strip_;
     webui_tab_strip_ = nullptr;
+
+    top_container_->RemoveChildView(loading_bar_);
+    delete loading_bar_;
+    loading_bar_ = nullptr;
   }
   GetBrowserViewLayout()->set_webui_tab_strip(webui_tab_strip_);
+  GetBrowserViewLayout()->set_loading_bar(loading_bar_);
   if (toolbar_)
     toolbar_->UpdateForWebUITabStrip();
 #endif  // BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
@@ -2832,7 +2877,8 @@ void BrowserView::UpdateUIForContents(WebContents* contents) {
 
 void BrowserView::ProcessFullscreen(bool fullscreen,
                                     const GURL& url,
-                                    ExclusiveAccessBubbleType bubble_type) {
+                                    ExclusiveAccessBubbleType bubble_type,
+                                    const int64_t display_id) {
   if (in_process_fullscreen_)
     return;
   in_process_fullscreen_ = true;
@@ -2865,8 +2911,22 @@ void BrowserView::ProcessFullscreen(bool fullscreen,
     }
   }
 
-  // Toggle fullscreen mode.
+  // Toggle fullscreen mode; move the window between displays as needed.
+  // TODO(crbug.com/1034783): Implement at lower layers to avoid transitions.
+  if (fullscreen && display_id != display::kInvalidDisplayId) {
+    display::Screen* screen = display::Screen::GetScreen();
+    display::Display display;
+    if (screen && screen->GetDisplayWithDisplayId(display_id, &display)) {
+      pre_fullscreen_bounds_ = frame_->GetWindowBoundsInScreen();
+      frame_->SetBounds(
+          {display.work_area().origin(), pre_fullscreen_bounds_->size()});
+    }
+  }
   frame_->SetFullscreen(fullscreen);
+  if (!fullscreen && pre_fullscreen_bounds_) {
+    frame_->SetBounds(*pre_fullscreen_bounds_);
+    pre_fullscreen_bounds_.reset();
+  }
 
   // Enable immersive before the browser refreshes its list of enabled commands.
   const bool should_stay_in_immersive =

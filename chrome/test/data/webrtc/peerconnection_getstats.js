@@ -117,8 +117,11 @@ let kRTCInboundRtpStreamStats = new RTCStats(kRTCReceivedRtpStreamStats, {
   remoteId: 'string',
   framesDecoded: 'number',
   keyFramesDecoded: 'number',
+  frameBitDepth: 'number',
   qpSum: 'number',
   totalDecodeTime: 'number',
+  totalInterFrameDelay: 'number',
+  totalSquaredInterFrameDelay: 'number',
   lastPacketReceivedTimestamp: 'number',
   averageRtcpInterval: 'number',
   fecPacketsReceived: 'number',
@@ -185,6 +188,7 @@ let kRTCOutboundRtpStreamStats = new RTCStats(kRTCSentRtpStreamStats, {
   headerBytesSent: 'number',
   targetBitrate: 'number',
   totalEncodedBytesTarget: 'number',
+  frameBitDepth: 'number',
   framesEncoded: 'number',
   keyFramesEncoded: 'number',
   qpSum: 'number',
@@ -248,6 +252,7 @@ addRTCStatsToWhitelist(
 const kRTCVideoSourceStats = new RTCStats(kRTCMediaSourceStats, {
   width: 'number',
   height: 'number',
+  bitDepth: 'number',
   frames: 'number',
   framesPerSecond: 'number',
 });

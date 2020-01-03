@@ -20,7 +20,6 @@
 #include "third_party/blink/renderer/modules/vibration/navigator_vibration.h"
 
 #include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
 #include "third_party/blink/renderer/core/frame/intervention.h"
@@ -78,7 +77,7 @@ bool NavigatorVibration::vibrate(Navigator& navigator,
   if (!frame->GetPage()->IsPageVisible())
     return false;
 
-  if (!frame->HasBeenActivated()) {
+  if (!frame->HasStickyUserActivation()) {
     String message;
     if (frame->IsCrossOriginSubframe()) {
       message =
@@ -104,7 +103,7 @@ bool NavigatorVibration::vibrate(Navigator& navigator,
 void NavigatorVibration::CollectHistogramMetrics(const Navigator& navigator) {
   NavigatorVibrationType type;
   LocalFrame* frame = navigator.GetFrame();
-  bool user_gesture = frame->HasBeenActivated();
+  bool user_gesture = frame->HasStickyUserActivation();
   UseCounter::Count(navigator.DomWindow()->document(),
                     WebFeature::kNavigatorVibrate);
   if (!frame->IsMainFrame()) {

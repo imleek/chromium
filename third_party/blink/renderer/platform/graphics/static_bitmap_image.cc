@@ -20,20 +20,6 @@
 
 namespace blink {
 
-scoped_refptr<StaticBitmapImage> StaticBitmapImage::Create(
-    sk_sp<SkImage> image,
-    base::WeakPtr<WebGraphicsContext3DProviderWrapper>
-        context_provider_wrapper) {
-  if (!image)
-    return nullptr;
-  if (image->isTextureBacked()) {
-    CHECK(context_provider_wrapper);
-    return AcceleratedStaticBitmapImage::CreateFromSkImage(
-        image, std::move(context_provider_wrapper));
-  }
-  return UnacceleratedStaticBitmapImage::Create(image);
-}
-
 scoped_refptr<StaticBitmapImage> StaticBitmapImage::Create(PaintImage image) {
   DCHECK(!image.GetSkImage()->isTextureBacked());
   return UnacceleratedStaticBitmapImage::Create(std::move(image));
@@ -42,7 +28,7 @@ scoped_refptr<StaticBitmapImage> StaticBitmapImage::Create(PaintImage image) {
 scoped_refptr<StaticBitmapImage> StaticBitmapImage::Create(
     sk_sp<SkData> data,
     const SkImageInfo& info) {
-  return Create(
+  return UnacceleratedStaticBitmapImage::Create(
       SkImage::MakeRasterData(info, std::move(data), info.minRowBytes()));
 }
 
@@ -62,32 +48,13 @@ void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
                         WebCoreClampingModeToSkiaRectConstraint(clamp_mode));
 }
 
-scoped_refptr<StaticBitmapImage> StaticBitmapImage::ConvertToColorSpace(
-    sk_sp<SkColorSpace> color_space,
-    SkColorType color_type) {
-  DCHECK(color_space);
-  sk_sp<SkImage> skia_image = PaintImageForCurrentFrame().GetSkImage();
-
-  // If we don't need to change the color type, use SkImage::makeColorSpace()
-  if (skia_image->colorType() == color_type) {
-    skia_image = skia_image->makeColorSpace(color_space);
-  } else {
-    skia_image =
-        skia_image->makeColorTypeAndColorSpace(color_type, color_space);
-  }
-
-  return StaticBitmapImage::Create(skia_image, skia_image->isTextureBacked()
-                                                   ? ContextProviderWrapper()
-                                                   : nullptr);
-}
-
-size_t StaticBitmapImage::GetSizeInBytes(
+base::CheckedNumeric<size_t> StaticBitmapImage::GetSizeInBytes(
     const IntRect& rect,
     const CanvasColorParams& color_params) {
   uint8_t bytes_per_pixel = color_params.BytesPerPixel();
   base::CheckedNumeric<size_t> data_size = bytes_per_pixel;
   data_size *= rect.Size().Area();
-  return data_size.ValueOrDefault(0);
+  return data_size;
 }
 
 bool StaticBitmapImage::MayHaveStrayArea(
@@ -106,7 +73,7 @@ bool StaticBitmapImage::CopyToByteArray(
     base::span<uint8_t> dst,
     const IntRect& rect,
     const CanvasColorParams& color_params) {
-  DCHECK_EQ(dst.size(), GetSizeInBytes(rect, color_params));
+  DCHECK_EQ(dst.size(), GetSizeInBytes(rect, color_params).ValueOrDie());
 
   if (!src_image)
     return true;

@@ -10,7 +10,9 @@
 #include <vector>
 
 #include "base/bind_helpers.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
+#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
@@ -176,25 +178,33 @@ class SiteSettingsHandlerTest : public testing::Test {
         kCookies(site_settings::ContentSettingsTypeToGroupName(
             ContentSettingsType::COOKIES)),
         kFlash(site_settings::ContentSettingsTypeToGroupName(
-            ContentSettingsType::PLUGINS)),
-        handler_(&profile_, app_registrar_) {
+            ContentSettingsType::PLUGINS)) {
 #if defined(OS_CHROMEOS)
     user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
         std::make_unique<chromeos::MockUserManager>());
 #endif
+
+    // Fully initialize |profile_| in the constructor since some children
+    // classes need it right away for SetUp().
+    DCHECK(profile_dir_.CreateUniqueTempDir());
+    TestingProfile::Builder profile_builder;
+    profile_builder.SetPath(profile_dir_.GetPath());
+    profile_ = profile_builder.Build();
   }
 
   void SetUp() override {
+    handler_ =
+        std::make_unique<SiteSettingsHandler>(profile_.get(), app_registrar_);
     handler()->set_web_ui(web_ui());
     handler()->AllowJavascript();
     web_ui()->ClearTrackedCalls();
   }
 
-  TestingProfile* profile() { return &profile_; }
+  TestingProfile* profile() { return profile_.get(); }
   TestingProfile* incognito_profile() { return incognito_profile_; }
   web_app::TestAppRegistrar& app_registrar() { return app_registrar_; }
   content::TestWebUI* web_ui() { return &web_ui_; }
-  SiteSettingsHandler* handler() { return &handler_; }
+  SiteSettingsHandler* handler() { return handler_.get(); }
 
   void ValidateBlockAutoplay(bool expected_value, bool expected_enabled) {
     const content::TestWebUI::CallData& data = *web_ui()->call_data().back();
@@ -390,12 +400,12 @@ class SiteSettingsHandlerTest : public testing::Test {
   }
 
   void CreateIncognitoProfile() {
-    incognito_profile_ = TestingProfile::Builder().BuildIncognito(&profile_);
+    incognito_profile_ = TestingProfile::Builder().BuildIncognito(profile());
   }
 
   virtual void DestroyIncognitoProfile() {
-    profile_.SetOffTheRecordProfile(nullptr);
-    ASSERT_FALSE(profile_.HasOffTheRecordProfile());
+    profile_->SetOffTheRecordProfile(nullptr);
+    ASSERT_FALSE(profile_->HasOffTheRecordProfile());
     incognito_profile_ = nullptr;
   }
 
@@ -470,12 +480,16 @@ class SiteSettingsHandlerTest : public testing::Test {
   const std::string kFlash;
 
  private:
+  // A profile directory that outlives |task_environment_| is needed because
+  // TestingProfile::CreateHistoryService uses the directory to host a
+  // database. See https://crbug.com/546640 for more details.
+  base::ScopedTempDir profile_dir_;
   content::BrowserTaskEnvironment task_environment_;
-  TestingProfile profile_;
+  std::unique_ptr<TestingProfile> profile_;
   TestingProfile* incognito_profile_;
   web_app::TestAppRegistrar app_registrar_;
   content::TestWebUI web_ui_;
-  SiteSettingsHandler handler_;
+  std::unique_ptr<SiteSettingsHandler> handler_;
 #if defined(OS_CHROMEOS)
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
 #endif
@@ -529,7 +543,7 @@ TEST_F(SiteSettingsHandlerTest, MAYBE_GetAllSites) {
     EXPECT_EQ(kCallbackId, data.arg1()->GetString());
     ASSERT_TRUE(data.arg2()->GetBool());
 
-    base::span<const base::Value> site_groups = data.arg3()->GetList();
+    base::Value::ConstListView site_groups = data.arg3()->GetList();
     EXPECT_EQ(0UL, site_groups.size());
   }
 
@@ -551,12 +565,12 @@ TEST_F(SiteSettingsHandlerTest, MAYBE_GetAllSites) {
     EXPECT_EQ(kCallbackId, data.arg1()->GetString());
     ASSERT_TRUE(data.arg2()->GetBool());
 
-    base::span<const base::Value> site_groups = data.arg3()->GetList();
+    base::Value::ConstListView site_groups = data.arg3()->GetList();
     EXPECT_EQ(1UL, site_groups.size());
     for (const base::Value& site_group : site_groups) {
       const std::string& etld_plus1_string =
           site_group.FindKey("etldPlus1")->GetString();
-      base::span<const base::Value> origin_list =
+      base::Value::ConstListView origin_list =
           site_group.FindKey("origins")->GetList();
       EXPECT_EQ("example.com", etld_plus1_string);
       EXPECT_EQ(2UL, origin_list.size());
@@ -580,12 +594,12 @@ TEST_F(SiteSettingsHandlerTest, MAYBE_GetAllSites) {
     EXPECT_EQ(kCallbackId, data.arg1()->GetString());
     ASSERT_TRUE(data.arg2()->GetBool());
 
-    base::span<const base::Value> site_groups = data.arg3()->GetList();
+    base::Value::ConstListView site_groups = data.arg3()->GetList();
     EXPECT_EQ(2UL, site_groups.size());
     for (const base::Value& site_group : site_groups) {
       const std::string& etld_plus1_string =
           site_group.FindKey("etldPlus1")->GetString();
-      base::span<const base::Value> origin_list =
+      base::Value::ConstListView origin_list =
           site_group.FindKey("origins")->GetList();
       if (etld_plus1_string == "example2.net") {
         EXPECT_EQ(1UL, origin_list.size());
@@ -604,8 +618,8 @@ TEST_F(SiteSettingsHandlerTest, MAYBE_GetAllSites) {
   auto_blocker->SetClockForTesting(&clock);
   const GURL url4("https://example2.co.uk");
   for (int i = 0; i < 3; ++i) {
-    auto_blocker->RecordDismissAndEmbargo(url4,
-                                          ContentSettingsType::NOTIFICATIONS);
+    auto_blocker->RecordDismissAndEmbargo(
+        url4, ContentSettingsType::NOTIFICATIONS, false);
   }
   EXPECT_EQ(
       CONTENT_SETTING_BLOCK,
@@ -619,7 +633,7 @@ TEST_F(SiteSettingsHandlerTest, MAYBE_GetAllSites) {
     EXPECT_EQ(kCallbackId, data.arg1()->GetString());
     ASSERT_TRUE(data.arg2()->GetBool());
 
-    base::span<const base::Value> site_groups = data.arg3()->GetList();
+    base::Value::ConstListView site_groups = data.arg3()->GetList();
     EXPECT_EQ(3UL, site_groups.size());
   }
 
@@ -633,7 +647,7 @@ TEST_F(SiteSettingsHandlerTest, MAYBE_GetAllSites) {
     EXPECT_EQ(kCallbackId, data.arg1()->GetString());
     ASSERT_TRUE(data.arg2()->GetBool());
 
-    base::span<const base::Value> site_groups = data.arg3()->GetList();
+    base::Value::ConstListView site_groups = data.arg3()->GetList();
     EXPECT_EQ(2UL, site_groups.size());
     EXPECT_EQ("example.com", site_groups[0].FindKey("etldPlus1")->GetString());
     EXPECT_EQ("example2.net", site_groups[1].FindKey("etldPlus1")->GetString());
@@ -642,8 +656,8 @@ TEST_F(SiteSettingsHandlerTest, MAYBE_GetAllSites) {
   // Add an expired embargo setting to an existing eTLD+1 group and make sure it
   // still appears.
   for (int i = 0; i < 3; ++i) {
-    auto_blocker->RecordDismissAndEmbargo(url3,
-                                          ContentSettingsType::NOTIFICATIONS);
+    auto_blocker->RecordDismissAndEmbargo(
+        url3, ContentSettingsType::NOTIFICATIONS, false);
   }
   EXPECT_EQ(
       CONTENT_SETTING_BLOCK,
@@ -662,7 +676,7 @@ TEST_F(SiteSettingsHandlerTest, MAYBE_GetAllSites) {
     EXPECT_EQ(kCallbackId, data.arg1()->GetString());
     ASSERT_TRUE(data.arg2()->GetBool());
 
-    base::span<const base::Value> site_groups = data.arg3()->GetList();
+    base::Value::ConstListView site_groups = data.arg3()->GetList();
     EXPECT_EQ(2UL, site_groups.size());
     EXPECT_EQ("example.com", site_groups[0].FindKey("etldPlus1")->GetString());
     EXPECT_EQ("example2.net", site_groups[1].FindKey("etldPlus1")->GetString());
@@ -671,8 +685,8 @@ TEST_F(SiteSettingsHandlerTest, MAYBE_GetAllSites) {
   // Add an expired embargo to a new eTLD+1 and make sure it doesn't appear.
   const GURL url5("http://test.example5.com");
   for (int i = 0; i < 3; ++i) {
-    auto_blocker->RecordDismissAndEmbargo(url5,
-                                          ContentSettingsType::NOTIFICATIONS);
+    auto_blocker->RecordDismissAndEmbargo(
+        url5, ContentSettingsType::NOTIFICATIONS, false);
   }
   EXPECT_EQ(
       CONTENT_SETTING_BLOCK,
@@ -691,7 +705,7 @@ TEST_F(SiteSettingsHandlerTest, MAYBE_GetAllSites) {
     EXPECT_EQ(kCallbackId, data.arg1()->GetString());
     ASSERT_TRUE(data.arg2()->GetBool());
 
-    base::span<const base::Value> site_groups = data.arg3()->GetList();
+    base::Value::ConstListView site_groups = data.arg3()->GetList();
     EXPECT_EQ(2UL, site_groups.size());
     EXPECT_EQ("example.com", site_groups[0].FindKey("etldPlus1")->GetString());
     EXPECT_EQ("example2.net", site_groups[1].FindKey("etldPlus1")->GetString());

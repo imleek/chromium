@@ -22,7 +22,7 @@
 #include "chrome/browser/extensions/chrome_extension_host_delegate.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/extensions/chrome_extensions_browser_api_provider.h"
-#include "chrome/browser/extensions/chrome_extensions_interface_registration.h"
+#include "chrome/browser/extensions/chrome_extensions_browser_interface_binders.h"
 #include "chrome/browser/extensions/chrome_kiosk_delegate.h"
 #include "chrome/browser/extensions/chrome_process_manager_delegate.h"
 #include "chrome/browser/extensions/chrome_url_request_util.h"
@@ -56,7 +56,7 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
-#include "extensions/browser/mojo/interface_registration.h"
+#include "extensions/browser/extensions_browser_interface_binders.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/browser/url_request_util.h"
 #include "extensions/common/features/feature_channel.h"
@@ -327,13 +327,14 @@ ChromeExtensionsBrowserClient::GetExtensionSystemFactory() {
   return ExtensionSystemFactory::GetInstance();
 }
 
-void ChromeExtensionsBrowserClient::RegisterExtensionInterfaces(
-    service_manager::BinderRegistryWithArgs<content::RenderFrameHost*>*
-        registry,
+void ChromeExtensionsBrowserClient::RegisterBrowserInterfaceBindersForFrame(
+    service_manager::BinderMapWithContext<content::RenderFrameHost*>*
+        binder_map,
     content::RenderFrameHost* render_frame_host,
     const Extension* extension) const {
-  RegisterInterfacesForExtension(registry, render_frame_host, extension);
-  RegisterChromeInterfacesForExtension(registry, render_frame_host, extension);
+  PopulateExtensionFrameBinders(binder_map, render_frame_host, extension);
+  PopulateChromeFrameBindersForExtension(binder_map, render_frame_host,
+                                         extension);
 }
 
 std::unique_ptr<RuntimeAPIDelegate>

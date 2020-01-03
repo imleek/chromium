@@ -15,6 +15,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "device/vr/buildflags/buildflags.h"
+#include "device/vr/public/cpp/session_mode.h"
 #include "device/vr/vr_device.h"
 #include "ui/gfx/transform.h"
 #include "ui/gfx/transform_util.h"
@@ -122,7 +123,6 @@ device::mojom::VRDisplayInfoPtr ValidateVRDisplayInfo(
       IsValidTransform(info->stage_parameters->standing_transform, 1000000)) {
     ret->stage_parameters = device::mojom::VRStageParameters::New(
         info->stage_parameters->standing_transform,
-        info->stage_parameters->size_x, info->stage_parameters->size_z,
         info->stage_parameters->bounds);
   }
 
@@ -186,6 +186,7 @@ constexpr device::mojom::XRSessionFeature kOpenXRFeatures[] = {
     device::mojom::XRSessionFeature::REF_SPACE_LOCAL,
     device::mojom::XRSessionFeature::REF_SPACE_LOCAL_FLOOR,
     device::mojom::XRSessionFeature::REF_SPACE_BOUNDED_FLOOR,
+    device::mojom::XRSessionFeature::REF_SPACE_UNBOUNDED,
 };
 #endif
 
@@ -245,7 +246,7 @@ bool BrowserXRRuntime::SupportsFeature(
       // Only support DOM overlay if the feature flag is enabled.
       if (feature ==
           device::mojom::XRSessionFeature::DOM_OVERLAY_FOR_HANDHELD_AR) {
-        return base::FeatureList::IsEnabled(features::kWebXrArDOMOverlay);
+        return base::FeatureList::IsEnabled(features::kWebXrIncubations);
       }
       return ContainsFeature(kARCoreDeviceFeatures, feature);
     case device::mojom::XRDeviceId::ORIENTATION_DEVICE_ID:
@@ -448,7 +449,7 @@ void BrowserXRRuntime::OnRequestSessionResult(
         immersive_session_controller) {
   if (session && service) {
     DVLOG(2) << __func__ << ": id=" << id_;
-    if (options->immersive) {
+    if (device::XRSessionModeUtils::IsImmersive(options->mode)) {
       presenting_service_ = service.get();
       immersive_session_controller_.Bind(
           std::move(immersive_session_controller));

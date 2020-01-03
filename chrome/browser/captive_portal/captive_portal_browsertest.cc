@@ -34,13 +34,12 @@
 #include "chrome/browser/captive_portal/captive_portal_tab_reloader.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ssl/captive_portal_blocking_page.h"
-#include "chrome/browser/ssl/ssl_blocking_page.h"
 #include "chrome/browser/ssl/ssl_error_handler.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/navigation_correction_tab_observer.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -50,8 +49,10 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
+#include "components/security_interstitials/content/captive_portal_blocking_page.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
+#include "components/security_interstitials/content/ssl_blocking_page.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/interstitial_page.h"
@@ -556,6 +557,7 @@ class TabActivationWaiter : public TabStripModelObserver {
 class CaptivePortalBrowserTest : public InProcessBrowserTest {
  public:
   CaptivePortalBrowserTest();
+  ~CaptivePortalBrowserTest() override;
 
   // InProcessBrowserTest:
   void SetUpOnMainThread() override;
@@ -895,7 +897,13 @@ class CaptivePortalBrowserTest : public InProcessBrowserTest {
 };
 
 CaptivePortalBrowserTest::CaptivePortalBrowserTest()
-    : behind_captive_portal_(true) {}
+    : behind_captive_portal_(true) {
+  NavigationCorrectionTabObserver::SetAllowEnableCorrectionsForTesting(true);
+}
+
+CaptivePortalBrowserTest::~CaptivePortalBrowserTest() {
+  NavigationCorrectionTabObserver::SetAllowEnableCorrectionsForTesting(false);
+}
 
 void CaptivePortalBrowserTest::SetUpOnMainThread() {
   url_loader_interceptor_ =
@@ -1842,6 +1850,45 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, LoginSlow) {
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, LoginFastTimeout) {
   FastTimeoutBehindCaptivePortal(browser(), true);
   Login(browser(), 0, 1);
+}
+
+// Test that a navigation in a tab that is part of a captive portal windoow
+// has secure DNS disabled.
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
+                       CaptivePortalWindowNavigationDisableSecureDns) {
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  CaptivePortalTabHelper::FromWebContents(web_contents)
+      ->set_is_captive_portal_window();
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/title1.html"));
+  url::Origin origin = url::Origin::Create(url);
+
+  // Disable the interceptor that was set up during construction of the test.
+  // This is necessary since only one interceptor is allowed.
+  url_loader_interceptor_.reset();
+
+  std::unique_ptr<content::URLLoaderInterceptor> url_loader_interceptor;
+  bool invoked_interceptor = false;
+  url_loader_interceptor = std::make_unique<content::URLLoaderInterceptor>(
+      base::BindLambdaForTesting(
+          [&](content::URLLoaderInterceptor::RequestParams* params) {
+            if (params->url_request.url.spec().find("title1.html") !=
+                std::string::npos) {
+              invoked_interceptor = true;
+              EXPECT_TRUE(params->url_request.trusted_params);
+              EXPECT_TRUE(
+                  params->url_request.trusted_params->disable_secure_dns);
+              EXPECT_EQ(
+                  net::NetworkIsolationKey(origin, origin),
+                  params->url_request.trusted_params->network_isolation_key);
+            }
+            return false;
+          }));
+
+  ui_test_utils::NavigateToURL(browser(), url);
+  EXPECT_TRUE(invoked_interceptor);
 }
 
 // A cert error triggers a captive portal check and results in opening a login

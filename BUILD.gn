@@ -13,6 +13,7 @@ import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build/util/generate_wrapper.gni")
+import("//chrome/browser/media/router/features.gni")
 import("//components/nacl/features.gni")
 import("//device/vr/buildflags/buildflags.gni")
 import("//extensions/buildflags/buildflags.gni")
@@ -100,7 +101,6 @@ group("gn_all") {
   if (!is_ios && !is_android && !is_chromecast && !is_fuchsia) {
     deps += [
       "//chrome",
-      "//chrome/browser/ui/color:dump_colors",
       "//chrome/test:browser_tests",
       "//chrome/test:interactive_ui_tests",
       "//chrome/test:sync_integration_tests",
@@ -150,7 +150,6 @@ group("gn_all") {
       "//ui/accessibility:accessibility_unittests",
       "//ui/accessibility/extensions:extension_tests",
       "//ui/accessibility/extensions:extensions",
-      "//ui/color:color_unittests",
     ]
   }
 
@@ -211,6 +210,10 @@ group("gn_all") {
       "//components/cronet:cronet_unittests",
       "//components/viz/demo:viz_demo",
     ]
+  }
+
+  if (enable_openscreen) {
+    deps += [ "//chrome/browser/media/router:openscreen_unittests" ]
   }
 
   if (!is_ios && !is_fuchsia) {
@@ -348,6 +351,7 @@ group("gn_all") {
       "//ui/android:ui_junit_tests",
       "//weblayer/public/java:client_aar",
       "//weblayer/shell/android:weblayer_shell_apk",
+      "//weblayer/shell/android:weblayer_support_apk",
     ]
     deps -= [
       "//net:net_perftests",
@@ -367,7 +371,7 @@ group("gn_all") {
 
     if (!is_chromecast) {
       deps += [
-        "//android_webview",
+        "//android_webview:empty_group",
         "//android_webview/test",
         "//android_webview/tools/automated_ui_tests:webview_ui_test_app",
         "//android_webview/tools/system_webview_shell",
@@ -651,9 +655,13 @@ group("gn_all") {
   }
 
   if (is_chromecast) {
-    deps += [ "//chromecast:cast_shell" ]
+    deps += [ "//chromecast:cast_test_lists" ]
+
+    if (!is_fuchsia) {
+      deps += [ "//chromecast:cast_shell" ]
+    }
     if (enable_extensions && use_aura) {
-      deps += [ "//chrome/browser/resources/chromeos/chromevox" ]
+      deps += [ "//chrome/browser/resources/chromeos/accessibility/chromevox" ]
     }
   }
 
@@ -812,6 +820,13 @@ group("gn_all") {
     ]
   }
 
+  if (use_color_pipeline) {
+    deps += [
+      "//chrome/browser/ui/color:dump_colors",
+      "//ui/color:color_unittests",
+    ]
+  }
+
   # PFFFT.
   deps += [
     "//third_party/pffft:fuzzers",
@@ -829,6 +844,10 @@ if ((is_linux || is_win) && enable_remoting && !use_ozone) {
       "//remoting/host:host",
       "//tools/traffic_annotation/summary:annotations_xml",
     ]
+
+    if (is_win) {
+      deps += [ "//chrome/chrome_cleaner:shipped_binaries" ]
+    }
   }
 }
 
@@ -864,7 +883,6 @@ if (is_win) {
       "//components/zucchini",
       "//courgette",
       "//courgette:copy_courgette_binaries",
-      "//remoting/webapp",
       "//tools/metrics:metrics_metadata",
     ]
 
@@ -1005,12 +1023,7 @@ if (!is_ios) {
     }
   }
 
-  # https://www.chromium.org/developers/testing/webkit-layout-tests
-
-  # The _exparchive at the end of the name indicates to the isolate recipe
-  # that the isolate should be archived separately using the `exparchive`
-  # command, rather than as part of the normal `batcharchive` command.
-  group("blink_web_tests_exparchive") {
+  group("devtools_web_tests") {
     testonly = true
     deps = [
       ":blink_web_tests",
@@ -1018,12 +1031,12 @@ if (!is_ios) {
     data_deps = [
       ":blink_web_tests",
     ]
+    data = [
+      "//third_party/devtools-frontend/src/test/webtests/",
+    ]
   }
 
-  # This target contains only a small subset of the web tests,
-  # and is useful for testing with the regular isolate mechanism.
-  # To run the full web test suite you need to use
-  # :blink_web_tests_exparchive, above, instead.
+  # https://www.chromium.org/developers/testing/webkit-layout-tests
   generate_wrapper("blink_web_tests") {
     testonly = true
     wrapper_script = "${root_build_dir}/bin/run_blink_web_tests"
@@ -1047,19 +1060,19 @@ if (!is_ios) {
       ":layout_test_data_mojo_bindings",
       ":layout_test_data_mojo_bindings_lite",
       "//content/shell:content_shell",
-      "//content/test:mojo_web_test_bindings_js_data_deps",
       "//content/shell:mojo_bindings_js_data_deps",
+      "//content/test:mojo_web_test_bindings_js_data_deps",
       "//device/bluetooth/public/mojom:fake_bluetooth_interfaces_js_data_deps",
       "//device/vr/public/mojom:mojom_js_data_deps",
       "//media/capture/mojom:image_capture_js_data_deps",
       "//media/midi:mojo_js_data_deps",
       "//mojo/public/interfaces/bindings/tests:test_data_deps",
-      "//mojo/public/mojom/base:base_js_data_deps",
       "//mojo/public/js/ts/bindings/tests:test_interfaces_js_data_deps",
-      "//services/shape_detection/public/mojom:mojom_js_data_deps",
-      "//services/device/public/mojom:mojom_js_data_deps",
+      "//mojo/public/mojom/base:base_js_data_deps",
       "//services/device/public/mojom:generic_sensor_js_data_deps",
+      "//services/device/public/mojom:mojom_js_data_deps",
       "//services/device/public/mojom:usb_js_data_deps",
+      "//services/shape_detection/public/mojom:mojom_js_data_deps",
       "//skia/public/mojom:mojom_js_data_deps",
       "//testing/buildbot/filters:blink_web_tests_filter",
       "//third_party/blink/public:blink_devtools_frontend_resources_files",
@@ -1098,8 +1111,8 @@ if (!is_ios) {
 
     if (is_fuchsia) {
       data_deps += [
-        "//content/shell:content_shell_fuchsia",
         "//build/fuchsia/layout_test_proxy:layout_test_proxy_runner",
+        "//content/shell:content_shell_fuchsia",
       ]
     }
 
@@ -1240,8 +1253,8 @@ group("chromium_builder_perf") {
     }
     if (is_win || is_android) {
       data_deps += [
-        "//components:components_perftests",
         "//chrome/test:angle_perftests",
+        "//components:components_perftests",
       ]
     }
   }
@@ -1320,6 +1333,7 @@ if (closure_compile) {
     data_deps = [
       "chrome/browser/resources:closure_compile",
       "chrome/test:closure_compile",
+      "components/flags_ui/resources:closure_compile",
       "components/neterror/resources:closure_compile",
       "components/security_interstitials/core/common/resources:closure_compile",
       "components/sync/driver/resources:closure_compile",

@@ -259,8 +259,8 @@ NSTextInputContext* g_fake_current_input_context = nullptr;
 // windowDidFailToEnterFullScreen:.
 @interface BridgedNativeWidgetTestWindow : NativeWidgetMacNSWindow {
  @private
-  BOOL ignoreToggleFullScreen_;
-  int ignoredToggleFullScreenCount_;
+  BOOL _ignoreToggleFullScreen;
+  int _ignoredToggleFullScreenCount;
 }
 @property(assign, nonatomic) BOOL ignoreToggleFullScreen;
 @property(readonly, nonatomic) int ignoredToggleFullScreenCount;
@@ -268,8 +268,8 @@ NSTextInputContext* g_fake_current_input_context = nullptr;
 
 @implementation BridgedNativeWidgetTestWindow
 
-@synthesize ignoreToggleFullScreen = ignoreToggleFullScreen_;
-@synthesize ignoredToggleFullScreenCount = ignoredToggleFullScreenCount_;
+@synthesize ignoreToggleFullScreen = _ignoreToggleFullScreen;
+@synthesize ignoredToggleFullScreenCount = _ignoredToggleFullScreenCount;
 
 - (void)performSelector:(SEL)aSelector
              withObject:(id)anArgument
@@ -277,15 +277,15 @@ NSTextInputContext* g_fake_current_input_context = nullptr;
   // This is used in simulations without a message loop. Don't start a message
   // loop since that would expose the tests to system notifications and
   // potential flakes. Instead, just pretend the message loop is flushed here.
-  if (ignoreToggleFullScreen_ && aSelector == @selector(toggleFullScreen:))
+  if (_ignoreToggleFullScreen && aSelector == @selector(toggleFullScreen:))
     [self toggleFullScreen:anArgument];
   else
     [super performSelector:aSelector withObject:anArgument afterDelay:delay];
 }
 
 - (void)toggleFullScreen:(id)sender {
-  if (ignoreToggleFullScreen_)
-    ++ignoredToggleFullScreenCount_;
+  if (_ignoreToggleFullScreen)
+    ++_ignoredToggleFullScreenCount;
   else
     [super toggleFullScreen:sender];
 }
@@ -318,14 +318,15 @@ class MockNativeWidgetMac : public NativeWidgetMac {
             NativeWidgetMacNSWindowHost::GetFromNativeView(params.parent)) {
       GetNSWindowHost()->SetParent(parent);
     }
-    GetNSWindowHost()->InitWindow(params);
+    GetNSWindowHost()->InitWindow(params,
+                                  ConvertBoundsToScreenIfNeeded(params.bounds));
 
     // Usually the bridge gets initialized here. It is skipped to run extra
     // checks in tests, and so that a second window isn't created.
     delegate()->OnNativeWidgetCreated();
 
     // To allow events to dispatch to a view, it needs a way to get focus.
-    GetNSWindowHost()->SetFocusManager(GetWidget()->GetFocusManager());
+    SetFocusManager(GetWidget()->GetFocusManager());
   }
 
   void ReorderNativeViews() override {
@@ -416,7 +417,7 @@ class BridgedNativeWidgetTestBase : public ui::CocoaTest {
       Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   // Opacity defaults to "infer" which is usually updated by ViewsDelegate.
   Widget::InitParams::WindowOpacity opacity_ =
-      Widget::InitParams::OPAQUE_WINDOW;
+      Widget::InitParams::WindowOpacity::kOpaque;
   gfx::Rect bounds_ = gfx::Rect(100, 100, 100, 100);
   Widget::InitParams::ShadowType shadow_type_ =
       Widget::InitParams::ShadowType::kDefault;
@@ -621,7 +622,7 @@ void BridgedNativeWidgetTest::MakeSelection(int start, int end) {
 }
 
 void BridgedNativeWidgetTest::SetKeyDownEvent(NSEvent* event) {
-  [ns_view_ setValue:event forKey:@"keyDownEvent_"];
+  ns_view_.keyDownEventForTesting = event;
 }
 
 void BridgedNativeWidgetTest::SetHandleKeyEventCallback(
@@ -854,7 +855,7 @@ TEST_F(BridgedNativeWidgetTest, ViewSizeTracksWindow) {
 }
 
 TEST_F(BridgedNativeWidgetTest, GetInputMethodShouldNotReturnNull) {
-  EXPECT_TRUE(GetNSWindowHost()->GetInputMethod());
+  EXPECT_TRUE(native_widget_mac_->GetInputMethod());
 }
 
 // A simpler test harness for testing initialization flows.
@@ -901,7 +902,7 @@ TEST_F(BridgedNativeWidgetInitTest, InitNotCalled) {
 TEST_F(BridgedNativeWidgetInitTest, ShadowType) {
   // Verify Widget::InitParam defaults and arguments added from SetUp().
   EXPECT_EQ(Widget::InitParams::TYPE_WINDOW_FRAMELESS, type_);
-  EXPECT_EQ(Widget::InitParams::OPAQUE_WINDOW, opacity_);
+  EXPECT_EQ(Widget::InitParams::WindowOpacity::kOpaque, opacity_);
   EXPECT_EQ(Widget::InitParams::ShadowType::kDefault, shadow_type_);
 
   CreateNewWidgetToInit();

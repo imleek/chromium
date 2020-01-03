@@ -18,7 +18,6 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_package/signed_exchange_envelope.h"
 #include "content/common/navigation_params.mojom.h"
-#include "content/public/browser/file_select_listener.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/load_flags.h"
@@ -73,15 +72,7 @@ FrameTreeNode* GetFtnForNetworkRequest(int process_id, int routing_id) {
   // the id is set to 0. In these situations, the routing_id is the frame tree
   // node id, and can be used directly.
   if (process_id == 0) {
-    FrameTreeNode* ftn = FrameTreeNode::GloballyFindByID(routing_id);
-    if (ftn == nullptr)
-      return nullptr;
-    // If this is a navigation request (process_id == 0) of a child frame
-    // (ftn->parent()), then requestWillBeSent and responseReceived are
-    // delivered to the parent frame instead of the child because we don't know
-    // if the child will become an OOPIF with a separate target yet or not. Do
-    // the same for requestWillBeSentExtraInfo and responseReceivedExtraInfo.
-    return ftn->parent() ? ftn->parent() : ftn;
+    return FrameTreeNode::GloballyFindByID(routing_id);
   }
   return FrameTreeNode::GloballyFindByID(
       RenderFrameHost::GetFrameTreeNodeIdForRoutingId(process_id, routing_id));
@@ -99,15 +90,16 @@ void OnResetNavigationRequest(NavigationRequest* navigation_request) {
   }
 }
 
-void OnNavigationResponseReceived(const NavigationRequest& nav_request,
-                                  const network::ResourceResponse& response) {
+void OnNavigationResponseReceived(
+    const NavigationRequest& nav_request,
+    const network::mojom::URLResponseHead& response) {
   FrameTreeNode* ftn = nav_request.frame_tree_node();
   std::string id = nav_request.devtools_navigation_token().ToString();
   std::string frame_id = ftn->devtools_frame_token().ToString();
   GURL url = nav_request.common_params().url;
   DispatchToAgents(ftn, &protocol::NetworkHandler::ResponseReceived, id, id,
-                   url, protocol::Network::ResourceTypeEnum::Document,
-                   response.head, frame_id);
+                   url, protocol::Network::ResourceTypeEnum::Document, response,
+                   frame_id);
 }
 
 void OnNavigationRequestFailed(
@@ -136,7 +128,7 @@ void OnSignedExchangeReceived(
     FrameTreeNode* frame_tree_node,
     base::Optional<const base::UnguessableToken> devtools_navigation_token,
     const GURL& outer_request_url,
-    const network::ResourceResponseHead& outer_response,
+    const network::mojom::URLResponseHead& outer_response,
     const base::Optional<SignedExchangeEnvelope>& envelope,
     const scoped_refptr<net::X509Certificate>& certificate,
     const base::Optional<net::SSLInfo>& ssl_info,
@@ -182,7 +174,7 @@ void OnSignedExchangeCertificateResponseReceived(
     const base::UnguessableToken& request_id,
     const base::UnguessableToken& loader_id,
     const GURL& url,
-    const network::ResourceResponseHead& head) {
+    const network::mojom::URLResponseHead& head) {
   DispatchToAgents(frame_tree_node, &protocol::NetworkHandler::ResponseReceived,
                    request_id.ToString(), loader_id.ToString(), url,
                    protocol::Network::ResourceTypeEnum::Other, head,
@@ -330,22 +322,6 @@ bool WillCreateURLLoaderFactory(
   return had_interceptors;
 }
 
-bool InterceptFileChooser(
-    RenderFrameHostImpl* rfh,
-    std::unique_ptr<content::FileSelectListener>* listener,
-    const blink::mojom::FileChooserParams& params) {
-  DevToolsAgentHostImpl* agent_host = RenderFrameDevToolsAgentHost::GetFor(rfh);
-  if (!agent_host)
-    return false;
-  std::vector<protocol::PageHandler*> page_handlers =
-      protocol::PageHandler::ForAgentHost(agent_host);
-  for (auto* handler : page_handlers) {
-    if (handler->InterceptFileChooser(rfh, listener, params))
-      return true;
-  }
-  return false;
-}
-
 bool WillCreateURLLoaderFactoryForServiceWorker(
     RenderProcessHost* rph,
     int routing_id,
@@ -394,6 +370,13 @@ bool WillCreateURLLoaderFactory(
 
 void OnNavigationRequestWillBeSent(
     const NavigationRequest& navigation_request) {
+  auto* agent_host = static_cast<RenderFrameDevToolsAgentHost*>(
+      RenderFrameDevToolsAgentHost::GetFor(
+          navigation_request.frame_tree_node()));
+  if (!agent_host)
+    return;
+  agent_host->OnNavigationRequestWillBeSent(navigation_request);
+
   // Make sure both back-ends yield the same timestamp.
   auto timestamp = base::TimeTicks::Now();
   DispatchToAgents(navigation_request.frame_tree_node(),

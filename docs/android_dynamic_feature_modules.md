@@ -94,6 +94,9 @@ For this, add `foo` to the `AndroidFeatureModuleName` in
 </histogram_suffixes>
 ```
 
+See [below](#metrics) for what metrics will be automatically collected after
+this step.
+
 <!--- TODO(tiborg): Add info about install UI. -->
 Lastly, give your module a title that Chrome and Play can use for the install
 UI. To do this, add a string to
@@ -135,16 +138,13 @@ $ $OUTDIR/bin/monochrome_public_bundle install -m base -m foo
 ```
 
 This will install Foo alongside the rest of Chrome. The rest of Chrome is called
-_base_ module in the bundle world. The Base module will always be put on the
+_base_ module in the bundle world. The base module will always be put on the
 device when initially installing Chrome.
 
 *** note
-**Note:** You have to specify `-m base` here to make it explicit which modules
-will be installed. If you only specify `-m foo` the command will fail. It is
-also possible to specify no modules. In that case, the script will install the
-set of modules that the Play Store would install when first installing Chrome.
-That may be different than just specifying `-m base` if we have non-on-demand
-modules.
+**Note:** The install script may install more modules than you specify, e.g.
+when there are default or conditionally installed modules (see
+[below](#conditional-install) for details).
 ***
 
 You can then check that the install worked with:
@@ -242,7 +242,7 @@ import("//chrome/android/features/foo/public/foo_public_java_sources.gni")
 ...
 android_library("chrome_java") {
   ...
-  java_files += foo_public_java_sources
+  sources += foo_public_java_sources
 }
 ...
 ```
@@ -256,7 +256,7 @@ import("//build/config/android/rules.gni")
 
 android_library("java") {
   # Define like ordinary Java Android library.
-  java_files = [
+  sources = [
     "java/src/org/chromium/chrome/features/foo/FooImpl.java",
     # Add other Java classes that should go into the Foo DFM here.
   ]
@@ -637,15 +637,6 @@ public class FooImpl implements Foo {
 }
 ```
 
-*** note
-**Warning:** While your module is emulated (see [below](#on-demand-install))
-your resources are only available through
-`ContextUtils.getApplicationContext()`. Not through activities, etc. We
-therefore recommend that you only access DFM resources this way. See
-[crbug/949729](https://bugs.chromium.org/p/chromium/issues/detail?id=949729)
-for progress on making this more robust.
-***
-
 
 ### Module install
 
@@ -724,7 +715,9 @@ $ $OUTDIR/bin/monochrome_public_bundle launch --args="--fake-feature-module-inst
 When running the install code, the Foo DFM module will be emulated.
 This will be the case in production right after installing the module. Emulation
 will last until Play Store has a chance to install your module as a true split.
-This usually takes about a day.
+This usually takes about a day. After it has been installed, it will be updated
+atomically alongside Chrome. Always check that it is installed and available
+before invoking code within the DFM.
 
 *** note
 **Warning:** There are subtle differences between emulating a module and
@@ -781,6 +774,22 @@ like this:
     <application />
 </manifest>
 ```
+
+### Metrics
+
+After adding your module to `AndroidFeatureModuleName` (see
+[above](#create-dfm-target)) we will collect, among others, the following
+metrics:
+
+* `Android.FeatureModules.AvailabilityStatus.Foo`: Measures your module's
+  install penetration. That is, the share of users who eventually installed
+  the module after requesting it (once or multiple times).
+
+* `Android.FeatureModules.InstallStatus.Foo`: The result of an on-demand
+  install request. Can be success or one of several error conditions.
+
+* `Android.FeatureModules.UncachedAwakeInstallDuration.Foo`: The duration to
+  install your module successfully after on-demand requesting it.
 
 
 ### Integration test APK and Android K support

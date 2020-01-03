@@ -41,10 +41,15 @@ extern const base::Feature kCaptureSafetyNetId;
 // navigations instead of overlays.
 extern const base::Feature kCommittedSBInterstitials;
 
-// Controls whether to do deep scanning of downloads. If both this feature and
-// the enterprise policies are enabled, the downloaded file is sent for
-// scanning.
-extern const base::Feature kDeepScanningOfDownloads;
+// Controls whether to do deep scanning for DLP. If both this feature and
+// the enterprise policies are enabled, the downloaded and uploaded files are
+// sent for scanning.
+extern const base::Feature kContentComplianceEnabled;
+
+// Controls whether to do deep scanning for malware. If both this feature and
+// the enterprise policies are enabled, the downloaded and uploaded files are
+// sent for scanning.
+extern const base::Feature kMalwareScanEnabled;
 
 // Controls whether the user has forcibly enabled AP download protection. This
 // flag will enable AP downloads protections even for users not enrolled in
@@ -98,6 +103,9 @@ extern const base::Feature kTriggerThrottlerDailyQuotaFeature;
 
 // Controls whether Chrome on Android uses locally cached blacklists.
 extern const base::Feature kUseLocalBlacklistsV2;
+
+// Controls whether Chrome uses new download warning UX.
+extern const base::Feature kUseNewDownloadWarnings;
 
 base::ListValue GetFeatureStatusList();
 

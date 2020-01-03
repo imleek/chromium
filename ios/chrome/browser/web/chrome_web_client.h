@@ -12,9 +12,6 @@
 #include "base/macros.h"
 #import "ios/web/public/web_client.h"
 
-// Shared desktop user agent used to mimic Safari on a mac.
-extern const char kDesktopUserAgent[];
-
 // Chrome implementation of WebClient.
 class ChromeWebClient : public web::WebClient {
  public:
@@ -63,6 +60,8 @@ class ChromeWebClient : public web::WebClient {
                         int64_t navigation_id,
                         base::OnceCallback<void(NSString*)> callback) override;
   UIView* GetWindowedContainer() override;
+  bool ForceMobileVersionByDefault(const GURL& url) override;
+  web::UserAgentType GetDefaultUserAgent(UIView* web_view) override;
 
  private:
   // Returns a string describing the product name and version, of the

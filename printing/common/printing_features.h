@@ -6,12 +6,18 @@
 #define PRINTING_COMMON_PRINTING_FEATURES_H_
 
 #include "base/feature_list.h"
+#include "build/build_config.h"
 #include "printing/printing_export.h"
 
 namespace printing {
 namespace features {
 
 PRINTING_EXPORT extern const base::Feature kHarfBuzzPDFSubsetter;
+
+#if defined(OS_WIN)
+PRINTING_EXPORT extern const base::Feature kUseXpsForPrinting;
+PRINTING_EXPORT extern const base::Feature kUseXpsForPrintingFromPdf;
+#endif
 
 }  // namespace features
 }  // namespace printing

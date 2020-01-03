@@ -61,6 +61,9 @@ class TestDataSourceDelegate : public DataSourceDelegate {
   void OnDndDropPerformed() override {}
   void OnDndFinished() override {}
   void OnAction(DndAction dnd_action) override {}
+  bool CanAcceptDataEventsForSurface(Surface* surface) const override {
+    return true;
+  }
 
   DISALLOW_COPY_AND_ASSIGN(TestDataSourceDelegate);
 };
@@ -322,7 +325,7 @@ TEST_F(PointerTest, SetCursorAndSetCursorType) {
       pointer->GetActivePresentationCallbacksForTesting().begin()->second;
   base::RunLoop runloop;
   list.push_back(base::BindRepeating(
-      [](base::Closure callback, const gfx::PresentationFeedback&) {
+      [](base::RepeatingClosure callback, const gfx::PresentationFeedback&) {
         callback.Run();
       },
       runloop.QuitClosure()));

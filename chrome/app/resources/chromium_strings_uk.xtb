@@ -3,7 +3,6 @@
 <translationbundle lang="uk">
 <translation id="1065672644894730302">Не вдається розпізнати налаштування. Деякі функції можуть бути не доступні, а зміни в налаштуваннях не зберігатимуться.</translation>
 <translation id="1104942323762546749">Chromium хоче експортувати ваші паролі. Щоб дозволити, введіть свій пароль Windows.</translation>
-<translation id="1115445892567829615">Chromium не вдалося синхронізувати ваші дані. Оновіть свою парольну фразу для синхронізації.</translation>
 <translation id="113122355610423240">Chromium – ваш веб-переглядач за умовчанням</translation>
 <translation id="1185134272377778587">Про Chromium</translation>
 <translation id="1396446129537741364">Chromium намагається показати паролі.</translation>
@@ -20,7 +19,7 @@
 <translation id="1929939181775079593">Chromium не відповідає. Перезапустити зараз?</translation>
 <translation id="1966382378801805537">Chromium не може визначити чи встановити веб-переглядач за умовчанням</translation>
 <translation id="2008474315282236005">1 елемент буде видалено з цього пристрою. Щоб відновити дані пізніше, увійдіть в обліковий запис Chromium як <ph name="USER_EMAIL" />.</translation>
-<translation id="2119636228670142020">Про &amp;ОС Chromium</translation>
+<translation id="2147976119693222405">ОС Chromium не вдалося синхронізувати ваші дані. Виправити.</translation>
 <translation id="2241627712206172106">Якщо вашим комп’ютером користуєтесь не лише ви, а й ваші друзі чи сім’я, вони можуть налаштувати Chromium на свій смак.</translation>
 <translation id="2347108572062610441">Це розширення змінило сторінку, яка відкривається під час запуску Chromium.</translation>
 <translation id="2396765026452590966">Розширення "<ph name="EXTENSION_NAME" />" змінило сторінку, яка відкривається під час запуску Chromium.</translation>
@@ -36,6 +35,7 @@
 <translation id="2718390899429598676">Задля підвищення безпеки Chromium шифруватиме ваші дані.</translation>
 <translation id="2770231113462710648">Змінити веб-переглядач за умовчанням на:</translation>
 <translation id="2799223571221894425">Перезапустити</translation>
+<translation id="2805036593126168338">ОС Chromium не вдалося синхронізувати ваші паролі. Виправити.</translation>
 <translation id="2838154144102149890">Для оновлення потрібно припинити роботу Chromium. У результаті інші користувачі, що ввійшли в обліковий запис на цьому комп’ютері, можуть утратити незбережені зміни.</translation>
 <translation id="2847479871509788944">Видалити з Chromium…</translation>
 <translation id="2886012850691518054">Додатково: допоможіть покращити Chromium,  автоматично надсилаючи статистику використання та звіти про аварійне завершення роботи в Google.</translation>
@@ -107,7 +107,6 @@
 <translation id="5631814766731275228">Ім’я та зображення профілю Chromium</translation>
 <translation id="5634636535844844681">Для роботи Chromium потрібно мати ОС Windows 7 або новішої версії.</translation>
 <translation id="5653831366781983928">Перезапустіть Chromium</translation>
-<translation id="5680901439334282664">увійдіть в обліковий запис Chromium</translation>
 <translation id="5698481217667032250">Вибрати цю мову для Chromium</translation>
 <translation id="5820394555380036790">ОС Chromium</translation>
 <translation id="5862307444128926510">Вітаємо в Chromium</translation>

@@ -16,6 +16,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -32,12 +33,14 @@ import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.webapps.WebApkInfoBuilder;
 import org.chromium.content_public.browser.test.NativeLibraryTestRule;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
+import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.webapk.lib.common.WebApkConstants;
 
 /** Tests for WebApkActivity. */
@@ -145,7 +148,6 @@ public final class WebApkActivityTest {
     @LargeTest
     @Feature({"WebApk"})
     public void testLaunchIntervalHistogramNotRecordedOnFirstLaunch() {
-        android.util.Log.e("ABCD", "Start");
         final String histogramName = "WebApk.LaunchInterval";
         WebApkActivity webApkActivity = mActivityTestRule.startWebApkActivity(createWebApkInfo(
                 getTestServerUrl("manifest_test_page.html"), getTestServerUrl("/")));
@@ -162,7 +164,6 @@ public final class WebApkActivityTest {
         WebappDataStorage storage =
                 WebappRegistry.getInstance().getWebappDataStorage(TEST_WEBAPK_ID);
         Assert.assertNotEquals(WebappDataStorage.TIMESTAMP_INVALID, storage.getLastUsedTimeMs());
-        android.util.Log.e("ABCD", "Start2");
     }
 
     /** Test that the "WebApk.LaunchInterval" histogram is recorded on susbequent launches. */
@@ -199,7 +200,7 @@ public final class WebApkActivityTest {
      */
     @LargeTest
     @Test
-    public void testActivateWebApkLPlus() {
+    public void testActivateWebApkLPlus() throws Exception {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
 
         // Launch WebAPK.
@@ -215,9 +216,13 @@ public final class WebApkActivityTest {
         InstrumentationRegistry.getTargetContext().startActivity(intent);
         ChromeActivityTestRule.waitFor(mainClass);
 
-        TabWebContentsDelegateAndroid tabDelegate =
-                TabTestUtils.getTabWebContentsDelegate(webApkActivity.getActivityTab());
-        tabDelegate.activateContents();
+        ApplicationTestUtils.waitForActivityState(webApkActivity, ActivityState.STOPPED);
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            TabWebContentsDelegateAndroid tabDelegate =
+                    TabTestUtils.getTabWebContentsDelegate(webApkActivity.getActivityTab());
+            tabDelegate.activateContents();
+        });
 
         // WebApkActivity should have been brought back to the foreground.
         ChromeActivityTestRule.waitFor(WebApkActivity.class);

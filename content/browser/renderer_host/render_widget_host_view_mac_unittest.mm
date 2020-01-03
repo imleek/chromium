@@ -26,7 +26,6 @@
 #include "components/viz/common/surfaces/child_local_surface_id_allocator.h"
 #import "content/app_shim_remote_cocoa/render_widget_host_view_cocoa.h"
 #include "content/browser/compositor/image_transport_factory.h"
-#include "content/browser/frame_host/render_widget_host_view_guest.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/frame_token_message_queue.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
@@ -100,7 +99,7 @@ using testing::_;
 
 @interface MockRenderWidgetHostViewMacDelegate
     : NSObject<RenderWidgetHostViewMacDelegate> {
-  BOOL unhandledWheelEventReceived_;
+  BOOL _unhandledWheelEventReceived;
 }
 
 @property(nonatomic) BOOL unhandledWheelEventReceived;
@@ -109,19 +108,19 @@ using testing::_;
 
 @implementation MockRenderWidgetHostViewMacDelegate
 
-@synthesize unhandledWheelEventReceived = unhandledWheelEventReceived_;
+@synthesize unhandledWheelEventReceived = _unhandledWheelEventReceived;
 
 - (void)rendererHandledWheelEvent:(const blink::WebMouseWheelEvent&)event
                          consumed:(BOOL)consumed {
   if (!consumed)
-    unhandledWheelEventReceived_ = true;
+    _unhandledWheelEventReceived = true;
 }
 
 - (void)rendererHandledGestureScrollEvent:(const blink::WebGestureEvent&)event
                                  consumed:(BOOL)consumed {
   if (!consumed &&
       event.GetType() == blink::WebInputEvent::kGestureScrollUpdate)
-    unhandledWheelEventReceived_ = true;
+    _unhandledWheelEventReceived = true;
 }
 
 - (void)touchesBeganWithEvent:(NSEvent*)event {}
@@ -141,16 +140,16 @@ using testing::_;
 @end
 
 @implementation FakeTextCheckingResult {
-  base::scoped_nsobject<NSString> replacementString_;
+  base::scoped_nsobject<NSString> _replacementString;
 }
-@synthesize range = range_;
+@synthesize range = _range;
 
 + (FakeTextCheckingResult*)resultWithRange:(NSRange)range
                          replacementString:(NSString*)replacementString {
   FakeTextCheckingResult* result =
       [[[FakeTextCheckingResult alloc] init] autorelease];
-  result->range_ = range;
-  result->replacementString_.reset([replacementString retain]);
+  result->_range = range;
+  result->_replacementString.reset([replacementString retain]);
   return result;
 }
 
@@ -161,7 +160,7 @@ using testing::_;
 }
 
 - (NSString*)replacementString {
-  return replacementString_;
+  return _replacementString;
 }
 @end
 
@@ -172,9 +171,9 @@ using testing::_;
 @implementation FakeSpellChecker {
   base::mac::ScopedBlock<void (^)(NSInteger sequenceNumber,
                                   NSArray<NSTextCheckingResult*>* candidates)>
-      lastCompletionHandler_;
+      _lastCompletionHandler;
 }
-@synthesize sequenceNumber = sequenceNumber_;
+@synthesize sequenceNumber = _sequenceNumber;
 
 - (NSInteger)
 requestCandidatesForSelectedRange:(NSRange)selectedRange
@@ -189,15 +188,15 @@ requestCandidatesForSelectedRange:(NSRange)selectedRange
                                         NSArray<NSTextCheckingResult*>*
                                             candidates))completionHandler
     NS_AVAILABLE_MAC(10_12_2) {
-  sequenceNumber_ += 1;
-  lastCompletionHandler_.reset([completionHandler copy]);
-  return sequenceNumber_;
+  _sequenceNumber += 1;
+  _lastCompletionHandler.reset([completionHandler copy]);
+  return _sequenceNumber;
 }
 
 - (base::mac::ScopedBlock<void (^)(NSInteger sequenceNumber,
                                    NSArray<NSTextCheckingResult*>* candidates)>)
     takeCompletionHandler {
-  return std::move(lastCompletionHandler_);
+  return std::move(_lastCompletionHandler);
 }
 
 @end
@@ -495,7 +494,7 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
     host_ = base::WrapUnique(MockRenderWidgetHostImpl::Create(
         &delegate_, process_host_.get(), process_host_->GetNextRoutingID()));
     host_->set_owner_delegate(&mock_owner_delegate_);
-    rwhv_mac_ = new RenderWidgetHostViewMac(host_.get(), false);
+    rwhv_mac_ = new RenderWidgetHostViewMac(host_.get());
     rwhv_cocoa_.reset([rwhv_mac_->GetInProcessNSView() retain]);
 
     window_.reset([[CocoaTestHelperWindow alloc] init]);
@@ -1207,44 +1206,6 @@ TEST_F(RenderWidgetHostViewMacTest,
   rwhv_cocoa_.reset();
 }
 
-// Tests that when view initiated shutdown happens (i.e. RWHView is deleted
-// before RWH), we clean up properly and don't leak the RWHVGuest.
-TEST_F(RenderWidgetHostViewMacTest, GuestViewDoesNotLeak) {
-  int32_t routing_id = process_host_->GetNextRoutingID();
-
-  // Owned by its |GetInProcessNSView()|.
-  MockRenderWidgetHostImpl* rwh = MockRenderWidgetHostImpl::Create(
-      &delegate_, process_host_.get(), routing_id);
-  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(rwh, true);
-
-  // Add a delegate to the view.
-  base::scoped_nsobject<MockRenderWidgetHostViewMacDelegate> view_delegate(
-      [[MockRenderWidgetHostViewMacDelegate alloc] init]);
-  view->SetDelegate(view_delegate.get());
-
-  base::WeakPtr<RenderWidgetHostViewBase> guest_rwhv_weak =
-      (RenderWidgetHostViewGuest::Create(rwh, nullptr, view->GetWeakPtr()))
-          ->GetWeakPtr();
-
-  // Remove the GetInProcessNSView() so |view| also goes away before |rwh|.
-  {
-    base::scoped_nsobject<RenderWidgetHostViewCocoa> rwhv_cocoa;
-    rwhv_cocoa.reset([view->GetInProcessNSView() retain]);
-  }
-  RecycleAndWait();
-
-  // Clean up.
-  rwh->ShutdownAndDestroyWidget(true);
-
-  // Let |guest_rwhv_weak| have a chance to delete itself.
-  base::RunLoop run_loop;
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 run_loop.QuitClosure());
-  run_loop.Run();
-
-  ASSERT_FALSE(guest_rwhv_weak.get());
-}
-
 // Tests setting background transparency. See also (disabled on Mac)
 // RenderWidgetHostTest.Background. This test has some additional checks for
 // Mac.
@@ -1336,7 +1297,7 @@ TEST_F(RenderWidgetHostViewMacTest,
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
       MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
-  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
+  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host);
   base::RunLoop().RunUntilIdle();
 
   // Send an initial wheel event for scrolling by 3 lines.
@@ -1396,7 +1357,7 @@ TEST_F(RenderWidgetHostViewMacTest,
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
       MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
-  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
+  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host);
   base::RunLoop().RunUntilIdle();
 
   // Send an initial wheel event for scrolling by 3 lines.
@@ -1452,7 +1413,7 @@ TEST_F(RenderWidgetHostViewMacTest,
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
       MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
-  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
+  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host);
   base::RunLoop().RunUntilIdle();
 
   // Send an initial wheel event for scrolling by 3 lines.

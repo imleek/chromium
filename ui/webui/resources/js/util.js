@@ -85,14 +85,18 @@
  * @param {Node} node The node to check.
  * @param {function(Node):boolean} predicate The function that tests the
  *     nodes.
+ * @param {boolean=} includeShadowHosts
  * @return {Node} The found ancestor or null if not found.
  */
-/* #export */ function findAncestor(node, predicate) {
-  let last = false;
-  while (node != null && !(last = predicate(node))) {
-    node = node.parentNode;
+/* #export */ function findAncestor(node, predicate, includeShadowHosts) {
+  while (node !== null) {
+    if (predicate(node)) {
+      break;
+    }
+    node = includeShadowHosts && node instanceof ShadowRoot ? node.host :
+                                                              node.parentNode;
   }
-  return last ? node : null;
+  return node;
 }
 
 /**
@@ -153,60 +157,6 @@
   const element = (opt_context || document).querySelector(selectors);
   return assertInstanceof(
       element, HTMLElement, 'Missing required element: ' + selectors);
-}
-
-// Adds click/auxclick listeners for any link on the page. If the link points to
-// a chrome: or file: url, then calls into the browser to do the navigation.
-// Note: This method is *not* re-entrant. Every call to it, will re-add
-// listeners on |document|. It's up to callers to ensure this is only called
-// once.
-/* #export */ function listenForPrivilegedLinkClicks() {
-  ['click', 'auxclick'].forEach(function(eventName) {
-    document.addEventListener(eventName, function(e) {
-      if (e.button > 1) {
-        return;
-      }  // Ignore buttons other than left and middle.
-      if (e.defaultPrevented) {
-        return;
-      }
-
-      const eventPath = e.path;
-      let anchor = null;
-      if (eventPath) {
-        for (let i = 0; i < eventPath.length; i++) {
-          const element = eventPath[i];
-          if (element.tagName === 'A' && element.href) {
-            anchor = element;
-            break;
-          }
-        }
-      }
-
-      // Fallback if Event.path is not available.
-      let el = e.target;
-      if (!anchor && el.nodeType == Node.ELEMENT_NODE &&
-          el.webkitMatchesSelector('A, A *')) {
-        while (el.tagName != 'A') {
-          el = el.parentElement;
-        }
-        anchor = el;
-      }
-
-      if (!anchor) {
-        return;
-      }
-
-      anchor = /** @type {!HTMLAnchorElement} */ (anchor);
-      if ((anchor.protocol == 'file:' || anchor.protocol == 'about:') &&
-          (e.button == 0 || e.button == 1)) {
-        chrome.send('navigateToUrl', [
-          anchor.href, anchor.target, e.button, e.altKey, e.ctrlKey, e.metaKey,
-          e.shiftKey
-        ]);
-        e.preventDefault();
-      }
-    });
-  });
 }
 
 /**

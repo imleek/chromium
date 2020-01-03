@@ -221,6 +221,10 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   };
 
   CacheSuccess ApplyMatchedCache(StyleResolverState&, const MatchResult&);
+  void MaybeAddToMatchedPropertiesCache(StyleResolverState&,
+                                        const CacheSuccess&,
+                                        const MatchResult&);
+
   void ApplyCustomProperties(StyleResolverState&,
                              const MatchResult&,
                              const CacheSuccess&,
@@ -250,6 +254,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                            const MatchResult& match_result,
                            bool apply_inherited_only,
                            NeedsApplyPass& needs_apply_pass);
+  void CascadeAndApplyForcedColors(StyleResolverState&, const MatchResult&);
 
   void CascadeAndApplyMatchedProperties(StyleResolverState&,
                                         const MatchResult&);
@@ -311,6 +316,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   bool WasViewportResized() const { return was_viewport_resized_; }
 
   bool IsForcedColorsModeEnabled() const;
+  bool IsForcedColorsModeEnabled(const StyleResolverState&) const;
 
   MatchedPropertiesCache matched_properties_cache_;
   Member<Document> document_;

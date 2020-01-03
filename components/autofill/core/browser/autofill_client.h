@@ -63,7 +63,10 @@ class FormStructure;
 class LogManager;
 class MigratableCreditCard;
 class PersonalDataManager;
+class SmsClient;
 class StrikeDatabase;
+enum class WebauthnDialogCallbackType;
+enum class WebauthnDialogState;
 struct Suggestion;
 
 namespace payments {
@@ -127,23 +130,6 @@ class AutofillClient : public RiskDataLoader {
     FIDO = 2,
   };
 
-  // Details for card unmasking, such as the suggested method of authentication,
-  // along with any information required to facilitate the authentication.
-  struct UnmaskDetails {
-    UnmaskDetails();
-    ~UnmaskDetails();
-
-    // The type of authentication method suggested for card unmask.
-    UnmaskAuthMethod unmask_auth_method = UnmaskAuthMethod::UNKNOWN;
-    // Set to true if the user should be offered opt-in for FIDO Authentication.
-    bool offer_fido_opt_in = false;
-    // Public Key Credential Request Options required for authentication.
-    // https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialrequestoptions
-    base::Value fido_request_options;
-    // Set of credit cards ids that are eligible for FIDO Authentication.
-    std::set<std::string> fido_eligible_card_ids;
-  };
-
   // Used for explicitly requesting the user to enter/confirm cardholder name,
   // expiration date month and year.
   struct UserProvidedCardDetails {
@@ -200,7 +186,7 @@ class AutofillClient : public RiskDataLoader {
       const UserProvidedCardDetails& user_provided_card_details)>
       UploadSaveCardPromptCallback;
 
-  typedef base::Callback<void(const CreditCard&)> CreditCardScanCallback;
+  typedef base::OnceCallback<void(const CreditCard&)> CreditCardScanCallback;
 
   // Callback to run if user presses the Save button in the migration dialog.
   // Will pass a vector of GUIDs of cards that the user selected to upload to
@@ -215,10 +201,10 @@ class AutofillClient : public RiskDataLoader {
   typedef base::RepeatingCallback<void(const std::string&)>
       MigrationDeleteCardCallback;
 
-  // Callback to run if the OK button or the cancel button in the
-  // WebauthnOfferDialog is clicked. Will pass to CreditCardFIDOAuthenticator a
-  // bool indicating if offer was accepted or declined.
-  typedef base::RepeatingCallback<void(bool)> WebauthnOfferDialogCallback;
+  // Callback to run if the OK button or the cancel button in a
+  // Webauthn dialog is clicked.
+  typedef base::RepeatingCallback<void(WebauthnDialogCallbackType)>
+      WebauthnDialogCallback;
 
   ~AutofillClient() override {}
 
@@ -249,6 +235,10 @@ class AutofillClient : public RiskDataLoader {
   // Gets the payments::PaymentsClient instance owned by the client.
   virtual payments::PaymentsClient* GetPaymentsClient() = 0;
 
+  // Gets the SmsClient instance owned by the client. May be null for platforms
+  // that don't support this.
+  virtual SmsClient* GetSmsClient() = 0;
+
   // Gets the StrikeDatabase associated with the client.
   virtual StrikeDatabase* GetStrikeDatabase() = 0;
 
@@ -267,6 +257,12 @@ class AutofillClient : public RiskDataLoader {
 
   // Returns the current best guess as to the page's display language.
   virtual std::string GetPageLanguage() const;
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  // Returns the whitelists for virtual cards. Used on desktop platforms only.
+  virtual std::vector<std::string> GetMerchantWhitelistForVirtualCards() = 0;
+  virtual std::vector<std::string> GetBinRangeWhitelistForVirtualCards() = 0;
+#endif
 
   // Causes the Autofill settings UI to be shown. If |show_credit_card_settings|
   // is true, will show the credit card specific subpage.
@@ -307,31 +303,43 @@ class AutofillClient : public RiskDataLoader {
       MigrationDeleteCardCallback delete_local_card_callback) = 0;
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-  // Will show a dialog indicating the card verification is in progress. It is
-  // shown after verification starts only if the WebAuthn is enabled.
-  // Implemented only on desktop.
-  virtual void ShowVerifyPendingDialog(
-      base::OnceClosure cancel_card_verification_callback) = 0;
-
-  // Close the verify pending dialog once the card verificiation is completed or
-  // verification falls back to CVC.
-  virtual void CloseVerifyPendingDialog() = 0;
-#endif
+  // TODO(crbug.com/991037): Find a way to merge these two functions. Shouldn't
+  // use WebauthnDialogState as that state is a purely UI state (should not be
+  // accessible for managers?), and some of the states |KInactive| may be
+  // confusing here. Do we want to add another Enum?
 
   // Will show a dialog offering the option to use device's platform
   // authenticator in the future instead of CVC to verify the card being
-  // unmasked. Runs |callback| if the OK button or the cancel button in the
-  // dialog is clicked. This is only implemented on desktop.
+  // unmasked. Runs |offer_dialog_callback| if the OK button or the cancel
+  // button in the dialog is clicked.
   virtual void ShowWebauthnOfferDialog(
-      WebauthnOfferDialogCallback callback) = 0;
+      WebauthnDialogCallback offer_dialog_callback) = 0;
 
-  // Will close the WebAuthn offer dialog. Returns true if dialog was visible
-  // and has been closed. Implemented only on desktop.
-  virtual bool CloseWebauthnOfferDialog();
+  // Will show a dialog indicating the card verification is in progress. It is
+  // shown after verification starts only if the WebAuthn is enabled.
+  virtual void ShowWebauthnVerifyPendingDialog(
+      WebauthnDialogCallback verify_pending_dialog_callback) = 0;
 
-  // Will update the WebAuthn offer dialog content to the error state.
-  // Implemented only on desktop.
-  virtual void UpdateWebauthnOfferDialogWithError() {}
+  // Will update the WebAuthn dialog content when there is an error fetching the
+  // challenge.
+  virtual void UpdateWebauthnOfferDialogWithError() = 0;
+
+  // Will close the current visible WebAuthn dialog. Returns true if dialog was
+  // visible and has been closed.
+  virtual bool CloseWebauthnDialog() = 0;
+
+  // Prompt the user to confirm the saving of a UPI ID.
+  virtual void ConfirmSaveUpiIdLocally(
+      const std::string& upi_id,
+      base::OnceCallback<void(bool user_decision)> callback) = 0;
+
+  // Shows the dialog including all credit cards that are available to be used
+  // as a virtual card. |candidates| must not be empty and has at least one
+  // card. Runs |callback| when a card is selected.
+  virtual void OfferVirtualCardOptions(
+      const std::vector<CreditCard*>& candidates,
+      base::OnceCallback<void(const std::string&)> callback) = 0;
+#endif
 
   // Runs |callback| if the |profile| should be imported as personal data.
   virtual void ConfirmSaveAutofillProfile(const AutofillProfile& profile,
@@ -395,7 +403,7 @@ class AutofillClient : public RiskDataLoader {
   // Shows the user interface for scanning a credit card. Invokes the |callback|
   // when a credit card is scanned successfully. Should be called only if
   // HasCreditCardScanFeature() returns true.
-  virtual void ScanCreditCard(const CreditCardScanCallback& callback) = 0;
+  virtual void ScanCreditCard(CreditCardScanCallback callback) = 0;
 
   // Shows an Autofill popup with the given |values|, |labels|, |icons|, and
   // |identifiers| for the element at |element_bounds|. |delegate| will be

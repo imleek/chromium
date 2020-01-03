@@ -31,6 +31,7 @@
 #include "chrome/browser/web_applications/test/test_app_registrar.h"
 #include "chrome/browser/web_applications/test/test_app_shortcut_manager.h"
 #include "chrome/browser/web_applications/test/test_data_retriever.h"
+#include "chrome/browser/web_applications/test/test_file_handler_manager.h"
 #include "chrome/browser/web_applications/test/test_install_finalizer.h"
 #include "chrome/browser/web_applications/test/test_web_app_provider.h"
 #include "chrome/browser/web_applications/test/test_web_app_ui_manager.h"
@@ -210,6 +211,21 @@ class TestPendingAppInstallFinalizer : public InstallFinalizer {
     NOTIMPLEMENTED();
   }
 
+  bool CanUserUninstallExternalApp(const AppId& app_id) const override {
+    NOTIMPLEMENTED();
+    return false;
+  }
+
+  void UninstallExternalAppByUser(const AppId& app_id,
+                                  UninstallWebAppCallback callback) override {
+    NOTIMPLEMENTED();
+  }
+
+  bool WasExternalAppUninstalledByUser(const AppId& app_id) const override {
+    NOTIMPLEMENTED();
+    return false;
+  }
+
   bool CanAddAppToQuickLaunchBar() const override { return true; }
 
   void AddAppToQuickLaunchBar(const AppId& app_id) override {
@@ -284,6 +300,10 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
     auto shortcut_manager = std::make_unique<TestAppShortcutManager>(profile());
     shortcut_manager_ = shortcut_manager.get();
 
+    auto file_handler_manager =
+        std::make_unique<TestFileHandlerManager>(profile());
+    file_handler_manager_ = file_handler_manager.get();
+
     auto ui_manager = std::make_unique<TestWebAppUiManager>();
     ui_manager_ = ui_manager.get();
 
@@ -292,6 +312,7 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
     provider->SetInstallFinalizer(std::move(install_finalizer));
     provider->SetWebAppUiManager(std::move(ui_manager));
     provider->SetShortcutManager(std::move(shortcut_manager));
+    provider->SetFileHandlerManager(std::move(file_handler_manager));
 
     provider->Start();
   }
@@ -301,6 +322,9 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
   TestAppRegistrar* registrar() { return registrar_; }
   TestPendingAppInstallFinalizer* finalizer() { return install_finalizer_; }
   TestAppShortcutManager* shortcut_manager() { return shortcut_manager_; }
+  TestFileHandlerManager* file_handler_manager() {
+    return file_handler_manager_;
+  }
 
   TestDataRetriever* data_retriever() { return data_retriever_; }
 
@@ -338,8 +362,8 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
         install_finalizer_->GetAppIdForUrl(options.url), true);
 
     auto task = std::make_unique<PendingAppInstallTask>(
-        profile(), registrar_, shortcut_manager_, ui_manager_,
-        install_finalizer_, std::move(options));
+        profile(), registrar_, shortcut_manager_, file_handler_manager_,
+        ui_manager_, install_finalizer_, std::move(options));
     return task;
   }
 
@@ -352,6 +376,7 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
   TestPendingAppInstallFinalizer* install_finalizer_ = nullptr;
   TestWebAppUiManager* ui_manager_ = nullptr;
   TestAppShortcutManager* shortcut_manager_ = nullptr;
+  TestFileHandlerManager* file_handler_manager_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(PendingAppInstallTaskTest);
 };
@@ -616,7 +641,8 @@ TEST_F(PendingAppInstallTaskTest, InstallPlaceholder) {
         EXPECT_EQ(base::UTF8ToUTF16(kWebAppUrl.spec()), web_app_info.title);
         EXPECT_EQ(kWebAppUrl, web_app_info.app_url);
         EXPECT_TRUE(web_app_info.open_as_window);
-        EXPECT_TRUE(web_app_info.icons.empty());
+        EXPECT_TRUE(web_app_info.icon_infos.empty());
+        EXPECT_TRUE(web_app_info.icon_bitmaps.empty());
 
         run_loop.Quit();
       }));
@@ -651,7 +677,8 @@ TEST_F(PendingAppInstallTaskTest, InstallPlaceholderNoCreateOsShorcuts) {
         EXPECT_EQ(base::UTF8ToUTF16(kWebAppUrl.spec()), web_app_info.title);
         EXPECT_EQ(kWebAppUrl, web_app_info.app_url);
         EXPECT_TRUE(web_app_info.open_as_window);
-        EXPECT_TRUE(web_app_info.icons.empty());
+        EXPECT_TRUE(web_app_info.icon_infos.empty());
+        EXPECT_TRUE(web_app_info.icon_bitmaps.empty());
 
         run_loop.Quit();
       }));
@@ -775,7 +802,7 @@ TEST_F(PendingAppInstallTaskTest, ReinstallPlaceholderFails) {
   task->Install(
       web_contents(), WebAppUrlLoader::Result::kUrlLoaded,
       base::BindLambdaForTesting([&](PendingAppInstallTask::Result result) {
-        EXPECT_EQ(InstallResultCode::kFailedUnknownReason, result.code);
+        EXPECT_EQ(InstallResultCode::kFailedPlaceholderUninstall, result.code);
         EXPECT_FALSE(result.app_id.has_value());
         EXPECT_TRUE(IsPlaceholderApp(profile(), kWebAppUrl));
 
@@ -847,7 +874,7 @@ TEST_F(PendingAppInstallTaskTest, InstallURLLoadFailed) {
                       {WebAppUrlLoader::Result::kFailedUnknownReason,
                        InstallResultCode::kInstallURLLoadFailed},
                       {WebAppUrlLoader::Result::kFailedPageTookTooLong,
-                       InstallResultCode::kInstallURLLoadFailed}};
+                       InstallResultCode::kInstallURLLoadTimeOut}};
 
   for (const auto& result_pair : result_pairs) {
     base::RunLoop run_loop;
@@ -855,9 +882,9 @@ TEST_F(PendingAppInstallTaskTest, InstallURLLoadFailed) {
     ExternalInstallOptions install_options(
         GURL(), DisplayMode::kStandalone,
         ExternalInstallSource::kInternalDefault);
-    PendingAppInstallTask install_task(profile(), registrar(),
-                                       shortcut_manager(), ui_manager(),
-                                       finalizer(), install_options);
+    PendingAppInstallTask install_task(
+        profile(), registrar(), shortcut_manager(), file_handler_manager(),
+        ui_manager(), finalizer(), install_options);
 
     install_task.Install(
         web_contents(), result_pair.loader_result,
@@ -875,8 +902,8 @@ TEST_F(PendingAppInstallTaskTest, FailedWebContentsDestroyed) {
       GURL(), DisplayMode::kStandalone,
       ExternalInstallSource::kInternalDefault);
   PendingAppInstallTask install_task(profile(), registrar(), shortcut_manager(),
-                                     ui_manager(), finalizer(),
-                                     install_options);
+                                     file_handler_manager(), ui_manager(),
+                                     finalizer(), install_options);
 
   install_task.Install(
       web_contents(), WebAppUrlLoader::Result::kFailedWebContentsDestroyed,

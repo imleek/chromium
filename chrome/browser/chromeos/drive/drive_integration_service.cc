@@ -28,12 +28,12 @@
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/profiles/profile_util.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/drive/drive_notification_manager_factory.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/components/drivefs/drivefs_bootstrap.h"
@@ -48,6 +48,7 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
+#include "components/user_manager/user.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -58,7 +59,6 @@
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "services/device/public/mojom/constants.mojom.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/identity/public/mojom/identity_service.mojom.h"
 #include "services/network/public/cpp/network_connection_tracker.h"
@@ -92,7 +92,7 @@ void DeleteDirectoryContents(const base::FilePath& dir) {
                       base::FileEnumerator::SHOW_SYM_LINKS);
   for (base::FilePath path = content_enumerator.Next(); !path.empty();
        path = content_enumerator.Next()) {
-    base::DeleteFile(path, true);
+    base::DeleteFileRecursively(path);
   }
 }
 
@@ -696,7 +696,7 @@ void DriveIntegrationService::ClearCacheAndRemountFileSystem(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(callback);
 
-  if (state_ != INITIALIZED) {
+  if (state_ != INITIALIZED || !GetDriveFsInterface()) {
     callback.Run(false);
     return;
   }
@@ -1076,7 +1076,7 @@ KeyedService* DriveIntegrationServiceFactory::BuildServiceInstanceFor(
   DriveIntegrationService* service = nullptr;
   if (!factory_for_test_) {
     DriveIntegrationService::PreferenceWatcher* preference_watcher = nullptr;
-    if (chromeos::IsProfileAssociatedWithGaiaAccount(profile)) {
+    if (util::IsDriveEnabledForProfile(profile)) {
       // Drive File System can be enabled.
       preference_watcher =
           new DriveIntegrationService::PreferenceWatcher(profile->GetPrefs());

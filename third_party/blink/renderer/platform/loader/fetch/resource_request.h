@@ -52,7 +52,6 @@
 namespace blink {
 
 class EncodedFormData;
-struct Referrer;
 
 // A ResourceRequest is a "request" object for ResourceLoader. Conceptually
 // it is https://fetch.spec.whatwg.org/#concept-request, but it contains
@@ -150,16 +149,6 @@ class PLATFORM_EXPORT ResourceRequest final {
   void SetHTTPContentType(const AtomicString& http_content_type) {
     SetHttpHeaderField(http_names::kContentType, http_content_type);
   }
-
-  // TODO(domfarolino): Remove this once we stop storing the generated referrer
-  // as a header, and instead use a separate member. See
-  // https://crbug.com/850813.
-  const AtomicString& HttpReferrer() const {
-    return HttpHeaderField(http_names::kReferer);
-  }
-  void SetHttpReferrer(const Referrer&);
-  bool DidSetHttpReferrer() const { return did_set_http_referrer_; }
-  void ClearHTTPReferrer();
 
   void SetReferrerPolicy(network::mojom::ReferrerPolicy referrer_policy) {
     referrer_policy_ = referrer_policy;
@@ -279,6 +268,13 @@ class PLATFORM_EXPORT ResourceRequest final {
   }
   void SetRequestContext(mojom::RequestContextType context) {
     request_context_ = context;
+  }
+
+  network::mojom::RequestDestination GetRequestDestination() const {
+    return destination_;
+  }
+  void SetRequestDestination(network::mojom::RequestDestination destination) {
+    destination_ = destination;
   }
 
   network::mojom::RequestMode GetMode() const { return mode_; }
@@ -494,17 +490,14 @@ class PLATFORM_EXPORT ResourceRequest final {
   WebURLRequest::PreviewsState previews_state_;
   scoped_refptr<SharableExtraData> sharable_extra_data_;
   mojom::RequestContextType request_context_;
+  network::mojom::RequestDestination destination_;
   network::mojom::RequestMode mode_;
   mojom::FetchImportanceMode fetch_importance_mode_;
   network::mojom::CredentialsMode credentials_mode_;
   network::mojom::RedirectMode redirect_mode_;
   String fetch_integrity_;
-  // TODO(domfarolino): Use AtomicString for referrer_string_ once
-  // off-main-thread fetch is fully implemented and ResourceRequest never gets
-  // transferred between threads. See https://crbug.com/706331.
   String referrer_string_;
   network::mojom::ReferrerPolicy referrer_policy_;
-  bool did_set_http_referrer_;
   bool is_external_request_;
   network::mojom::CorsPreflightPolicy cors_preflight_policy_;
   RedirectStatus redirect_status_;

@@ -18,6 +18,7 @@
 #include "base/memory/madv_free_discardable_memory_allocator_posix.h"
 #include "base/memory/madv_free_discardable_memory_posix.h"
 #include "base/memory/memory_pressure_listener.h"
+#include "base/test/bind_test_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/discardable_memory/client/client_discardable_shared_memory_manager.h"
@@ -97,14 +98,14 @@ IN_PROC_BROWSER_TEST_F(RenderThreadImplDiscardableMemoryBrowserTest,
   const size_t kLargeSize = 4 * 1024 * 1024;   // 4MiB.
   const size_t kNumberOfInstances = 1024 + 1;  // >4GiB total.
 
-  DiscardableMemoryBacking impl = GetDiscardableMemoryBacking();
+  base::DiscardableMemoryBacking impl = base::GetDiscardableMemoryBacking();
 
   // TODO(gordonguan): When MADV_FREE DiscardableMemory is discarded, the
   // backing memory is freed, but remains mapped in memory. It is only
   // unmapped when the object is destroyed, or on the next Lock() after
   // discard. Therefore, an abundance of discarded but mapped discardable
   // memory instances may cause an out-of-memory condition.
-  if (impl != DiscardableMemoryBacking::kSharedMemory)
+  if (impl != base::DiscardableMemoryBacking::kSharedMemory)
     return;
 
   std::vector<std::unique_ptr<base::DiscardableMemory>> instances;
@@ -125,7 +126,7 @@ IN_PROC_BROWSER_TEST_F(RenderThreadImplDiscardableMemoryBrowserTest,
                        ReleaseFreeDiscardableMemory) {
   const size_t kSize = 1024 * 1024;  // 1MiB.
 
-  DiscardableMemoryBacking impl = GetDiscardableMemoryBacking();
+  base::DiscardableMemoryBacking impl = base::GetDiscardableMemoryBacking();
 
   std::unique_ptr<base::DiscardableMemory> memory =
       discardable_memory_allocator()->AllocateLockedDiscardableMemory(kSize);
@@ -135,7 +136,7 @@ IN_PROC_BROWSER_TEST_F(RenderThreadImplDiscardableMemoryBrowserTest,
   memory.reset();
 
   EXPECT_EQ(discardable_memory_allocator()->GetBytesAllocated(), 0U);
-  if (impl != DiscardableMemoryBacking::kSharedMemory)
+  if (impl != base::DiscardableMemoryBacking::kSharedMemory)
     return;
 
   EXPECT_GE(discardable_memory::DiscardableSharedMemoryManager::Get()
@@ -179,6 +180,35 @@ IN_PROC_BROWSER_TEST_F(RenderThreadImplDiscardableMemoryBrowserTest,
   RunAllTasksUntilIdle();
 
   EXPECT_EQ(0U, discardable_memory_allocator()->GetBytesAllocated());
+}
+
+IN_PROC_BROWSER_TEST_F(RenderThreadImplDiscardableMemoryBrowserTest,
+                       CheckReleaseMemory) {
+  std::vector<std::unique_ptr<base::DiscardableMemory>> all_memory;
+  auto* allocator =
+      static_cast<discardable_memory::ClientDiscardableSharedMemoryManager*>(
+          discardable_memory_allocator());
+  constexpr size_t kMaxRegions = 10;
+  constexpr size_t kRegionSize = 4 * 1024 * 1024;
+
+  allocator->SetBytesAllocatedLimitForTesting(kMaxRegions * kRegionSize);
+
+  // Allocate the maximum amount of memory.
+  for (size_t i = 0; i < kMaxRegions; i++) {
+    auto region = allocator->AllocateLockedDiscardableMemoryWithRetryOrDie(
+        kRegionSize, base::DoNothing());
+    all_memory.push_back(std::move(region));
+  }
+
+  auto region = allocator->AllocateLockedDiscardableMemoryWithRetryOrDie(
+      kRegionSize, base::BindLambdaForTesting([&]() { all_memory.clear(); }));
+
+  // Checks that the memory reclaim callback was called, and that the allocation
+  // then succeeded. Allocation success is checked because the test has not
+  // crashed.
+  EXPECT_TRUE(all_memory.empty());
+
+  allocator->SetBytesAllocatedLimitForTesting(0);
 }
 
 }  // namespace

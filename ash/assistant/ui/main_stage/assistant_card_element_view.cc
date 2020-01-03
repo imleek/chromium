@@ -6,10 +6,11 @@
 
 #include <memory>
 
-#include "ash/assistant/model/assistant_ui_element.h"
+#include "ash/assistant/model/ui/assistant_card_element.h"
 #include "ash/assistant/ui/assistant_container_view.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/assistant/ui/assistant_view_delegate.h"
+#include "ash/assistant/util/deep_link_util.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/events/event.h"
@@ -22,6 +23,10 @@
 namespace ash {
 
 namespace {
+
+using assistant::util::DeepLinkParam;
+using assistant::util::DeepLinkType;
+using assistant::util::ProactiveSuggestionsAction;
 
 // Helpers ---------------------------------------------------------------------
 
@@ -53,21 +58,28 @@ void CreateAndSendMouseClick(aura::WindowTreeHost* host,
 AssistantCardElementView::AssistantCardElementView(
     AssistantViewDelegate* delegate,
     const AssistantCardElement* card_element)
-    : delegate_(delegate),
-      contents_(const_cast<AssistantCardElement*>(card_element)->contents()) {
+    : delegate_(delegate), card_element_(card_element) {
   InitLayout(card_element);
 
-  // We observe |contents_| to receive events pertaining to the underlying web
+  // We observe contents() to receive events pertaining to the underlying web
   // contents including auto-resize and suppressed navigation events.
-  contents_->AddObserver(this);
+  contents()->AddObserver(this);
 }
 
 AssistantCardElementView::~AssistantCardElementView() {
-  contents_->RemoveObserver(this);
+  contents()->RemoveObserver(this);
 }
 
 const char* AssistantCardElementView::GetClassName() const {
   return "AssistantCardElementView";
+}
+
+ui::Layer* AssistantCardElementView::GetLayerForAnimating() {
+  return native_view()->layer();
+}
+
+std::string AssistantCardElementView::ToStringForTesting() const {
+  return card_element_->html();
 }
 
 void AssistantCardElementView::AddedToWidget() {
@@ -94,11 +106,11 @@ void AssistantCardElementView::AboutToRequestFocusFromTabTraversal(
     bool reverse) {
   // Focus in the web contents will be reset in FocusThroughTabTraversal().
   focused_node_rect_ = gfx::Rect();
-  contents_->FocusThroughTabTraversal(reverse);
+  contents()->FocusThroughTabTraversal(reverse);
 }
 
 void AssistantCardElementView::OnFocus() {
-  contents_->Focus();
+  contents()->Focus();
 }
 
 void AssistantCardElementView::OnGestureEvent(ui::GestureEvent* event) {
@@ -163,17 +175,34 @@ void AssistantCardElementView::ScrollRectToVisible(const gfx::Rect& rect) {
 }
 
 void AssistantCardElementView::DidAutoResizeView(const gfx::Size& new_size) {
-  contents_->GetView()->view()->SetPreferredSize(new_size);
+  contents()->GetView()->view()->SetPreferredSize(new_size);
 }
 
 void AssistantCardElementView::DidSuppressNavigation(
     const GURL& url,
     WindowOpenDisposition disposition,
     bool from_user_gesture) {
+  // Proactive suggestion deep links may be invoked without a user gesture to
+  // log view impressions. Those are (currently) the only deep links we allow to
+  // be processed without originating from a user event.
+  if (!from_user_gesture) {
+    DeepLinkType deep_link_type = assistant::util::GetDeepLinkType(url);
+    if (deep_link_type != DeepLinkType::kProactiveSuggestions) {
+      NOTREACHED();
+      return;
+    }
+
+    const base::Optional<ProactiveSuggestionsAction> action =
+        assistant::util::GetDeepLinkParamAsProactiveSuggestionsAction(
+            assistant::util::GetDeepLinkParams(url), DeepLinkParam::kAction);
+    if (action != ProactiveSuggestionsAction::kViewImpression) {
+      NOTREACHED();
+      return;
+    }
+  }
   // We delegate navigation to the AssistantController so that it can apply
   // special handling to deep links.
-  if (from_user_gesture)
-    delegate_->OpenUrlFromView(url);
+  delegate_->OpenUrlFromView(url);
 }
 
 void AssistantCardElementView::FocusedNodeChanged(
@@ -195,10 +224,14 @@ void AssistantCardElementView::InitLayout(
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
   // Contents view.
-  AddChildView(contents_->GetView()->view());
+  AddChildView(contents()->GetView()->view());
 
   // OverrideDescription() doesn't work. Only names are read automatically.
   GetViewAccessibility().OverrideName(card_element->fallback());
+}
+
+content::NavigableContents* AssistantCardElementView::contents() {
+  return const_cast<content::NavigableContents*>(card_element_->contents());
 }
 
 }  // namespace ash

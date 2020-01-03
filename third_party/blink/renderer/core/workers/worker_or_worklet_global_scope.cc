@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worker_reporting_proxy.h"
 #include "third_party/blink/renderer/core/workers/worker_thread.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/fetch/detachable_use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object_snapshot.h"
 #include "third_party/blink/renderer/platform/loader/fetch/null_resource_fetcher_properties.h"
@@ -179,8 +180,16 @@ WorkerOrWorkletGlobalScope::WorkerOrWorkletGlobalScope(
     WorkerReportingProxy& reporting_proxy)
     : ExecutionContext(isolate,
                        agent,
-                       MakeGarbageCollected<OriginTrialContext>()),
-      SecurityContext(std::move(origin), WebSandboxFlags::kNone, nullptr),
+                       MakeGarbageCollected<OriginTrialContext>(),
+                       origin,
+                       WebSandboxFlags::kNone,
+                       nullptr,
+                       // Until there are APIs that are available in workers or
+                       // or worklets that require a privileged context test
+                       // that checks ancestors, just do a simple check here.
+                       origin->IsPotentiallyTrustworthy()
+                           ? SecureContextMode::kSecureContext
+                           : SecureContextMode::kInsecureContext),
       off_main_thread_fetch_option_(off_main_thread_fetch_option),
       name_(name),
       parent_devtools_token_(parent_devtools_token),
@@ -270,7 +279,7 @@ void WorkerOrWorkletGlobalScope::InitializeWebFetchContextIfNeeded() {
       web_worker_fetch_context_->TakeSubresourceFilter();
   if (web_filter) {
     subresource_filter_ =
-        SubresourceFilter::Create(*this, std::move(web_filter));
+        MakeGarbageCollected<SubresourceFilter>(this, std::move(web_filter));
   }
 }
 
@@ -406,10 +415,11 @@ WorkerOrWorkletGlobalScope::GetTaskRunner(TaskType type) {
 }
 
 void WorkerOrWorkletGlobalScope::ApplySandboxFlags(SandboxFlags mask) {
-  sandbox_flags_ |= mask;
+  GetSecurityContext().ApplySandboxFlags(mask);
   if (IsSandboxed(WebSandboxFlags::kOrigin) &&
       !GetSecurityOrigin()->IsOpaque()) {
-    SetSecurityOrigin(GetSecurityOrigin()->DeriveNewOpaqueOrigin());
+    GetSecurityContext().SetSecurityOrigin(
+        GetSecurityOrigin()->DeriveNewOpaqueOrigin());
   }
 }
 
@@ -422,7 +432,7 @@ void WorkerOrWorkletGlobalScope::InitContentSecurityPolicyFromVector(
     const Vector<CSPHeaderAndType>& headers) {
   if (!GetContentSecurityPolicy()) {
     auto* csp = MakeGarbageCollected<ContentSecurityPolicy>();
-    SetContentSecurityPolicy(csp);
+    GetSecurityContext().SetContentSecurityPolicy(csp);
   }
   for (const auto& policy_and_type : headers) {
     GetContentSecurityPolicy()->DidReceiveHeader(
@@ -444,7 +454,8 @@ void WorkerOrWorkletGlobalScope::FetchModuleScript(
     const KURL& module_url_record,
     const FetchClientSettingsObjectSnapshot& fetch_client_settings_object,
     WorkerResourceTimingNotifier& resource_timing_notifier,
-    mojom::RequestContextType destination,
+    mojom::RequestContextType context_type,
+    network::mojom::RequestDestination destination,
     network::mojom::CredentialsMode credentials_mode,
     ModuleScriptCustomFetchType custom_fetch_type,
     ModuleTreeClient* client) {
@@ -473,19 +484,13 @@ void WorkerOrWorkletGlobalScope::FetchModuleScript(
       module_url_record,
       CreateOutsideSettingsFetcher(fetch_client_settings_object,
                                    resource_timing_notifier),
-      destination, options, custom_fetch_type, client);
+      context_type, destination, options, custom_fetch_type, client);
 }
 
-void WorkerOrWorkletGlobalScope::TasksWerePaused() {
-  ExecutionContext::TasksWerePaused();
+void WorkerOrWorkletGlobalScope::SetDefersLoadingForResourceFetchers(
+    bool defers) {
   for (ResourceFetcher* resource_fetcher : resource_fetchers_)
-    resource_fetcher->SetDefersLoading(true);
-}
-
-void WorkerOrWorkletGlobalScope::TasksWereUnpaused() {
-  ExecutionContext::TasksWereUnpaused();
-  for (ResourceFetcher* resource_fetcher : resource_fetchers_)
-    resource_fetcher->SetDefersLoading(false);
+    resource_fetcher->SetDefersLoading(defers);
 }
 
 void WorkerOrWorkletGlobalScope::Trace(blink::Visitor* visitor) {
@@ -496,7 +501,6 @@ void WorkerOrWorkletGlobalScope::Trace(blink::Visitor* visitor) {
   visitor->Trace(modulator_);
   EventTargetWithInlineData::Trace(visitor);
   ExecutionContext::Trace(visitor);
-  SecurityContext::Trace(visitor);
 }
 
 }  // namespace blink

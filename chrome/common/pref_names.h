@@ -180,6 +180,8 @@ extern const char kAccessibilityCaptionsTextOpacity[];
 extern const char kAccessibilityCaptionsBackgroundColor[];
 extern const char kAccessibilityCaptionsTextShadow[];
 extern const char kAccessibilityCaptionsBackgroundOpacity[];
+extern const char kLiveCaptionEnabled[];
+extern const char kSODAPath[];
 #if defined(OS_MACOSX)
 extern const char kConfirmToQuitEnabled[];
 extern const char kShowFullscreenToolbar[];
@@ -402,14 +404,13 @@ extern const char kProfileUsingDefaultAvatar[];
 extern const char kProfileUsingGAIAAvatar[];
 extern const char kSupervisedUserId[];
 
-extern const char kProfileGAIAInfoUpdateTime[];
-extern const char kProfileGAIAInfoPictureURL[];
-
 extern const char kProfileAvatarTutorialShown[];
 
 extern const char kInvertNotificationShown[];
 
-extern const char kPrinterTypeBlacklist[];
+extern const char kPrinterTypeDenyList[];
+extern const char kPrintingAllowedBackgroundGraphicsModes[];
+extern const char kPrintingBackgroundGraphicsDefault[];
 extern const char kPrintingEnabled[];
 extern const char kPrintHeaderFooter[];
 extern const char kPrintPreviewDisabled[];
@@ -430,12 +431,10 @@ extern const char kUserNativePrintersAllowed[];
 extern const char kPrintingAllowedColorModes[];
 extern const char kPrintingAllowedDuplexModes[];
 extern const char kPrintingAllowedPinModes[];
-extern const char kPrintingAllowedBackgroundGraphicsModes[];
 extern const char kPrintingAllowedPageSizes[];
 extern const char kPrintingColorDefault[];
 extern const char kPrintingDuplexDefault[];
 extern const char kPrintingPinDefault[];
-extern const char kPrintingBackgroundGraphicsDefault[];
 extern const char kPrintingSizeDefault[];
 extern const char kPrintingSendUsernameAndFilenameEnabled[];
 extern const char kPrintJobHistoryExpirationPeriod[];
@@ -449,6 +448,7 @@ extern const char kMessageCenterDisabledExtensionIds[];
 
 extern const char kFullscreenAllowed[];
 
+extern const char kLocalDiscoveryEnabled[];
 extern const char kLocalDiscoveryNotificationsEnabled[];
 
 #if defined(OS_ANDROID)
@@ -491,6 +491,11 @@ extern const char kNaviOnboardGroup[];
 #if defined(OS_ANDROID)
 extern const char kCrashReportingEnabled[];
 #endif  // defined(OS_ANDROID)
+
+extern const char kEnableQuietNotificationPermissionUi[];
+extern const char kQuietNotificationPermissionShouldShowPromo[];
+extern const char kQuietNotificationPermissionPromoWasShown[];
+extern const char kNotificationPermissionActions[];
 
 extern const char kProfileLastUsed[];
 extern const char kProfilesLastActive[];
@@ -551,6 +556,7 @@ extern const char kSelectFileLastDirectory[];
 extern const char kExcludedSchemes[];
 
 extern const char kLastKnownIntranetRedirectOrigin[];
+extern const char kDNSInterceptionChecksEnabled[];
 
 extern const char kShutdownType[];
 extern const char kShutdownNumProcesses[];
@@ -611,6 +617,7 @@ extern const char kWebAppInstallForceList[];
 extern const char kWebAppInstallMetrics[];
 
 extern const char kWebAppsExtensionIDs[];
+extern const char kWebAppsPreferences[];
 extern const char kSystemWebAppLastUpdateVersion[];
 extern const char kSystemWebAppLastInstalledLocale[];
 
@@ -732,6 +739,7 @@ extern const char kGSSAPILibraryName[];
 extern const char kAuthAndroidNegotiateAccountType[];
 extern const char kAllowCrossOriginAuthPrompt[];
 extern const char kGloballyScopeHTTPAuthCacheEnabled[];
+extern const char kAmbientAuthenticationInPrivateModesEnabled[];
 
 #if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
 extern const char kAuthNegotiateDelegateByKdcPolicy[];
@@ -1010,6 +1018,10 @@ extern const char kCorsLegacyModeEnabled[];
 extern const char kExternalProtocolDialogShowAlwaysOpenCheckbox[];
 
 extern const char kWebComponentsV0Enabled[];
+
+#if defined(OS_ANDROID)
+extern const char kKnownInterceptionDisclosureInfobarLastShown[];
+#endif
 
 }  // namespace prefs
 

@@ -36,18 +36,23 @@
 #include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
 #include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/context_lifecycle_notifier.h"
 #include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/feature_policy/feature_policy_parser_delegate.h"
+#include "third_party/blink/renderer/core/frame/dom_timer_coordinator.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/console_logger.h"
 #include "third_party/blink/renderer/platform/loader/fetch/https_state.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "v8/include/v8.h"
 
 namespace base {
@@ -69,16 +74,17 @@ class CoreProbeSink;
 class DOMTimerCoordinator;
 class ErrorEvent;
 class EventTarget;
+class FeaturePolicy;
 class FrameOrWorkerScheduler;
 class KURL;
 class LocalDOMWindow;
 class OriginTrialContext;
 class PublicURLManager;
 class ResourceFetcher;
-class SecurityContext;
 class SecurityOrigin;
 class ScriptState;
 class TrustedTypePolicyFactory;
+enum class WebSandboxFlags;
 
 enum class TaskType : unsigned char;
 
@@ -149,10 +155,13 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
 
   virtual bool ShouldInstallV8Extensions() const { return false; }
 
-  const SecurityOrigin* GetSecurityOrigin();
+  const SecurityOrigin* GetSecurityOrigin() const;
   SecurityOrigin* GetMutableSecurityOrigin();
 
-  ContentSecurityPolicy* GetContentSecurityPolicy();
+  ContentSecurityPolicy* GetContentSecurityPolicy() const;
+
+  WebSandboxFlags GetSandboxFlags() const;
+  bool IsSandboxed(WebSandboxFlags mask) const;
 
   // Returns the content security policy to be used based on the current
   // JavaScript world we are in.
@@ -176,12 +185,17 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   // list" of tasks created by setTimeout and setInterval. The
   // DOMTimerCoordinator is owned by the ExecutionContext and should
   // not be used after the ExecutionContext is destroyed.
-  virtual DOMTimerCoordinator* Timers() = 0;
+  DOMTimerCoordinator* Timers() {
+    DCHECK(!IsWorkletGlobalScope());
+    return &timers_;
+  }
 
   virtual ResourceFetcher* Fetcher() const = 0;
 
-  virtual SecurityContext& GetSecurityContext() = 0;
-  virtual const SecurityContext& GetSecurityContext() const = 0;
+  SecurityContext& GetSecurityContext() { return security_context_; }
+  const SecurityContext& GetSecurityContext() const {
+    return security_context_;
+  }
 
   // https://tc39.github.io/ecma262/#sec-agent-clusters
   // TODO(dtapuska): Remove this virtual once all execution_contexts
@@ -215,13 +229,6 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
     AddConsoleMessageImpl(message, discard_duplicates);
   }
 
-  // TODO(haraken): Remove these methods by making the customers inherit from
-  // ContextLifecycleObserver. ContextLifecycleObserver is a standard way to
-  // observe context suspension/resumption.
-  virtual bool TasksNeedPause() { return false; }
-  virtual void TasksWerePaused() {}
-  virtual void TasksWereUnpaused() {}
-
   bool IsContextPaused() const;
   bool IsContextDestroyed() const { return is_context_destroyed_; }
   mojom::FrameLifecycleState ContextPauseState() const {
@@ -241,12 +248,15 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
 
   // Decides whether this context is privileged, as described in
   // https://w3c.github.io/webappsec-secure-contexts/#is-settings-object-contextually-secure.
-  virtual bool IsSecureContext(String& error_message) const = 0;
-  virtual bool IsSecureContext() const;
-
   SecureContextMode GetSecureContextMode() const {
-    return IsSecureContext() ? SecureContextMode::kSecureContext
-                             : SecureContextMode::kInsecureContext;
+    return secure_context_mode_;
+  }
+  bool IsSecureContext() const {
+    return secure_context_mode_ == SecureContextMode::kSecureContext;
+  }
+  bool IsSecureContext(String& error_message) const;
+  void SetSecureContextModeForTesting(SecureContextMode mode) {
+    secure_context_mode_ = mode;
   }
 
   // Returns a referrer to be used in the "Determine request's Referrer"
@@ -299,11 +309,40 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   bool FeaturePolicyFeatureObserved(
       mojom::FeaturePolicyFeature feature) override;
 
+  // Tests whether the policy-controlled feature is enabled in this frame.
+  // Optionally sends a report to any registered reporting observers or
+  // Report-To endpoints, via ReportFeaturePolicyViolation(), if the feature is
+  // disabled. The optional ConsoleMessage will be sent to the console if
+  // present, or else a default message will be used instead.
+  bool IsFeatureEnabled(
+      mojom::FeaturePolicyFeature,
+      ReportOptions report_on_failure = ReportOptions::kDoNotReport,
+      const String& message = g_empty_string,
+      const String& source_file = g_empty_string) const;
+  bool IsFeatureEnabled(
+      mojom::FeaturePolicyFeature,
+      PolicyValue threshold_value,
+      ReportOptions report_on_failure = ReportOptions::kDoNotReport,
+      const String& message = g_empty_string,
+      const String& source_file = g_empty_string) const;
+  virtual void CountPotentialFeaturePolicyViolation(
+      mojom::FeaturePolicyFeature) const {}
+  virtual void ReportFeaturePolicyViolation(
+      mojom::FeaturePolicyFeature,
+      mojom::FeaturePolicyDisposition,
+      const String& message = g_empty_string,
+      const String& source_file = g_empty_string) const {}
+
+  String addressSpaceForBindings() const;
 
  protected:
   ExecutionContext(v8::Isolate* isolate,
                    Agent* agent,
-                   OriginTrialContext* origin_trial_context);
+                   OriginTrialContext* origin_trial_context,
+                   scoped_refptr<SecurityOrigin> origin,
+                   WebSandboxFlags sandbox_flags,
+                   std::unique_ptr<FeaturePolicy> feature_policy,
+                   SecureContextMode secure_context_mode);
   ~ExecutionContext() override;
 
  private:
@@ -312,11 +351,12 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
                              mojom::ConsoleMessageLevel,
                              const String& message,
                              bool discard_duplicates) final;
-
   virtual void AddConsoleMessageImpl(ConsoleMessage*,
                                      bool discard_duplicates) = 0;
 
   v8::Isolate* const isolate_;
+
+  SecurityContext security_context_;
 
   bool DispatchErrorEventInternal(ErrorEvent*, SanitizeScriptErrors);
 
@@ -336,6 +376,8 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
 
   Member<OriginTrialContext> origin_trial_context_;
 
+  DOMTimerCoordinator timers_;
+
   // Counter that keeps track of how many window interaction calls are allowed
   // for this ExecutionContext. Callers are expected to call
   // |allowWindowInteraction()| and |consumeWindowInteraction()| in order to
@@ -348,6 +390,8 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   // them multiple times.
   // The size of this vector is 0 until FeaturePolicyFeatureObserved is called.
   Vector<bool> parsed_feature_policies_;
+
+  SecureContextMode secure_context_mode_;
 
   DISALLOW_COPY_AND_ASSIGN(ExecutionContext);
 };

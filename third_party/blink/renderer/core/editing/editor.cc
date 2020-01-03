@@ -96,7 +96,8 @@ namespace blink {
 namespace {
 
 bool IsInPasswordFieldWithUnrevealedPassword(const Position& position) {
-  if (auto* input = ToHTMLInputElementOrNull(EnclosingTextControl(position))) {
+  if (auto* input =
+          DynamicTo<HTMLInputElement>(EnclosingTextControl(position))) {
     return (input->type() == input_type_names::kPassword) &&
            !input->ShouldRevealPassword();
   }
@@ -276,7 +277,7 @@ void Editor::DeleteSelectionWithSmartDelete(
     return;
 
   DCHECK(GetFrame().GetDocument());
-  DeleteSelectionCommand::Create(
+  MakeGarbageCollected<DeleteSelectionCommand>(
       *GetFrame().GetDocument(),
       DeleteSelectionOptions::Builder()
           .SetSmartDelete(delete_mode == DeleteMode::kSmart)
@@ -553,23 +554,23 @@ static void CountEditingEvent(ExecutionContext* execution_context,
     return;
   }
 
-  if (IsHTMLInputElement(node)) {
+  if (IsA<HTMLInputElement>(node)) {
     UseCounter::Count(execution_context, feature_on_input);
     return;
   }
 
-  if (IsHTMLTextAreaElement(node)) {
+  if (IsA<HTMLTextAreaElement>(node)) {
     UseCounter::Count(execution_context, feature_on_text_area);
     return;
   }
 
   TextControlElement* control = EnclosingTextControl(node);
-  if (IsHTMLInputElement(control)) {
+  if (IsA<HTMLInputElement>(control)) {
     UseCounter::Count(execution_context, feature_on_input);
     return;
   }
 
-  if (IsHTMLTextAreaElement(control)) {
+  if (IsA<HTMLTextAreaElement>(control)) {
     UseCounter::Count(execution_context, feature_on_text_area);
     return;
   }
@@ -724,7 +725,8 @@ void Editor::ComputeAndSetTypingStyle(CSSPropertyValueSet* style,
       EditingStyle::kPreserveWritingDirection);
 
   // Handle block styles, substracting these from the typing style.
-  EditingStyle* block_style = typing_style_->ExtractAndRemoveBlockProperties();
+  EditingStyle* block_style =
+      typing_style_->ExtractAndRemoveBlockProperties(GetFrame().GetDocument());
   if (!block_style->IsEmpty()) {
     DCHECK(GetFrame().GetDocument());
     MakeGarbageCollected<ApplyStyleCommand>(*GetFrame().GetDocument(),

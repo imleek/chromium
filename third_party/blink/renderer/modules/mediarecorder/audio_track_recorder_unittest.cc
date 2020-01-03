@@ -109,7 +109,7 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
         first_source_cache_pos_(0) {
     ResetDecoder(first_params_);
     PrepareBlinkTrack();
-    audio_track_recorder_ = MakeGarbageCollected<AudioTrackRecorder>(
+    audio_track_recorder_ = std::make_unique<AudioTrackRecorder>(
         codec_, blink_track_,
         WTF::BindRepeating(&AudioTrackRecorderTest::OnEncodedAudio,
                            WTF::Unretained(this)),
@@ -121,7 +121,7 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
     opus_decoder_ = nullptr;
     blink_track_.Reset();
     WebHeap::CollectAllGarbageForTesting();
-    audio_track_recorder_ = nullptr;
+    audio_track_recorder_.reset();
     // Let the message loop run to finish destroying the recorder properly.
     base::RunLoop().RunUntilIdle();
   }
@@ -207,7 +207,7 @@ class AudioTrackRecorderTest : public testing::TestWithParam<ATRTestParams> {
   }
 
   // ATR and WebMediaStreamTrack for fooling it.
-  Persistent<AudioTrackRecorder> audio_track_recorder_;
+  std::unique_ptr<AudioTrackRecorder> audio_track_recorder_;
   WebMediaStreamTrack blink_track_;
 
   // The codec we'll use for compression the audio.
@@ -256,7 +256,7 @@ TEST_P(AudioTrackRecorderTest, OnDataOpus) {
 
   testing::InSequence s;
   base::RunLoop run_loop;
-  base::Closure quit_closure = run_loop.QuitClosure();
+  base::RepeatingClosure quit_closure = run_loop.QuitClosure();
 
   // Give ATR initial audio parameters.
   audio_track_recorder_->OnSetFormat(first_params_);
@@ -315,7 +315,7 @@ TEST_P(AudioTrackRecorderTest, OnDataPcm) {
 
   testing::InSequence s;
   base::RunLoop run_loop;
-  base::Closure quit_closure = run_loop.QuitClosure();
+  base::RepeatingClosure quit_closure = run_loop.QuitClosure();
 
   audio_track_recorder_->OnSetFormat(first_params_);
 
@@ -340,7 +340,7 @@ TEST_P(AudioTrackRecorderTest, PauseResume) {
 
   testing::InSequence s;
   base::RunLoop run_loop;
-  base::Closure quit_closure = run_loop.QuitClosure();
+  base::RepeatingClosure quit_closure = run_loop.QuitClosure();
 
   // Give ATR initial audio parameters.
   audio_track_recorder_->OnSetFormat(first_params_);
@@ -374,7 +374,7 @@ TEST_P(AudioTrackRecorderTest, PauseResume) {
   testing::Mock::VerifyAndClearExpectations(this);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          AudioTrackRecorderTest,
                          testing::ValuesIn(kATRTestParams));
 }  // namespace blink

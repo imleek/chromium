@@ -6,6 +6,7 @@
 #define ASH_ASSISTANT_TEST_ASSISTANT_ASH_TEST_BASE_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "ash/assistant/model/assistant_ui_model.h"
@@ -52,6 +53,9 @@ class AssistantAshTestBase : public AshTestBase {
   // keyboard.
   void SetPreferVoice(bool value);
 
+  // Return true if the Assistant UI is visible.
+  bool IsVisible();
+
   // Return the actual displayed Assistant main view.
   // Can only be used after |ShowAssistantUi| has been called.
   views::View* main_view();
@@ -60,15 +64,33 @@ class AssistantAshTestBase : public AshTestBase {
   // Can only be used after |ShowAssistantUi| has been called.
   views::View* page_view();
 
+  // Return the app list view hosting the Assistant page view.
+  // Can only be used after |ShowAssistantUi| has been called.
+  views::View* app_list_view();
+
   // Spoof sending a request to the Assistant service,
   // and receiving |response_text| as a response to display.
   void MockAssistantInteractionWithResponse(const std::string& response_text);
 
+  void MockAssistantInteractionWithQueryAndResponse(
+      const std::string& query,
+      const std::string& response_text);
+
   // Simulate the user entering a query followed by <return>.
   void SendQueryThroughTextField(const std::string& query);
 
-  // Simulate the user tapping on the text field.
-  void TapOnTextField();
+  // Simulate the user tapping on the given view.
+  // Waits for the event to be processed.
+  void TapOnAndWait(views::View* view);
+
+  // Simulate a mouse click on the given view.
+  // Waits for the event to be processed.
+  void ClickOnAndWait(views::View* view);
+
+  // Returns the current interaction. Returns |base::nullopt| if no interaction
+  // is in progress.
+  base::Optional<chromeos::assistant::mojom::AssistantInteractionMetadata>
+  current_interaction();
 
   // Create a new App window, and activate it. This will take the focus away
   // from the Assistant UI (and force it to close).
@@ -89,8 +111,15 @@ class AssistantAshTestBase : public AshTestBase {
   // Return the greeting label shown when you first open the Assistant.
   views::View* greeting_label();
 
+  // Return the button to enable voice mode.
+  views::View* voice_input_toggle();
+
+  // Return the button to enable text mode.
+  views::View* keyboard_input_toggle();
+
   // Show the on-screen keyboard.
   void ShowKeyboard();
+
   // Returns if the on-screen keyboard is being displayed.
   bool IsKeyboardShowing() const;
 

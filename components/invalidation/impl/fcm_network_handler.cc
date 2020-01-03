@@ -11,8 +11,10 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/i18n/time_formatting.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "components/gcm_driver/gcm_driver.h"
@@ -72,18 +74,20 @@ std::string UnpackPrivateTopic(base::StringPiece private_topic) {
   }
 }
 
-InvalidationParsingStatus ParseIncommingMessage(
+InvalidationParsingStatus ParseIncomingMessage(
     const gcm::IncomingMessage& message,
     std::string* payload,
     std::string* private_topic,
     std::string* public_topic,
-    std::string* version) {
+    int64_t* version) {
   *payload = GetValueFromMessage(message, kPayloadKey);
-  *version = GetValueFromMessage(message, kVersionKey);
+  std::string version_str = GetValueFromMessage(message, kVersionKey);
 
-  // Version must always be there.
-  if (version->empty())
+  // Version must always be there, and be an integer.
+  if (version_str.empty())
     return InvalidationParsingStatus::kVersionEmpty;
+  if (!base::StringToInt64(version_str, version))
+    return InvalidationParsingStatus::kVersionInvalid;
 
   *public_topic = GetValueFromMessage(message, kPublicTopic);
 
@@ -92,6 +96,28 @@ InvalidationParsingStatus ParseIncommingMessage(
     return InvalidationParsingStatus::kPrivateTopicEmpty;
 
   return InvalidationParsingStatus::kSuccess;
+}
+
+void RecordFCMMessageStatus(InvalidationParsingStatus status,
+                            const std::string& sender_id) {
+  // These histograms are recorded quite frequently, so use the macros rather
+  // than the functions.
+  UMA_HISTOGRAM_ENUMERATION("FCMInvalidations.FCMMessageStatus", status);
+  // Also split the histogram by a few well-known senders. The actual constants
+  // aren't accessible here (they're defined in higher layers), so we simply
+  // duplicate them here, strictly only for the purpose of metrics.
+  constexpr char kInvalidationGCMSenderId[] = "8181035976";
+  constexpr char kDriveFcmSenderId[] = "947318989803";
+  constexpr char kPolicyFCMInvalidationSenderID[] = "1013309121859";
+  if (sender_id == kInvalidationGCMSenderId) {
+    UMA_HISTOGRAM_ENUMERATION("FCMInvalidations.FCMMessageStatus.Sync", status);
+  } else if (sender_id == kDriveFcmSenderId) {
+    UMA_HISTOGRAM_ENUMERATION("FCMInvalidations.FCMMessageStatus.Drive",
+                              status);
+  } else if (sender_id == kPolicyFCMInvalidationSenderID) {
+    UMA_HISTOGRAM_ENUMERATION("FCMInvalidations.FCMMessageStatus.Policy",
+                              status);
+  }
 }
 
 }  // namespace
@@ -149,8 +175,8 @@ bool FCMNetworkHandler::IsListening() const {
 
 void FCMNetworkHandler::DidRetrieveToken(const std::string& subscription_token,
                                          InstanceID::Result result) {
-  UMA_HISTOGRAM_ENUMERATION("FCMInvalidations.InitialTokenRetrievalStatus",
-                            result, InstanceID::Result::LAST_RESULT + 1);
+  base::UmaHistogramEnumeration("FCMInvalidations.InitialTokenRetrievalStatus",
+                                result);
   diagnostic_info_.registration_result = result;
   diagnostic_info_.token = subscription_token;
   diagnostic_info_.instance_id_token_was_received = base::Time::Now();
@@ -235,23 +261,26 @@ void FCMNetworkHandler::OnStoreReset() {}
 void FCMNetworkHandler::OnMessage(const std::string& app_id,
                                   const gcm::IncomingMessage& message) {
   DCHECK_EQ(app_id, app_id_);
+
   std::string payload;
   std::string private_topic;
   std::string public_topic;
-  std::string version;
-
-  InvalidationParsingStatus status = ParseIncommingMessage(
+  int64_t version = 0;
+  InvalidationParsingStatus status = ParseIncomingMessage(
       message, &payload, &private_topic, &public_topic, &version);
-  UMA_HISTOGRAM_ENUMERATION("FCMInvalidations.FCMMessageStatus", status);
+
+  RecordFCMMessageStatus(status, sender_id_);
 
   if (status == InvalidationParsingStatus::kSuccess)
     DeliverIncomingMessage(payload, private_topic, public_topic, version);
 }
 
 void FCMNetworkHandler::OnMessagesDeleted(const std::string& app_id) {
-  // TODO(melandory): consider notifyint the client that messages were
-  // deleted. So the client can act on it, e.g. in case of sync request
-  // GetUpdates from the server.
+  DCHECK_EQ(app_id, app_id_);
+  base::UmaHistogramBoolean("FCMInvalidations.FCMMessagesDeleted", true);
+  // Note: If this actually happens in practice, consider notifying the client
+  // that messages were deleted so it can act on it, e.g. in case of sync by
+  // triggering a GetUpdates.
 }
 
 void FCMNetworkHandler::OnSendError(
@@ -275,13 +304,15 @@ void FCMNetworkHandler::SetTokenValidationTimerForTesting(
 }
 
 void FCMNetworkHandler::RequestDetailedStatus(
-    base::Callback<void(const base::DictionaryValue&)> callback) {
+    const base::RepeatingCallback<void(const base::DictionaryValue&)>&
+        callback) {
   callback.Run(diagnostic_info_.CollectDebugData());
 }
 
-FCMNetworkHandlerDiagnostic::FCMNetworkHandlerDiagnostic() {}
+FCMNetworkHandler::FCMNetworkHandlerDiagnostic::FCMNetworkHandlerDiagnostic() {}
 
-base::DictionaryValue FCMNetworkHandlerDiagnostic::CollectDebugData() const {
+base::DictionaryValue
+FCMNetworkHandler::FCMNetworkHandlerDiagnostic::CollectDebugData() const {
   base::DictionaryValue status;
   status.SetString("NetworkHandler.Registration-result-code",
                    RegistrationResultToString(registration_result));
@@ -307,7 +338,8 @@ base::DictionaryValue FCMNetworkHandlerDiagnostic::CollectDebugData() const {
   return status;
 }
 
-std::string FCMNetworkHandlerDiagnostic::RegistrationResultToString(
+std::string
+FCMNetworkHandler::FCMNetworkHandlerDiagnostic::RegistrationResultToString(
     const instance_id::InstanceID::Result result) const {
   switch (registration_result) {
     case instance_id::InstanceID::SUCCESS:

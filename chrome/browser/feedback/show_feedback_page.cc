@@ -13,13 +13,13 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "components/feedback/feedback_util.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/browser/api/feedback_private/feedback_private_api.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 #endif
 
 namespace feedback_private = extensions::api::feedback_private;
@@ -61,6 +61,18 @@ void ShowFeedbackPage(const Browser* browser,
   }
 
   Profile* profile = GetFeedbackProfile(browser);
+  ShowFeedbackPage(page_url, profile, source, description_template,
+                   description_placeholder_text, category_tag,
+                   extra_diagnostics);
+}
+
+void ShowFeedbackPage(const GURL& page_url,
+                      Profile* profile,
+                      FeedbackSource source,
+                      const std::string& description_template,
+                      const std::string& description_placeholder_text,
+                      const std::string& category_tag,
+                      const std::string& extra_diagnostics) {
   if (!profile) {
     LOG(ERROR) << "Cannot invoke feedback: No profile found!";
     return;
@@ -84,7 +96,7 @@ void ShowFeedbackPage(const Browser* browser,
 #if defined(OS_CHROMEOS)
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
   if (identity_manager &&
-      feedback_util::IsGoogleEmail(
+      gaia::IsGoogleInternalAccountEmail(
           identity_manager->GetPrimaryAccountInfo().email)) {
     flow = feedback_private::FeedbackFlow::FEEDBACK_FLOW_GOOGLEINTERNAL;
     include_bluetooth_logs = IsFromUserInteraction(source);

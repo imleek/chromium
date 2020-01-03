@@ -47,6 +47,7 @@
 #include "third_party/blink/renderer/core/layout/layout_object_factory.h"
 #include "third_party/blink/renderer/core/layout/layout_slider_container.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
+#include "ui/base/ui_base_features.h"
 
 namespace blink {
 
@@ -67,7 +68,7 @@ void SliderThumbElement::SetPositionFromValue() {
   if (GetLayoutObject()) {
     GetLayoutObject()->SetNeedsLayoutAndFullPaintInvalidation(
         layout_invalidation_reason::kSliderValueChanged);
-    if (RuntimeEnabledFeatures::FormControlsRefreshEnabled()) {
+    if (features::IsFormControlsRefreshEnabled()) {
       HTMLInputElement* input(HostInput());
       if (input && input->GetLayoutObject()) {
         // the slider track selected value needs to be updated.
@@ -275,7 +276,7 @@ void SliderThumbElement::DetachLayoutTree(bool performing_reattach) {
 HTMLInputElement* SliderThumbElement::HostInput() const {
   // Only HTMLInputElement creates SliderThumbElement instances as its shadow
   // nodes.  So, ownerShadowHost() must be an HTMLInputElement.
-  return ToHTMLInputElement(OwnerShadowHost());
+  return To<HTMLInputElement>(OwnerShadowHost());
 }
 
 static const AtomicString& SliderThumbShadowPartId() {
@@ -339,7 +340,7 @@ SliderContainerElement::SliderContainerElement(Document& document)
 }
 
 HTMLInputElement* SliderContainerElement::HostInput() const {
-  return ToHTMLInputElement(OwnerShadowHost());
+  return To<HTMLInputElement>(OwnerShadowHost());
 }
 
 LayoutObject* SliderContainerElement::CreateLayoutObject(const ComputedStyle&,

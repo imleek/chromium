@@ -188,9 +188,9 @@ void TrayBluetoothHelperLegacy::StartBluetoothDiscovering() {
   VLOG(1) << "Requesting new Bluetooth device discovery session.";
   should_run_discovery_ = true;
   adapter_->StartDiscoverySession(
-      base::Bind(&TrayBluetoothHelperLegacy::OnStartDiscoverySession,
-                 weak_ptr_factory_.GetWeakPtr()),
-      base::Bind(&BluetoothSetDiscoveringError));
+      base::BindOnce(&TrayBluetoothHelperLegacy::OnStartDiscoverySession,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&BluetoothSetDiscoveringError));
 }
 
 void TrayBluetoothHelperLegacy::StopBluetoothDiscovering() {
@@ -202,8 +202,7 @@ void TrayBluetoothHelperLegacy::StopBluetoothDiscovering() {
     return;
   }
   VLOG(1) << "Stopping Bluetooth device discovery session.";
-  discovery_session_->Stop(base::DoNothing(),
-                           base::Bind(&BluetoothSetDiscoveringError));
+  discovery_session_.reset();
 }
 
 void TrayBluetoothHelperLegacy::ConnectToBluetoothDevice(
@@ -235,18 +234,18 @@ void TrayBluetoothHelperLegacy::ConnectToBluetoothDevice(
     }
 
     device->Connect(nullptr /* pairing_delegate */,
-                    base::Bind(&OnBluetoothDeviceConnect,
-                               true /* was_device_already_paired */),
-                    base::Bind(&OnBluetoothDeviceConnectError,
-                               true /* was_device_already_paired */));
+                    base::BindOnce(&OnBluetoothDeviceConnect,
+                                   true /* was_device_already_paired */),
+                    base::BindOnce(&OnBluetoothDeviceConnectError,
+                                   true /* was_device_already_paired */));
     return;
   }
 
   // Simply connect without pairing for devices which do not support pairing.
   if (!device->IsPairable()) {
     device->Connect(nullptr /* pairing_delegate */, base::DoNothing(),
-                    base::Bind(&OnBluetoothDeviceConnectError,
-                               false /* was_device_already_paired */));
+                    base::BindOnce(&OnBluetoothDeviceConnectError,
+                                   false /* was_device_already_paired */));
     return;
   }
 

@@ -39,15 +39,15 @@ import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.UrlBar;
-import org.chromium.chrome.browser.preferences.Preferences;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager;
+import org.chromium.chrome.browser.settings.SettingsActivity;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.privacy.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuTestSupport;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
@@ -195,7 +195,7 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
      */
     public static void waitForActivityNativeInitializationComplete(ChromeActivity activity) {
         CriteriaHelper.pollUiThread(()
-                                            -> ChromeBrowserInitializer.getInstance(activity)
+                                            -> ChromeBrowserInitializer.getInstance()
                                                        .hasNativeInitializationCompleted(),
                 "Native initialization never finished",
                 20 * CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL,
@@ -599,15 +599,18 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
     }
 
     /**
-     * Launches the preferences menu and starts the preferences activity named fragmentName.
+     * Launches the settings activity with the specified fragment.
      * Returns the activity that was started.
+     *
+     * TODO(chouinard): This seems like mostly a duplicate of {@link
+     * SettingsActivityTest#startSettingsActivity}, try to consolidate to one.
      */
-    public Preferences startPreferences(String fragmentName) {
+    public SettingsActivity startSettingsActivity(String fragmentName) {
         Context context = InstrumentationRegistry.getTargetContext();
-        Intent intent = PreferencesLauncher.createIntentForSettingsPage(context, fragmentName);
+        Intent intent = SettingsLauncher.createIntentForSettingsPage(context, fragmentName);
         Activity activity = InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
-        Assert.assertTrue(activity instanceof Preferences);
-        return (Preferences) activity;
+        Assert.assertTrue(activity instanceof SettingsActivity);
+        return (SettingsActivity) activity;
     }
 
     /**

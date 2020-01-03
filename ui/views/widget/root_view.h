@@ -28,6 +28,7 @@ class Widget;
 // This is a views-internal API and should not be used externally.
 // Widget exposes this object as a View*.
 namespace internal {
+class AnnounceTextView;
 class PreEventDispatchHandler;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -91,6 +92,11 @@ class VIEWS_EXPORT RootView : public View,
   // this View hierarchy.
   void DeviceScaleFactorChanged(float old_device_scale_factor,
                                 float new_device_scale_factor);
+
+  // Accessibility -------------------------------------------------------------
+
+  // Make an announcement through the screen reader, if present.
+  void AnnounceText(const base::string16& text);
 
   // Overridden from FocusTraversable:
   FocusSearch* GetFocusSearch() override;
@@ -232,6 +238,12 @@ class VIEWS_EXPORT RootView : public View,
 
   // Tracks drag state for a view.
   View::DragInfo drag_info_;
+
+  // Accessibility -------------------------------------------------------------
+
+  // Hidden view used to make announcements to the screen reader via an alert or
+  // live region update.
+  AnnounceTextView* announce_view_ = nullptr;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(RootView);
 };

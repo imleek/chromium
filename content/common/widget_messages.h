@@ -20,7 +20,6 @@
 #include "ipc/ipc_message_macros.h"
 #include "third_party/blink/public/common/screen_orientation/web_screen_orientation_type.h"
 #include "third_party/blink/public/platform/viewport_intersection_state.h"
-#include "third_party/blink/public/platform/web_float_point.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_intrinsic_sizing_info.h"
 #include "third_party/blink/public/web/web_text_direction.h"
@@ -36,11 +35,6 @@
 #define IPC_MESSAGE_START WidgetMsgStart
 
 // Traits for WebDeviceEmulationParams.
-IPC_STRUCT_TRAITS_BEGIN(blink::WebFloatPoint)
-  IPC_STRUCT_TRAITS_MEMBER(x)
-  IPC_STRUCT_TRAITS_MEMBER(y)
-IPC_STRUCT_TRAITS_END()
-
 IPC_STRUCT_TRAITS_BEGIN(blink::WebFloatRect)
   IPC_STRUCT_TRAITS_MEMBER(x)
   IPC_STRUCT_TRAITS_MEMBER(y)
@@ -95,6 +89,8 @@ IPC_STRUCT_TRAITS_BEGIN(content::TextInputState)
   IPC_STRUCT_TRAITS_MEMBER(show_ime_if_needed)
   IPC_STRUCT_TRAITS_MEMBER(always_hide_ime)
   IPC_STRUCT_TRAITS_MEMBER(reply_to_request)
+  IPC_STRUCT_TRAITS_MEMBER(edit_context_control_bounds)
+  IPC_STRUCT_TRAITS_MEMBER(edit_context_selection_bounds)
 IPC_STRUCT_TRAITS_END()
 
 //

@@ -26,9 +26,6 @@ BluetoothInternalsTest.prototype = {
   isAsync: true,
 
   /** @override */
-  runAccessibilityChecks: false,
-
-  /** @override */
   extraLibraries: [
     '//third_party/mocha/mocha.js',
     '//chrome/test/data/webui/mocha_adapter.js',
@@ -192,7 +189,8 @@ BluetoothInternalsTest.prototype = {
 
     window.setupFn = () => {
       this.internalsHandlerInterceptor = new MojoInterfaceInterceptor(
-          mojom.BluetoothInternalsHandler.$interfaceName);
+          mojom.BluetoothInternalsHandler.$interfaceName, 'context',
+          /*useBrowserInterfaceBroker=*/ true);
       this.internalsHandlerInterceptor.oninterfacerequest = (e) => {
         this.internalsHandler = new TestBluetoothInternalsHandler(e.handle);
 

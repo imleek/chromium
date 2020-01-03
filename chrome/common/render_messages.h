@@ -27,7 +27,6 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "url/gurl.h"
 #include "url/ipc/url_param_traits.h"
-#include "url/origin.h"
 
 // Singly-included section for enums and custom IPC traits.
 #ifndef INTERNAL_CHROME_COMMON_RENDER_MESSAGES_H_
@@ -62,12 +61,6 @@ IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_SetIsShowingDownloadButtonInErrorPage,
 //-----------------------------------------------------------------------------
 // Misc messages
 // These are messages sent from the renderer to the browser process.
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-// Sent by the renderer to check if crash reporting is enabled.
-IPC_SYNC_MESSAGE_CONTROL0_1(ChromeViewHostMsg_IsCrashReportingEnabled,
-                            bool /* enabled */)
-#endif
 
 // Tells the browser to open a PDF file in a new tab. Used when no PDF Viewer is
 // available, and user clicks to view PDF.

@@ -26,6 +26,7 @@ class PanelItem extends HTMLElement {
     this.panelTypeDone = 2;
     this.panelTypeError = 3;
     this.panelTypeInfo = 4;
+    this.panelTypeFormatProgress = 5;
 
     /** @private {number} */
     this.panelType_ = this.panelTypeDefault;
@@ -60,7 +61,7 @@ class PanelItem extends HTMLElement {
     return `<style>
               .xf-panel-item {
                   align-items: center;
-                  background-color: #FFF;
+                  background-color: rgba(0,0,0,0);
                   border-radius: 4px;
                   display: flex;
                   flex-direction: row;
@@ -123,8 +124,10 @@ class PanelItem extends HTMLElement {
                   padding: 16px;
               }
 
-              xf-activity-complete {
+              iron-icon {
+                  height: 36px;
                   padding: 16px;
+                  width: 36px;
               }
 
               // TODO(crbug.com/947388) Use '--goog' prefixed CSS varables.
@@ -149,7 +152,7 @@ class PanelItem extends HTMLElement {
             <div class='xf-panel-item'>
                 <xf-circular-progress id='indicator'>
                 </xf-circular-progress>
-                <div class='xf-panel-text'>
+                <div class='xf-panel-text' role='alert'>
                     <span class='xf-panel-label-text' tabindex='0'>
                     </span>
                     <br class='xf-linebreaker'/>
@@ -204,6 +207,10 @@ class PanelItem extends HTMLElement {
 
     const buttonSpacer = this.shadowRoot.querySelector('#button-gap');
 
+    // Default the text host to use an alert role.
+    const textHost = assert(this.shadowRoot.querySelector('.xf-panel-text'));
+    textHost.setAttribute('role', 'alert');
+
     // Setup the panel configuration for the panel type.
     // TOOD(crbug.com/947388) Simplify this switch breaking out common cases.
     /** @type {?Element} */
@@ -227,6 +234,9 @@ class PanelItem extends HTMLElement {
         primaryButton.dataset.category = 'expand';
         primaryButton.setAttribute(
             'aria-label', '$i18n{FEEDBACK_EXPAND_LABEL}');
+        // Remove the 'alert' role to stop screen readers repeatedly
+        // reading each progress update.
+        textHost.setAttribute('role', '');
         buttonSpacer.insertAdjacentElement('afterend', primaryButton);
         break;
       case this.panelTypeDone:
@@ -250,6 +260,10 @@ class PanelItem extends HTMLElement {
         buttonSpacer.insertAdjacentElement('afterend', secondaryButton);
         break;
       case this.panelTypeInfo:
+        break;
+      case this.panelTypeFormatProgress:
+        this.setAttribute('indicator', 'status');
+        this.setAttribute('status', 'hard-drive');
         break;
     }
 
@@ -314,10 +328,10 @@ class PanelItem extends HTMLElement {
             }
             break;
           case 'status':
-            indicator = document.createElement('xf-activity-complete');
+            indicator = document.createElement('iron-icon');
             const status = this.getAttribute('status');
             if (status) {
-              indicator.status = status;
+              indicator.setAttribute('icon', `files36:${status}`);
             }
             break;
         }
@@ -344,7 +358,7 @@ class PanelItem extends HTMLElement {
         break;
       case 'status':
         if (this.indicator_) {
-          this.indicator_.status = newValue;
+          this.indicator_.setAttribute('icon', `files36:${newValue}`);
         }
         break;
       case 'primary-text':
@@ -429,7 +443,7 @@ class PanelItem extends HTMLElement {
       return;
     }
 
-    let id = assert(event.target.dataset.category);
+    const id = assert(event.target.dataset.category);
     this.signal_(id);
   }
 
@@ -576,7 +590,7 @@ class PanelItem extends HTMLElement {
    * @param {string} text Text to set for the 'aria-label'.
    */
   set closeButtonAriaLabel(text) {
-    let action = this.shadowRoot.querySelector('#secondary-action');
+    const action = this.shadowRoot.querySelector('#secondary-action');
     if (action && action.dataset.category === 'cancel') {
       action.setAttribute('aria-label', text);
     }

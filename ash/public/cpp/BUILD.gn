@@ -17,6 +17,8 @@ component("cpp") {
     "accessibility_focus_ring_controller.h",
     "accessibility_focus_ring_info.cc",
     "accessibility_focus_ring_info.h",
+    "ambient/ambient_mode_state.cc",
+    "ambient/ambient_mode_state.h",
     "ambient/photo_controller.cc",
     "ambient/photo_controller.h",
     "android_intent_helper.cc",
@@ -38,14 +40,6 @@ component("cpp") {
     "app_list/app_list_types.cc",
     "app_list/app_list_types.h",
     "app_list/internal_app_id_constants.h",
-    "app_list/term_break_iterator.cc",
-    "app_list/term_break_iterator.h",
-    "app_list/tokenized_string.cc",
-    "app_list/tokenized_string.h",
-    "app_list/tokenized_string_char_iterator.cc",
-    "app_list/tokenized_string_char_iterator.h",
-    "app_list/tokenized_string_match.cc",
-    "app_list/tokenized_string_match.h",
     "app_menu_constants.h",
     "app_types.h",
     "arc_app_id_provider.cc",
@@ -73,6 +67,10 @@ component("cpp") {
     "assistant/assistant_state.h",
     "assistant/assistant_state_base.cc",
     "assistant/assistant_state_base.h",
+    "assistant/assistant_web_view_2.cc",
+    "assistant/assistant_web_view_2.h",
+    "assistant/assistant_web_view_factory.cc",
+    "assistant/assistant_web_view_factory.h",
     "assistant/proactive_suggestions.cc",
     "assistant/proactive_suggestions.h",
     "assistant/proactive_suggestions_client.cc",
@@ -104,6 +102,11 @@ component("cpp") {
     "frame_utils.cc",
     "frame_utils.h",
     "gesture_action_type.h",
+    "ime_controller.cc",
+    "ime_controller.h",
+    "ime_controller_client.h",
+    "ime_info.cc",
+    "ime_info.h",
     "immersive/immersive_context.cc",
     "immersive/immersive_context.h",
     "immersive/immersive_focus_watcher.cc",
@@ -241,7 +244,6 @@ component("cpp") {
     "//components/prefs",
     "//components/sync:rest_of_sync",
     "//mojo/public/cpp/bindings",
-    "//services/service_manager/public/cpp",
     "//skia/public/mojom",
     "//ui/aura",
     "//ui/chromeos/strings",
@@ -263,48 +265,11 @@ component("cpp") {
     "//components/arc/mojom:notifications",
     "//components/session_manager:base",
     "//components/user_manager",
+    "//ui/base/ime/chromeos:ime_types",
     "//ui/gfx",
   ]
 
   output_name = "ash_public_cpp"
-}
-
-source_set("manifest") {
-  sources = [
-    "manifest.cc",
-    "manifest.h",
-  ]
-
-  deps = [
-    "//ash/public/mojom",
-    "//base",
-    "//chromeos/services/multidevice_setup/public/mojom",
-    "//chromeos/services/network_config/public/mojom",
-    "//services/content/public/mojom",
-    "//services/data_decoder/public/mojom",
-    "//services/device/public/mojom",
-    "//services/preferences/public/mojom",
-    "//services/service_manager/public/cpp",
-    "//services/service_manager/public/mojom",
-    "//services/viz/public/mojom",
-  ]
-}
-
-source_set("manifest_for_tests") {
-  testonly = true
-
-  sources = [
-    "test_manifest.cc",
-    "test_manifest.h",
-  ]
-
-  deps = [
-    ":manifest",
-    "//ash/public/mojom:test_interfaces",
-    "//base",
-    "//services/service_manager/public/cpp",
-    "//services/service_manager/public/mojom",
-  ]
 }
 
 source_set("unit_tests") {
@@ -343,6 +308,8 @@ source_set("test_support") {
     "test/test_keyboard_controller_observer.h",
     "test/test_new_window_delegate.cc",
     "test/test_new_window_delegate.h",
+    "test/test_photo_controller.cc",
+    "test/test_photo_controller.h",
     "test/test_system_tray_client.cc",
     "test/test_system_tray_client.h",
   ]
@@ -350,10 +317,10 @@ source_set("test_support") {
   deps = [
     ":cpp",
     "//base",
-    "//services/service_manager/public/cpp",
     "//ui/aura",
     "//ui/aura:test_support",
     "//ui/gfx",
+    "//ui/gfx:test_support",
     "//ui/views",
   ]
 }

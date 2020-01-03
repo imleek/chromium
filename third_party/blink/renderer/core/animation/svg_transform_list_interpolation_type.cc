@@ -256,10 +256,11 @@ InterpolationValue SVGTransformListInterpolationType::MaybeConvertSingle(
   }
 
   if (!keyframe.IsNeutral()) {
-    SVGPropertyBase* svg_value =
-        ToSVGInterpolationEnvironment(environment)
+    auto* svg_value =
+        To<SVGInterpolationEnvironment>(environment)
             .SvgBaseValue()
-            .CloneForAnimation(ToSVGPropertySpecificKeyframe(keyframe).Value());
+            .CloneForAnimation(
+                To<SVGPropertySpecificKeyframe>(keyframe).Value());
     InterpolationValue value = MaybeConvertSVGValue(*svg_value);
     if (!value)
       return nullptr;

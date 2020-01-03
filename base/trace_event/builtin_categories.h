@@ -106,6 +106,7 @@
   X("omnibox")                                                           \
   X("oobe")                                                              \
   X("ozone")                                                             \
+  X("passwords")                                                         \
   X("p2p")                                                               \
   X("page-serialization")                                                \
   X("pepper")                                                            \
@@ -170,6 +171,7 @@
   X(TRACE_DISABLED_BY_DEFAULT("devtools.screenshot"))                    \
   X(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"))                      \
   X(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.frame"))                \
+  X(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.inputs"))               \
   X(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking")) \
   X(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.layers"))               \
   X(TRACE_DISABLED_BY_DEFAULT("devtools.timeline.picture"))              \
@@ -181,6 +183,7 @@
   X(TRACE_DISABLED_BY_DEFAULT("gpu_decoder"))                            \
   X(TRACE_DISABLED_BY_DEFAULT("gpu.device"))                             \
   X(TRACE_DISABLED_BY_DEFAULT("gpu.service"))                            \
+  X(TRACE_DISABLED_BY_DEFAULT("histogram_samples"))                      \
   X(TRACE_DISABLED_BY_DEFAULT("ipc.flow"))                               \
   X(TRACE_DISABLED_BY_DEFAULT("java-heap-profiler"))                     \
   X(TRACE_DISABLED_BY_DEFAULT("layer-element"))                          \

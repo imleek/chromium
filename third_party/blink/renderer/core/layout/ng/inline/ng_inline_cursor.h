@@ -18,6 +18,7 @@
 namespace blink {
 
 class ComputedStyle;
+class DisplayItemClient;
 class LayoutBlockFlow;
 class LayoutInline;
 class LayoutObject;
@@ -162,7 +163,9 @@ class CORE_EXPORT NGInlineCursor {
   // line.
   TextDirection CurrentBaseDirection() const;
   const NGPhysicalBoxFragment* CurrentBoxFragment() const;
+  const DisplayItemClient* CurrentDisplayItemClient() const;
   const LayoutObject* CurrentLayoutObject() const;
+  LayoutObject* CurrentMutableLayoutObject() const;
   Node* CurrentNode() const;
 
   // Returns bidi level of current position. It is error to call other than
@@ -213,8 +216,8 @@ class CORE_EXPORT NGInlineCursor {
   PhysicalOffset LineEndPoint() const;
 
   // Converts the given point, relative to the fragment itself, into a position
-  // in DOM tree.
-  PositionWithAffinity PositionForPoint(const PhysicalOffset&) const;
+  // in DOM tree within the range of |this|.
+  PositionWithAffinity PositionForPoint(const PhysicalOffset&);
 
   //
   // Functions to move the current position.
@@ -277,6 +280,14 @@ class CORE_EXPORT NGInlineCursor {
   void MoveToPreviousInlineLeaf();
   void MoveToPreviousInlineLeafIgnoringLineBreak();
 
+  // Move the current position to next/previous inline leaf item on line.
+  // Note: If the current position isn't leaf item, this function moves the
+  // current position to leaf item then moves to next/previous leaf item. This
+  // behavior doesn't match |MoveTo{Next,Previous}InlineLeaf()|, but AX requires
+  // this. See AccessibilityLayoutTest.NextOnLine
+  void MoveToNextInlineLeafOnLine();
+  void MoveToPreviousInlineLeafOnLine();
+
   // Move the cursor position to previous fragment in pre-order DFS.
   void MoveToPrevious();
 
@@ -301,9 +312,8 @@ class CORE_EXPORT NGInlineCursor {
   NGStyleVariant CurrentStyleVariant() const;
   bool UsesFirstLineStyle() const;
 
-  // True if current position is descendant or self of |layout_object|.
-  // Note: This function is used for moving cursor in culled inline boxes.
-  bool IsInclusiveDescendantOf(const LayoutObject& layout_object) const;
+  // True if current position is part of culled inline box |layout_inline|.
+  bool IsPartOfCulledInlineBox(const LayoutInline& layout_inline) const;
 
   // True if the current position is a last line in inline block. It is error
   // to call at end or the current position is not line.
@@ -315,6 +325,9 @@ class CORE_EXPORT NGInlineCursor {
 
   // Move the cursor position to the first fragment in tree.
   void MoveToFirst();
+
+  // Move the current position to the last fragment on same layout object.
+  void MoveToLastForSameLayoutObject();
 
   // Same as |MoveTo()| but not support culled inline.
   void InternalMoveTo(const LayoutObject& layout_object);
@@ -347,6 +360,41 @@ class CORE_EXPORT NGInlineCursor {
 
   // Used in |MoveToNextForSameLayoutObject()| to support culled inline.
   const LayoutInline* layout_inline_ = nullptr;
+
+  friend class NGInlineBackwardCursor;
+};
+
+// This class provides the |MoveToPreviousSibling| functionality, but as a
+// separate class because it consumes memory, and only rarely used.
+class CORE_EXPORT NGInlineBackwardCursor {
+  STACK_ALLOCATED();
+
+ public:
+  NGInlineBackwardCursor(const NGInlineCursor& cursor);
+
+  NGInlineCursor CursorForDescendants() const;
+
+  explicit operator bool() const {
+    return current_paint_fragment_ || current_item_;
+  }
+
+  const NGFragmentItem* CurrentItem() const { return current_item_; }
+  const NGPaintFragment* CurrentPaintFragment() const {
+    return current_paint_fragment_;
+  }
+
+  const PhysicalOffset CurrentOffset() const;
+  const PhysicalRect CurrentSelfInkOverflow() const;
+
+  void MoveToPreviousSibling();
+
+ private:
+  const NGInlineCursor& cursor_;
+  Vector<const NGPaintFragment*, 16> sibling_paint_fragments_;
+  Vector<NGInlineCursor::ItemsSpan::iterator, 16> sibling_item_iterators_;
+  const NGPaintFragment* current_paint_fragment_ = nullptr;
+  const NGFragmentItem* current_item_ = nullptr;
+  wtf_size_t current_index_;
 };
 
 CORE_EXPORT std::ostream& operator<<(std::ostream&, const NGInlineCursor&);

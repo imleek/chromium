@@ -6,6 +6,7 @@ import("//third_party/closure_compiler/compile_js.gni")
 
 js_type_check("closure_compile") {
   deps = [
+    ":passwords_leak_detection_toggle",
     ":personalization_options",
     ":privacy_page",
     ":privacy_page_browser_proxy",
@@ -14,6 +15,7 @@ js_type_check("closure_compile") {
     ":security_keys_reset_dialog",
     ":security_keys_set_pin_dialog",
     ":security_keys_subpage",
+    ":security_page",
   ]
 }
 
@@ -25,9 +27,20 @@ js_library("personalization_options") {
     "../controls:settings_toggle_button",
     "../people_page:sync_browser_proxy",
     "../prefs:prefs_behavior",
+    "//ui/webui/resources/js:load_time_data",
     "//ui/webui/resources/js:web_ui_listener_behavior",
   ]
   externs_list = [ "$externs_path/settings_private.js" ]
+}
+
+js_library("passwords_leak_detection_toggle") {
+  deps = [
+    "../people_page:sync_browser_proxy",
+    "../prefs:prefs_behavior",
+    "//ui/webui/resources/js:i18n_behavior",
+    "//ui/webui/resources/js:load_time_data",
+    "//ui/webui/resources/js:web_ui_listener_behavior",
+  ]
 }
 
 js_library("privacy_page_browser_proxy") {
@@ -115,4 +128,14 @@ js_library("security_keys_bio_enroll_dialog") {
     "//ui/webui/resources/js:i18n_behavior",
   ]
   externs_list = [ "$externs_path/settings_private.js" ]
+}
+
+js_library("security_page") {
+  deps = [
+    ":privacy_page_browser_proxy",
+    "..:route",
+    "../people_page:sync_browser_proxy",
+    "../prefs:prefs_behavior",
+    "//ui/webui/resources/js:load_time_data",
+  ]
 }

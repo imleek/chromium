@@ -184,6 +184,8 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
                                std::string());
   registry->RegisterStringPref(prefs::kAccessibilityCaptionsTextShadow,
                                std::string());
+  registry->RegisterBooleanPref(prefs::kLiveCaptionEnabled, false);
+  registry->RegisterFilePathPref(prefs::kSODAPath, base::FilePath());
 #if !defined(OS_ANDROID)
   registry->RegisterDictionaryPref(prefs::kPartitionDefaultZoomLevel);
   registry->RegisterDictionaryPref(prefs::kPartitionPerHostZoomLevels);
@@ -274,6 +276,17 @@ bool Profile::IsSystemProfile() const {
   return is_system_profile_;
 }
 
+bool Profile::CanUseDiskWhenOffTheRecord() {
+#if defined(OS_CHROMEOS)
+  // Guest mode on ChromeOS uses an in-memory file system to store the profile
+  // in, so despite this being an off the record profile, it is still okay to
+  // store data on disk.
+  return IsGuestSession();
+#else
+  return false;
+#endif
+}
+
 bool Profile::ShouldRestoreOldSessionCookies() {
   return false;
 }
@@ -304,22 +317,6 @@ bool Profile::IsNewProfile() {
 
   return GetOriginalProfile()->GetPrefs()->GetInitializationStatus() ==
          PrefService::INITIALIZATION_STATUS_CREATED_NEW_PREF_STORE;
-}
-
-bool Profile::IsSyncAllowed() {
-  if (ProfileSyncServiceFactory::HasSyncService(this)) {
-    syncer::SyncService* sync_service =
-        ProfileSyncServiceFactory::GetForProfile(this);
-    return !sync_service->HasDisableReason(
-               syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE) &&
-           !sync_service->HasDisableReason(
-               syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
-  }
-
-  // No ProfileSyncService created yet - we don't want to create one, so just
-  // infer the accessible state by looking at prefs/command line flags.
-  syncer::SyncPrefs prefs(GetPrefs());
-  return switches::IsSyncAllowedByFlag() && !prefs.IsManaged();
 }
 
 void Profile::MaybeSendDestroyedNotification() {

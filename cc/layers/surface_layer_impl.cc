@@ -100,6 +100,7 @@ void SurfaceLayerImpl::PushPropertiesTo(LayerImpl* layer) {
   deadline_in_frames_ = 0u;
   layer_impl->SetStretchContentToFillBounds(stretch_content_to_fill_bounds_);
   layer_impl->SetSurfaceHitTestable(surface_hit_testable_);
+  layer_impl->SetUnoccludedForHitTesting(unoccluded_for_hit_testing_);
   layer_impl->SetHasPointerEventsNone(has_pointer_events_none_);
   layer_impl->SetIsReflection(is_reflection_);
 }
@@ -149,7 +150,7 @@ void SurfaceLayerImpl::AppendQuads(viz::RenderPass* render_pass,
     auto* quad = render_pass->CreateAndAppendDrawQuad<viz::SurfaceDrawQuad>();
     quad->SetNew(shared_quad_state, quad_rect, visible_quad_rect,
                  surface_range_, background_color(),
-                 stretch_content_to_fill_bounds_, has_pointer_events_none_);
+                 stretch_content_to_fill_bounds_);
     quad->is_reflection = is_reflection_;
     // Add the primary surface ID as a dependency.
     append_quads_data->activation_dependencies.push_back(surface_range_.end());

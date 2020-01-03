@@ -67,9 +67,6 @@ class HostContextFactoryPrivate : public ContextFactoryPrivate {
   base::flat_set<Compositor*> GetAllCompositors();
 
   // ContextFactoryPrivate implementation.
-  std::unique_ptr<Reflector> CreateReflector(Compositor* source,
-                                             Layer* target) override;
-  void RemoveReflector(Reflector* reflector) override;
   viz::FrameSinkId AllocateFrameSinkId() override;
   viz::HostFrameSinkManager* GetHostFrameSinkManager() override;
   void SetDisplayVisible(Compositor* compositor, bool visible) override;
@@ -93,8 +90,6 @@ class HostContextFactoryPrivate : public ContextFactoryPrivate {
       Compositor* compositor,
       mojo::PendingRemote<viz::mojom::VSyncParameterObserver> observer)
       override;
-  void SetDisplayTransformHint(Compositor* compositor,
-                               gfx::OverlayTransform transform) override;
 
  private:
   struct CompositorData {

@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/modules/presentation/presentation_controller.h"
 #include "third_party/blink/renderer/modules/presentation/presentation_receiver.h"
 #include "third_party/blink/renderer/modules/presentation/presentation_request.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -159,12 +160,14 @@ class PresentationConnection::BlobLoader final
 PresentationConnection::PresentationConnection(LocalFrame& frame,
                                                const String& id,
                                                const KURL& url)
-    : ContextLifecycleObserver(frame.GetDocument()),
+    : ContextLifecycleStateObserver(frame.GetDocument()),
       id_(id),
       url_(url),
       state_(mojom::blink::PresentationConnectionState::CONNECTING),
       binary_type_(kBinaryTypeArrayBuffer),
-      file_reading_task_runner_(frame.GetTaskRunner(TaskType::kFileReading)) {}
+      file_reading_task_runner_(frame.GetTaskRunner(TaskType::kFileReading)) {
+  UpdateStateIfNeeded();
+}
 
 PresentationConnection::~PresentationConnection() {
   DCHECK(!blob_loader_);
@@ -319,7 +322,6 @@ ReceiverPresentationConnection* ReceiverPresentationConnection::Take(
                    std::move(receiver_connection_receiver));
 
   receiver->RegisterConnection(connection);
-
   return connection;
 }
 
@@ -412,6 +414,18 @@ void PresentationConnection::AddedEventListener(
 }
 
 void PresentationConnection::ContextDestroyed(ExecutionContext*) {
+  CloseConnection();
+}
+
+void PresentationConnection::ContextLifecycleStateChanged(
+    mojom::FrameLifecycleState state) {
+  if (state == mojom::FrameLifecycleState::kFrozen ||
+      state == mojom::FrameLifecycleState::kFrozenAutoResumeMedia) {
+    CloseConnection();
+  }
+}
+
+void PresentationConnection::CloseConnection() {
   DoClose(mojom::blink::PresentationConnectionCloseReason::WENT_AWAY);
   target_connection_.reset();
   connection_receiver_.reset();
@@ -421,7 +435,7 @@ void PresentationConnection::Trace(blink::Visitor* visitor) {
   visitor->Trace(blob_loader_);
   visitor->Trace(messages_);
   EventTargetWithInlineData::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ContextLifecycleStateObserver::Trace(visitor);
 }
 
 const AtomicString& PresentationConnection::state() const {
@@ -562,8 +576,8 @@ void PresentationConnection::DidReceiveBinaryMessage(const uint8_t* data,
     case kBinaryTypeBlob: {
       auto blob_data = std::make_unique<BlobData>();
       blob_data->AppendBytes(data, length);
-      Blob* blob =
-          Blob::Create(BlobDataHandle::Create(std::move(blob_data), length));
+      auto* blob = MakeGarbageCollected<Blob>(
+          BlobDataHandle::Create(std::move(blob_data), length));
       DispatchEvent(*MessageEvent::Create(blob));
       return;
     }

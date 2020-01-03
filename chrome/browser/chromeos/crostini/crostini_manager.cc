@@ -17,6 +17,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
+#include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
@@ -24,6 +25,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/crostini/ansible/ansible_management_service.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
+#include "chrome/browser/chromeos/crostini/crostini_installer_types.mojom.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/crostini/crostini_remover.h"
@@ -33,11 +35,13 @@
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_share_path.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/scheduler_configuration_manager.h"
 #include "chrome/browser/chromeos/usb/cros_usb_detector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/dbus/anomaly_detector_client.h"
 #include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/cros_disks_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -54,7 +58,6 @@
 #include "content/public/common/service_manager_connection.h"
 #include "dbus/message.h"
 #include "extensions/browser/extension_registry.h"
-#include "services/device/public/mojom/constants.mojom.h"
 #include "services/device/public/mojom/usb_device.mojom.h"
 #include "services/device/public/mojom/usb_enumeration_options.mojom.h"
 #include "services/network/public/cpp/network_connection_tracker.h"
@@ -66,21 +69,16 @@ namespace crostini {
 
 namespace {
 
-enum class ContainerOsVersion {
-  kUnkown = 0,
-  kDebianStretch = 1,
-  kDebianBuster = 2,
-  kDebianOther = 3,
-  kOtherOs = 4,
-  kMaxValue = kOtherOs,
-};
-
 chromeos::CiceroneClient* GetCiceroneClient() {
   return chromeos::DBusThreadManager::Get()->GetCiceroneClient();
 }
 
 chromeos::ConciergeClient* GetConciergeClient() {
   return chromeos::DBusThreadManager::Get()->GetConciergeClient();
+}
+
+chromeos::AnomalyDetectorClient* GetAnomalyDetectorClient() {
+  return chromeos::DBusThreadManager::Get()->GetAnomalyDetectorClient();
 }
 
 // Find any callbacks for the specified |vm_name|, invoke them with
@@ -128,7 +126,8 @@ CrostiniManager::RestartOptions& CrostiniManager::RestartOptions::operator=(
 class CrostiniManager::CrostiniRestarter
     : public base::RefCountedThreadSafe<CrostiniRestarter>,
       public crostini::VmShutdownObserver,
-      public chromeos::disks::DiskMountManager::Observer {
+      public chromeos::disks::DiskMountManager::Observer,
+      public chromeos::SchedulerConfigurationManagerBase::Observer {
  public:
   CrostiniRestarter(Profile* profile,
                     CrostiniManager* crostini_manager,
@@ -200,7 +199,7 @@ class CrostiniManager::CrostiniRestarter
     observer_list_.Clear();
     completed_callback_.Reset();
     abort_callback_ = std::move(callback);
-    ReportRestarterResult(CrostiniResult::RESTART_ABORTED);
+    result_ = CrostiniResult::RESTART_ABORTED;
   }
 
   bool ReturnEarlyIfAborted() {
@@ -223,11 +222,18 @@ class CrostiniManager::CrostiniRestarter
   std::string vm_name() const { return vm_name_; }
   std::string container_name() const { return container_name_; }
   bool is_aborted() const { return is_aborted_; }
+  CrostiniResult result_ = CrostiniResult::NEVER_FINISHED;
 
  private:
   friend class base::RefCountedThreadSafe<CrostiniRestarter>;
 
   ~CrostiniRestarter() override {
+    // Do not record results if this restart was triggered by the installer.
+    // The crostini installer has its own histograms that should be kept
+    // separate.
+    if (!is_initial_install_) {
+      base::UmaHistogramEnumeration("Crostini.RestarterResult", result_);
+    }
     crostini_manager_->RemoveVmShutdownObserver(this);
     if (completed_callback_) {
       LOG(ERROR) << "Destroying without having called the callback.";
@@ -243,16 +249,8 @@ class CrostiniManager::CrostiniRestarter
     }
   }
 
-  void ReportRestarterResult(CrostiniResult result) {
-    // Do not record results if this restart was triggered by the installer. The
-    // crostini installer has its own histograms that should be kept separate.
-    if (!is_initial_install_)
-      base::UmaHistogramEnumeration("Crostini.RestarterResult", result);
-  }
-
   void FinishRestart(CrostiniResult result) {
     DCHECK(!is_aborted_);
-    ReportRestarterResult(result);
 
     // FinishRestart will delete this, so it's not safe to call any methods
     // after this point.
@@ -318,9 +316,34 @@ class CrostiniManager::CrostiniRestarter
       FinishRestart(CrostiniResult::CREATE_DISK_IMAGE_FAILED);
       return;
     }
+    disk_path_ = result_path;
+
+    auto* scheduler_configuration_manager =
+        g_browser_process->platform_part()->scheduler_configuration_manager();
+    base::Optional<std::pair<bool, size_t>> scheduler_configuration =
+        scheduler_configuration_manager->GetLastReply();
+    if (!scheduler_configuration) {
+      // Wait for the configuration to become available.
+      LOG(WARNING) << "Scheduler configuration is not yet ready";
+      scheduler_configuration_manager->AddObserver(this);
+      return;
+    }
+    OnConfigurationSet(scheduler_configuration->first,
+                       scheduler_configuration->second);
+  }
+
+  // chromeos::SchedulerConfigurationManagerBase::Observer:
+  void OnConfigurationSet(bool success, size_t num_cores_disabled) override {
+    // Note: On non-x86_64 devices, the configuration request to debugd always
+    // fails. It is WAI, and to support that case, don't log anything even when
+    // |success| is false. |num_cores_disabled| is always set regardless of
+    // whether the call is successful.
+    g_browser_process->platform_part()
+        ->scheduler_configuration_manager()
+        ->RemoveObserver(this);
     StartStage(mojom::InstallerState::kStartTerminaVm);
     crostini_manager_->StartTerminaVm(
-        vm_name_, result_path,
+        vm_name_, disk_path_, num_cores_disabled,
         base::BindOnce(&CrostiniRestarter::StartTerminaVmFinished, this));
   }
 
@@ -541,10 +564,11 @@ class CrostiniManager::CrostiniRestarter
   CrostiniManager* crostini_manager_;
 
   std::string vm_name_;
+  base::FilePath disk_path_;
   std::string container_name_;
   RestartOptions options_;
   std::string source_path_;
-  bool is_initial_install_ = true;
+  bool is_initial_install_ = false;
   CrostiniManager::CrostiniResultCallback completed_callback_;
   base::OnceClosure abort_callback_;
   base::ObserverList<CrostiniManager::RestartObserver>::Unchecked
@@ -697,6 +721,7 @@ CrostiniManager::CrostiniManager(Profile* profile)
   GetCiceroneClient()->AddObserver(this);
   GetConciergeClient()->AddVmObserver(this);
   GetConciergeClient()->AddContainerObserver(this);
+  GetAnomalyDetectorClient()->AddObserver(this);
   if (chromeos::PowerManagerClient::Get()) {
     chromeos::PowerManagerClient::Get()->AddObserver(this);
   }
@@ -714,6 +739,7 @@ void CrostiniManager::RemoveDBusObservers() {
   dbus_observers_removed_ = true;
   GetCiceroneClient()->RemoveObserver(this);
   GetConciergeClient()->RemoveContainerObserver(this);
+  GetAnomalyDetectorClient()->RemoveObserver(this);
   if (chromeos::PowerManagerClient::Get()) {
     chromeos::PowerManagerClient::Get()->RemoveObserver(this);
   }
@@ -831,7 +857,7 @@ void CrostiniManager::OnInstallTerminaComponent(
     CrostiniResultCallback callback,
     bool is_update_checked,
     component_updater::CrOSComponentManager::Error error,
-    const base::FilePath& result) {
+    const base::FilePath& path) {
   bool is_successful =
       error == component_updater::CrOSComponentManager::Error::NONE;
 
@@ -871,10 +897,17 @@ void CrostiniManager::OnInstallTerminaComponent(
     VLOG(1) << "cros-termina update check successful.";
     termina_update_check_needed_ = false;
   }
+  CrostiniResult result = CrostiniResult::SUCCESS;
+  if (!is_successful) {
+    if (error ==
+        component_updater::CrOSComponentManager::Error::UPDATE_IN_PROGRESS) {
+      result = CrostiniResult::LOAD_COMPONENT_UPDATE_IN_PROGRESS;
+    } else {
+      result = CrostiniResult::LOAD_COMPONENT_FAILED;
+    }
+  }
 
-  std::move(callback).Run(is_successful
-                              ? CrostiniResult::SUCCESS
-                              : CrostiniResult::LOAD_COMPONENT_FAILED);
+  std::move(callback).Run(result);
 }
 
 bool CrostiniManager::UninstallTerminaComponent() {
@@ -998,6 +1031,7 @@ void CrostiniManager::ListVmDisks(ListVmDisksCallback callback) {
 
 void CrostiniManager::StartTerminaVm(std::string name,
                                      const base::FilePath& disk_path,
+                                     size_t num_cores_disabled,
                                      BoolCallback callback) {
   if (name.empty()) {
     LOG(ERROR) << "name is required";
@@ -1008,6 +1042,12 @@ void CrostiniManager::StartTerminaVm(std::string name,
   std::string disk_path_string = disk_path.AsUTF8Unsafe();
   if (disk_path_string.empty()) {
     LOG(ERROR) << "Disk path cannot be empty";
+    std::move(callback).Run(/*success=*/false);
+    return;
+  }
+  if (!GetAnomalyDetectorClient()->IsGuestFileCorruptionSignalConnected()) {
+    LOG(ERROR) << "GuestFileCorruptionSignal not connected, will not be "
+                  "able to detect file system corruption.";
     std::move(callback).Run(/*success=*/false);
     return;
   }
@@ -1022,6 +1062,9 @@ void CrostiniManager::StartTerminaVm(std::string name,
   request.set_owner_id(owner_id_);
   if (base::FeatureList::IsEnabled(chromeos::features::kCrostiniGpuSupport))
     request.set_enable_gpu(true);
+  const int32_t cpus = base::SysInfo::NumberOfProcessors() - num_cores_disabled;
+  DCHECK_LT(0, cpus);
+  request.set_cpus(cpus);
 
   vm_tools::concierge::DiskImage* disk_image = request.add_disks();
   disk_image->set_path(std::move(disk_path_string));
@@ -1723,41 +1766,6 @@ void CrostiniManager::OnDetachUsbDevice(
   std::move(callback).Run(/*success=*/true);
 }
 
-void CrostiniManager::ListUsbDevices(const std::string& vm_name,
-                                     ListUsbDevicesCallback callback) {
-  vm_tools::concierge::ListUsbDeviceRequest request;
-  request.set_vm_name(vm_name);
-  request.set_owner_id(CryptohomeIdForProfile(profile_));
-
-  GetConciergeClient()->ListUsbDevices(
-      std::move(request), base::BindOnce(&CrostiniManager::OnListUsbDevices,
-                                         weak_ptr_factory_.GetWeakPtr(),
-                                         vm_name, std::move(callback)));
-}
-
-void CrostiniManager::OnListUsbDevices(
-    const std::string& vm_name,
-    ListUsbDevicesCallback callback,
-    base::Optional<vm_tools::concierge::ListUsbDeviceResponse> response) {
-  if (!response) {
-    LOG(ERROR) << "Failed to list USB devices, empty dbus response";
-    std::move(callback).Run(/*success=*/false, {});
-    return;
-  }
-
-  if (!response->success()) {
-    LOG(ERROR) << "Failed to list USB devices";
-    std::move(callback).Run(/*success=*/false, {});
-    return;
-  }
-
-  std::vector<std::pair<std::string, uint8_t>> mount_points;
-  for (const auto& dev : response->usb_devices()) {
-    mount_points.push_back(std::make_pair(vm_name, dev.guest_port()));
-  }
-  std::move(callback).Run(/*success=*/true, std::move(mount_points));
-}
-
 CrostiniManager::RestartId CrostiniManager::RestartCrostini(
     std::string vm_name,
     std::string container_name,
@@ -1774,6 +1782,11 @@ CrostiniManager::RestartId CrostiniManager::RestartCrostiniWithOptions(
     RestartOptions options,
     CrostiniResultCallback callback,
     RestartObserver* observer) {
+  if (GetInstallerViewStatus()) {
+    base::UmaHistogramBoolean("Crostini.Setup.Started", true);
+  } else {
+    base::UmaHistogramBoolean("Crostini.Restarter.Started", true);
+  }
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // Currently, |remove_crostini_callbacks_| is only used just before running
   // CrostiniRemover. If that changes, then we should check for a currently
@@ -2006,6 +2019,19 @@ void CrostiniManager::OnStartTerminaVm(
     return;
   }
 
+  switch (response->mount_result()) {
+    case vm_tools::concierge::StartVmResponse::PARTIAL_DATA_LOSS:
+      base::UmaHistogramEnumeration(kCrostiniCorruptionHistogram,
+                                    CorruptionStates::MOUNT_ROLLED_BACK);
+      break;
+    case vm_tools::concierge::StartVmResponse::FAILURE:
+      base::UmaHistogramEnumeration(kCrostiniCorruptionHistogram,
+                                    CorruptionStates::MOUNT_FAILED);
+      break;
+    default:
+      break;
+  }
+
   // If the vm is already marked "running" run the callback.
   if (response->status() == vm_tools::concierge::VM_STATUS_RUNNING) {
     running_vms_[vm_name] =
@@ -2160,13 +2186,18 @@ void CrostiniManager::OnDefaultContainerConfigured(bool success) {
   CrostiniResult result = CrostiniResult::SUCCESS;
   if (!success) {
     LOG(ERROR) << "Failed to configure default Crostini container";
-    // TODO(https://crbug.com/998124): Add a proper error.
-    result = CrostiniResult::UNKNOWN_ERROR;
+    result = CrostiniResult::CONTAINER_CONFIGURATION_FAILED;
   }
 
   InvokeAndErasePendingContainerCallbacks(
       &start_container_callbacks_, kCrostiniDefaultVmName,
       kCrostiniDefaultContainerName, result);
+}
+
+void CrostiniManager::OnGuestFileCorruption(
+    const anomaly_detector::GuestFileCorruptionSignal& signal) {
+  base::UmaHistogramEnumeration(kCrostiniCorruptionHistogram,
+                                CorruptionStates::OTHER_CORRUPTION);
 }
 
 void CrostiniManager::OnVmStarted(
@@ -2223,13 +2254,15 @@ void CrostiniManager::OnInstallLinuxPackageProgress(
   }
 
   InstallLinuxPackageProgressStatus status;
+  std::string error_message;
   switch (signal.status()) {
     case vm_tools::cicerone::InstallLinuxPackageProgressSignal::SUCCEEDED:
       status = InstallLinuxPackageProgressStatus::SUCCEEDED;
       break;
     case vm_tools::cicerone::InstallLinuxPackageProgressSignal::FAILED:
-      status = InstallLinuxPackageProgressStatus::FAILED;
       LOG(ERROR) << "Install failed: " << signal.failure_details();
+      status = InstallLinuxPackageProgressStatus::FAILED;
+      error_message = signal.failure_details();
       break;
     case vm_tools::cicerone::InstallLinuxPackageProgressSignal::DOWNLOADING:
       status = InstallLinuxPackageProgressStatus::DOWNLOADING;
@@ -2243,8 +2276,8 @@ void CrostiniManager::OnInstallLinuxPackageProgress(
 
   ContainerId container_id(signal.vm_name(), signal.container_name());
   for (auto& observer : linux_package_operation_progress_observers_) {
-    observer.OnInstallLinuxPackageProgress(container_id, status,
-                                           signal.progress_percent());
+    observer.OnInstallLinuxPackageProgress(
+        container_id, status, signal.progress_percent(), error_message);
   }
 }
 
@@ -2749,6 +2782,7 @@ void CrostiniManager::FinishRestart(CrostiniRestarter* restarter,
   }
   restarters_by_container_.erase(range.first, range.second);
   for (const auto& pending_restarter : pending_restarters) {
+    pending_restarter->result_ = result;
     pending_restarter->RunCallback(result);
   }
 }
@@ -3060,6 +3094,12 @@ void CrostiniManager::OnPendingAppListUpdates(
 
 void CrostiniManager::SuspendImminent(
     power_manager::SuspendImminent::Reason reason) {
+  auto info =
+      GetContainerInfo(kCrostiniDefaultVmName, kCrostiniDefaultContainerName);
+  if (!info || !info->sshfs_mounted) {
+    return;
+  }
+
   // Block suspend and try to unmount sshfs (https://crbug.com/968060).
   auto token = base::UnguessableToken::Create();
   chromeos::PowerManagerClient::Get()->BlockSuspend(token, "CrostiniManager");

@@ -341,8 +341,8 @@ void CloudPolicyRefreshScheduler::PerformRefresh() {
     // and OnPolicyRefreshed() callbacks. Next refresh will be scheduled in
     // OnPolicyFetched().
     service_->RefreshPolicy(
-        base::BindRepeating(&CloudPolicyRefreshScheduler::OnPolicyRefreshed,
-                            base::Unretained(this)));
+        base::BindOnce(&CloudPolicyRefreshScheduler::OnPolicyRefreshed,
+                       base::Unretained(this)));
     return;
   }
 
@@ -365,9 +365,8 @@ void CloudPolicyRefreshScheduler::RefreshAfter(int delta_ms) {
       std::max((last_refresh_ticks_ + delta) - base::TimeTicks::Now(),
                base::TimeDelta());
   const base::TimeDelta delay = std::min(system_delay, time_ticks_delay);
-  refresh_callback_.Reset(
-      base::Bind(&CloudPolicyRefreshScheduler::PerformRefresh,
-                 base::Unretained(this)));
+  refresh_callback_.Reset(base::BindOnce(
+      &CloudPolicyRefreshScheduler::PerformRefresh, base::Unretained(this)));
   task_runner_->PostDelayedTask(FROM_HERE, refresh_callback_.callback(), delay);
 }
 

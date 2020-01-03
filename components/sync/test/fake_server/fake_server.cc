@@ -40,7 +40,8 @@ FakeServer::FakeServer()
     : commit_error_type_(sync_pb::SyncEnums::SUCCESS),
       error_type_(sync_pb::SyncEnums::SUCCESS),
       alternate_triggered_errors_(false),
-      request_counter_(0) {
+      request_counter_(0),
+      disallow_sending_encryption_keys_(false) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   loopback_server_storage_ = std::make_unique<base::ScopedTempDir>();
   if (!loopback_server_storage_->CreateUniqueTempDir()) {
@@ -55,7 +56,8 @@ FakeServer::FakeServer(const base::FilePath& user_data_dir)
     : commit_error_type_(sync_pb::SyncEnums::SUCCESS),
       error_type_(sync_pb::SyncEnums::SUCCESS),
       alternate_triggered_errors_(false),
-      request_counter_(0) {
+      request_counter_(0),
+      disallow_sending_encryption_keys_(false) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::FilePath loopback_server_path =
       user_data_dir.AppendASCII("FakeSyncServer");
@@ -291,6 +293,10 @@ net::HttpStatusCode FakeServer::HandleParsedCommand(
   net::HttpStatusCode http_status_code =
       SendToLoopbackServer(message_without_wallet, response);
 
+  if (response->has_get_updates() && disallow_sending_encryption_keys_) {
+    response->mutable_get_updates()->clear_encryption_keys();
+  }
+
   if (wallet_marker != nullptr && http_status_code == net::HTTP_OK &&
       message.message_contents() ==
           sync_pb::ClientToServerMessage::GET_UPDATES) {
@@ -359,7 +365,7 @@ std::string FakeServer::GetTopLevelPermanentItemId(
   return loopback_server_->GetTopLevelPermanentItemId(model_type);
 }
 
-const std::vector<std::string>& FakeServer::GetKeystoreKeys() const {
+const std::vector<std::vector<uint8_t>>& FakeServer::GetKeystoreKeys() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return loopback_server_->GetKeystoreKeysForTesting();
 }
@@ -526,6 +532,10 @@ bool FakeServer::EnableAlternatingTriggeredErrors() {
   return true;
 }
 
+void FakeServer::DisallowSendingEncryptionKeys() {
+  disallow_sending_encryption_keys_ = true;
+}
+
 bool FakeServer::ShouldSendTriggeredError() const {
   if (!alternate_triggered_errors_)
     return true;
@@ -583,6 +593,10 @@ void FakeServer::TriggerMigrationDoneError(syncer::ModelTypeSet types) {
 
 const std::set<std::string>& FakeServer::GetCommittedHistoryURLs() const {
   return committed_history_urls_;
+}
+
+std::string FakeServer::GetStoreBirthday() const {
+  return loopback_server_->GetStoreBirthday();
 }
 
 base::WeakPtr<FakeServer> FakeServer::AsWeakPtr() {

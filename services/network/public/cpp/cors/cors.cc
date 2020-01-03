@@ -209,7 +209,7 @@ base::Optional<CorsErrorStatus> CheckAccessInternal(
 
 // These values are used for logging to UMA. Entries should not be renumbered
 // and numeric values should never be reused. Please keep in sync with
-// "AccessCheckResult" in src/tools/metrics/histograms/enums.xml.
+// "CorsAccessCheckResult" in src/tools/metrics/histograms/enums.xml.
 enum class AccessCheckResult {
   kPermitted = 0,
   kNotPermitted = 1,
@@ -465,6 +465,7 @@ bool IsCorsSafelistedHeader(
       "sec-ch-ua-platform",
       "sec-ch-ua-arch",
       "sec-ch-ua-model",
+      "sec-ch-ua-mobile",
   };
   if (std::find(std::begin(safe_names), std::end(safe_names), lower_name) ==
       std::end(safe_names))

@@ -9,11 +9,13 @@
 #include <memory>
 
 #include "android_webview/browser/metrics/aw_metrics_log_uploader.h"
+#include "android_webview/browser/metrics/aw_stability_metrics_provider.h"
 #include "android_webview/browser_jni_headers/AwMetricsServiceClient_jni.h"
 #include "android_webview/common/aw_features.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/base_paths_android.h"
 #include "base/feature_list.h"
 #include "base/hash/hash.h"
 #include "base/i18n/rtl.h"
@@ -24,6 +26,7 @@
 #include "components/metrics/android_metrics_provider.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "components/metrics/cpu_metrics_provider.h"
+#include "components/metrics/drive_metrics_provider.h"
 #include "components/metrics/enabled_state_provider.h"
 #include "components/metrics/gpu/gpu_metrics_provider.h"
 #include "components/metrics/metrics_log_uploader.h"
@@ -34,6 +37,7 @@
 #include "components/metrics/net/network_metrics_provider.h"
 #include "components/metrics/ui/screen_info_metrics_provider.h"
 #include "components/metrics/version_utils.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/android/channel_getter.h"
 #include "components/version_info/version_info.h"
@@ -59,7 +63,7 @@ const double kStableSampledInRate = 0.02;
 const double kBetaDevCanarySampledInRate = 0.99;
 
 // As a mitigation to preserve use privacy, the privacy team has asked that we
-// upload package name with no more than 10% of UMA records. This is to mitigate
+// upload package name with no more than 10% of UMA clients. This is to mitigate
 // fingerprinting for users on low-usage applications (if an app only has a
 // a small handful of users, there's a very good chance many of them won't be
 // uploading UMA records due to sampling). Do not change this constant without
@@ -90,6 +94,27 @@ bool UintFallsInBottomPercentOfValues(uint32_t value, double percent) {
   return value < value_threshold;
 }
 
+// Normally kMetricsReportingEnabledTimestamp would be set by the
+// MetricsStateManager. However, it assumes kMetricsClientID and
+// kMetricsReportingEnabledTimestamp are always set together. Because WebView
+// previously persisted kMetricsClientID but not
+// kMetricsReportingEnabledTimestamp, we violated this invariant, and need to
+// manually set this pref to correct things.
+//
+// TODO(https://crbug.com/995544): remove this (and its call site) when the
+// kMetricsReportingEnabledTimestamp pref has been persisted for one or two
+// milestones.
+void SetReportingEnabledDateIfNotSet(PrefService* prefs) {
+  if (prefs->HasPrefPath(metrics::prefs::kMetricsReportingEnabledTimestamp))
+    return;
+  // Arbitrarily, backfill the date with 2014-01-01 00:00:00.000 UTC. This date
+  // is within the range of dates the backend will accept.
+  base::Time backfill_date =
+      base::Time::FromDeltaSinceWindowsEpoch(base::TimeDelta::FromDays(150845));
+  prefs->SetInt64(metrics::prefs::kMetricsReportingEnabledTimestamp,
+                  backfill_date.ToTimeT());
+}
+
 std::unique_ptr<metrics::MetricsService> CreateMetricsService(
     metrics::MetricsStateManager* state_manager,
     metrics::MetricsServiceClient* client,
@@ -100,11 +125,16 @@ std::unique_ptr<metrics::MetricsService> CreateMetricsService(
       std::make_unique<metrics::NetworkMetricsProvider>(
           content::CreateNetworkConnectionTrackerAsyncGetter()));
   service->RegisterMetricsProvider(
+      std::make_unique<android_webview::AwStabilityMetricsProvider>(prefs));
+  service->RegisterMetricsProvider(
       std::make_unique<metrics::AndroidMetricsProvider>());
   service->RegisterMetricsProvider(
       std::make_unique<metrics::CPUMetricsProvider>());
   service->RegisterMetricsProvider(
       std::make_unique<metrics::GPUMetricsProvider>());
+  service->RegisterMetricsProvider(
+      std::make_unique<metrics::DriveMetricsProvider>(
+          base::DIR_ANDROID_APP_DATA));
   service->RegisterMetricsProvider(
       std::make_unique<metrics::ScreenInfoMetricsProvider>());
   service->RegisterMetricsProvider(
@@ -158,6 +188,12 @@ AwMetricsServiceClient* AwMetricsServiceClient::GetInstance() {
 AwMetricsServiceClient::AwMetricsServiceClient() = default;
 AwMetricsServiceClient::~AwMetricsServiceClient() = default;
 
+// static
+void AwMetricsServiceClient::RegisterPrefs(PrefRegistrySimple* registry) {
+  metrics::MetricsService::RegisterPrefs(registry);
+  metrics::StabilityMetricsHelper::RegisterPrefs(registry);
+}
+
 void AwMetricsServiceClient::Initialize(PrefService* pref_service) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!init_finished_);
@@ -189,7 +225,9 @@ void AwMetricsServiceClient::MaybeStartMetrics() {
       // MetricsService.
       RegisterForNotifications();
       metrics_state_manager_->ForceClientIdCreation();
+      SetReportingEnabledDateIfNotSet(pref_service_);
       is_in_sample_ = IsInSample();
+      is_in_package_name_sample_ = IsInPackageNameSample();
       if (IsReportingEnabled()) {
         // WebView has no shutdown sequence, so there's no need for a matching
         // Stop() call.
@@ -197,6 +235,8 @@ void AwMetricsServiceClient::MaybeStartMetrics() {
       }
     } else {
       pref_service_->ClearPref(metrics::prefs::kMetricsClientID);
+      pref_service_->ClearPref(
+          metrics::prefs::kMetricsReportingEnabledTimestamp);
     }
   }
 }
@@ -287,8 +327,8 @@ std::string AwMetricsServiceClient::GetVersionString() {
 }
 
 void AwMetricsServiceClient::CollectFinalMetricsForLog(
-    const base::Closure& done_callback) {
-  done_callback.Run();
+    base::OnceClosure done_callback) {
+  std::move(done_callback).Run();
 }
 
 std::unique_ptr<metrics::MetricsLogUploader>
@@ -327,7 +367,7 @@ bool AwMetricsServiceClient::ShouldStartUpFastForTesting() const {
 }
 
 std::string AwMetricsServiceClient::GetAppPackageName() {
-  if (IsInPackageNameSample() && CanRecordPackageNameForAppType()) {
+  if (is_in_package_name_sample_ && CanRecordPackageNameForAppType()) {
     JNIEnv* env = base::android::AttachCurrentThread();
     base::android::ScopedJavaLocalRef<jstring> j_app_name =
         Java_AwMetricsServiceClient_getAppPackageName(env);

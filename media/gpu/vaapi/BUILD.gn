@@ -10,6 +10,7 @@ import("//tools/generate_stubs/rules.gni")
 import("//ui/gl/features.gni")
 import("//ui/ozone/ozone.gni")
 
+assert(is_linux)
 assert(use_vaapi)
 
 generate_stubs("libva_stubs") {
@@ -34,20 +35,20 @@ source_set("vaapi") {
     "accelerated_video_encoder.h",
     "h264_encoder.cc",
     "h264_encoder.h",
+    "h264_vaapi_video_decoder_delegate.cc",
+    "h264_vaapi_video_decoder_delegate.h",
     "va_surface.cc",
     "va_surface.h",
     "vaapi_common.cc",
     "vaapi_common.h",
     "vaapi_dmabuf_video_frame_mapper.cc",
     "vaapi_dmabuf_video_frame_mapper.h",
-    "vaapi_h264_accelerator.cc",
-    "vaapi_h264_accelerator.h",
     "vaapi_image_decode_accelerator_worker.cc",
     "vaapi_image_decode_accelerator_worker.h",
     "vaapi_image_decoder.cc",
     "vaapi_image_decoder.h",
-    "vaapi_image_processor.cc",
-    "vaapi_image_processor.h",
+    "vaapi_image_processor_backend.cc",
+    "vaapi_image_processor_backend.h",
     "vaapi_jpeg_decoder.cc",
     "vaapi_jpeg_decoder.h",
     "vaapi_jpeg_encoder.cc",
@@ -62,20 +63,22 @@ source_set("vaapi") {
     "vaapi_video_decode_accelerator.h",
     "vaapi_video_decoder.cc",
     "vaapi_video_decoder.h",
+    "vaapi_video_decoder_delegate.cc",
+    "vaapi_video_decoder_delegate.h",
     "vaapi_video_encode_accelerator.cc",
     "vaapi_video_encode_accelerator.h",
-    "vaapi_vp8_accelerator.cc",
-    "vaapi_vp8_accelerator.h",
-    "vaapi_vp9_accelerator.cc",
-    "vaapi_vp9_accelerator.h",
     "vaapi_webp_decoder.cc",
     "vaapi_webp_decoder.h",
     "vaapi_wrapper.cc",
     "vaapi_wrapper.h",
     "vp8_encoder.cc",
     "vp8_encoder.h",
+    "vp8_vaapi_video_decoder_delegate.cc",
+    "vp8_vaapi_video_decoder_delegate.h",
     "vp9_encoder.cc",
     "vp9_encoder.h",
+    "vp9_vaapi_video_decoder_delegate.cc",
+    "vp9_vaapi_video_decoder_delegate.h",
   ]
 
   configs += [
@@ -92,7 +95,6 @@ source_set("vaapi") {
     "//media/gpu:common",
     "//media/gpu:video_frame_mapper_common",
     "//media/gpu/chromeos:common",
-    "//media/gpu/linux:common",
     "//media/parsers",
     "//mojo/public/cpp/bindings",
     "//third_party/libyuv",
@@ -213,6 +215,7 @@ source_set("jpeg_decoder_unit_test") {
     ":vaapi_image_decoder_test_common",
     ":vaapi_test_utils",
     "//base",
+    "//media/gpu/test:local_gpu_memory_buffer_manager",
     "//media/parsers",
     "//testing/gtest",
     "//third_party/libyuv:libyuv",
@@ -220,9 +223,6 @@ source_set("jpeg_decoder_unit_test") {
     "//ui/gfx/codec",
     "//ui/gfx/geometry",
   ]
-  if (is_chromeos) {
-    deps += [ "//media/capture:chromeos_test_utils" ]
-  }
 }
 
 source_set("webp_decoder_unit_test") {
@@ -235,15 +235,13 @@ source_set("webp_decoder_unit_test") {
     ":vaapi_image_decoder_test_common",
     ":vaapi_test_utils",
     "//base",
+    "//media/gpu/test:local_gpu_memory_buffer_manager",
     "//media/parsers",
     "//testing/gtest",
     "//third_party/libwebp",
     "//ui/gfx:memory_buffer",
     "//ui/gfx/geometry",
   ]
-  if (is_chromeos) {
-    deps += [ "//media/capture:chromeos_test_utils" ]
-  }
 }
 
 source_set("vaapi_utils_unittest") {
@@ -270,6 +268,7 @@ test("vaapi_unittest") {
     ":vaapi_utils_unittest",
     ":webp_decoder_unit_test",
     "//base",
+    "//media/gpu/test:helpers",
     "//testing/gtest",
   ]
 }

@@ -9,6 +9,7 @@
 
 #include "build/build_config.h"
 #include "third_party/blink/public/mojom/credentialmanager/credential_manager.mojom-blink.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
@@ -22,8 +23,10 @@
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/page/frame_tree.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
+#include "third_party/blink/renderer/modules/credentialmanager/authentication_extensions_client_inputs.h"
 #include "third_party/blink/renderer/modules/credentialmanager/authenticator_assertion_response.h"
 #include "third_party/blink/renderer/modules/credentialmanager/authenticator_attestation_response.h"
+#include "third_party/blink/renderer/modules/credentialmanager/authenticator_selection_criteria.h"
 #include "third_party/blink/renderer/modules/credentialmanager/credential.h"
 #include "third_party/blink/renderer/modules/credentialmanager/credential_creation_options.h"
 #include "third_party/blink/renderer/modules/credentialmanager/credential_manager_proxy.h"
@@ -43,6 +46,10 @@
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
+#if defined(OS_ANDROID)
+#include "third_party/blink/renderer/modules/credentialmanager/public_key_credential_rp_entity.h"
+#endif
+
 namespace blink {
 
 namespace {
@@ -61,7 +68,23 @@ using mojom::blink::GetAssertionAuthenticatorResponsePtr;
 
 constexpr char kCryptotokenOrigin[] =
     "chrome-extension://kmendfapggjehodndflmmgagdbamhnfd";
-enum class RequiredOriginType { kSecure, kSecureAndSameWithAncestors };
+
+// RequiredOriginType enumerates the requirements on the environment to perform
+// an operation.
+enum class RequiredOriginType {
+  // Must be a secure origin.
+  kSecure,
+  // Must be a secure origin and be same-origin with all ancestor frames.
+  kSecureAndSameWithAncestors,
+  // Must be a secure origin and the "publickey-credentials" feature policy
+  // must be enabled. By default "publickey-credentials" is not inherited by
+  // cross-origin child frames, so if that policy is not explicitly enabled,
+  // behavior is the same as that of |kSecureAndSameWithAncestors|. Note that
+  // feature policies can be expressed in various ways, e.g.: |allow| iframe
+  // attribute and/or feature-policy header, and may be inherited from parent
+  // browsing contexts. See Feature Policy spec.
+  kSecureAndPermittedByFeaturePolicy,
+};
 
 bool IsSameOriginWithAncestors(const Frame* frame) {
   DCHECK(frame);
@@ -70,7 +93,8 @@ bool IsSameOriginWithAncestors(const Frame* frame) {
       frame->GetSecurityContext()->GetSecurityOrigin();
   while (current->Tree().Parent()) {
     current = current->Tree().Parent();
-    if (!origin->CanAccess(current->GetSecurityContext()->GetSecurityOrigin()))
+    if (!origin->IsSameOriginWith(
+            current->GetSecurityContext()->GetSecurityOrigin()))
       return false;
   }
   return true;
@@ -94,15 +118,36 @@ bool CheckSecurityRequirementsBeforeRequest(
   // The API is not exposed in non-secure context.
   SECURITY_CHECK(resolver->GetExecutionContext()->IsSecureContext());
 
-  if (required_origin_type == RequiredOriginType::kSecureAndSameWithAncestors &&
-      !IsSameOriginWithAncestors(resolver->GetFrame())) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kNotAllowedError,
-        "The following credential operations can only occur in a document which"
-        " is same-origin with all of its ancestors: "
-        "storage/retrieval of 'PasswordCredential' and 'FederatedCredential', "
-        "and creation/retrieval of 'PublicKeyCredential'"));
-    return false;
+  switch (required_origin_type) {
+    case RequiredOriginType::kSecure:
+      // This has already been checked.
+      break;
+
+    case RequiredOriginType::kSecureAndSameWithAncestors:
+      if (!IsSameOriginWithAncestors(resolver->GetFrame())) {
+        resolver->Reject(MakeGarbageCollected<DOMException>(
+            DOMExceptionCode::kNotAllowedError,
+            "The following credential operations can only occur in a document "
+            "which is same-origin with all of its ancestors: storage/retrieval "
+            "of 'PasswordCredential' and 'FederatedCredential'."));
+        return false;
+      }
+      break;
+
+    case RequiredOriginType::kSecureAndPermittedByFeaturePolicy:
+      // The 'publickey-credentials' feature's "default allowlist" is "self",
+      // which means the webauthn feature is allowed by default in same-origin
+      // child browsing contexts.
+      if (!resolver->GetFrame()->GetSecurityContext()->IsFeatureEnabled(
+              mojom::FeaturePolicyFeature::kPublicKeyCredentials)) {
+        resolver->Reject(MakeGarbageCollected<DOMException>(
+            DOMExceptionCode::kNotAllowedError,
+            "The 'publickey-credentials' feature is not enabled in this "
+            "document. Feature Policy may be used to delegate Web "
+            "Authentication capabilities to cross-origin child frames."));
+        return false;
+      }
+      break;
   }
 
   return true;
@@ -120,9 +165,21 @@ void AssertSecurityRequirementsBeforeResponse(
 
   SECURITY_CHECK(resolver->GetFrame());
   SECURITY_CHECK(resolver->GetExecutionContext()->IsSecureContext());
-  SECURITY_CHECK(require_origin !=
-                     RequiredOriginType::kSecureAndSameWithAncestors ||
-                 IsSameOriginWithAncestors(resolver->GetFrame()));
+  switch (require_origin) {
+    case RequiredOriginType::kSecure:
+      // This has already been checked.
+      break;
+
+    case RequiredOriginType::kSecureAndSameWithAncestors:
+      SECURITY_CHECK(IsSameOriginWithAncestors(resolver->GetFrame()));
+      break;
+
+    case RequiredOriginType::kSecureAndPermittedByFeaturePolicy:
+      SECURITY_CHECK(
+          resolver->GetFrame()->GetSecurityContext()->IsFeatureEnabled(
+              mojom::FeaturePolicyFeature::kPublicKeyCredentials));
+      break;
+  }
 }
 
 #if defined(OS_ANDROID)
@@ -142,7 +199,7 @@ bool CheckPublicKeySecurityRequirements(ScriptPromiseResolver* resolver,
   }
 
   auto cryptotoken_origin = SecurityOrigin::Create(KURL(kCryptotokenOrigin));
-  if (cryptotoken_origin->IsSameSchemeHostPort(origin)) {
+  if (cryptotoken_origin->IsSameOriginWith(origin)) {
     // Allow CryptoToken U2F extension to assert any origin, as cryptotoken
     // handles origin checking separately.
     return true;
@@ -496,13 +553,19 @@ ScriptPromise CredentialsContainer::get(
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
-  auto required_origin_type = RequiredOriginType::kSecureAndSameWithAncestors;
-  if (!CheckSecurityRequirementsBeforeRequest(resolver, required_origin_type))
+  // hasPublicKey() implies that this is a WebAuthn request.
+  auto required_origin_type =
+      options->hasPublicKey() &&
+              RuntimeEnabledFeatures::WebAuthenticationFeaturePolicyEnabled()
+          ? RequiredOriginType::kSecureAndPermittedByFeaturePolicy
+          : RequiredOriginType::kSecureAndSameWithAncestors;
+  if (!CheckSecurityRequirementsBeforeRequest(resolver, required_origin_type)) {
     return promise;
+  }
 
   if (options->hasPublicKey()) {
     auto cryptotoken_origin = SecurityOrigin::Create(KURL(kCryptotokenOrigin));
-    if (cryptotoken_origin->IsSameSchemeHostPort(
+    if (cryptotoken_origin->IsSameOriginWith(
             resolver->GetFrame()->GetSecurityContext()->GetSecurityOrigin())) {
       UseCounter::Count(resolver->GetExecutionContext(),
                         WebFeature::kU2FCryptotokenSign);
@@ -679,12 +742,17 @@ ScriptPromise CredentialsContainer::create(
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
+  // hasPublicKey() implies that this is a WebAuthn request.
   auto required_origin_type =
-      options->hasPublicKey() ? RequiredOriginType::kSecureAndSameWithAncestors
-                              : RequiredOriginType::kSecure;
+      options->hasPublicKey()
+          ? RuntimeEnabledFeatures::WebAuthenticationFeaturePolicyEnabled()
+                ? RequiredOriginType::kSecureAndPermittedByFeaturePolicy
+                : RequiredOriginType::kSecureAndSameWithAncestors
+          : RequiredOriginType::kSecure;
 
-  if (!CheckSecurityRequirementsBeforeRequest(resolver, required_origin_type))
+  if (!CheckSecurityRequirementsBeforeRequest(resolver, required_origin_type)) {
     return promise;
+  }
 
   if ((options->hasPassword() + options->hasFederated() +
        options->hasPublicKey()) != 1) {
@@ -709,7 +777,7 @@ ScriptPromise CredentialsContainer::create(
   } else {
     DCHECK(options->hasPublicKey());
     auto cryptotoken_origin = SecurityOrigin::Create(KURL(kCryptotokenOrigin));
-    if (cryptotoken_origin->IsSameSchemeHostPort(
+    if (cryptotoken_origin->IsSameOriginWith(
             resolver->GetFrame()->GetSecurityContext()->GetSecurityOrigin())) {
       UseCounter::Count(resolver->GetExecutionContext(),
                         WebFeature::kU2FCryptotokenRegister);
@@ -841,8 +909,9 @@ ScriptPromise CredentialsContainer::preventSilentAccess(
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
   const auto required_origin_type = RequiredOriginType::kSecure;
-  if (!CheckSecurityRequirementsBeforeRequest(resolver, required_origin_type))
+  if (!CheckSecurityRequirementsBeforeRequest(resolver, required_origin_type)) {
     return promise;
+  }
 
   auto* credential_manager =
       CredentialManagerProxy::From(script_state)->CredentialManager();

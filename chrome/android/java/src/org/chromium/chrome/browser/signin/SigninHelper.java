@@ -25,6 +25,7 @@ import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountTrackerService;
 import org.chromium.components.signin.ChromeSigninController;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
 
 import java.io.IOException;
@@ -112,8 +113,8 @@ public class SigninHelper {
 
     private SigninHelper() {
         mProfileSyncService = ProfileSyncService.get();
-        mSigninManager = IdentityServicesProvider.getSigninManager();
-        mAccountTrackerService = IdentityServicesProvider.getAccountTrackerService();
+        mSigninManager = IdentityServicesProvider.get().getSigninManager();
+        mAccountTrackerService = IdentityServicesProvider.get().getAccountTrackerService();
         mChromeSigninController = ChromeSigninController.get();
     }
 
@@ -212,7 +213,7 @@ public class SigninHelper {
         // This is the correct account now.
         final Account account = AccountManagerFacade.createAccountFromName(newName);
 
-        mSigninManager.signIn(account, new SignInCallback() {
+        mSigninManager.signIn(SigninAccessPoint.ACCOUNT_RENAMED, account, new SignInCallback() {
             @Override
             public void onSignInComplete() {
                 validateAccountsInternal(true);

@@ -14,6 +14,7 @@
 #include "base/strings/string_piece.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
+#include "content/browser/frame_host/should_swap_browsing_instance.h"
 #include "content/common/content_export.h"
 
 namespace url {
@@ -25,6 +26,7 @@ class BackForwardCacheCanStoreDocumentResult;
 class NavigationEntryImpl;
 class NavigationRequest;
 class RenderFrameHostImpl;
+struct LoadCommittedDetails;
 
 // Helper class for recording metrics around history navigations.
 // Associated with a main frame document and shared between all
@@ -56,13 +58,20 @@ class BackForwardCacheMetrics
     kJavaScriptExecution = 14,
     kRendererProcessKilled = 15,
     kRendererProcessCrashed = 16,
-    kDialog = 17,
+    // 17: Dialogs are no longer a reason to exclude from BackForwardCache
     kGrantedMediaStreamAccess = 18,
     kSchedulerTrackedFeatureUsed = 19,
     kConflictingBrowsingInstance = 20,
     kCacheFlushed = 21,
     kServiceWorkerVersionActivation = 22,
-    kMaxValue = kServiceWorkerVersionActivation,
+    kSessionRestored = 23,
+    kUnknown = 24,
+    kServiceWorkerPostMessage = 25,
+    kEnteredBackForwardCacheBeforeServiceWorkerHostAdded = 26,
+    kRenderFrameHostReused_SameSite = 27,
+    kRenderFrameHostReused_CrossSite = 28,
+    kNotMostRecentNavigationEntry = 29,
+    kMaxValue = kNotMostRecentNavigationEntry,
   };
 
   using NotRestoredReasons =
@@ -124,7 +133,12 @@ class BackForwardCacheMetrics
   // Records when another navigation commits away from the most recent entry
   // associated with |this|.  This is the point in time that the previous
   // document could enter the back-forward cache.
-  void MainFrameDidNavigateAwayFromDocument();
+  // |new_main_document| points to the newly committed RFH, which might or might
+  // not be the same as the RFH for the old document.
+  void MainFrameDidNavigateAwayFromDocument(
+      RenderFrameHostImpl* new_main_document,
+      LoadCommittedDetails* details,
+      NavigationRequest* navigation);
 
   // Snapshots the state of the features active on the page before closing it.
   // It should be called at the same time when the document might have been
@@ -135,9 +149,6 @@ class BackForwardCacheMetrics
   // e.g., to prioritize the tasks to improve cache-hit rate.
   void MarkNotRestoredWithReason(
       const BackForwardCacheCanStoreDocumentResult& can_store);
-
-  // Marks the frame disabled the back forward cache with the reason.
-  void MarkDisableForRenderFrameHost(const base::StringPiece& reason);
 
   // Injects a clock for mocking time.
   // Should be called only from the UI thread.
@@ -155,7 +166,18 @@ class BackForwardCacheMetrics
   void CollectFeatureUsageFromSubtree(RenderFrameHostImpl* rfh,
                                       const url::Origin& main_frame_origin);
 
-  void RecordMetricsForHistoryNavigationCommit(NavigationRequest* navigation);
+  // Dumps the current recorded information.
+  // |back_forward_cache_allowed| indicates whether back-forward cache is
+  // allowed for the URL of |navigation_request|.
+  void RecordMetricsForHistoryNavigationCommit(
+      NavigationRequest* navigation,
+      bool back_forward_cache_allowed) const;
+
+  // Record additional reason why navigation was not served from bfcache which
+  // are known only at the commit time.
+  void UpdateNotRestoredReasonsForNavigation(NavigationRequest* navigation);
+
+  bool ShouldRecordBrowsingInstanceNotSwappedReason() const;
 
   // Main frame document sequence number that identifies all NavigationEntries
   // this metrics object is associated with.
@@ -182,10 +204,12 @@ class BackForwardCacheMetrics
 
   NotRestoredReasons not_restored_reasons_;
   uint64_t blocklisted_features_ = 0;
+  base::Optional<ShouldSwapBrowsingInstance>
+      browsing_instance_not_swapped_reason_;
 
   // The reasons given at BackForwardCache::DisableForRenderFrameHost. These are
   // a further breakdown of NotRestoredReason::kDisableForRenderFrameHostCalled.
-  std::set<std::string> disallowed_reasons_;
+  std::set<std::string> disabled_reasons_;
 
   DISALLOW_COPY_AND_ASSIGN(BackForwardCacheMetrics);
 };

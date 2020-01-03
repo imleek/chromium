@@ -65,6 +65,8 @@ class JSChecker {
   WARN_UNUSED_RESULT std::unique_ptr<TestConditionWaiter>
   CreateVisibilityWaiter(bool visibility,
                          std::initializer_list<base::StringPiece> element_ids);
+  WARN_UNUSED_RESULT std::unique_ptr<TestConditionWaiter>
+  CreateVisibilityWaiter(bool visibility, const std::string& element);
 
   // Waiter that waits until specified element is (not) displayed with non-zero
   // size.
@@ -125,6 +127,9 @@ class JSChecker {
   // tap events.
   void TapOnPath(std::initializer_list<base::StringPiece> element_ids);
   void TapOn(const std::string& element_id);
+
+  // Clicks on the indicated UI element that should be a link.
+  void TapLinkOnPath(std::initializer_list<base::StringPiece> element_ids);
 
   // Select particular radio button.
   void SelectRadioPath(std::initializer_list<base::StringPiece> element_ids);

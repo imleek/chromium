@@ -38,9 +38,12 @@ namespace raster {
 
 namespace {
 
-class WrappedSkImage : public SharedImageBacking {
+class WrappedSkImage : public ClearTrackingSharedImageBacking {
  public:
   ~WrappedSkImage() override {
+    promise_texture_.reset();
+    gpu::DeleteSkImage(context_state_, std::move(image_));
+
     DCHECK(context_state_->context_lost() ||
            context_state_->IsCurrent(nullptr));
     if (!context_state_->context_lost())
@@ -51,15 +54,6 @@ class WrappedSkImage : public SharedImageBacking {
   bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) override {
     return false;
   }
-
-  void Destroy() override {
-    promise_texture_.reset();
-    image_.reset();
-  }
-
-  bool IsCleared() const override { return cleared_; }
-
-  void SetCleared() override { cleared_ = true; }
 
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override {}
 
@@ -113,13 +107,13 @@ class WrappedSkImage : public SharedImageBacking {
                  uint32_t usage,
                  size_t estimated_size,
                  SharedContextState* context_state)
-      : SharedImageBacking(mailbox,
-                           format,
-                           size,
-                           color_space,
-                           usage,
-                           estimated_size,
-                           false /* is_thread_safe */),
+      : ClearTrackingSharedImageBacking(mailbox,
+                                        format,
+                                        size,
+                                        color_space,
+                                        usage,
+                                        estimated_size,
+                                        false /* is_thread_safe */),
         context_state_(context_state) {
     DCHECK(!!context_state_);
   }
@@ -163,6 +157,7 @@ class WrappedSkImage : public SharedImageBacking {
       if (!image_)
         return false;
 
+      SetCleared();
       OnWriteSucceeded();
     } else {
       // Initializing to bright green makes it obvious if the pixels are not
@@ -204,9 +199,9 @@ class WrappedSkImage : public SharedImageBacking {
       }
 #if BUILDFLAG(SKIA_USE_DAWN)
       case GrBackendApi::kDawn: {
-        GrDawnImageInfo image_info;
-        if (backend_texture.getDawnImageInfo(&image_info))
-          tracing_id_ = reinterpret_cast<uint64_t>(image_info.fTexture.Get());
+        GrDawnTextureInfo tex_info;
+        if (backend_texture.getDawnTextureInfo(&tex_info))
+          tracing_id_ = reinterpret_cast<uint64_t>(tex_info.fTexture.Get());
         break;
       }
 #endif
@@ -221,9 +216,8 @@ class WrappedSkImage : public SharedImageBacking {
   SharedContextState* const context_state_;
 
   sk_sp<SkPromiseImageTexture> promise_texture_;
+  // TODO(penghuang): manage texture directly with GrBackendTexture,
   sk_sp<SkImage> image_;
-
-  bool cleared_ = false;
 
   uint64_t tracing_id_ = 0;
 
@@ -267,6 +261,8 @@ class WrappedSkImageRepresentation : public SharedImageRepresentationSkia {
     DCHECK(!write_surface_);
     // TODO(ericrk): Handle begin/end correctness checks.
   }
+
+  bool SupportsMultipleConcurrentReadAccess() override { return true; }
 
  private:
   WrappedSkImage* wrapped_sk_image() {

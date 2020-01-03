@@ -28,8 +28,8 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
 #include "services/network/cross_origin_read_blocking.h"
-#include "services/network/initiator_lock_compatibility.h"
 #include "services/network/keepalive_statistics_recorder.h"
+#include "services/network/public/cpp/initiator_lock_compatibility.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
@@ -53,7 +53,6 @@ constexpr size_t kMaxFileUploadRequestsPerBatch = 64;
 class NetToMojoPendingBuffer;
 class NetworkUsageAccumulator;
 class KeepaliveStatisticsRecorder;
-struct ResourceResponse;
 class ScopedThrottlingToken;
 struct OriginPolicy;
 
@@ -139,8 +138,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   net::LoadState GetLoadStateForTesting() const;
 
-  uint32_t GetRenderFrameId() const;
-  uint32_t GetProcessId() const;
+  int32_t GetRenderFrameId() const;
+  int32_t GetProcessId() const;
   uint32_t GetResourceType() const;
 
   // Whether this URLLoader should allow sending/setting cookies for requests
@@ -195,6 +194,17 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   class FileOpenerForUpload;
   friend class FileOpenerForUpload;
 
+  // An enum class representing the result of keepalive requests. This is used
+  // for UMA so do NOT re-assign values.
+  enum class KeepaliveRequestResult {
+    kOk = 0,
+    kMojoConnectionErrorBeforeResponseArrival = 1,
+    kMojoConnectionErrorAfterResponseArrival = 2,
+    kErrorBeforeResponseArrival = 3,
+    kErrorAfterResponseArrival = 4,
+    kMaxValue = kErrorAfterResponseArrival,
+  };
+
   void OpenFilesForUpload(const ResourceRequest& request);
   void SetUpUpload(const ResourceRequest& request,
                    int error_code,
@@ -203,6 +213,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   void ReadMore();
   void DidRead(int num_bytes, bool completed_synchronously);
   void NotifyCompleted(int error_code);
+  void RecordKeepaliveResult(KeepaliveRequestResult result);
   void OnMojoDisconnect();
   void OnResponseBodyStreamConsumerClosed(MojoResult result);
   void OnResponseBodyStreamReady(MojoResult result);
@@ -258,6 +269,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   bool corb_detachable_;
   int resource_type_;
   bool is_load_timing_enabled_;
+  bool has_received_response_ = false;
+  bool has_recorded_keepalive_result_ = false;
 
   // URLLoaderFactory is guaranteed to outlive URLLoader, so it is safe to
   // store a raw pointer to mojom::URLLoaderFactoryParams.
@@ -284,9 +297,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   mojo::SimpleWatcher writable_handle_watcher_;
   mojo::SimpleWatcher peer_closed_handle_watcher_;
 
+  // True if there's a URLRequest::Read() call in progress.
+  bool read_in_progress_ = false;
+
   // Used when deferring sending the data to the client until mime sniffing is
   // finished.
-  scoped_refptr<ResourceResponse> response_;
+  mojom::URLResponseHeadPtr response_;
   mojo::ScopedDataPipeConsumerHandle consumer_handle_;
 
   // Sniffing state.
@@ -343,6 +359,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   bool is_nocors_corb_excluded_request_ = false;
 
   mojom::RequestMode request_mode_;
+
+  bool has_user_activation_;
+
+  mojom::RequestDestination request_destination_ =
+      mojom::RequestDestination::kEmpty;
 
   scoped_refptr<ResourceSchedulerClient> resource_scheduler_client_;
 

@@ -17,7 +17,7 @@
 #include "base/profiler/stack_sampling_profiler.h"
 #include "base/strings/strcat.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/threading/thread_local.h"
+#include "base/threading/sequence_local_storage_slot.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
@@ -158,13 +158,12 @@ class TracingSamplerProfilerDataSource
 std::atomic<uint32_t>
     TracingSamplerProfilerDataSource::incremental_state_reset_id_{0};
 
-base::ThreadLocalStorage::Slot* GetThreadLocalStorageProfilerSlot() {
-  static base::NoDestructor<base::ThreadLocalStorage::Slot>
-      thread_local_profiler_tls([](void* profiler) {
-        delete static_cast<TracingSamplerProfiler*>(profiler);
-      });
-
-  return thread_local_profiler_tls.get();
+base::SequenceLocalStorageSlot<TracingSamplerProfiler>&
+GetSequenceLocalStorageProfilerSlot() {
+  static base::NoDestructor<
+      base::SequenceLocalStorageSlot<TracingSamplerProfiler>>
+      storage;
+  return *storage;
 }
 
 }  // namespace
@@ -249,7 +248,8 @@ void TracingSamplerProfiler::TracingProfileBuilder::WriteSampleToTrace(
     interned_modules_.ResetEmittedState();
 
     auto trace_packet = trace_writer_->NewTracePacket();
-    trace_packet->set_incremental_state_cleared(true);
+    trace_packet->set_sequence_flags(
+        perfetto::protos::pbzero::TracePacket::SEQ_INCREMENTAL_STATE_CLEARED);
 
     // Note: Make sure ThreadDescriptors we emit here won't cause
     // metadata events to be emitted from the JSON exporter which conflict
@@ -273,6 +273,9 @@ void TracingSamplerProfiler::TracingProfileBuilder::WriteSampleToTrace(
   }
 
   auto trace_packet = trace_writer_->NewTracePacket();
+  // Delta encoded timestamps and interned data require incremental state.
+  trace_packet->set_sequence_flags(
+      perfetto::protos::pbzero::TracePacket::SEQ_NEEDS_INCREMENTAL_STATE);
   auto callstack_id = GetCallstackIDAndMaybeEmit(frames, &trace_packet);
   auto* streaming_profile_packet = trace_packet->set_streaming_profile_packet();
   streaming_profile_packet->add_callstack_iid(callstack_id);
@@ -467,22 +470,17 @@ TracingSamplerProfiler::CreateOnMainThread() {
 
 // static
 void TracingSamplerProfiler::CreateOnChildThread() {
-  auto* slot = GetThreadLocalStorageProfilerSlot();
-  if (slot->Get())
+  base::SequenceLocalStorageSlot<TracingSamplerProfiler>& slot =
+      GetSequenceLocalStorageProfilerSlot();
+  if (slot)
     return;
 
-  auto* profiler =
-      new TracingSamplerProfiler(base::GetSamplingProfilerCurrentThreadToken());
-  slot->Set(profiler);
+  slot.emplace(base::GetSamplingProfilerCurrentThreadToken());
 }
 
 // static
 void TracingSamplerProfiler::DeleteOnChildThreadForTesting() {
-  auto* profiler = GetThreadLocalStorageProfilerSlot()->Get();
-  if (profiler) {
-    delete static_cast<TracingSamplerProfiler*>(profiler);
-    GetThreadLocalStorageProfilerSlot()->Set(nullptr);
-  }
+  GetSequenceLocalStorageProfilerSlot().reset();
 }
 
 // static

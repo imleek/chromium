@@ -26,6 +26,7 @@ enum class TabAlertState {
   AUDIO_MUTING,         // Tab audio is being muted.
   BLUETOOTH_CONNECTED,  // Tab is connected to a BT Device.
   USB_CONNECTED,        // Tab is connected to a USB device.
+  HID_CONNECTED,        // Tab is connected to a HID device.
   SERIAL_CONNECTED,     // Tab is connected to a serial device.
   PIP_PLAYING,          // Tab contains a video in Picture-in-Picture mode.
   DESKTOP_CAPTURING,    // Desktop contents being recorded, consumed by tab.
@@ -35,7 +36,6 @@ enum class TabAlertState {
 enum class TabMutedReason {
   NONE,                    // The tab has never been muted or unmuted.
   CONTEXT_MENU,            // Mute/Unmute chosen from tab context menu.
-  MEDIA_CAPTURE,           // Media recording/capture was started.
   EXTENSION,               // Mute state changed via extension API.
   CONTENT_SETTING,         // The sound content setting was set to BLOCK.
   CONTENT_SETTING_CHROME,  // Mute toggled on chrome:// URL.

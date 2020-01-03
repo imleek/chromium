@@ -23,7 +23,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
 #include "media/base/video_types.h"
-#include "media/capture/video/chromeos/local_gpu_memory_buffer_manager.h"
+#include "media/gpu/test/local_gpu_memory_buffer_manager.h"
 #include "media/gpu/vaapi/test_utils.h"
 #include "media/gpu/vaapi/va_surface.h"
 #include "media/gpu/vaapi/vaapi_image_decoder.h"
@@ -701,12 +701,12 @@ TEST_F(VaapiJpegDecoderTest, DecodeFails) {
   EXPECT_FALSE(Decoder()->GetScopedVASurface());
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          VaapiJpegDecoderTest,
                          testing::ValuesIn(kVAImageTestCases),
                          vaapi_test_utils::TestParamToString);
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          VaapiJpegDecoderWithDmaBufsTest,
                          testing::ValuesIn(kDmaBufTestCases),
                          vaapi_test_utils::TestParamToString);

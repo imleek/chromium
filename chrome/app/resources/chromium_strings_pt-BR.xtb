@@ -3,7 +3,6 @@
 <translationbundle lang="pt-BR">
 <translation id="1065672644894730302">Não foi possível ler suas preferências. Alguns recursos podem não estar disponíveis e as alterações nas preferências não serão salvas.</translation>
 <translation id="1104942323762546749">O Chromium quer exportar suas senhas. Digite sua senha do Windows para permitir isso.</translation>
-<translation id="1115445892567829615">O Chromium não pôde sincronizar seus dados. Atualize sua senha de sincronização.</translation>
 <translation id="113122355610423240">O Chromium é seu navegador padrão</translation>
 <translation id="1185134272377778587">Sobre o Chromium</translation>
 <translation id="1396446129537741364">O Chromium está tentando mostrar senhas.</translation>
@@ -20,7 +19,7 @@
 <translation id="1929939181775079593">O Chromium não está respondendo. Reiniciar agora?</translation>
 <translation id="1966382378801805537">O Chromium não pode determinar ou definir o navegador padrão</translation>
 <translation id="2008474315282236005">Essa ação excluirá 1 item deste dispositivo. Para recuperar seus dados mais tarde, faça login no Chromium como <ph name="USER_EMAIL" />.</translation>
-<translation id="2119636228670142020">Sobre o &amp;Chromium OS</translation>
+<translation id="2147976119693222405">O Chromium OS não pôde sincronizar seus dados. Corrigir agora.</translation>
 <translation id="2241627712206172106">Se você usa um computador compartilhado, seus amigos e familiares podem navegar separadamente e configurar o Chromium da maneira que desejarem.</translation>
 <translation id="2347108572062610441">Esta extensão alterou a página que é exibida quando você inicia o Chromium.</translation>
 <translation id="2396765026452590966">A extensão "<ph name="EXTENSION_NAME" />" alterou a página que é exibida quando você inicia o Chromium.</translation>
@@ -36,6 +35,7 @@
 <translation id="2718390899429598676">Para maior segurança, o Chromium criptografará seus dados.</translation>
 <translation id="2770231113462710648">Alterar navegador padrão para:</translation>
 <translation id="2799223571221894425">Reiniciar</translation>
+<translation id="2805036593126168338">O Chromium OS não pôde sincronizar suas senhas. Corrigir agora.</translation>
 <translation id="2838154144102149890">Para atualizar, é necessário interromper o Chromium neste computador. Essa ação pode causar perda de dados não salvos de outros usuários conectados a esta máquina.</translation>
 <translation id="2847479871509788944">Remover do Chromium</translation>
 <translation id="2886012850691518054">Opcional: Ajude a tornar o Chromium melhor enviando automaticamente as estatísticas de uso e os relatórios de erros ao Google.</translation>
@@ -105,7 +105,6 @@
 <translation id="5631814766731275228">Nome e foto do Chromium</translation>
 <translation id="5634636535844844681">O Chromium requer o Windows 7 ou versão superior.</translation>
 <translation id="5653831366781983928">Reinicie o Chromium agora</translation>
-<translation id="5680901439334282664">fazer login no Chromium</translation>
 <translation id="5698481217667032250">Exibir Chromium neste idioma</translation>
 <translation id="5820394555380036790">Chromium OS</translation>
 <translation id="5862307444128926510">Bem-vindo ao Chromium</translation>

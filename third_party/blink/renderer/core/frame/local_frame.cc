@@ -49,6 +49,7 @@
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/web/web_content_capture_client.h"
+#include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/core/content_capture/content_capture_manager.h"
@@ -84,6 +85,7 @@
 #include "third_party/blink/renderer/core/frame/report.h"
 #include "third_party/blink/renderer/core/frame/reporting_context.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
 #include "third_party/blink/renderer/core/html/html_plugin_element.h"
 #include "third_party/blink/renderer/core/html/plugin_document.h"
@@ -269,6 +271,14 @@ void LocalFrame::Navigate(const FrameLoadRequest& request,
       frame_load_type = WebFrameLoadType::kReplaceCurrentItem;
     }
   }
+
+  // Navigations in portal contexts do not create back/forward entries.
+  // TODO(mcnee): Similarly, we need to restrict orphaned contexts.
+  if (GetPage()->InsidePortal() &&
+      frame_load_type == WebFrameLoadType::kStandard) {
+    frame_load_type = WebFrameLoadType::kReplaceCurrentItem;
+  }
+
   loader_.StartNavigation(request, frame_load_type);
 
   if (request.ClientRedirectReason() != ClientNavigationReason::kNone)
@@ -380,8 +390,8 @@ void LocalFrame::CheckCompleted() {
   GetDocument()->CheckCompleted();
 }
 
-SecurityContext* LocalFrame::GetSecurityContext() const {
-  return GetDocument();
+const SecurityContext* LocalFrame::GetSecurityContext() const {
+  return GetDocument() ? &GetDocument()->GetSecurityContext() : nullptr;
 }
 
 void LocalFrame::PrintNavigationErrorMessage(const Frame& target_frame,
@@ -824,7 +834,7 @@ String LocalFrame::GetLayerTreeAsTextForTesting(unsigned flags) const {
   } else {
     if (const auto* root_layer =
             ContentLayoutObject()->Compositor()->RootGraphicsLayer()) {
-      if (flags & kLayerTreeIncludesRootLayer && IsMainFrame()) {
+      if (flags & kLayerTreeIncludesAllLayers && IsMainFrame()) {
         while (root_layer->Parent())
           root_layer = root_layer->Parent();
       }
@@ -1078,7 +1088,7 @@ bool LocalFrame::CanNavigate(const Frame& target_frame,
     // A frame navigating its top may blocked if the document initiating
     // the navigation has never received a user gesture and the navigation
     // isn't same-origin with the target.
-    if (HasBeenActivated() ||
+    if (HasStickyUserActivation() ||
         target_frame.GetSecurityContext()->GetSecurityOrigin()->CanAccess(
             SecurityOrigin::Create(destination_url).get())) {
       return true;
@@ -1276,8 +1286,8 @@ WebURLLoaderFactory* LocalFrame::GetURLLoaderFactory() {
 }
 
 WebPluginContainerImpl* LocalFrame::GetWebPluginContainer(Node* node) const {
-  if (GetDocument() && GetDocument()->IsPluginDocument()) {
-    return ToPluginDocument(GetDocument())->GetPluginView();
+  if (auto* plugin_document = DynamicTo<PluginDocument>(GetDocument())) {
+    return plugin_document->GetPluginView();
   }
   if (!node) {
     DCHECK(GetDocument());
@@ -1511,17 +1521,15 @@ LocalFrame::GetReportingService() const {
 }
 
 // static
-std::unique_ptr<UserGestureIndicator> LocalFrame::NotifyUserActivation(
-    LocalFrame* frame,
-    bool need_browser_verification) {
+void LocalFrame::NotifyUserActivation(LocalFrame* frame,
+                                      bool need_browser_verification) {
   if (frame)
     frame->NotifyUserActivation(need_browser_verification);
-  return std::make_unique<UserGestureIndicator>();
 }
 
 // static
 bool LocalFrame::HasTransientUserActivation(LocalFrame* frame) {
-  return frame ? frame->HasTransientUserActivation() : false;
+  return frame ? frame->Frame::HasTransientUserActivation() : false;
 }
 
 // static
@@ -1536,14 +1544,10 @@ void LocalFrame::NotifyUserActivation(bool need_browser_verification) {
   NotifyUserActivationInLocalTree();
 }
 
-bool LocalFrame::HasTransientUserActivation() {
-  return user_activation_state_.IsActive();
-}
-
 bool LocalFrame::ConsumeTransientUserActivation(
     UserActivationUpdateSource update_source) {
   if (update_source == UserActivationUpdateSource::kRenderer)
-    Client()->ConsumeUserActivation();
+    Client()->ConsumeTransientUserActivation();
   return ConsumeTransientUserActivationInLocalTree();
 }
 
@@ -1744,7 +1748,7 @@ void LocalFrame::SetLifecycleState(mojom::FrameLifecycleState state) {
 }
 
 void LocalFrame::MaybeLogAdClickNavigation() {
-  if (HasTransientUserActivation() && IsAdSubframe())
+  if (HasTransientUserActivation(this) && IsAdSubframe())
     UseCounter::Count(GetDocument(), WebFeature::kAdClickNavigation);
 }
 
@@ -1808,6 +1812,20 @@ void LocalFrame::DidChangeVisibleToHitTesting() {
   }
 }
 
+WebPrescientNetworking* LocalFrame::PrescientNetworking() {
+  if (!prescient_networking_) {
+    prescient_networking_ = WebLocalFrameImpl::FromFrame(this)
+                                ->Client()
+                                ->CreatePrescientNetworking();
+  }
+  return prescient_networking_.get();
+}
+
+void LocalFrame::SetPrescientNetworkingForTesting(
+    std::unique_ptr<WebPrescientNetworking> prescient_networking) {
+  prescient_networking_ = std::move(prescient_networking);
+}
+
 mojom::blink::LocalFrameHost& LocalFrame::GetLocalFrameHostRemote() {
   return *local_frame_host_remote_.get();
 }
@@ -1848,6 +1866,37 @@ void LocalFrame::AddMessageToConsole(mojom::blink::ConsoleMessageLevel level,
       ConsoleMessage::Create(mojom::ConsoleMessageSource::kOther, level,
                              message),
       discard_duplicates);
+}
+
+void LocalFrame::Collapse(bool collapsed) {
+  FrameOwner* owner = Owner();
+  To<HTMLFrameOwnerElement>(owner)->SetCollapsed(collapsed);
+}
+
+void LocalFrame::EnableViewSourceMode() {
+  DCHECK(!Tree().Parent());
+  SetInViewSourceMode(true);
+}
+
+void LocalFrame::Focus() {
+  FocusImpl();
+}
+
+void LocalFrame::ClearFocusedElement() {
+  Document* document = GetDocument();
+  Element* old_focused_element = document->FocusedElement();
+  document->ClearFocusedElement();
+  if (!old_focused_element)
+    return;
+
+  // If a text field has focus, we need to make sure the selection controller
+  // knows to remove selection from it. Otherwise, the text field is still
+  // processing keyboard events even though focus has been moved to the page and
+  // keystrokes get eaten as a result.
+  document->UpdateStyleAndLayoutTree();
+  if (HasEditableStyle(*old_focused_element) ||
+      old_focused_element->IsTextControl())
+    Selection().Clear();
 }
 
 void LocalFrame::BindToReceiver(

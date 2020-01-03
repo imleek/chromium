@@ -32,11 +32,11 @@
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 
 #include "build/build_config.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_cursor_info.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
-#include "third_party/blink/public/platform/web_input_event.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
@@ -60,7 +60,6 @@
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
 #include "third_party/blink/renderer/core/clipboard/system_clipboard.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/events/drag_event.h"
 #include "third_party/blink/renderer/core/events/gesture_event.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
@@ -527,10 +526,8 @@ WebString WebPluginContainerImpl::ExecuteScriptURL(const WebURL& url,
   }
   script = script.Substring(strlen("javascript:"));
 
-  std::unique_ptr<UserGestureIndicator> gesture_indicator;
-  if (popups_allowed) {
-    gesture_indicator = LocalFrame::NotifyUserActivation(frame);
-  }
+  if (popups_allowed)
+    LocalFrame::NotifyUserActivation(frame);
 
   v8::HandleScope handle_scope(ToIsolate(frame));
   v8::Local<v8::Value> result =
@@ -852,10 +849,10 @@ void WebPluginContainerImpl::HandleDragEvent(MouseEvent& event) {
   WebDragData drag_data = data_transfer->GetDataObject()->ToWebDragData();
   WebDragOperationsMask drag_operation_mask =
       static_cast<WebDragOperationsMask>(data_transfer->SourceOperation());
-  WebFloatPoint drag_screen_location(event.screenX(), event.screenY());
+  gfx::PointF drag_screen_location(event.screenX(), event.screenY());
   IntPoint location(Location());
-  WebFloatPoint drag_location(event.AbsoluteLocation().X() - location.X(),
-                              event.AbsoluteLocation().Y() - location.Y());
+  gfx::PointF drag_location(event.AbsoluteLocation().X() - location.X(),
+                            event.AbsoluteLocation().Y() - location.Y());
 
   web_plugin_->HandleDragStatusUpdate(drag_status, drag_data,
                                       drag_operation_mask, drag_location,
@@ -863,7 +860,8 @@ void WebPluginContainerImpl::HandleDragEvent(MouseEvent& event) {
 }
 
 void WebPluginContainerImpl::HandleWheelEvent(WheelEvent& event) {
-  WebFloatPoint absolute_location = event.NativeEvent().PositionInRootFrame();
+  FloatPoint absolute_location =
+      FloatPoint(event.NativeEvent().PositionInRootFrame());
 
   // Translate the root frame position to content coordinates.
   absolute_location =
@@ -958,8 +956,8 @@ WebTouchEvent WebPluginContainerImpl::TransformTouchEvent(
 
   LocalFrameView* parent = ParentFrameView();
   for (unsigned i = 0; i < transformed_event.touches_length; ++i) {
-    WebFloatPoint absolute_location =
-        transformed_event.touches[i].PositionInWidget();
+    FloatPoint absolute_location =
+        FloatPoint(transformed_event.touches[i].PositionInWidget());
 
     // Translate the root frame position to content coordinates.
     absolute_location = parent->ConvertFromRootFrame(absolute_location);
@@ -1024,11 +1022,11 @@ void WebPluginContainerImpl::HandleGestureEvent(GestureEvent& event) {
   // Take a copy of the event and translate it into the coordinate
   // system of the plugin.
   WebGestureEvent translated_event = event.NativeEvent();
-  WebFloatPoint absolute_root_frame_location =
+  gfx::PointF absolute_root_frame_location =
       event.NativeEvent().PositionInRootFrame();
   FloatPoint local_point =
       element_->GetLayoutObject()->AbsoluteToLocalFloatPoint(
-          absolute_root_frame_location);
+          FloatPoint(absolute_root_frame_location));
   translated_event.FlattenTransform();
   translated_event.SetPositionInWidget(local_point);
 

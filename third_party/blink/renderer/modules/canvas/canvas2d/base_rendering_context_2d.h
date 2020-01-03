@@ -14,7 +14,6 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_path.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d_state.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_style.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_heuristic_parameters.h"
 
 namespace blink {
 class CanvasImageSource;
@@ -248,7 +247,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
     return kSRGBCanvasColorSpaceName;
   }
   virtual CanvasPixelFormat PixelFormat() const {
-    return kRGBA8CanvasPixelFormat;
+    return CanvasColorParams::GetNativeCanvasPixelFormat();
   }
 
   void RestoreMatrixClipStack(cc::PaintCanvas*) const;
@@ -386,7 +385,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   void DrawPathInternal(const Path&,
                         CanvasRenderingContext2DState::PaintType,
-                        SkPath::FillType = SkPath::kWinding_FillType);
+                        SkPathFillType = SkPathFillType::kWinding);
   void DrawImageInternal(cc::PaintCanvas*,
                          CanvasImageSource*,
                          Image*,

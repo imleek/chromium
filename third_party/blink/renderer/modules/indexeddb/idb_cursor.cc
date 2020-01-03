@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_private_property.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
 
@@ -406,7 +407,7 @@ ScriptValue IDBCursor::value(ScriptState* script_state) {
 #endif  // DCHECK_IS_ON()
 
   } else {
-    value = IDBAny::CreateUndefined();
+    value = MakeGarbageCollected<IDBAny>(IDBAny::kUndefinedType);
   }
 
   value_dirty_ = false;
@@ -451,7 +452,7 @@ void IDBCursor::SetValueReady(std::unique_ptr<IDBKey> key,
 #endif  // DCHECK_IS_ON()
   }
 
-  value_ = IDBAny::Create(std::move(value));
+  value_ = MakeGarbageCollected<IDBAny>(std::move(value));
 }
 
 const IDBKey* IDBCursor::IdbPrimaryKey() const {

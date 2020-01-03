@@ -36,6 +36,7 @@
 #include "chrome/browser/bookmarks/startup_task_runner_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/chromeos/account_manager/child_account_type_changed_user_data.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
@@ -44,6 +45,7 @@
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
+#include "chrome/browser/permissions/adaptive_quiet_notification_permission_ui_enabler.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/previews/previews_service.h"
 #include "chrome/browser/previews/previews_service_factory.h"
@@ -276,8 +278,8 @@ void NukeProfileFromDisk(const base::FilePath& profile_path) {
   // Delete both the profile directory and its corresponding cache.
   base::FilePath cache_path;
   chrome::GetUserCacheDirectory(profile_path, &cache_path);
-  base::DeleteFile(profile_path, true);
-  base::DeleteFile(cache_path, true);
+  base::DeleteFileRecursively(profile_path);
+  base::DeleteFileRecursively(cache_path);
 }
 
 // Called after a deleted profile was checked and cleaned up.
@@ -985,7 +987,13 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
       }
       profile->GetPrefs()->SetInteger(arc::prefs::kArcSupervisionTransition,
                                       static_cast<int>(supervisionTransition));
+      chromeos::ChildAccountTypeChangedUserData::GetForProfile(profile)
+          ->SetValue(true);
+    } else {
+      chromeos::ChildAccountTypeChangedUserData::GetForProfile(profile)
+          ->SetValue(false);
     }
+
     if (user_is_child) {
       profile->GetPrefs()->SetString(prefs::kSupervisedUserId,
                                      supervised_users::kChildAccountSUID);
@@ -1270,7 +1278,6 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   // Create the Previews Service and begin loading opt out history from
   // persistent memory.
   PreviewsServiceFactory::GetForProfile(profile)->Initialize(
-      g_browser_process->optimization_guide_service(), proto_db_provider,
       base::CreateSingleThreadTaskRunner({BrowserThread::UI}),
       profile->GetPath());
 
@@ -1298,6 +1305,10 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   chromeos::AccountManagerPolicyControllerFactory::GetForBrowserContext(
       profile);
 #endif
+
+  // TODO(crbug.com/1031477): Remove once getting this created with the browser
+  // context does not change dependency initialization order to cause crashes.
+  AdaptiveQuietNotificationPermissionUiEnabler::GetForProfile(profile);
 }
 
 void ProfileManager::DoFinalInitLogging(Profile* profile) {

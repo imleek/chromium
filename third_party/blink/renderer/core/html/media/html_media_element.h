@@ -31,7 +31,6 @@
 
 #include "base/optional.h"
 #include "base/timer/elapsed_timer.h"
-#include "third_party/blink/public/platform/web_audio_source_provider_client.h"
 #include "third_party/blink/public/platform/web_media_player_client.h"
 #include "third_party/blink/public/platform/webaudiosourceprovider_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
@@ -43,6 +42,7 @@
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
 #include "third_party/blink/renderer/platform/audio/audio_source_provider.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/media/web_audio_source_provider_client.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -343,6 +343,9 @@ class CORE_EXPORT HTMLMediaElement
   void SetCcLayerForTesting(cc::Layer* layer) { SetCcLayer(layer); }
 
  protected:
+  // Assert the correct order of the children in shadow dom when DCHECK is on.
+  static void AssertShadowRootChildren(ShadowRoot&);
+
   HTMLMediaElement(const QualifiedName&, Document&);
   ~HTMLMediaElement() override;
   void Dispose();
@@ -370,14 +373,16 @@ class CORE_EXPORT HTMLMediaElement
   DisplayMode GetDisplayMode() const { return display_mode_; }
   virtual void SetDisplayMode(DisplayMode mode) { display_mode_ = mode; }
 
-  // Assert the correct order of the children in shadow dom when DCHECK is on.
-  static void AssertShadowRootChildren(ShadowRoot&);
+  // Called after the creation of |web_media_player_|.
+  virtual void OnWebMediaPlayerCreated() {}
 
  private:
   // Friend class for testing.
   friend class ContextMenuControllerTest;
   friend class VideoWakeLockTest;
   friend class PictureInPictureControllerTest;
+
+  bool HasPendingActivityInternal() const;
 
   void ResetMediaPlayerAndMediaSource();
 
@@ -764,11 +769,21 @@ class CORE_EXPORT HTMLMediaElement
   Member<IntersectionObserver> lazy_load_intersection_observer_;
 };
 
-inline bool IsHTMLMediaElement(const HTMLElement& element) {
-  return IsA<HTMLAudioElement>(element) || IsHTMLVideoElement(element);
+template <>
+inline bool IsElementOfType<const HTMLMediaElement>(const Node& node) {
+  return IsA<HTMLMediaElement>(node);
 }
-
-DEFINE_HTMLELEMENT_TYPE_CASTS_WITH_FUNCTION(HTMLMediaElement);
+template <>
+struct DowncastTraits<HTMLMediaElement> {
+  static bool AllowFrom(const Node& node) {
+    auto* html_element = DynamicTo<HTMLElement>(node);
+    return html_element && AllowFrom(*html_element);
+  }
+  static bool AllowFrom(const HTMLElement& html_element) {
+    return IsA<HTMLAudioElement>(html_element) ||
+           IsA<HTMLVideoElement>(html_element);
+  }
+};
 
 }  // namespace blink
 

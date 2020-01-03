@@ -178,9 +178,11 @@ js_unittest("crostini_unittest") {
 
 js_library("device_handler") {
   deps = [
+    ":progress_center",
     ":volume_manager_factory",
     "//ui/file_manager/file_manager/common/js:async_util",
     "//ui/file_manager/file_manager/common/js:importer_common",
+    "//ui/file_manager/file_manager/common/js:progress_center_common",
     "//ui/webui/resources/js:cr",
     "//ui/webui/resources/js/cr:event_target",
   ]
@@ -189,6 +191,7 @@ js_library("device_handler") {
 js_unittest("device_handler_unittest") {
   deps = [
     ":device_handler",
+    ":mock_progress_center",
     ":mock_volume_manager",
     "//ui/file_manager/base/js:mock_chrome",
     "//ui/file_manager/base/js:test_error_reporting",
@@ -315,6 +318,14 @@ js_library("file_operation_util") {
 js_library("metadata_proxy") {
   deps = [
     "//ui/file_manager/file_manager/common/js:lru_cache",
+  ]
+}
+
+js_unittest("metadata_proxy_unittest") {
+  deps = [
+    ":metadata_proxy",
+    "//ui/file_manager/base/js:test_error_reporting",
+    "//ui/file_manager/file_manager/common/js:mock_entry",
   ]
 }
 
@@ -485,6 +496,7 @@ js_library("runtime_loaded_test_util") {
 
   deps = [
     ":app_windows",
+    ":file_operation_util",
     ":test_util_base",
     "//ui/file_manager/base/js:error_counter",
   ]
@@ -572,6 +584,7 @@ js_test_gen_html("js_test_gen_html") {
     ":import_history_unittest",
     ":media_import_handler_unittest",
     ":media_scanner_unittest",
+    ":metadata_proxy_unittest",
     ":mount_metrics_unittest",
     ":task_queue_unittest",
     ":volume_manager_unittest",

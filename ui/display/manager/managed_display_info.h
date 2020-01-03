@@ -42,7 +42,7 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayMode {
   ManagedDisplayMode& operator=(const ManagedDisplayMode& other);
 
   // Returns the size in DIP which is visible to the user.
-  gfx::Size GetSizeInDIP(bool is_internal) const;
+  gfx::Size GetSizeInDIP() const;
 
   // Returns true if |other| has same size and scale factors.
   bool IsEquivalent(const ManagedDisplayMode& other) const;
@@ -201,10 +201,6 @@ class DISPLAY_MANAGER_EXPORT ManagedDisplayInfo {
   // Returns the currently active rotation for this display with the panel
   // orientation adjustment applied.
   Display::Rotation GetLogicalActiveRotation() const;
-
-  // Returns the natural orientation rotation with the panel orientation
-  // adjustment applied.
-  Display::Rotation GetNaturalOrientationRotation() const;
 
   // Returns the source which set the active rotation for this display.
   Display::RotationSource active_rotation_source() const {

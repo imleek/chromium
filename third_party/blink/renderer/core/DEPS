@@ -50,6 +50,7 @@ include_rules = [
     "+cc/paint/paint_canvas.h",
     "+cc/paint/paint_flags.h",
     "+cc/paint/paint_worklet_input.h",
+    "+cc/trees/browser_controls_params.h",
     "+cc/trees/paint_holding_commit_trigger.h",
     "+components/performance_manager/public/mojom/coordination_unit.mojom-blink.h",
     "+gpu/config/gpu_feature_info.h",
@@ -63,6 +64,7 @@ include_rules = [
     "+services/network/public/cpp/cors/cors_error_status.h",
     "+services/network/public/cpp/features.h",
     "+services/network/public/cpp/request_mode.h",
+    "+services/network/public/cpp/request_destination.h",
     "+services/network/public/cpp/shared_url_loader_factory.h",
     "+services/resource_coordinator/public/mojom/coordination_unit.mojom-blink.h",
     "+services/service_manager/public",
@@ -129,5 +131,8 @@ specific_include_rules = {
     ],
     "html_canvas_painter_test.cc": [
         "+components/viz/test/test_context_provider.h",
+    ],
+    "document.cc" : [
+        "+net/base/registry_controlled_domains/registry_controlled_domain.h",
     ]
 }

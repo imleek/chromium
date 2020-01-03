@@ -17,6 +17,9 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 /** A simple sheet content to test with. This only displays two empty white views. */
 public class TestBottomSheetContent implements BottomSheetContent {
+    /** The height of the toolbar for this test content. */
+    public static final int TOOLBAR_HEIGHT = 100;
+
     /** {@link CallbackHelper} to ensure the destroy method is called. */
     public final CallbackHelper destroyCallbackHelper = new CallbackHelper();
 
@@ -41,6 +44,9 @@ public class TestBottomSheetContent implements BottomSheetContent {
     /** The full height of this content. */
     private float mFullHeight;
 
+    /** If set to true, the half state will be skipped when scrolling down the FULL sheet. */
+    private boolean mSkipHalfStateScrollingDown;
+
     /**
      * @param context A context to inflate views with.
      * @param priority The content's priority.
@@ -56,7 +62,7 @@ public class TestBottomSheetContent implements BottomSheetContent {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mToolbarView = new View(context);
             ViewGroup.LayoutParams params =
-                    new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 100);
+                    new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TOOLBAR_HEIGHT);
             mToolbarView.setLayoutParams(params);
             mToolbarView.setBackground(new ColorDrawable(Color.WHITE));
 
@@ -104,6 +110,15 @@ public class TestBottomSheetContent implements BottomSheetContent {
     @Override
     public boolean swipeToDismissEnabled() {
         return false;
+    }
+
+    public void setSkipHalfStateScrollingDown(boolean skiphalfStateScrollingDown) {
+        mSkipHalfStateScrollingDown = skiphalfStateScrollingDown;
+    }
+
+    @Override
+    public boolean skipHalfStateOnScrollingDown() {
+        return mSkipHalfStateScrollingDown;
     }
 
     public void setPeekHeight(int height) {

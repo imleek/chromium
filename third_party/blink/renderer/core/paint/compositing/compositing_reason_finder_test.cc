@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
 
 namespace blink {
 
@@ -39,42 +40,7 @@ TEST_F(CompositingReasonFinderTest, CompositingReasonDependencies) {
                CompositingReason::kComboAllStyleDeterminedReasons);
 }
 
-class CompositingReasonFinderTestWithDoNotCompositeTrivial3D
-    : public CompositingReasonFinderTest {
- public:
-  CompositingReasonFinderTestWithDoNotCompositeTrivial3D() {
-    scoped_feature_list_.InitAndEnableFeature(
-        blink::features::kDoNotCompositeTrivial3D);
-  }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-TEST_F(CompositingReasonFinderTestWithDoNotCompositeTrivial3D,
-       DontPromoteTrivial3D) {
-  SetBodyInnerHTML(R"HTML(
-    <div id='target'
-      style='width: 100px; height: 100px; transform: translateZ(0)'></div>
-  )HTML");
-
-  Element* target = GetDocument().getElementById("target");
-  PaintLayer* paint_layer =
-      ToLayoutBoxModelObject(target->GetLayoutObject())->Layer();
-  EXPECT_EQ(kNotComposited, paint_layer->GetCompositingState());
-}
-
-class CompositingReasonFinderTestWithCompositeTrivial3D
-    : public CompositingReasonFinderTest {
- public:
-  CompositingReasonFinderTestWithCompositeTrivial3D() {
-    scoped_feature_list_.InitAndDisableFeature(
-        blink::features::kDoNotCompositeTrivial3D);
-  }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-TEST_F(CompositingReasonFinderTestWithCompositeTrivial3D, PromoteTrivial3D) {
+TEST_F(CompositingReasonFinderTest, PromoteTrivial3D) {
   SetBodyInnerHTML(R"HTML(
     <div id='target'
       style='width: 100px; height: 100px; transform: translateZ(0)'></div>
@@ -98,6 +64,26 @@ TEST_F(CompositingReasonFinderTest, PromoteNonTrivial3D) {
   EXPECT_EQ(kPaintsIntoOwnBacking, paint_layer->GetCompositingState());
 }
 
+class CompositingReasonFinderTestLowEndPlatform
+    : public TestingPlatformSupport {
+ public:
+  bool IsLowEndDevice() override { return true; }
+};
+
+TEST_F(CompositingReasonFinderTest, DontPromoteTrivial3DWithLowEndDevice) {
+  ScopedTestingPlatformSupport<CompositingReasonFinderTestLowEndPlatform>
+      platform;
+  SetBodyInnerHTML(R"HTML(
+    <div id='target'
+      style='width: 100px; height: 100px; transform: translateZ(0)'></div>
+  )HTML");
+
+  Element* target = GetDocument().getElementById("target");
+  PaintLayer* paint_layer =
+      ToLayoutBoxModelObject(target->GetLayoutObject())->Layer();
+  EXPECT_EQ(kNotComposited, paint_layer->GetCompositingState());
+}
+
 TEST_F(CompositingReasonFinderTest, OnlyAnchoredStickyPositionPromoted) {
   SetBodyInnerHTML(R"HTML(
     <style>
@@ -119,6 +105,42 @@ TEST_F(CompositingReasonFinderTest, OnlyAnchoredStickyPositionPromoted) {
                                 GetLayoutObjectByElementId("sticky-no-anchor"))
                                 ->Layer()
                                 ->GetCompositingState());
+}
+
+TEST_F(CompositingReasonFinderTest,
+       OnlyAnchoredStickyPositionPromotedAssumeOverlap) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatureState(
+      blink::features::kAssumeOverlapAfterFixedOrStickyPosition, true);
+  SetBodyInnerHTML(R"HTML(
+    <style>
+    .scroller {contain: paint; width: 400px; height: 400px; overflow: auto;
+    will-change: transform;}
+    .sticky { position: sticky; width: 10px; height: 10px;}</style>
+    <div class='scroller'>
+      <div id='sticky-top' class='sticky' style='top: 0px;'></div>
+      <div id='sticky-no-anchor' class='sticky'></div>
+      <div style='height: 2000px;'></div>
+    </div>
+  )HTML");
+
+  EXPECT_EQ(kPaintsIntoOwnBacking,
+            ToLayoutBoxModelObject(GetLayoutObjectByElementId("sticky-top"))
+                ->Layer()
+                ->GetCompositingState());
+  // Any scroll dependent layer, such as sticky-top, assumes that it overlaps
+  // anything which draws after it.
+  EXPECT_EQ(
+      kPaintsIntoOwnBacking,
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("sticky-no-anchor"))
+          ->Layer()
+          ->GetCompositingState());
+  EXPECT_EQ(
+      CompositingReason::kAssumedOverlap,
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("sticky-no-anchor"))
+              ->Layer()
+              ->GetCompositingReasons() &
+          CompositingReason::kAssumedOverlap);
 }
 
 TEST_F(CompositingReasonFinderTest, OnlyScrollingStickyPositionPromoted) {

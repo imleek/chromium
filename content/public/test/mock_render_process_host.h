@@ -29,8 +29,6 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/network_isolation_key.h"
-#include "services/service_manager/public/cpp/identity.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
 
 #if defined(OS_ANDROID)
 #include "content/public/browser/android/child_process_importance.h"
@@ -54,7 +52,8 @@ class StoragePartition;
 // IPC messages are sent into the message sink for inspection by tests.
 class MockRenderProcessHost : public RenderProcessHost {
  public:
-  using InterfaceBinder = base::Callback<void(mojo::ScopedMessagePipeHandle)>;
+  using InterfaceBinder =
+      base::RepeatingCallback<void(mojo::ScopedMessagePipeHandle)>;
 
   explicit MockRenderProcessHost(BrowserContext* browser_context);
   ~MockRenderProcessHost() override;
@@ -139,13 +138,10 @@ class MockRenderProcessHost : public RenderProcessHost {
   WebRtcStopRtpDumpCallback StartRtpDump(
       bool incoming,
       bool outgoing,
-      const WebRtcRtpPacketCallback& packet_callback) override;
+      WebRtcRtpPacketCallback packet_callback) override;
   void EnableWebRtcEventLogOutput(int lid, int output_period_ms) override;
   void DisableWebRtcEventLogOutput(int lid) override;
-  void BindInterface(const std::string& interface_name,
-                     mojo::ScopedMessagePipeHandle interface_pipe) override;
   void BindReceiver(mojo::GenericPendingReceiver receiver) override;
-  const service_manager::Identity& GetChildIdentity() override;
   std::unique_ptr<base::PersistentMemoryAllocator> TakeMetricsAllocator()
       override;
   const base::TimeTicks& GetInitTimeForNavigationMetrics() override;
@@ -158,15 +154,8 @@ class MockRenderProcessHost : public RenderProcessHost {
   void Resume() override;
   mojom::Renderer* GetRendererInterface() override;
   void CreateURLLoaderFactory(
-      const url::Origin& origin,
-      const url::Origin& main_world_origin,
-      network::mojom::CrossOriginEmbedderPolicy embedder_policy,
-      const WebPreferences* preferences,
-      const net::NetworkIsolationKey& network_isolation_key,
-      mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
-          header_client,
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
-      override;
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
+      network::mojom::URLLoaderFactoryParamsPtr params) override;
 
   bool MayReuseHost() override;
   bool IsUnused() override;
@@ -176,18 +165,32 @@ class MockRenderProcessHost : public RenderProcessHost {
   void LockToOrigin(const IsolationContext& isolation_context,
                     const GURL& lock_url) override;
   void BindCacheStorage(
-      mojo::PendingReceiver<blink::mojom::CacheStorage> receiver,
-      const url::Origin& origin) override;
+      network::mojom::CrossOriginEmbedderPolicy,
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) override;
   void BindFileSystemManager(
       const url::Origin& origin,
       mojo::PendingReceiver<blink::mojom::FileSystemManager> receiver)
+      override {}
+  void BindNativeFileSystemManager(
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::NativeFileSystemManager> receiver)
       override {}
   void BindIndexedDB(
       int render_frame_id,
       const url::Origin& origin,
       mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) override;
+  void BindRestrictedCookieManagerForServiceWorker(
+      const url::Origin& origin,
+      mojo::PendingReceiver<network::mojom::RestrictedCookieManager> receiver)
+      override {}
   void BindVideoDecodePerfHistory(
       mojo::PendingReceiver<media::mojom::VideoDecodePerfHistory> receiver)
+      override {}
+  void BindQuotaDispatcherHost(
+      int render_frame_id,
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::QuotaDispatcherHost> receiver)
       override {}
   void CreateLockManager(
       int render_frame_id,
@@ -201,6 +204,15 @@ class MockRenderProcessHost : public RenderProcessHost {
       const url::Origin& origin,
       mojo::PendingReceiver<payments::mojom::PaymentManager> receiver)
       override {}
+  void CreateNotificationService(
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::NotificationService> receiver)
+      override {}
+  void CreateWebSocketConnector(
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::WebSocketConnector> receiver)
+      override {}
+
   void CleanupCorbExceptionForPluginUponDestruction() override;
 
   // IPC::Sender via RenderProcessHost.
@@ -235,10 +247,6 @@ class MockRenderProcessHost : public RenderProcessHost {
       std::unique_ptr<mojo::AssociatedRemote<mojom::Renderer>>
           renderer_interface);
 
-  // SetNetworkFactory() wins over this.
-  // TODO(falken): Remove this method or call it SetURLLoaderFactory().
-  void OverrideURLLoaderFactory(network::mojom::URLLoaderFactory* factory);
-
   bool is_renderer_locked_to_site() const {
     return is_renderer_locked_to_site_;
   }
@@ -270,9 +278,8 @@ class MockRenderProcessHost : public RenderProcessHost {
   int foreground_service_worker_count_;
   std::unique_ptr<mojo::AssociatedRemote<mojom::Renderer>> renderer_interface_;
   std::map<std::string, InterfaceBinder> binder_overrides_;
-  service_manager::Identity child_identity_;
   bool is_renderer_locked_to_site_ = false;
-  network::mojom::URLLoaderFactory* url_loader_factory_;
+  std::unique_ptr<network::mojom::URLLoaderFactory> url_loader_factory_;
   mojo::PendingReceiver<blink::mojom::CacheStorage> cache_storage_receiver_;
   mojo::PendingReceiver<blink::mojom::IDBFactory> idb_factory_receiver_;
   base::WeakPtrFactory<MockRenderProcessHost> weak_ptr_factory_{this};

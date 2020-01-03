@@ -36,13 +36,14 @@ import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.toolbar.HomeButton;
 import org.chromium.chrome.browser.toolbar.KeyboardNavigationListener;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.TabCountProvider.TabCountObserver;
 import org.chromium.chrome.browser.toolbar.ToolbarColors;
-import org.chromium.chrome.browser.ui.styles.ChromeColors;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.widget.Toast;
@@ -302,7 +303,7 @@ public class ToolbarTablet extends ToolbarLayout
     private void displayNavigationPopup(boolean isForward, View anchorView) {
         Tab tab = getToolbarDataProvider().getTab();
         if (tab == null || tab.getWebContents() == null) return;
-        mNavigationPopup = new NavigationPopup(tab.getProfile(), getContext(),
+        mNavigationPopup = new NavigationPopup(((TabImpl) tab).getProfile(), getContext(),
                 tab.getWebContents().getNavigationController(),
                 isForward ? NavigationPopup.Type.TABLET_FORWARD : NavigationPopup.Type.TABLET_BACK);
         mNavigationPopup.show(anchorView);
@@ -592,6 +593,11 @@ public class ToolbarTablet extends ToolbarLayout
     @Override
     View getExperimentalButtonView() {
         return mExperimentalButton;
+    }
+
+    @Override
+    public HomeButton getHomeButtonForTesting() {
+        return mHomeButton;
     }
 
     private void setToolbarButtonsVisible(boolean visible) {

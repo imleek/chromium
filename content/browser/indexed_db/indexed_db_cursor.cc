@@ -18,8 +18,6 @@
 #include "content/browser/indexed_db/indexed_db_tracing.h"
 #include "content/browser/indexed_db/indexed_db_transaction.h"
 #include "content/browser/indexed_db/indexed_db_value.h"
-#include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/browser_thread.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
 
 using blink::IndexedDBKey;
@@ -127,13 +125,7 @@ leveldb::Status IndexedDBCursor::CursorAdvanceOperation(
   if (value) {
     mojo_value = IndexedDBValue::ConvertAndEraseValue(value);
     blob_info.swap(value->blob_info);
-
-    if (!IndexedDBCallbacks::CreateAllBlobs(
-            dispatcher_host->blob_storage_context(),
-            IndexedDBCallbacks::IndexedDBValueBlob::GetIndexedDBValueBlobs(
-                blob_info, &mojo_value->blob_or_file_info))) {
-      return s;
-    }
+    dispatcher_host->CreateAllBlobs(blob_info, &mojo_value->blob_or_file_info);
   } else {
     mojo_value = blink::mojom::IDBValue::New();
   }
@@ -214,13 +206,7 @@ leveldb::Status IndexedDBCursor::CursorContinueOperation(
   if (value) {
     mojo_value = IndexedDBValue::ConvertAndEraseValue(value);
     blob_info.swap(value->blob_info);
-
-    if (!IndexedDBCallbacks::CreateAllBlobs(
-            dispatcher_host->blob_storage_context(),
-            IndexedDBCallbacks::IndexedDBValueBlob::GetIndexedDBValueBlobs(
-                blob_info, &mojo_value->blob_or_file_info))) {
-      return s;
-    }
+    dispatcher_host->CreateAllBlobs(blob_info, &mojo_value->blob_or_file_info);
   } else {
     mojo_value = blink::mojom::IDBValue::New();
   }
@@ -345,18 +331,8 @@ leveldb::Status IndexedDBCursor::CursorPrefetchIterationOperation(
   for (size_t i = 0; i < found_values.size(); ++i) {
     mojo_values.push_back(
         IndexedDBValue::ConvertAndEraseValue(&found_values[i]));
-  }
-
-  std::vector<IndexedDBCallbacks::IndexedDBValueBlob> value_blobs;
-  for (size_t i = 0; i < mojo_values.size(); ++i) {
-    IndexedDBCallbacks::IndexedDBValueBlob::GetIndexedDBValueBlobs(
-        &value_blobs, found_values[i].blob_info,
-        &mojo_values[i]->blob_or_file_info);
-  }
-
-  if (!IndexedDBCallbacks::CreateAllBlobs(
-          dispatcher_host->blob_storage_context(), std::move(value_blobs))) {
-    return s;
+    dispatcher_host->CreateAllBlobs(found_values[i].blob_info,
+                                    &mojo_values[i]->blob_or_file_info);
   }
 
   std::move(callback).Run(blink::mojom::IDBCursorResult::NewValues(

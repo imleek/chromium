@@ -94,8 +94,6 @@ class ContentHash : public base::RefCountedThreadSafe<ContentHash> {
     HASH_MISMATCH
   };
 
-  using IsCancelledCallback = base::RepeatingCallback<bool(void)>;
-
   // Factory:
   // Returns ContentHash through |created_callback|, the returned values are:
   //   - |hash| The content hash. This will never be nullptr, but
@@ -122,7 +120,7 @@ class ContentHash : public base::RefCountedThreadSafe<ContentHash> {
       const base::FilePath& relative_path,
       const std::string* root) const;
 
-  const ComputedHashes::Reader& computed_hashes() const;
+  const ComputedHashes& computed_hashes() const;
 
   // Returns whether or not computed_hashes.json (and, if needed,
   // verified_contents.json too) was read correctly and is ready to use.
@@ -158,8 +156,8 @@ class ContentHash : public base::RefCountedThreadSafe<ContentHash> {
   ContentHash(const ExtensionId& id,
               const base::FilePath& root,
               ContentVerifierDelegate::VerifierSourceType source_type,
-              std::unique_ptr<VerifiedContents> verified_contents,
-              std::unique_ptr<ComputedHashes::Reader> computed_hashes);
+              std::unique_ptr<const VerifiedContents> verified_contents,
+              std::unique_ptr<const ComputedHashes> computed_hashes);
   ~ContentHash();
 
   // Step 1/2: verified_contents.json.
@@ -209,18 +207,21 @@ class ContentHash : public base::RefCountedThreadSafe<ContentHash> {
   bool CreateHashes(const base::FilePath& hashes_file,
                     const IsCancelledCallback& is_cancelled);
 
-  // Builds hashes for one resource and checks them against
-  // verified_contents.json if needed. Returns nullopt if nothing should be
-  // added to computed_hashes.json for this resource.
-  base::Optional<std::vector<std::string>> ComputeAndCheckResourceHash(
-      const base::FilePath& full_path,
-      const base::FilePath& relative_unix_path);
-
   // Builds computed_hashes. Possibly after creating computed_hashes.json file
   // if necessary.
   void BuildComputedHashes(bool did_fetch_verified_contents,
                            bool force_build,
                            const IsCancelledCallback& is_cancelled);
+
+  // Helper callback for ComputedHashes::Create. Checks whether we want the hash
+  // of the given resource be in computes_hashes.json or not.
+  bool ShouldComputeHashesForResource(const base::FilePath& relative_unix_path);
+
+  // If needed (|source_type_| is SIGNED_HASHES) checks each hash from
+  // |computed_hashes| against data from verified_contenst.json and returns list
+  // of mismatches. If not needed, just returns empty list.
+  std::set<base::FilePath> GetMismatchedComputedHashes(
+      ComputedHashes::Data* computed_hashes);
 
   bool has_verified_contents() const { return verified_contents_ != nullptr; }
 
@@ -234,8 +235,8 @@ class ContentHash : public base::RefCountedThreadSafe<ContentHash> {
 
   // TODO(lazyboy): Avoid dynamic allocations here, |this| already supports
   // move.
-  std::unique_ptr<VerifiedContents> verified_contents_;
-  std::unique_ptr<ComputedHashes::Reader> computed_hashes_;
+  std::unique_ptr<const VerifiedContents> verified_contents_;
+  std::unique_ptr<const ComputedHashes> computed_hashes_;
 
   // Paths that were found to have a mismatching hash.
   std::set<base::FilePath> hash_mismatch_unix_paths_;

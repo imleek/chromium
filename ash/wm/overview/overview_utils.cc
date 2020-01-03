@@ -21,9 +21,11 @@
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_utils.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_transient_descendant_iterator.h"
 #include "ash/wm/wm_event.h"
+#include "ash/wm/work_area_insets.h"
 #include "base/no_destructor.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -50,8 +52,9 @@ const gfx::Transform& GetShiftTransform() {
 }  // namespace
 
 bool CanCoverAvailableWorkspace(aura::Window* window) {
-  if (SplitViewController::Get(window)->InSplitViewMode())
-    return CanSnapInSplitview(window);
+  SplitViewController* split_view_controller = SplitViewController::Get(window);
+  if (split_view_controller->InSplitViewMode())
+    return split_view_controller->CanSnapWindow(window);
   return WindowState::Get(window)->IsMaximizedOrFullscreenOrPinned();
 }
 
@@ -74,7 +77,8 @@ void FadeInWidgetAndMaybeSlideOnEnter(views::Widget* widget,
     }
     window->SetTransform(new_transform);
   }
-  window->layer()->SetOpacity(0.0f);
+
+  // Fade in the widget from its current opacity.
   ScopedOverviewAnimationSettings scoped_overview_animation_settings(
       animation_type, window);
   window->layer()->SetOpacity(1.0f);
@@ -99,9 +103,8 @@ void FadeOutWidgetAndMaybeSlideOnExit(std::unique_ptr<views::Widget> widget,
     return;
   }
 
-  widget->SetOpacity(1.f);
-  // Fade out the widget. This animation continues past the lifetime of overview
-  // mode items.
+  // Fade out the widget from its current opacity. This animation continues past
+  // the lifetime of overview mode items.
   ScopedOverviewAnimationSettings animation_settings(animation_type,
                                                      widget->GetNativeWindow());
   // CleanupAnimationObserver will delete itself (and the widget) when the
@@ -220,12 +223,17 @@ void MaximizeIfSnapped(aura::Window* window) {
   }
 }
 
-// Get the grid bounds if a window is snapped in splitview, or what they will be
-// when snapped based on |target_root| and |indicator_state|.
-gfx::Rect GetGridBoundsInScreenForSplitview(
+gfx::Rect GetGridBoundsInScreen(aura::Window* target_root) {
+  return GetGridBoundsInScreen(target_root,
+                               /*window_dragging_state=*/base::nullopt,
+                               /*divider_changed=*/false);
+}
+
+gfx::Rect GetGridBoundsInScreen(
     aura::Window* target_root,
     base::Optional<SplitViewDragIndicators::WindowDraggingState>
-        window_dragging_state) {
+        window_dragging_state,
+    bool divider_changed) {
   auto* split_view_controller = SplitViewController::Get(target_root);
   auto state = split_view_controller->state();
 
@@ -244,22 +252,65 @@ gfx::Rect GetGridBoundsInScreenForSplitview(
     }
   }
 
+  gfx::Rect bounds;
+  gfx::Rect work_area =
+      WorkAreaInsets::ForWindow(target_root)->ComputeStableWorkArea();
+  base::Optional<SplitViewController::SnapPosition> opposite_position =
+      base::nullopt;
   switch (state) {
     case SplitViewController::State::kLeftSnapped:
-      return split_view_controller->GetSnappedWindowBoundsInScreen(
+      bounds = split_view_controller->GetSnappedWindowBoundsInScreen(
           SplitViewController::RIGHT, /*window_for_minimum_size=*/nullptr);
+      opposite_position = base::make_optional(SplitViewController::RIGHT);
+      break;
     case SplitViewController::State::kRightSnapped:
-      return split_view_controller->GetSnappedWindowBoundsInScreen(
+      bounds = split_view_controller->GetSnappedWindowBoundsInScreen(
           SplitViewController::LEFT, /*window_for_minimum_size=*/nullptr);
-    default:
-      return screen_util::
-          GetDisplayWorkAreaBoundsInScreenForActiveDeskContainer(target_root);
+      opposite_position = base::make_optional(SplitViewController::LEFT);
+      break;
+    case SplitViewController::State::kNoSnap:
+      bounds = work_area;
+      break;
+    case SplitViewController::State::kBothSnapped:
+      // When this function is called, SplitViewController should have already
+      // handled the state change.
+      NOTREACHED();
   }
+
+  if (!divider_changed)
+    return bounds;
+
+  DCHECK(opposite_position);
+  const bool horizontal = SplitViewController::IsLayoutHorizontal();
+  const int min_length =
+      (horizontal ? work_area.width() : work_area.height()) / 3;
+  const int current_length = horizontal ? bounds.width() : bounds.height();
+
+  if (current_length > min_length)
+    return bounds;
+
+  // Clamp bounds' length to the minimum length.
+  if (horizontal)
+    bounds.set_width(min_length);
+  else
+    bounds.set_height(min_length);
+
+  if (SplitViewController::IsPhysicalLeftOrTop(*opposite_position)) {
+    // If we are shifting to the left or top we need to update the origin as
+    // well.
+    const int offset = min_length - current_length;
+    bounds.Offset(horizontal ? gfx::Vector2d(-offset, 0)
+                             : gfx::Vector2d(0, -offset));
+  }
+
+  return bounds;
 }
 
 base::Optional<gfx::RectF> GetSplitviewBoundsMaintainingAspectRatio(
     aura::Window* window) {
   if (!ShouldAllowSplitView())
+    return base::nullopt;
+  if (!Shell::Get()->tablet_mode_controller()->InTabletMode())
     return base::nullopt;
   auto* overview_session =
       Shell::Get()->overview_controller()->overview_session();
@@ -267,8 +318,6 @@ base::Optional<gfx::RectF> GetSplitviewBoundsMaintainingAspectRatio(
   aura::Window* root_window = Shell::GetPrimaryRootWindow();
   DCHECK(overview_session->GetGridWithRootWindow(root_window)
              ->split_view_drag_indicators());
-  // TODO(sammiequon): This does not work for drag from top as they have
-  // different drag indicators object as regular overview.
   auto window_dragging_state =
       overview_session->GetGridWithRootWindow(root_window)
           ->split_view_drag_indicators()
@@ -279,13 +328,19 @@ base::Optional<gfx::RectF> GetSplitviewBoundsMaintainingAspectRatio(
     return base::nullopt;
   }
 
-  return base::make_optional(gfx::RectF(GetGridBoundsInScreenForSplitview(
-      root_window, base::make_optional(window_dragging_state))));
+  return base::make_optional(gfx::RectF(GetGridBoundsInScreen(
+      root_window, base::make_optional(window_dragging_state),
+      /*divider_changed=*/false)));
 }
 
 bool ShouldUseTabletModeGridLayout() {
   return base::FeatureList::IsEnabled(features::kNewOverviewLayout) &&
          Shell::Get()->tablet_mode_controller()->InTabletMode();
+}
+
+gfx::Rect ToStableSizeRoundedRect(const gfx::RectF& rect) {
+  return gfx::Rect(gfx::ToRoundedPoint(rect.origin()),
+                   gfx::ToRoundedSize(rect.size()));
 }
 
 }  // namespace ash

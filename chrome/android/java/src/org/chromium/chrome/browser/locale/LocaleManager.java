@@ -26,9 +26,9 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.SearchEnginePreference;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.search_engine.SearchEngineSettings;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
@@ -97,7 +97,7 @@ public class LocaleManager {
         @Override
         public void onAction(Object actionData) {
             Context context = ContextUtils.getApplicationContext();
-            PreferencesLauncher.launchSettingsPage(context, SearchEnginePreference.class);
+            SettingsLauncher.launchSettingsPage(context, SearchEngineSettings.class);
         }
     };
 
@@ -371,7 +371,7 @@ public class LocaleManager {
         Snackbar snackbar = Snackbar.make(title, mSnackbarController, Snackbar.TYPE_NOTIFICATION,
                 Snackbar.UMA_SPECIAL_LOCALE);
         snackbar.setDuration(SNACKBAR_DURATION_MS);
-        snackbar.setAction(context.getString(R.string.preferences), null);
+        snackbar.setAction(context.getString(R.string.settings), null);
         manager.showSnackbar(snackbar);
     }
 

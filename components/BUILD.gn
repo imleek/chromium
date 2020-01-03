@@ -8,6 +8,7 @@ import("//build/config/ui.gni")
 import("//components/nacl/features.gni")
 import("//components/safe_browsing/buildflags.gni")
 import("//components/ui_devtools/devtools.gni")
+import("//extensions/buildflags/buildflags.gni")
 import("//media/media_options.gni")
 import("//ppapi/buildflags/buildflags.gni")
 import("//printing/buildflags/buildflags.gni")
@@ -122,6 +123,7 @@ test("components_unittests") {
     "//components/password_manager/core/browser:unit_tests",
     "//components/password_manager/core/common:unit_tests",
     "//components/payments/core:unit_tests",
+    "//components/policy/core/browser:unit_tests",
     "//components/policy/core/common:unit_tests",
     "//components/prefs:unit_tests",
     "//components/previews/core:unit_tests",
@@ -137,7 +139,6 @@ test("components_unittests") {
     "//components/security_interstitials/core:unit_tests",
     "//components/security_state/core:unit_tests",
     "//components/services/heap_profiling/public/cpp:unit_tests",
-    "//components/services/storage:tests",
     "//components/services/unzip:unit_tests",
     "//components/sessions:unit_tests",
     "//components/signin/core/browser:unit_tests",
@@ -180,8 +181,11 @@ test("components_unittests") {
     deps += [
       "//components/media_message_center:unit_tests",
       "//components/ui_devtools:unit_tests",
-      "//components/ui_devtools/views:unit_tests",
     ]
+  }
+
+  if (toolkit_views && enable_extensions) {
+    deps += [ "//components/ui_devtools/views:unit_tests" ]
   }
 
   if (use_viz_devtools) {
@@ -230,11 +234,11 @@ test("components_unittests") {
       "//components/discardable_memory/service:unit_tests",
       "//components/dom_distiller/content/browser:unit_tests",
       "//components/domain_reliability:unit_tests",
+      "//components/drive:unit_tests",
       "//components/favicon/content:unit_tests",
       "//components/gcm_driver/instance_id:unit_tests",
       "//components/history/content/browser:unit_tests",
       "//components/invalidation/impl:unit_tests",
-      "//components/invalidation/public:unit_tests",
       "//components/keyed_service/content:unit_tests",
       "//components/language/content/browser:unit_tests",
       "//components/link_header_util:unit_tests",
@@ -254,7 +258,6 @@ test("components_unittests") {
       "//components/payments/content/utility:unit_tests",
       "//components/performance_manager:unit_tests",
       "//components/policy/content:unit_tests",
-      "//components/policy/core/browser:unit_tests",
       "//components/previews/content:unit_tests",
       "//components/safe_browsing/common:unit_tests",
       "//components/safe_browsing/password_protection:password_protection_unittest",
@@ -265,6 +268,7 @@ test("components_unittests") {
       "//components/services/heap_profiling:unit_tests",
       "//components/services/paint_preview_compositor:unit_tests",
       "//components/services/quarantine:unit_tests",
+      "//components/services/storage:tests",
       "//components/spellcheck/browser:unit_tests",
       "//components/spellcheck/renderer:unit_tests",
       "//components/subresource_filter/content/browser:unit_tests",
@@ -283,7 +287,6 @@ test("components_unittests") {
         "//components/crash/content/app:unit_tests",
         "//components/crash/content/browser:unit_tests",
         "//components/data_reduction_proxy/content/common:unit_tests",
-        "//components/data_reduction_proxy/content/renderer:unit_tests",
         "//components/data_reduction_proxy/core/browser:unit_tests",
         "//components/data_reduction_proxy/core/common:unit_tests",
       ]
@@ -321,7 +324,7 @@ test("components_unittests") {
       "//components/policy/android:policy_java",
       "//components/signin/core/browser",
       "//components/signin/core/browser/android:java",
-      "//components/signin/public/identity_manager/android:java",
+      "//components/signin/public/android:java",
       "//components/spellcheck/browser/android:java",
       "//components/variations/android:variations_java",
       "//content/public/android:content_java",
@@ -368,6 +371,7 @@ test("components_unittests") {
       "//components/arc:unit_tests",
       "//components/arc/mojom:unit_tests",
       "//components/guest_os:unit_tests",
+      "//components/metrics/structured:unit_tests",
       "//components/ownership:unit_tests",
       "//components/timers:unit_tests",
       "//components/user_manager:unit_tests",
@@ -481,7 +485,7 @@ if (is_android) {
       "//testing/android/native_test:native_test_java",
       "//ui/android:ui_full_java",
     ]
-    java_files = [
+    sources = [
       "test/android/browsertests_apk/src/org/chromium/components_browsertests_apk/ComponentsBrowserTestsActivity.java",
       "test/android/browsertests_apk/src/org/chromium/components_browsertests_apk/ComponentsBrowserTestsApplication.java",
     ]
@@ -584,8 +588,15 @@ if (!is_ios && !is_fuchsia) {
     }
 
     if (enable_plugins) {
-      sources += [ "pdf/renderer/pdf_accessibility_tree_browsertest.cc" ]
-      deps += [ "//components/pdf/renderer" ]
+      sources += [
+        "pdf/browser/pdf_web_contents_helper_browsertest.cc",
+        "pdf/renderer/pdf_accessibility_tree_browsertest.cc",
+      ]
+      deps += [
+        "//components/pdf/browser",
+        "//components/pdf/renderer",
+        "//pdf:features",
+      ]
     }
 
     if (is_android) {
@@ -668,6 +679,7 @@ if (!is_ios && !is_fuchsia) {
       "$root_out_dir/components_tests_resources.pak",
       "$root_out_dir/ui_test.pak",
       "//components/subresource_filter/core/common/perftests/data/",
+      "//third_party/subresource-filter-ruleset/data/",
     ]
 
     if (is_android) {

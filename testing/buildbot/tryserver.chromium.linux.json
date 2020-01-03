@@ -9,9 +9,10 @@
       {
         "args": [
           "--num-retries=3",
-          "--additional-driver-flag=--enable-blink-features=LayoutNGFragmentItem"
+          "--additional-driver-flag=--enable-blink-features=LayoutNGFragmentItem",
+          "--fuzzy-diff"
         ],
-        "isolate_name": "blink_web_tests_exparchive",
+        "isolate_name": "blink_web_tests",
         "merge": {
           "args": [
             "--verbose"
@@ -28,7 +29,8 @@
             }
           ],
           "shards": 12
-        }
+        },
+        "test_target": "//:blink_web_tests"
       }
     ]
   },
@@ -40,9 +42,10 @@
       {
         "args": [
           "--num-retries=3",
-          "--additional-driver-flag=--enable-blink-features=LayoutNGFragmentPaint"
+          "--additional-driver-flag=--enable-blink-features=LayoutNGFragmentPaint",
+          "--fuzzy-diff"
         ],
-        "isolate_name": "blink_web_tests_exparchive",
+        "isolate_name": "blink_web_tests",
         "merge": {
           "args": [
             "--verbose"
@@ -59,7 +62,8 @@
             }
           ],
           "shards": 12
-        }
+        },
+        "test_target": "//:blink_web_tests"
       }
     ]
   }

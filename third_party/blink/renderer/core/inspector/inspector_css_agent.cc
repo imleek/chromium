@@ -64,6 +64,7 @@
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_head_element.h"
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
@@ -262,10 +263,10 @@ bool GetColorsFromRect(PhysicalRect rect,
     if (!layout_object)
       continue;
 
-    if (IsA<HTMLCanvasElement>(element) || IsHTMLEmbedElement(element) ||
-        IsHTMLImageElement(element) || IsHTMLObjectElement(element) ||
+    if (IsA<HTMLCanvasElement>(element) || IsA<HTMLEmbedElement>(element) ||
+        IsA<HTMLImageElement>(element) || IsA<HTMLObjectElement>(element) ||
         IsA<HTMLPictureElement>(element) || element->IsSVGElement() ||
-        IsHTMLVideoElement(element)) {
+        IsA<HTMLVideoElement>(element)) {
       colors.clear();
       found_opaque_color = false;
       continue;
@@ -1137,8 +1138,8 @@ Response InspectorCSSAgent::getComputedStyleForNode(
   for (CSSPropertyID property_id : CSSPropertyIDList()) {
     const CSSProperty& property_class =
         CSSProperty::Get(resolveCSSPropertyID(property_id));
-    if (!property_class.IsWebExposed() || property_class.IsShorthand() ||
-        !property_class.IsProperty())
+    if (!property_class.IsWebExposed(&node->GetDocument()) ||
+        property_class.IsShorthand() || !property_class.IsProperty())
       continue;
     (*style)->emplace_back(
         protocol::CSS::CSSComputedStyleProperty::create()
@@ -1832,7 +1833,7 @@ InspectorStyleSheetForInlineStyle* InspectorCSSAgent::AsInspectorStyleSheet(
     return nullptr;
 
   InspectorStyleSheetForInlineStyle* inspector_style_sheet =
-      InspectorStyleSheetForInlineStyle::Create(element, this);
+      MakeGarbageCollected<InspectorStyleSheetForInlineStyle>(element, this);
   id_to_inspector_style_sheet_for_inline_style_.Set(inspector_style_sheet->Id(),
                                                     inspector_style_sheet);
   node_to_inspector_style_sheet_.Set(element, inspector_style_sheet);
@@ -1869,7 +1870,7 @@ InspectorStyleSheet* InspectorCSSAgent::BindStyleSheet(
       css_style_sheet_to_inspector_style_sheet_.at(style_sheet);
   if (!inspector_style_sheet) {
     Document* document = style_sheet->OwnerDocument();
-    inspector_style_sheet = InspectorStyleSheet::Create(
+    inspector_style_sheet = MakeGarbageCollected<InspectorStyleSheet>(
         network_agent_, style_sheet, DetectOrigin(style_sheet, document),
         InspectorDOMAgent::DocumentURLString(document), this,
         resource_container_);
@@ -1917,7 +1918,7 @@ InspectorStyleSheet* InspectorCSSAgent::ViaInspectorStyleSheet(
   if (!document)
     return nullptr;
 
-  if (!document->IsHTMLDocument() && !document->IsSVGDocument())
+  if (!IsA<HTMLDocument>(document) && !document->IsSVGDocument())
     return nullptr;
 
   CSSStyleSheet& inspector_sheet =

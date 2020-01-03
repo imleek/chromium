@@ -82,7 +82,6 @@
 <translation id="3822383571486410024">Please lengthen this text to <ph name="MIN_CHARACTERS" /> characters or more (you are currently using <ph name="CURRENT_LENGTH" /> characters).</translation>
 <translation id="383465348367842624">A part followed by '<ph name="ATSIGN" />' should not contain the symbol '<ph name="INVALIDCHARACTER" />'.</translation>
 <translation id="3846214748874656680">Exit full screen</translation>
-<translation id="3889183436948184105">revision</translation>
 <translation id="3920932319529768807">conclusion</translation>
 <translation id="3924558731517983934">application</translation>
 <translation id="3944740393230681990">prologue</translation>
@@ -114,9 +113,12 @@
 <translation id="479989351350248267">search</translation>
 <translation id="4812940957355064477">Please enter a number.</translation>
 <translation id="4912536737030637138">bibliography entry</translation>
+<translation id="492244087561876220">comment</translation>
+<translation id="4971739861736909480"><ph name="ACCNAME" /> selected</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> selected</translation>
 <translation id="4992066212339426712">Unmute</translation>
 <translation id="49969490063480558">Please enter a part following '<ph name="ATSIGN" />'. '<ph name="INVALIDADDRESS" />' is incomplete.</translation>
+<translation id="5022314756875057021">row group</translation>
 <translation id="5034860022980953847">progress indicator</translation>
 <translation id="5090250355906949916">video time scrubber</translation>
 <translation id="5093189678851173835">epigraph</translation>
@@ -217,6 +219,7 @@
 <translation id="7888071071722539607">Please include an '<ph name="ATSIGN" />' in the email address. '<ph name="INVALIDADDRESS" />' is missing an '<ph name="ATSIGN" />'.</translation>
 <translation id="7891486169920085145">splitter</translation>
 <translation id="795667975304826397">No file chosen</translation>
+<translation id="7962328325860248200"><ph name="ACCNAME" /> not selected</translation>
 <translation id="8034303206267677282">strong</translation>
 <translation id="8053789581856978548">search text field</translation>
 <translation id="8057695513531652401">notice</translation>

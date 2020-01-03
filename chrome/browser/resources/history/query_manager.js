@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {BrowserService} from './browser_service.js';
+import {HistoryQuery, HistoryEntry, QueryResult} from './externs.js';
+import {QueryState} from './externs.js';
+
 Polymer({
   is: 'history-query-manager',
 
@@ -16,14 +21,16 @@ Polymer({
           incremental: false,
           // A query is initiated by page load.
           querying: true,
-          queryingDisabled: false,
           searchTerm: '',
         };
       },
     },
 
     /** @type {QueryResult} */
-    queryResult: Object,
+    queryResult: {
+      type: Object,
+      notify: true,
+    },
 
     /** @type {?HistoryRouterElement} */
     router: Object,
@@ -53,28 +60,24 @@ Polymer({
     }
   },
 
+  initialize: function() {
+    this.queryHistory_(false /* incremental */);
+  },
+
   /**
    * @param {boolean} incremental
    * @private
    */
   queryHistory_: function(incremental) {
-    const queryState = this.queryState;
-
-    if (queryState.queryingDisabled) {
-      return;
-    }
-
     this.set('queryState.querying', true);
     this.set('queryState.incremental', incremental);
 
-    if (incremental) {
-      chrome.send('queryHistoryContinuation');
-    } else {
-      chrome.send('queryHistory', [
-        queryState.searchTerm,
-        RESULTS_PER_PAGE,
-      ]);
-    }
+    const browserService = BrowserService.getInstance();
+    const promise = incremental ?
+        browserService.queryHistoryContinuation() :
+        browserService.queryHistory(this.queryState.searchTerm);
+    // Ignore rejected (cancelled) queries.
+    promise.then(result => this.onQueryResult_(result), () => {});
   },
 
   /**
@@ -85,8 +88,8 @@ Polymer({
     const changes = /** @type {{search: ?string}} */ (e.detail);
     let needsUpdate = false;
 
-    if (changes.search != null &&
-        changes.search != this.queryState.searchTerm) {
+    if (changes.search !== null &&
+        changes.search !== this.queryState.searchTerm) {
       this.set('queryState.searchTerm', changes.search);
       needsUpdate = true;
     }
@@ -108,11 +111,24 @@ Polymer({
     return false;
   },
 
+  /**
+   * @param {{info: !HistoryQuery,
+   *          value: !Array<!HistoryEntry>}} results List of results with
+   *     information about the query.
+   * @private
+   */
+  onQueryResult_: function(results) {
+    this.set('queryState.querying', false);
+    this.set('queryResult.info', results.info);
+    this.set('queryResult.results', results.value);
+    this.fire('query-finished');
+  },
+
   /** @private */
   searchTermChanged_: function() {
     // TODO(tsergeant): Ignore incremental searches in this metric.
     if (this.queryState.searchTerm) {
-      history.BrowserService.getInstance().recordAction('Search');
+      BrowserService.getInstance().recordAction('Search');
     }
   },
 });

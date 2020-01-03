@@ -110,7 +110,7 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/test/test_url_loader_client.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/base/ui_base_features.h"
 
 #if defined(OS_CHROMEOS)
@@ -521,12 +521,21 @@ class ExtensionWebRequestApiAuthRequiredTest
     : public ExtensionWebRequestApiTest,
       public testing::WithParamInterface<ProfileMode> {
  public:
-  int GetFlags() {
+  int GetBrowserTestFlags() {
     switch (GetParam()) {
       case ProfileMode::kUserProfile:
         return kFlagEnableFileAccess;
       case ProfileMode::kIncognito:
-        return kFlagEnableIncognito | kFlagUseIncognito | kFlagEnableFileAccess;
+        return kFlagEnableIncognito | kFlagEnableFileAccess;
+    }
+  }
+
+  int GetApiTestFlags() {
+    switch (GetParam()) {
+      case ProfileMode::kUserProfile:
+        return kFlagNone;
+      case ProfileMode::kIncognito:
+        return kFlagUseIncognito;
     }
   }
 };
@@ -540,7 +549,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiAuthRequiredTest,
 
   // Pass "debug" as a custom arg to debug test flakiness.
   ASSERT_TRUE(RunExtensionSubtestWithArgAndFlags(
-      "webrequest", "test_auth_required.html", "debug", GetFlags()))
+      "webrequest", "test_auth_required.html", "debug", GetBrowserTestFlags(),
+      GetApiTestFlags()))
       << message_;
 }
 
@@ -554,7 +564,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiAuthRequiredTest,
 
   // Pass "debug" as a custom arg to debug test flakiness.
   ASSERT_TRUE(RunExtensionSubtestWithArgAndFlags(
-      "webrequest", "test_auth_required_async.html", "debug", GetFlags()))
+      "webrequest", "test_auth_required_async.html", "debug",
+      GetBrowserTestFlags(), GetApiTestFlags()))
       << message_;
 }
 
@@ -566,7 +577,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiAuthRequiredTest,
 
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionSubtestWithArgAndFlags(
-      "webrequest", "test_auth_required_parallel.html", nullptr, GetFlags()))
+      "webrequest", "test_auth_required_parallel.html", nullptr,
+      GetBrowserTestFlags(), GetApiTestFlags()))
       << message_;
 }
 
@@ -675,15 +687,8 @@ class ExtensionWebRequestApiPolicyTest
   std::string test_name_ = "test_cors.html";
 };
 
-// Flaky on Win10: http://crbug.com/1020185
-#if defined(OS_WIN)
-#define MAYBE_WebRequestCORSWithExtraHeaders \
-  DISABLED_WebRequestCORSWithExtraHeaders
-#else
-#define MAYBE_WebRequestCORSWithExtraHeaders WebRequestCORSWithExtraHeaders
-#endif
 IN_PROC_BROWSER_TEST_P(ExtensionWebRequestApiPolicyTest,
-                       MAYBE_WebRequestCORSWithExtraHeaders) {
+                       WebRequestCORSWithExtraHeaders) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionSubtest("webrequest", test_name())) << message_;
 }
@@ -1889,7 +1894,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
       frame->GetProcess()->GetBrowserContext(), frame,
       frame->GetProcess()->GetID(),
       content::ContentBrowserClient::URLLoaderFactoryType::kDocumentSubResource,
-      &pending_receiver, nullptr));
+      base::nullopt, &pending_receiver, nullptr));
   temp_web_contents.reset();
   auto params = network::mojom::URLLoaderFactoryParams::New();
   params->process_id = 0;
@@ -1898,12 +1903,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
       ->CreateURLLoaderFactory(std::move(pending_receiver), std::move(params));
 
   network::TestURLLoaderClient client;
-  network::mojom::URLLoaderPtr loader;
+  mojo::PendingRemote<network::mojom::URLLoader> loader;
   network::ResourceRequest resource_request;
   resource_request.url = embedded_test_server()->GetURL("/hung");
   factory->CreateLoaderAndStart(
-      mojo::MakeRequest(&loader), 0, 0, network::mojom::kURLLoadOptionNone,
-      resource_request, client.CreateRemote(),
+      loader.InitWithNewPipeAndPassReceiver(), 0, 0,
+      network::mojom::kURLLoadOptionNone, resource_request,
+      client.CreateRemote(),
       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
 
   // Destroy profile, unbind client to cause a connection error, and delete the
@@ -2717,7 +2723,7 @@ class ServiceWorkerWebRequestApiTest : public testing::WithParamInterface<bool>,
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(/* No prefix */,
+INSTANTIATE_TEST_SUITE_P(All,
                          ServiceWorkerWebRequestApiTest,
                          ::testing::Bool());
 
@@ -2919,7 +2925,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, Initiator_SplitIncognito) {
                                                         will_reply);
   const Extension* extension = LoadExtensionWithFlags(
       test_data_dir_.AppendASCII("webrequest").AppendASCII("initiator_split"),
-      ExtensionBrowserTest::kFlagEnableIncognito);
+      kFlagEnableIncognito);
   ASSERT_TRUE(extension);
   EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
 

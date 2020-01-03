@@ -226,8 +226,8 @@ void ScrollableArea::SetScrollOffset(const ScrollOffset& offset,
     return;
   }
 
-  TRACE_EVENT2("blink", "ScrollableArea::SetScrollOffset", "x", offset.Width(),
-               "y", offset.Height());
+  TRACE_EVENT2("blink", "ScrollableArea::SetScrollOffset", "cur_x",
+               GetScrollOffset().Width(), "cur_y", GetScrollOffset().Height());
   TRACE_EVENT_INSTANT1("blink", "Type", TRACE_EVENT_SCOPE_THREAD, "type",
                        scroll_type);
   TRACE_EVENT_INSTANT1("blink", "Behavior", TRACE_EVENT_SCOPE_THREAD,
@@ -238,8 +238,11 @@ void ScrollableArea::SetScrollOffset(const ScrollOffset& offset,
 
   switch (scroll_type) {
     case kCompositorScroll:
-    case kClampingScroll:
       ScrollOffsetChanged(clamped_offset, scroll_type);
+      break;
+    case kClampingScroll:
+      GetScrollAnimator().AdjustAnimationAndSetScrollOffset(clamped_offset,
+                                                            scroll_type);
       break;
     case kAnchoringScroll:
       GetScrollAnimator().AdjustAnimationAndSetScrollOffset(clamped_offset,
@@ -789,7 +792,7 @@ void ScrollableArea::DidScroll(const FloatPoint& position) {
 
 CompositorElementId ScrollableArea::GetScrollbarElementId(
     ScrollbarOrientation orientation) {
-  CompositorElementId scrollable_element_id = GetCompositorElementId();
+  CompositorElementId scrollable_element_id = GetScrollElementId();
   DCHECK(scrollable_element_id);
   CompositorElementIdNamespace element_id_namespace =
       orientation == kHorizontalScrollbar
@@ -839,7 +842,8 @@ bool ScrollableArea::SnapForEndPosition(const FloatPoint& end_position,
   std::unique_ptr<cc::SnapSelectionStrategy> strategy =
       cc::SnapSelectionStrategy::CreateForEndPosition(
           gfx::ScrollOffset(end_position), scrolled_x, scrolled_y);
-  return PerformSnapping(*strategy, std::move(on_finish));
+  return PerformSnapping(*strategy, kScrollBehaviorSmooth,
+                         std::move(on_finish));
 }
 
 bool ScrollableArea::SnapForDirection(const ScrollOffset& delta,
@@ -849,8 +853,10 @@ bool ScrollableArea::SnapForDirection(const ScrollOffset& delta,
   std::unique_ptr<cc::SnapSelectionStrategy> strategy =
       cc::SnapSelectionStrategy::CreateForDirection(
           gfx::ScrollOffset(current_position),
-          gfx::ScrollOffset(delta.Width(), delta.Height()));
-  return PerformSnapping(*strategy, std::move(on_finish));
+          gfx::ScrollOffset(delta.Width(), delta.Height()),
+          RuntimeEnabledFeatures::FractionalScrollOffsetsEnabled());
+  return PerformSnapping(*strategy, kScrollBehaviorSmooth,
+                         std::move(on_finish));
 }
 
 bool ScrollableArea::SnapForEndAndDirection(const ScrollOffset& delta) {
@@ -859,11 +865,26 @@ bool ScrollableArea::SnapForEndAndDirection(const ScrollOffset& delta) {
   std::unique_ptr<cc::SnapSelectionStrategy> strategy =
       cc::SnapSelectionStrategy::CreateForEndAndDirection(
           gfx::ScrollOffset(current_position),
-          gfx::ScrollOffset(delta.Width(), delta.Height()));
+          gfx::ScrollOffset(delta.Width(), delta.Height()),
+          RuntimeEnabledFeatures::FractionalScrollOffsetsEnabled());
   return PerformSnapping(*strategy);
 }
 
+void ScrollableArea::SnapAfterLayout() {
+  const cc::SnapContainerData* container_data = GetSnapContainerData();
+  if (!container_data || !container_data->size())
+    return;
+
+  FloatPoint current_position = ScrollPosition();
+  std::unique_ptr<cc::SnapSelectionStrategy> strategy =
+      cc::SnapSelectionStrategy::CreateForTargetElement(
+          gfx::ScrollOffset(current_position));
+
+  PerformSnapping(*strategy, kScrollBehaviorInstant);
+}
+
 bool ScrollableArea::PerformSnapping(const cc::SnapSelectionStrategy& strategy,
+                                     ScrollBehavior scroll_behavior,
                                      base::ScopedClosureRunner on_finish) {
   base::Optional<FloatPoint> snap_point = GetSnapPositionAndSetTarget(strategy);
   if (!snap_point)
@@ -871,8 +892,7 @@ bool ScrollableArea::PerformSnapping(const cc::SnapSelectionStrategy& strategy,
   CancelScrollAnimation();
   CancelProgrammaticScrollAnimation();
   SetScrollOffset(ScrollPositionToOffset(snap_point.value()),
-                  kProgrammaticScroll, kScrollBehaviorSmooth,
-                  on_finish.Release());
+                  kProgrammaticScroll, scroll_behavior, on_finish.Release());
   return true;
 }
 
@@ -891,8 +911,9 @@ void ScrollableArea::InjectGestureScrollEvent(
   // it is not hit-testable.
   DCHECK(GetLayoutBox());
   GetChromeClient()->InjectGestureScrollEvent(
-      *GetLayoutBox()->GetFrame(), device, delta, granularity,
-      GetCompositorElementId(), gesture_type);
+      *GetLayoutBox()->GetFrame(), device,
+      gfx::Vector2dF(delta.Width(), delta.Height()), granularity,
+      GetScrollElementId(), gesture_type);
 }
 
 ScrollableArea* ScrollableArea::GetForScrolling(const LayoutBox* layout_box) {

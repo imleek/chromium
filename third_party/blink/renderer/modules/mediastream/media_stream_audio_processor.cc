@@ -21,6 +21,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/chromecast_buildflags.h"
 #include "media/base/audio_fifo.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
@@ -28,7 +29,7 @@
 #include "media/webrtc/helpers.h"
 #include "media/webrtc/webrtc_switches.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/web/modules/webrtc/webrtc_audio_device_impl.h"
+#include "third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl.h"
 #include "third_party/blink/renderer/platform/mediastream/aec_dump_agent_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/worker_pool.h"
@@ -60,6 +61,11 @@ using EchoCancellationType =
 namespace {
 
 using webrtc::AudioProcessing;
+
+bool UseMultiChannelCaptureProcessing() {
+  return base::FeatureList::IsEnabled(
+      features::kWebRtcEnableCaptureMultiChannelApm);
+}
 
 constexpr int kAudioProcessingNumberOfChannels = 1;
 constexpr int kBuffersPerSecond = 100;  // 10 ms per buffer.
@@ -234,7 +240,9 @@ MediaStreamAudioProcessor::MediaStreamAudioProcessor(
       audio_mirroring_(false),
       typing_detected_(false),
       aec_dump_agent_impl_(AecDumpAgentImpl::Create(this)),
-      stopped_(false) {
+      stopped_(false),
+      use_capture_multi_channel_processing_(
+          UseMultiChannelCaptureProcessing()) {
   DCHECK(main_thread_runner_);
   DETACH_FROM_THREAD(capture_thread_checker_);
   DETACH_FROM_THREAD(render_thread_checker_);
@@ -524,10 +532,10 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
         base::FeatureList::IsEnabled(features::kWebRtcHybridAgc);
 
     config.Set<webrtc::ExperimentalAgc>(experimental_agc);
-#if defined(IS_CHROMECAST)
+#if BUILDFLAG(IS_CHROMECAST)
   } else {
     config.Set<webrtc::ExperimentalAgc>(new webrtc::ExperimentalAgc(false));
-#endif  // defined(IS_CHROMECAST)
+#endif  // BUILDFLAG(IS_CHROMECAST)
   }
 
   // Create and configure the webrtc::AudioProcessing.
@@ -556,8 +564,9 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
   }
 
   webrtc::AudioProcessing::Config apm_config = audio_processing_->GetConfig();
-  apm_config.pipeline.experimental_multi_channel =
-      base::FeatureList::IsEnabled(features::kWebRtcEnableMultiChannelApm);
+  apm_config.pipeline.multi_channel_render = true;
+  apm_config.pipeline.multi_channel_capture =
+      use_capture_multi_channel_processing_;
 
   base::Optional<double> gain_control_compression_gain_db;
   blink::PopulateApmConfig(&apm_config, properties,
@@ -609,17 +618,21 @@ void MediaStreamAudioProcessor::InitializeCaptureFifo(
   // what format it would prefer.
   const int output_sample_rate = audio_processing_
                                      ?
-#if defined(IS_CHROMECAST)
+#if BUILDFLAG(IS_CHROMECAST)
                                      std::min(blink::kAudioProcessingSampleRate,
                                               input_format.sample_rate())
 #else
                                      blink::kAudioProcessingSampleRate
-#endif  // defined(IS_CHROMECAST)
+#endif  // BUILDFLAG(IS_CHROMECAST)
                                      : input_format.sample_rate();
-  media::ChannelLayout output_channel_layout =
-      audio_processing_
-          ? media::GuessChannelLayout(kAudioProcessingNumberOfChannels)
-          : input_format.channel_layout();
+
+  media::ChannelLayout output_channel_layout;
+  if (!audio_processing_ || use_capture_multi_channel_processing_) {
+    output_channel_layout = input_format.channel_layout();
+  } else {
+    output_channel_layout =
+        media::GuessChannelLayout(kAudioProcessingNumberOfChannels);
+  }
 
   // The output channels from the fifo is normally the same as input.
   int fifo_output_channels = input_format.channels();

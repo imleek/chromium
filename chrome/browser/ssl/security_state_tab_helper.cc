@@ -18,6 +18,7 @@
 #include "chrome/browser/reputation/reputation_web_contents_observer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
+#include "chrome/browser/ssl/known_interception_disclosure_infobar_delegate.h"
 #include "chrome/browser/ssl/tls_deprecation_config.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -29,6 +30,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/security_state/content/content_utils.h"
+#include "components/security_state/core/security_state_pref_names.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -166,6 +168,16 @@ SecurityStateTabHelper::GetVisibleSecurityState() {
                 ->GetSafetyTipInfoForVisibleNavigation()
           : security_state::SafetyTipInfo(
                 {security_state::SafetyTipStatus::kUnknown, GURL()});
+
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+
+  if (profile &&
+      !profile->GetPrefs()->GetBoolean(
+          security_state::prefs::kStricterMixedContentTreatmentEnabled)) {
+    state->should_suppress_mixed_content_warning = true;
+  }
+
   return state;
 }
 
@@ -214,6 +226,9 @@ void SecurityStateTabHelper::DidFinishNavigation(
     // the number of times it was available.
     UMA_HISTOGRAM_BOOLEAN("interstitial.ssl.visited_site_after_warning", true);
   }
+
+  MaybeShowKnownInterceptionDisclosureDialog(
+      web_contents(), visible_security_state->cert_status);
 }
 
 void SecurityStateTabHelper::DidChangeVisibleSecurityState() {

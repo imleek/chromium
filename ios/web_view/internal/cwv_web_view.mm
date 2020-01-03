@@ -39,6 +39,7 @@
 #import "ios/web/public/web_view_only/wk_web_view_configuration_util.h"
 #include "ios/web_view/cwv_web_view_buildflags.h"
 #import "ios/web_view/internal/autofill/cwv_autofill_controller_internal.h"
+#import "ios/web_view/internal/cwv_back_forward_list_internal.h"
 #import "ios/web_view/internal/cwv_favicon_internal.h"
 #import "ios/web_view/internal/cwv_html_element_internal.h"
 #import "ios/web_view/internal/cwv_navigation_action_internal.h"
@@ -140,7 +141,7 @@ WEB_STATE_USER_DATA_KEY_IMPL(WebViewHolder)
 #endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 
 // Updates the availability of the back/forward navigation properties exposed
-// through |canGoBack| and |canGoForward|.
+// through |canGoBack| and |canGoForward|, and also updates |backForwardList|.
 - (void)updateNavigationAvailability;
 // Updates the URLs exposed through |lastCommittedURL| and |visibleURL|.
 - (void)updateCurrentURLs;
@@ -164,6 +165,7 @@ static NSString* gUserAgentProduct = nil;
 #if BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
 @synthesize autofillController = _autofillController;
 #endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_AUTOFILL)
+@synthesize backForwardList = _backForwardList;
 @synthesize canGoBack = _canGoBack;
 @synthesize canGoForward = _canGoForward;
 @synthesize configuration = _configuration;
@@ -271,6 +273,26 @@ static NSString* gUserAgentProduct = nil;
     _webState->GetNavigationManager()->GoForward();
 }
 
+- (BOOL)goToBackForwardListItem:(CWVBackForwardListItem*)item {
+  if (!_backForwardList) {
+    return NO;  // Do nothing if |_backForwardList| is not generated yet.
+  }
+
+  if ([item isEqual:_backForwardList.currentItem]) {
+    return NO;
+  }
+
+  int index = [_backForwardList internalIndexOfItem:item];
+  if (index == -1) {
+    return NO;
+  }
+
+  DCHECK(_webState);
+  web::NavigationManager* navigationManager = _webState->GetNavigationManager();
+  navigationManager->GoToIndex(index);
+  return YES;
+}
+
 - (void)reload {
   // |check_for_repost| is false because CWVWebView does not support repost form
   // dialogs.
@@ -319,11 +341,6 @@ static NSString* gUserAgentProduct = nil;
 - (void)webStateDestroyed:(web::WebState*)webState {
   webState->RemoveObserver(_webStateObserver.get());
   _webStateObserver.reset();
-}
-
-- (void)webState:(web::WebState*)webState
-    navigationItemsPruned:(size_t)pruned_item_count {
-  [self updateCurrentURLs];
 }
 
 - (void)webState:(web::WebState*)webState
@@ -678,6 +695,9 @@ static NSString* gUserAgentProduct = nil;
   }
   _webState->AddObserver(_webStateObserver.get());
 
+  if (_backForwardList) {
+    _backForwardList.navigationManager = _webState->GetNavigationManager();
+  }
   [self updateWebStateVisibility];
 
   _webStateDelegate = std::make_unique<web::WebStateDelegateBridge>(self);
@@ -728,7 +748,7 @@ static NSString* gUserAgentProduct = nil;
 
   // TODO(crbug.com/873729): The session will not be restored until
   // LoadIfNecessary call. Fix the bug and remove extra call.
-  if (web::GetWebClient()->IsSlimNavigationManagerEnabled() && sessionStorage) {
+  if (sessionStorage) {
     _webState->GetNavigationManager()->LoadIfNecessary();
   }
 }
@@ -745,10 +765,20 @@ static NSString* gUserAgentProduct = nil;
   [self addSubview:subview];
 }
 
+- (CWVBackForwardList*)backForwardList {
+  if (!_backForwardList) {
+    _backForwardList = [[CWVBackForwardList alloc]
+        initWithNavigationManager:_webState->GetNavigationManager()];
+  }
+  return _backForwardList;
+}
+
 - (void)updateNavigationAvailability {
   self.canGoBack = _webState && _webState->GetNavigationManager()->CanGoBack();
   self.canGoForward =
       _webState && _webState->GetNavigationManager()->CanGoForward();
+
+  self.backForwardList.navigationManager = _webState->GetNavigationManager();
 }
 
 - (void)updateCurrentURLs {

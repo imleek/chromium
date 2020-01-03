@@ -20,11 +20,60 @@
             {
               "gpu": "intel-hd-630-ubuntu-stable",
               "os": "linux-intel-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-ubuntu-stable",
+              "os": "linux-intel-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-ubuntu-stable",
+              "os": "linux-intel-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -43,11 +92,12 @@
             {
               "gpu": "intel-hd-630-ubuntu-stable",
               "os": "linux-intel-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -66,16 +116,16 @@
             {
               "gpu": "intel-hd-630-ubuntu-stable",
               "os": "linux-intel-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
-          "--use-gpu-in-tests",
-          "--use-cmd-decoder=validating"
+          "--use-gpu-in-tests"
         ],
         "merge": {
           "args": [],
@@ -87,11 +137,12 @@
             {
               "gpu": "intel-hd-630-ubuntu-stable",
               "os": "linux-intel-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "gl_tests"
+        "test": "gl_tests",
+        "test_target": "//gpu:gl_tests"
       },
       {
         "args": [
@@ -108,11 +159,12 @@
             {
               "gpu": "intel-hd-630-ubuntu-stable",
               "os": "linux-intel-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "gl_unittests"
+        "test": "gl_unittests",
+        "test_target": "//ui/gl:gl_unittests"
       }
     ],
     "isolated_scripts": [
@@ -136,10 +188,11 @@
             {
               "gpu": "intel-hd-630-ubuntu-stable",
               "os": "linux-intel-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       },
       {
         "args": [
@@ -149,9 +202,10 @@
           "--additional-expectations=../../third_party/blink/web_tests/WebGPUExpectations",
           "--isolated-script-test-filter=wpt_internal/webgpu/*",
           "--no-xvfb",
-          "--additional-driver-flag=--disable-gpu-sandbox"
+          "--additional-driver-flag=--disable-gpu-sandbox",
+          "--fuzzy-diff"
         ],
-        "isolate_name": "blink_web_tests_exparchive",
+        "isolate_name": "blink_web_tests",
         "merge": {
           "args": [
             "--verbose"
@@ -165,10 +219,11 @@
             {
               "gpu": "intel-hd-630-ubuntu-stable",
               "os": "linux-intel-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//:blink_web_tests"
       }
     ]
   },
@@ -189,11 +244,60 @@
             {
               "gpu": "nvidia-quadro-p400-ubuntu-stable",
               "os": "linux-nvidia-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-ubuntu-stable",
+              "os": "linux-nvidia-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-ubuntu-stable",
+              "os": "linux-nvidia-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -212,11 +316,12 @@
             {
               "gpu": "nvidia-quadro-p400-ubuntu-stable",
               "os": "linux-nvidia-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -235,16 +340,16 @@
             {
               "gpu": "nvidia-quadro-p400-ubuntu-stable",
               "os": "linux-nvidia-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
-          "--use-gpu-in-tests",
-          "--use-cmd-decoder=validating"
+          "--use-gpu-in-tests"
         ],
         "merge": {
           "args": [],
@@ -256,11 +361,12 @@
             {
               "gpu": "nvidia-quadro-p400-ubuntu-stable",
               "os": "linux-nvidia-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "gl_tests"
+        "test": "gl_tests",
+        "test_target": "//gpu:gl_tests"
       },
       {
         "args": [
@@ -277,11 +383,12 @@
             {
               "gpu": "nvidia-quadro-p400-ubuntu-stable",
               "os": "linux-nvidia-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "gl_unittests"
+        "test": "gl_unittests",
+        "test_target": "//ui/gl:gl_unittests"
       }
     ],
     "isolated_scripts": [
@@ -305,10 +412,11 @@
             {
               "gpu": "nvidia-quadro-p400-ubuntu-stable",
               "os": "linux-nvidia-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       },
       {
         "args": [
@@ -318,9 +426,10 @@
           "--additional-expectations=../../third_party/blink/web_tests/WebGPUExpectations",
           "--isolated-script-test-filter=wpt_internal/webgpu/*",
           "--no-xvfb",
-          "--additional-driver-flag=--disable-gpu-sandbox"
+          "--additional-driver-flag=--disable-gpu-sandbox",
+          "--fuzzy-diff"
         ],
-        "isolate_name": "blink_web_tests_exparchive",
+        "isolate_name": "blink_web_tests",
         "merge": {
           "args": [
             "--verbose"
@@ -334,10 +443,11 @@
             {
               "gpu": "nvidia-quadro-p400-ubuntu-stable",
               "os": "linux-nvidia-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//:blink_web_tests"
       }
     ]
   },
@@ -358,11 +468,60 @@
             {
               "gpu": "intel-hd-630-ubuntu-stable",
               "os": "linux-intel-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-ubuntu-stable",
+              "os": "linux-intel-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-ubuntu-stable",
+              "os": "linux-intel-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -381,11 +540,12 @@
             {
               "gpu": "intel-hd-630-ubuntu-stable",
               "os": "linux-intel-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -404,11 +564,12 @@
             {
               "gpu": "intel-hd-630-ubuntu-stable",
               "os": "linux-intel-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       }
     ],
     "isolated_scripts": [
@@ -432,10 +593,11 @@
             {
               "gpu": "intel-hd-630-ubuntu-stable",
               "os": "linux-intel-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       }
     ]
   },
@@ -456,11 +618,60 @@
             {
               "gpu": "nvidia-quadro-p400-ubuntu-stable",
               "os": "linux-nvidia-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-ubuntu-stable",
+              "os": "linux-nvidia-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-ubuntu-stable",
+              "os": "linux-nvidia-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -479,11 +690,12 @@
             {
               "gpu": "nvidia-quadro-p400-ubuntu-stable",
               "os": "linux-nvidia-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -502,11 +714,12 @@
             {
               "gpu": "nvidia-quadro-p400-ubuntu-stable",
               "os": "linux-nvidia-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       }
     ],
     "isolated_scripts": [
@@ -530,10 +743,11 @@
             {
               "gpu": "nvidia-quadro-p400-ubuntu-stable",
               "os": "linux-nvidia-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       }
     ]
   },
@@ -557,11 +771,62 @@
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "mac-amd-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "mac-amd-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "mac-amd-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -581,11 +846,12 @@
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "mac-amd-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -605,33 +871,12 @@
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "mac-amd-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
-      },
-      {
-        "args": [
-          "--use-gpu-in-tests",
-          "--use-cmd-decoder=validating"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:6821",
-              "hidpi": "1",
-              "os": "mac-amd-stable",
-              "pool": "Chrome-GPU"
-            }
-          ]
-        },
-        "test": "gl_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -648,11 +893,34 @@
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "mac-amd-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "gl_unittests"
+        "test": "gl_tests",
+        "test_target": "//gpu:gl_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "mac-amd-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "gl_unittests",
+        "test_target": "//ui/gl:gl_unittests"
       }
     ],
     "isolated_scripts": [
@@ -677,10 +945,11 @@
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "mac-amd-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       },
       {
         "args": [
@@ -691,7 +960,7 @@
           "--isolated-script-test-filter=wpt_internal/webgpu/*",
           "--platform=mac-mac10.13"
         ],
-        "isolate_name": "blink_web_tests_exparchive",
+        "isolate_name": "blink_web_tests",
         "merge": {
           "args": [
             "--verbose"
@@ -706,10 +975,11 @@
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "mac-amd-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//:blink_web_tests"
       }
     ]
   },
@@ -733,7 +1003,54 @@
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "mac-intel-stable"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "mac-intel-stable"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -755,7 +1072,8 @@
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -777,27 +1095,8 @@
             }
           ]
         },
-        "test": "dawn_end2end_tests"
-      },
-      {
-        "args": [
-          "--use-gpu-in-tests",
-          "--use-cmd-decoder=validating"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:0a2e",
-              "os": "mac-intel-stable"
-            }
-          ]
-        },
-        "test": "gl_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -816,7 +1115,28 @@
             }
           ]
         },
-        "test": "gl_unittests"
+        "test": "gl_tests",
+        "test_target": "//gpu:gl_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "mac-intel-stable"
+            }
+          ]
+        },
+        "test": "gl_unittests",
+        "test_target": "//ui/gl:gl_unittests"
       }
     ],
     "isolated_scripts": [
@@ -842,7 +1162,8 @@
               "os": "mac-intel-stable"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       },
       {
         "args": [
@@ -853,7 +1174,7 @@
           "--isolated-script-test-filter=wpt_internal/webgpu/*",
           "--platform=mac-mac10.13"
         ],
-        "isolate_name": "blink_web_tests_exparchive",
+        "isolate_name": "blink_web_tests",
         "merge": {
           "args": [
             "--verbose"
@@ -869,7 +1190,8 @@
               "os": "mac-intel-stable"
             }
           ]
-        }
+        },
+        "test_target": "//:blink_web_tests"
       }
     ]
   },
@@ -891,11 +1213,62 @@
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "mac-amd-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "mac-amd-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "mac-amd-stable",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -915,11 +1288,12 @@
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "mac-amd-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -939,11 +1313,12 @@
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "mac-amd-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       }
     ],
     "isolated_scripts": [
@@ -968,10 +1343,11 @@
               "gpu": "1002:6821",
               "hidpi": "1",
               "os": "mac-amd-stable",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       }
     ]
   },
@@ -995,7 +1371,54 @@
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "mac-intel-stable"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "mac-intel-stable"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1017,7 +1440,8 @@
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1039,7 +1463,8 @@
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       }
     ],
     "isolated_scripts": [
@@ -1065,7 +1490,8 @@
               "os": "mac-intel-stable"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       }
     ]
   },
@@ -1088,11 +1514,60 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1111,11 +1586,12 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1134,32 +1610,12 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
-      },
-      {
-        "args": [
-          "--use-gpu-in-tests",
-          "--use-cmd-decoder=validating"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "intel-hd-630-win10-stable",
-              "os": "Windows-10",
-              "pool": "Chrome-GPU"
-            }
-          ]
-        },
-        "test": "gl_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1175,11 +1631,33 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "gl_unittests"
+        "test": "gl_tests",
+        "test_target": "//gpu:gl_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "gl_unittests",
+        "test_target": "//ui/gl:gl_unittests"
       }
     ],
     "isolated_scripts": [
@@ -1203,10 +1681,11 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       },
       {
         "args": [
@@ -1218,7 +1697,7 @@
           "--additional-driver-flag=--disable-gpu-sandbox",
           "--target=Release_x64"
         ],
-        "isolate_name": "blink_web_tests_exparchive",
+        "isolate_name": "blink_web_tests",
         "merge": {
           "args": [
             "--verbose"
@@ -1232,10 +1711,11 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//:blink_web_tests"
       }
     ]
   },
@@ -1256,11 +1736,60 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1279,11 +1808,12 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1302,32 +1832,12 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
-      },
-      {
-        "args": [
-          "--use-gpu-in-tests",
-          "--use-cmd-decoder=validating"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "nvidia-quadro-p400-win10-stable",
-              "os": "Windows-10",
-              "pool": "Chrome-GPU"
-            }
-          ]
-        },
-        "test": "gl_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1343,11 +1853,33 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "gl_unittests"
+        "test": "gl_tests",
+        "test_target": "//gpu:gl_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "gl_unittests",
+        "test_target": "//ui/gl:gl_unittests"
       }
     ],
     "isolated_scripts": [
@@ -1371,10 +1903,11 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       },
       {
         "args": [
@@ -1386,7 +1919,7 @@
           "--additional-driver-flag=--disable-gpu-sandbox",
           "--target=Release_x64"
         ],
-        "isolate_name": "blink_web_tests_exparchive",
+        "isolate_name": "blink_web_tests",
         "merge": {
           "args": [
             "--verbose"
@@ -1400,10 +1933,11 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//:blink_web_tests"
       }
     ]
   },
@@ -1424,11 +1958,60 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1447,11 +2030,12 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1470,11 +2054,12 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       }
     ],
     "isolated_scripts": [
@@ -1498,10 +2083,11 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       }
     ]
   },
@@ -1522,11 +2108,60 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1545,11 +2180,12 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1568,11 +2204,12 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       }
     ],
     "isolated_scripts": [
@@ -1596,10 +2233,11 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       }
     ]
   },
@@ -1622,11 +2260,60 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1645,11 +2332,12 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1668,32 +2356,12 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
-      },
-      {
-        "args": [
-          "--use-gpu-in-tests",
-          "--use-cmd-decoder=validating"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "intel-hd-630-win10-stable",
-              "os": "Windows-10",
-              "pool": "Chrome-GPU"
-            }
-          ]
-        },
-        "test": "gl_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1709,11 +2377,33 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "gl_unittests"
+        "test": "gl_tests",
+        "test_target": "//gpu:gl_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "gl_unittests",
+        "test_target": "//ui/gl:gl_unittests"
       }
     ],
     "isolated_scripts": [
@@ -1737,10 +2427,11 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       },
       {
         "args": [
@@ -1751,7 +2442,7 @@
           "--isolated-script-test-filter=wpt_internal/webgpu/*",
           "--additional-driver-flag=--disable-gpu-sandbox"
         ],
-        "isolate_name": "blink_web_tests_exparchive",
+        "isolate_name": "blink_web_tests",
         "merge": {
           "args": [
             "--verbose"
@@ -1765,10 +2456,11 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//:blink_web_tests"
       }
     ]
   },
@@ -1789,11 +2481,60 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1812,11 +2553,12 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1835,32 +2577,12 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
-      },
-      {
-        "args": [
-          "--use-gpu-in-tests",
-          "--use-cmd-decoder=validating"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "nvidia-quadro-p400-win10-stable",
-              "os": "Windows-10",
-              "pool": "Chrome-GPU"
-            }
-          ]
-        },
-        "test": "gl_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1876,11 +2598,33 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "gl_unittests"
+        "test": "gl_tests",
+        "test_target": "//gpu:gl_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "gl_unittests",
+        "test_target": "//ui/gl:gl_unittests"
       }
     ],
     "isolated_scripts": [
@@ -1904,10 +2648,11 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       },
       {
         "args": [
@@ -1918,7 +2663,7 @@
           "--isolated-script-test-filter=wpt_internal/webgpu/*",
           "--additional-driver-flag=--disable-gpu-sandbox"
         ],
-        "isolate_name": "blink_web_tests_exparchive",
+        "isolate_name": "blink_web_tests",
         "merge": {
           "args": [
             "--verbose"
@@ -1932,10 +2677,11 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//:blink_web_tests"
       }
     ]
   },
@@ -1956,11 +2702,60 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "intel-hd-630-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -1979,11 +2774,12 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -2002,11 +2798,12 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       }
     ],
     "isolated_scripts": [
@@ -2030,10 +2827,11 @@
             {
               "gpu": "intel-hd-630-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       }
     ]
   },
@@ -2054,11 +2852,60 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--skip-validation"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_skip_validation_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
+      },
+      {
+        "args": [
+          "--use-gpu-in-tests",
+          "--test-launcher-retry-limit=0",
+          "--use-spvc"
+        ],
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "name": "dawn_end2end_use_spvc_tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "nvidia-quadro-p400-win10-stable",
+              "os": "Windows-10",
+              "pool": "chromium.tests.gpu"
+            }
+          ]
+        },
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -2077,11 +2924,12 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       },
       {
         "args": [
@@ -2100,11 +2948,12 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
         },
-        "test": "dawn_end2end_tests"
+        "test": "dawn_end2end_tests",
+        "test_target": "//third_party/dawn:dawn_end2end_tests"
       }
     ],
     "isolated_scripts": [
@@ -2128,10 +2977,11 @@
             {
               "gpu": "nvidia-quadro-p400-win10-stable",
               "os": "Windows-10",
-              "pool": "Chrome-GPU"
+              "pool": "chromium.tests.gpu"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/test:dawn_perf_tests"
       }
     ]
   }

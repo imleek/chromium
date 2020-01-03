@@ -14,8 +14,8 @@
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
 #include "base/optional.h"
-#include "third_party/blink/public/platform/web_media_constraints.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
+#include "third_party/blink/renderer/platform/mediastream/media_constraints.h"
 
 namespace blink {
 
@@ -239,7 +239,6 @@ class MODULES_EXPORT ResolutionSet {
     Point(double height, double width);
     Point(const Point& other);
     Point& operator=(const Point& other);
-    ~Point();
 
     // Accessors.
     double height() const { return height_; }
@@ -286,7 +285,6 @@ class MODULES_EXPORT ResolutionSet {
                 double max_aspect_ratio);
   ResolutionSet(const ResolutionSet& other);
   ResolutionSet& operator=(const ResolutionSet& other);
-  ~ResolutionSet();
 
   // Getters.
   int min_height() const { return min_height_; }

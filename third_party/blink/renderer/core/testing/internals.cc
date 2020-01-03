@@ -182,6 +182,7 @@
 #include "third_party/blink/renderer/platform/wtf/dtoa.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_encoding_registry.h"
+#include "ui/base/ui_base_features.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -332,6 +333,10 @@ InternalRuntimeFlags* Internals::runtimeFlags() const {
 
 unsigned Internals::workerThreadCount() const {
   return WorkerThread::WorkerThreadCount();
+}
+
+bool Internals::isFormControlsRefreshEnabled() const {
+  return ::features::IsFormControlsRefreshEnabled();
 }
 
 GCObservation* Internals::observeGC(ScriptValue script_value) {
@@ -610,9 +615,9 @@ void Internals::advanceImageAnimation(Element* image,
   DCHECK(image);
 
   ImageResourceContent* resource = nullptr;
-  if (auto* html_image = ToHTMLImageElementOrNull(*image)) {
+  if (auto* html_image = DynamicTo<HTMLImageElement>(*image)) {
     resource = html_image->CachedImage();
-  } else if (auto* svg_image = ToSVGImageElementOrNull(*image)) {
+  } else if (auto* svg_image = DynamicTo<SVGImageElement>(*image)) {
     resource = svg_image->CachedImage();
   } else {
     exception_state.ThrowDOMException(
@@ -839,13 +844,13 @@ void Internals::selectColorInColorChooser(Element* element,
   Color color;
   if (!color.SetFromString(color_value))
     return;
-  if (auto* input = ToHTMLInputElementOrNull(*element))
+  if (auto* input = DynamicTo<HTMLInputElement>(*element))
     input->SelectColorInColorChooser(color);
 }
 
 void Internals::endColorChooser(Element* element) {
   DCHECK(element);
-  if (auto* input = ToHTMLInputElementOrNull(*element))
+  if (auto* input = DynamicTo<HTMLInputElement>(*element))
     input->EndColorChooser();
 }
 
@@ -1304,7 +1309,7 @@ String Internals::viewportAsText(Document* document,
 bool Internals::elementShouldAutoComplete(Element* element,
                                           ExceptionState& exception_state) {
   DCHECK(element);
-  if (auto* input = ToHTMLInputElementOrNull(*element))
+  if (auto* input = DynamicTo<HTMLInputElement>(*element))
     return input->ShouldAutocomplete();
 
   exception_state.ThrowDOMException(DOMExceptionCode::kInvalidNodeTypeError,
@@ -1323,10 +1328,10 @@ String Internals::suggestedValue(Element* element,
   }
 
   String suggested_value;
-  if (auto* input = ToHTMLInputElementOrNull(*element))
+  if (auto* input = DynamicTo<HTMLInputElement>(*element))
     return input->SuggestedValue();
 
-  if (auto* textarea = ToHTMLTextAreaElementOrNull(*element))
+  if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*element))
     return textarea->SuggestedValue();
 
   if (auto* select = DynamicTo<HTMLSelectElement>(*element))
@@ -1346,10 +1351,10 @@ void Internals::setSuggestedValue(Element* element,
     return;
   }
 
-  if (auto* input = ToHTMLInputElementOrNull(*element))
+  if (auto* input = DynamicTo<HTMLInputElement>(*element))
     input->SetSuggestedValue(value);
 
-  if (auto* textarea = ToHTMLTextAreaElementOrNull(*element))
+  if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*element))
     textarea->SetSuggestedValue(value);
 
   if (auto* select = DynamicTo<HTMLSelectElement>(*element))
@@ -1367,14 +1372,14 @@ void Internals::setAutofilledValue(Element* element,
     return;
   }
 
-  if (auto* input = ToHTMLInputElementOrNull(*element)) {
+  if (auto* input = DynamicTo<HTMLInputElement>(*element)) {
     input->DispatchScopedEvent(
         *Event::CreateBubble(event_type_names::kKeydown));
     input->SetAutofillValue(value);
     input->DispatchScopedEvent(*Event::CreateBubble(event_type_names::kKeyup));
   }
 
-  if (auto* textarea = ToHTMLTextAreaElementOrNull(*element)) {
+  if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*element)) {
     textarea->DispatchScopedEvent(
         *Event::CreateBubble(event_type_names::kKeydown));
     textarea->SetAutofillValue(value);
@@ -1393,13 +1398,14 @@ void Internals::setEditingValue(Element* element,
                                 const String& value,
                                 ExceptionState& exception_state) {
   DCHECK(element);
-  if (!IsHTMLInputElement(*element)) {
+  auto* html_input_element = DynamicTo<HTMLInputElement>(element);
+  if (!html_input_element) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidNodeTypeError,
                                       "The element provided is not an INPUT.");
     return;
   }
 
-  ToHTMLInputElement(*element).SetEditingValue(value);
+  html_input_element->SetEditingValue(value);
 }
 
 void Internals::setAutofilled(Element* element,
@@ -1837,14 +1843,11 @@ HitTestLayerRectList* Internals::touchEventTargetLayerRects(
 
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
     auto* pac = document->View()->GetPaintArtifactCompositor();
-    pac->EnableExtraDataForTesting();
     document->View()->UpdateAllLifecyclePhases(
         DocumentLifecycle::LifecycleUpdateReason::kTest);
 
-    const auto& content_layers = pac->GetExtraDataForTesting()->content_layers;
-
     auto* hit_test_rects = MakeGarbageCollected<HitTestLayerRectList>();
-    for (const auto& layer : content_layers) {
+    for (const auto& layer : pac->RootLayer()->children()) {
       const cc::TouchActionRegion& touch_action_region =
           layer->touch_action_region();
       if (!touch_action_region.GetAllRegions().IsEmpty()) {
@@ -2065,15 +2068,24 @@ unsigned Internals::numberOfScrollableAreas(Document* document) {
 
   unsigned count = 0;
   LocalFrame* frame = document->GetFrame();
-  if (frame->View()->ScrollableAreas())
-    count += frame->View()->ScrollableAreas()->size();
+  if (frame->View()->ScrollableAreas()) {
+    for (const auto& scrollable_area : *frame->View()->ScrollableAreas()) {
+      if (scrollable_area->ScrollsOverflow())
+        count++;
+    }
+  }
 
   for (Frame* child = frame->Tree().FirstChild(); child;
        child = child->Tree().NextSibling()) {
     auto* child_local_frame = DynamicTo<LocalFrame>(child);
     if (child_local_frame && child_local_frame->View() &&
-        child_local_frame->View()->ScrollableAreas())
-      count += child_local_frame->View()->ScrollableAreas()->size();
+        child_local_frame->View()->ScrollableAreas()) {
+      for (const auto& scrollable_area :
+           *child_local_frame->View()->ScrollableAreas()) {
+        if (scrollable_area->ScrollsOverflow())
+          count++;
+      }
+    }
   }
 
   return count;
@@ -2218,7 +2230,7 @@ DOMRectList* Internals::nonFastScrollableRects(
     }
   }
 
-  return DOMRectList::Create(layer_non_fast_scrollable_rects);
+  return MakeGarbageCollected<DOMRectList>(layer_non_fast_scrollable_rects);
 }
 
 void Internals::evictAllResources() const {
@@ -2505,7 +2517,7 @@ void Internals::startTrackingRepaints(Document* document,
   LocalFrameView* frame_view = document->View();
   frame_view->UpdateAllLifecyclePhases(
       DocumentLifecycle::LifecycleUpdateReason::kTest);
-  frame_view->SetTracksPaintInvalidations(true);
+  frame_view->SetTracksRasterInvalidations(true);
 }
 
 void Internals::stopTrackingRepaints(Document* document,
@@ -2520,7 +2532,7 @@ void Internals::stopTrackingRepaints(Document* document,
   LocalFrameView* frame_view = document->View();
   frame_view->UpdateAllLifecyclePhases(
       DocumentLifecycle::LifecycleUpdateReason::kTest);
-  frame_view->SetTracksPaintInvalidations(false);
+  frame_view->SetTracksRasterInvalidations(false);
 }
 
 void Internals::updateLayoutAndRunPostLayoutTasks(
@@ -2576,7 +2588,7 @@ DOMRectList* Internals::AnnotatedRegions(Document* document,
   if (!document->View()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
                                       "The document provided is invalid.");
-    return DOMRectList::Create();
+    return MakeGarbageCollected<DOMRectList>();
   }
 
   document->UpdateStyleAndLayout();
@@ -2588,7 +2600,7 @@ DOMRectList* Internals::AnnotatedRegions(Document* document,
     if (region.draggable == draggable)
       quads.push_back(FloatQuad(FloatRect(region.bounds)));
   }
-  return DOMRectList::Create(quads);
+  return MakeGarbageCollected<DOMRectList>(quads);
 }
 
 static const char* CursorTypeToString(ui::CursorType cursor_type) {
@@ -2881,13 +2893,14 @@ String Internals::getImageSourceURL(Element* element) {
 
 void Internals::forceImageReload(Element* element,
                                  ExceptionState& exception_state) {
-  if (!element || !IsHTMLImageElement(*element)) {
+  auto* html_image_element = DynamicTo<HTMLImageElement>(element);
+  if (!html_image_element) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidAccessError,
         "The element should be HTMLImageElement.");
   }
 
-  ToHTMLImageElement(*element).ForceReload();
+  html_image_element->ForceReload();
 }
 
 String Internals::selectMenuListText(HTMLSelectElement* select) {
@@ -2976,13 +2989,14 @@ void Internals::setShouldRevealPassword(Element* element,
                                         bool reveal,
                                         ExceptionState& exception_state) {
   DCHECK(element);
-  if (!IsHTMLInputElement(element)) {
+  auto* html_input_element = DynamicTo<HTMLInputElement>(element);
+  if (!html_input_element) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidNodeTypeError,
                                       "The element provided is not an INPUT.");
     return;
   }
 
-  return ToHTMLInputElement(*element).SetShouldRevealPassword(reveal);
+  return html_input_element->SetShouldRevealPassword(reveal);
 }
 
 namespace {
@@ -3187,13 +3201,14 @@ bool Internals::isUseCounted(Document* document, uint32_t feature) {
 
 bool Internals::isCSSPropertyUseCounted(Document* document,
                                         const String& property_name) {
-  return document->IsPropertyCounted(unresolvedCSSPropertyID(property_name));
+  return document->IsPropertyCounted(
+      unresolvedCSSPropertyID(document, property_name));
 }
 
 bool Internals::isAnimatedCSSPropertyUseCounted(Document* document,
                                                 const String& property_name) {
   return document->IsAnimatedPropertyCounted(
-      unresolvedCSSPropertyID(property_name));
+      unresolvedCSSPropertyID(document, property_name));
 }
 
 void Internals::clearUseCounter(Document* document, uint32_t feature) {

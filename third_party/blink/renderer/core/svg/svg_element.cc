@@ -112,7 +112,7 @@ SVGElementRareData* SVGElement::EnsureSVGRareData() {
 }
 
 bool SVGElement::IsOutermostSVGSVGElement() const {
-  if (!IsSVGSVGElement(*this))
+  if (!IsA<SVGSVGElement>(*this))
     return false;
 
   // Element may not be in the document, pretend we're outermost for viewport(),
@@ -122,7 +122,7 @@ bool SVGElement::IsOutermostSVGSVGElement() const {
 
   // We act like an outermost SVG element, if we're a direct child of a
   // <foreignObject> element.
-  if (IsSVGForeignObjectElement(*parentNode()))
+  if (IsA<SVGForeignObjectElement>(*parentNode()))
     return true;
 
   // If we're living in a shadow tree, we're a <svg> element that got created as
@@ -155,7 +155,7 @@ String SVGElement::title() const {
   // According to spec, we should not return titles when hovering over root
   // <svg> elements imported as a standalone document(those <title> elements
   // are the title of the document, not a tooltip) so we instantly return.
-  if (IsSVGSVGElement(*this) && this == GetDocument().documentElement())
+  if (IsA<SVGSVGElement>(*this) && this == GetDocument().documentElement())
     return String();
 
   if (InUseShadowTree()) {
@@ -238,6 +238,16 @@ void SVGElement::ClearWebAnimatedAttributes() {
     ClearAnimatedAttribute(*attribute);
   }
   SvgRareData()->WebAnimatedAttributes().clear();
+}
+
+ElementSMILAnimations* SVGElement::GetSMILAnimations() {
+  if (!HasSVGRareData())
+    return nullptr;
+  return SvgRareData()->GetSMILAnimations();
+}
+
+ElementSMILAnimations& SVGElement::EnsureSMILAnimations() {
+  return EnsureSVGRareData()->EnsureSMILAnimations();
 }
 
 void SVGElement::SetAnimatedAttribute(const QualifiedName& attribute,
@@ -469,7 +479,7 @@ void SVGElement::UpdateRelativeLengthsInformation(
   }
 
   // Register root SVG elements for top level viewport change notifications.
-  if (auto* svg = ToSVGSVGElementOrNull(*client_element)) {
+  if (auto* svg = DynamicTo<SVGSVGElement>(*client_element)) {
     SVGDocumentExtensions& svg_extensions = GetDocument().AccessSVGExtensions();
     if (client_element->HasRelativeLengths())
       svg_extensions.AddSVGRootWithRelativeLengthDescendents(svg);
@@ -510,8 +520,8 @@ void SVGElement::InvalidateRelativeLengthClients(
 SVGSVGElement* SVGElement::ownerSVGElement() const {
   ContainerNode* n = ParentOrShadowHostNode();
   while (n) {
-    if (IsSVGSVGElement(*n))
-      return ToSVGSVGElement(n);
+    if (auto* svg_svg_element = DynamicTo<SVGSVGElement>(n))
+      return svg_svg_element;
 
     n = n->ParentOrShadowHostNode();
   }
@@ -525,7 +535,8 @@ SVGElement* SVGElement::viewportElement() const {
   // work otherwhise.
   ContainerNode* n = ParentOrShadowHostNode();
   while (n) {
-    if (IsSVGSVGElement(*n) || IsSVGImageElement(*n) || IsSVGSymbolElement(*n))
+    if (IsA<SVGSVGElement>(*n) || IsA<SVGImageElement>(*n) ||
+        IsA<SVGSymbolElement>(*n))
       return To<SVGElement>(n);
 
     n = n->ParentOrShadowHostNode();
@@ -580,8 +591,7 @@ SVGElement* SVGElement::CorrespondingElement() const {
 
 SVGUseElement* SVGElement::CorrespondingUseElement() const {
   if (ShadowRoot* root = ContainingShadowRoot()) {
-    if (IsSVGUseElement(root->host()))
-      return &ToSVGUseElement(root->host());
+    return DynamicTo<SVGUseElement>(root->host());
   }
   return nullptr;
 }
@@ -816,7 +826,7 @@ static bool HasLoadListener(Element* element) {
 bool SVGElement::SendSVGLoadEventIfPossible() {
   if (!HaveLoadedRequiredResources())
     return false;
-  if ((IsStructurallyExternal() || IsSVGSVGElement(*this)) &&
+  if ((IsStructurallyExternal() || IsA<SVGSVGElement>(*this)) &&
       HasLoadListener(this))
     DispatchEvent(*Event::Create(event_type_names::kLoad));
   return true;
@@ -897,8 +907,8 @@ void SVGElement::EnsureAttributeAnimValUpdated() {
 
   if ((HasSVGRareData() && SvgRareData()->WebAnimatedAttributesDirty()) ||
       (GetElementAnimations() &&
-       DocumentAnimations::NeedsAnimationTimingUpdate(GetDocument()))) {
-    DocumentAnimations::UpdateAnimationTimingIfNeeded(GetDocument());
+       GetDocument().GetDocumentAnimations().NeedsAnimationTimingUpdate())) {
+    GetDocument().GetDocumentAnimations().UpdateAnimationTimingIfNeeded();
     ApplyActiveWebAnimations();
   }
 }

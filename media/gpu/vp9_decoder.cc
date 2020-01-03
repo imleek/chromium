@@ -38,6 +38,22 @@ std::vector<uint32_t> GetSpatialLayerFrameSize(
 #endif  // defined(ARCH_CPU_X86_FAMILY) && defined(OS_CHROMEOS)
   return {};
 }
+
+VideoCodecProfile VP9ProfileToVideoCodecProfile(uint8_t profile) {
+  switch (profile) {
+    case 0:
+      return VP9PROFILE_PROFILE0;
+    case 1:
+      return VP9PROFILE_PROFILE1;
+    case 2:
+      return VP9PROFILE_PROFILE2;
+    case 3:
+      return VP9PROFILE_PROFILE3;
+    default:
+      return VIDEO_CODEC_PROFILE_UNKNOWN;
+  }
+}
+
 }  // namespace
 
 VP9Decoder::VP9Accelerator::VP9Accelerator() {}
@@ -45,12 +61,14 @@ VP9Decoder::VP9Accelerator::VP9Accelerator() {}
 VP9Decoder::VP9Accelerator::~VP9Accelerator() {}
 
 VP9Decoder::VP9Decoder(std::unique_ptr<VP9Accelerator> accelerator,
+                       VideoCodecProfile profile,
                        const VideoColorSpace& container_color_space)
     : state_(kNeedStreamMetadata),
       container_color_space_(container_color_space),
+      // TODO(hiroh): Set profile to UNKNOWN.
+      profile_(profile),
       accelerator_(std::move(accelerator)),
-      parser_(accelerator_->IsFrameContextRequired()) {
-}
+      parser_(accelerator_->IsFrameContextRequired()) {}
 
 VP9Decoder::~VP9Decoder() = default;
 
@@ -175,13 +193,20 @@ VP9Decoder::DecodeResult VP9Decoder::Decode() {
                << ", picture size: " << new_pic_size.ToString();
       new_render_rect = gfx::Rect();
     }
+    VideoCodecProfile new_profile =
+        VP9ProfileToVideoCodecProfile(curr_frame_hdr_->profile);
+    if (new_profile == VIDEO_CODEC_PROFILE_UNKNOWN) {
+      VLOG(1) << "Invalid profile: " << curr_frame_hdr_->profile;
+      return kDecodeError;
+    }
 
     DCHECK(!new_pic_size.IsEmpty());
-    if (new_pic_size != pic_size_) {
-      DVLOG(1) << "New resolution: " << new_pic_size.ToString();
+    if (new_pic_size != pic_size_ || new_profile != profile_) {
+      DVLOG(1) << "New profile: " << GetProfileName(new_profile)
+               << ", New resolution: " << new_pic_size.ToString();
 
       if (!curr_frame_hdr_->IsKeyframe() &&
-          (curr_frame_hdr_->IsIntra() && pic_size_.IsEmpty())) {
+          !(curr_frame_hdr_->IsIntra() && pic_size_.IsEmpty())) {
         // TODO(posciak): This is doable, but requires a few modifications to
         // VDA implementations to allow multiple picture buffer sets in flight.
         // http://crbug.com/832264
@@ -199,14 +224,15 @@ VP9Decoder::DecodeResult VP9Decoder::Decode() {
 
       // TODO(posciak): This requires us to be on a keyframe (see above) and is
       // required, because VDA clients expect all surfaces to be returned before
-      // they can cycle surface sets after receiving kAllocateNewSurfaces.
+      // they can cycle surface sets after receiving kConfigChange.
       // This is only an implementation detail of VDAs and can be improved.
       ref_frames_.Clear();
 
       pic_size_ = new_pic_size;
       visible_rect_ = new_render_rect;
+      profile_ = new_profile;
       size_change_failure_counter_ = 0;
-      return kAllocateNewSurfaces;
+      return kConfigChange;
     }
 
     scoped_refptr<VP9Picture> pic = accelerator_->CreateVP9Picture();
@@ -227,7 +253,7 @@ VP9Decoder::DecodeResult VP9Decoder::Decode() {
     }
     pic->frame_hdr = std::move(curr_frame_hdr_);
 
-    if (!DecodeAndOutputPicture(pic)) {
+    if (!DecodeAndOutputPicture(std::move(pic))) {
       SetError();
       return kDecodeError;
     }
@@ -253,17 +279,19 @@ bool VP9Decoder::DecodeAndOutputPicture(scoped_refptr<VP9Picture> pic) {
   DCHECK(!pic_size_.IsEmpty());
   DCHECK(pic->frame_hdr);
 
-  base::Closure done_cb;
+  base::OnceClosure done_cb;
   const auto& context_refresh_cb =
       parser_.GetContextRefreshCb(pic->frame_hdr->frame_context_idx);
   if (context_refresh_cb)
-    done_cb = base::Bind(&VP9Decoder::UpdateFrameContext,
-                         base::Unretained(this), pic, context_refresh_cb);
+    done_cb = base::BindOnce(&VP9Decoder::UpdateFrameContext,
+                             base::Unretained(this), pic, context_refresh_cb);
 
   const Vp9Parser::Context& context = parser_.context();
   if (!accelerator_->SubmitDecode(pic, context.segmentation(),
-                                  context.loop_filter(), ref_frames_, done_cb))
+                                  context.loop_filter(), ref_frames_,
+                                  std::move(done_cb))) {
     return false;
+  }
 
   if (pic->frame_hdr->show_frame) {
     if (!accelerator_->OutputPicture(pic))
@@ -285,6 +313,10 @@ gfx::Size VP9Decoder::GetPicSize() const {
 
 gfx::Rect VP9Decoder::GetVisibleRect() const {
   return visible_rect_;
+}
+
+VideoCodecProfile VP9Decoder::GetProfile() const {
+  return profile_;
 }
 
 size_t VP9Decoder::GetRequiredNumOfPictures() const {

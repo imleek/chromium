@@ -16,7 +16,7 @@ import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
 import org.chromium.components.sync.ModelType;
-import org.chromium.components.sync.Passphrase;
+import org.chromium.components.sync.PassphraseType;
 
 import java.util.HashSet;
 import java.util.List;
@@ -379,11 +379,11 @@ public class ProfileSyncService {
      * This method should only be used if you want to know the raw value. For checking whether
      * we should ask the user for a passphrase, use isPassphraseRequiredForPreferredDataTypes().
      */
-    public @Passphrase.Type int getPassphraseType() {
+    public @PassphraseType int getPassphraseType() {
         assert isEngineInitialized();
         int passphraseType = ProfileSyncServiceJni.get().getPassphraseType(
                 mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
-        if (passphraseType < 0 || passphraseType >= Passphrase.Type.NUM_ENTRIES) {
+        if (passphraseType < 0 || passphraseType > PassphraseType.MAX_VALUE) {
             throw new IllegalArgumentException();
         }
         return passphraseType;
@@ -451,6 +451,17 @@ public class ProfileSyncService {
     public boolean isPassphraseRequiredForPreferredDataTypes() {
         assert isEngineInitialized();
         return ProfileSyncServiceJni.get().isPassphraseRequiredForPreferredDataTypes(
+                mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
+    }
+
+    /**
+     * Checks if trusted vault encryption keys are needed to decrypt a currently-enabled data type.
+     *
+     * @return true if we need an encryption key for a type that is currently enabled.
+     */
+    public boolean isTrustedVaultKeyRequiredForPreferredDataTypes() {
+        assert isEngineInitialized();
+        return ProfileSyncServiceJni.get().isTrustedVaultKeyRequiredForPreferredDataTypes(
                 mNativeProfileSyncServiceAndroid, ProfileSyncService.this);
     }
 
@@ -647,6 +658,8 @@ public class ProfileSyncService {
         void enableEncryptEverything(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         boolean isPassphraseRequiredForPreferredDataTypes(
+                long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
+        boolean isTrustedVaultKeyRequiredForPreferredDataTypes(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);
         boolean isUsingSecondaryPassphrase(
                 long nativeProfileSyncServiceAndroid, ProfileSyncService caller);

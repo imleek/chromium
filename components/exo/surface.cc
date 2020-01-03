@@ -522,12 +522,26 @@ void Surface::SetApplicationId(const char* application_id) {
     delegate_->OnSetApplicationId(application_id);
 }
 
+void Surface::SetColorSpace(gfx::ColorSpace color_space) {
+  TRACE_EVENT1("exo", "Surface::SetColorSpace", "color_space",
+               color_space.ToString());
+
+  pending_state_.color_space = color_space;
+}
+
 void Surface::SetParent(Surface* parent, const gfx::Point& position) {
   TRACE_EVENT2("exo", "Surface::SetParent", "parent", !!parent, "position",
                position.ToString());
 
   if (delegate_)
     delegate_->OnSetParent(parent, position);
+}
+
+void Surface::RequestActivation() {
+  TRACE_EVENT0("exo", "Surface::RequestActivation");
+
+  if (delegate_)
+    delegate_->OnActivationRequested();
 }
 
 void Surface::SetClientSurfaceId(int32_t client_surface_id) {
@@ -545,6 +559,10 @@ void Surface::SetEmbeddedSurfaceId(
     base::RepeatingCallback<viz::SurfaceId()> surface_id_callback) {
   get_current_surface_id_ = std::move(surface_id_callback);
   first_embedded_surface_id_ = viz::SurfaceId();
+}
+
+void Surface::SetEmbeddedSurfaceSize(const gfx::Size& size) {
+  embedded_surface_size_ = gfx::SizeF(size);
 }
 
 void Surface::SetAcquireFence(std::unique_ptr<gfx::GpuFence> gpu_fence) {
@@ -591,7 +609,8 @@ void Surface::CommitSurfaceHierarchy(bool synchronized) {
         pending_state_.only_visible_on_secure_output !=
             state_.only_visible_on_secure_output ||
         pending_state_.blend_mode != state_.blend_mode ||
-        pending_state_.alpha != state_.alpha;
+        pending_state_.alpha != state_.alpha ||
+        pending_state_.color_space != state_.color_space;
 
     bool needs_update_buffer_transform =
         pending_state_.buffer_scale != state_.buffer_scale ||
@@ -920,6 +939,7 @@ void Surface::UpdateResource(FrameSinkResourceManager* resource_manager) {
             state_.only_visible_on_secure_output, &current_resource_)) {
       current_resource_has_alpha_ =
           FormatHasAlpha(current_buffer_.buffer()->GetFormat());
+      current_resource_.color_space = state_.color_space;
     } else {
       current_resource_.id = 0;
       // Use the buffer's size, so the AppendContentsToFrame() will append
@@ -952,7 +972,9 @@ void Surface::UpdateBufferTransform(bool y_invert) {
   }
   if (y_invert)
     buffer_matrix.preScale(1, -1, 0.5f, 0.5f);
-  buffer_matrix.postIDiv(state_.buffer_scale, state_.buffer_scale);
+  if (state_.buffer_scale != 0)
+    buffer_matrix.postScale(1.0f / state_.buffer_scale,
+                            1.0f / state_.buffer_scale);
   buffer_transform_ = gfx::Transform(buffer_matrix);
 }
 
@@ -978,14 +1000,41 @@ void Surface::AppendContentsToFrame(const gfx::Point& origin,
         gfx::ConvertRectToPixel(device_scale_factor, damage_rect));
   }
 
+  gfx::PointF scale(content_size_.width(), content_size_.height());
+
+  gfx::Vector2dF translate(0.0f, 0.0f);
+
+  // Surface quads require the quad rect to be appropriately sized and need to
+  // use the shared quad clip rect.
+  if (get_current_surface_id_) {
+    quad_rect = gfx::Rect(content_size_);
+    // Scale the |embedded_surface_size_| to |content_size_|.
+    if (embedded_surface_size_.width() || embedded_surface_size_.height()) {
+      scale.Scale(1.0f / embedded_surface_size_.width(),
+                  1.0f / embedded_surface_size_.height());
+    }
+
+    if (!state_.crop.IsEmpty()) {
+      // In order to crop an AxB rect to CxD we need to scale by A/C, B/D.
+      // We achieve clipping by scaling it up and then drawing only in the
+      // output rectangle.
+      scale.Scale(content_size_.width() / state_.crop.width(),
+                  content_size_.height() / state_.crop.height());
+
+      translate = -state_.crop.origin().OffsetFromOrigin();
+    }
+  } else {
+    scale.Scale(state_.buffer_scale);
+  }
+
   // Compute the total transformation from post-transform buffer coordinates to
   // target coordinates.
   SkMatrix viewport_to_target_matrix;
   // Scale and offset the normalized space to fit the content size rectangle.
-  viewport_to_target_matrix.setScale(
-      content_size_.width() * state_.buffer_scale,
-      content_size_.height() * state_.buffer_scale);
-  viewport_to_target_matrix.postTranslate(origin.x(), origin.y());
+  viewport_to_target_matrix.setScale(scale.x(), scale.y());
+
+  gfx::PointF target = gfx::PointF(origin) + translate;
+  viewport_to_target_matrix.postTranslate(target.x(), target.y());
   // Convert from DPs to pixels.
   viewport_to_target_matrix.postScale(device_scale_factor, device_scale_factor);
 
@@ -1039,15 +1088,21 @@ void Surface::AppendContentsToFrame(const gfx::Point& origin,
         }
       }
       if (latest_embedded_surface_id_.is_valid()) {
+        if (!state_.crop.IsEmpty()) {
+          quad_state->is_clipped = true;
+          quad_state->clip_rect = output_rect;
+        }
         viz::SurfaceDrawQuad* surface_quad =
             render_pass->CreateAndAppendDrawQuad<viz::SurfaceDrawQuad>();
         surface_quad->SetNew(quad_state, quad_rect, quad_rect,
                              viz::SurfaceRange(first_embedded_surface_id_,
                                                latest_embedded_surface_id_),
                              background_color,
-                             /*stretch_content_to_fill_bounds=*/true,
-                             /*ignores_input_event=*/false);
+                             /*stretch_content_to_fill_bounds=*/false);
       }
+      // A resource was still produced for this so we still need to release it
+      // later.
+      frame->resource_list.push_back(current_resource_);
     } else if (state_.alpha) {
       // Texture quad is only needed if buffer is not fully transparent.
       viz::TextureDrawQuad* texture_quad =

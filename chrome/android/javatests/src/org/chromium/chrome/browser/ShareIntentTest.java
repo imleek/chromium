@@ -19,13 +19,14 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ObservableSupplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.share.ShareDelegate;
+import org.chromium.chrome.browser.share.ShareDelegateImpl;
 import org.chromium.chrome.browser.share.ShareHelper;
-import org.chromium.chrome.browser.share.ShareSheetCoordinator;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.RootUiCoordinator;
 import org.chromium.chrome.browser.util.ChromeFileProvider;
@@ -146,8 +147,8 @@ public class ShareIntentTest {
         }
 
         @Override
-        public ShareDelegate getShareDelegate() {
-            return mActivity.getShareDelegate();
+        public ObservableSupplier<ShareDelegate> getShareDelegateSupplier() {
+            return mActivity.getShareDelegateSupplier();
         }
     }
 
@@ -162,12 +163,13 @@ public class ShareIntentTest {
             return new MockChromeActivity(mActivityTestRule.getActivity());
         });
         RootUiCoordinator rootUiCoordinator = TestThreadUtils.runOnUiThreadBlocking(() -> {
-            return new RootUiCoordinator(mockActivity, null, null, mockActivity.getShareDelegate());
+            return new RootUiCoordinator(
+                    mockActivity, null, mockActivity.getShareDelegateSupplier());
         });
         ShareHelper.setLastShareComponentName(
                 new ComponentName("test.package", "test.activity"), null);
         // Skips the capture of screenshot and notifies with an empty file.
-        ShareSheetCoordinator.setScreenshotCaptureSkippedForTesting(true);
+        ShareDelegateImpl.setScreenshotCaptureSkippedForTesting(true);
 
         WindowAndroid window = TestThreadUtils.runOnUiThreadBlocking(() -> {
             return new WindowAndroid(mActivityTestRule.getActivity()) {
@@ -197,6 +199,6 @@ public class ShareIntentTest {
 
     @After
     public void tearDown() {
-        ShareSheetCoordinator.setScreenshotCaptureSkippedForTesting(false);
+        ShareDelegateImpl.setScreenshotCaptureSkippedForTesting(false);
     }
 }

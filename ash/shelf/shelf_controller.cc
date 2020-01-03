@@ -53,7 +53,7 @@ void SetShelfAutoHideFromPrefs() {
     auto value = GetShelfAutoHideBehaviorPref(prefs, display.id());
     // Don't show the shelf in app mode.
     if (session_controller->IsRunningInAppMode())
-      value = SHELF_AUTO_HIDE_ALWAYS_HIDDEN;
+      value = ShelfAutoHideBehavior::kAlwaysHidden;
     if (Shelf* shelf = GetShelfForDisplay(display.id()))
       shelf->SetAutoHideBehavior(value);
   }
@@ -163,7 +163,7 @@ void ShelfController::OnTabletModeStarted() {
       // Only animate into tablet mode if the shelf alignment will not change.
       if (shelf->IsHorizontalAlignment())
         shelf->set_is_tablet_mode_animation_running(true);
-      shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+      shelf->SetAlignment(ShelfAlignment::kBottom);
       shelf->shelf_widget()->OnTabletModeChanged();
     }
   }

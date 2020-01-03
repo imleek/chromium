@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 
 #include "base/memory/scoped_refptr.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
@@ -63,6 +64,7 @@
 #include "third_party/blink/renderer/core/workers/worker_thread.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/instance_counters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object_snapshot.h"
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
@@ -286,9 +288,10 @@ bool WorkerGlobalScope::FetchClassicImportedScript(
   WorkerClassicScriptLoader* classic_script_loader =
       MakeGarbageCollected<WorkerClassicScriptLoader>();
   EnsureFetcher();
-  classic_script_loader->LoadSynchronously(*execution_context, Fetcher(),
-                                           script_url,
-                                           mojom::RequestContextType::SCRIPT);
+  classic_script_loader->LoadSynchronously(
+      *execution_context, Fetcher(), script_url,
+      mojom::RequestContextType::SCRIPT,
+      network::mojom::RequestDestination::kScript);
   if (classic_script_loader->Failed())
     return false;
   *out_response_url = classic_script_loader->ResponseURL();
@@ -320,23 +323,6 @@ CoreProbeSink* WorkerGlobalScope::GetProbeSink() {
           GetThread()->GetWorkerInspectorController())
     return controller->GetProbeSink();
   return nullptr;
-}
-
-bool WorkerGlobalScope::IsSecureContext(String& error_message) const {
-  // Until there are APIs that are available in workers and that
-  // require a privileged context test that checks ancestors, just do
-  // a simple check here. Once we have a need for a real
-  // |isSecureContext| check here, we can check the responsible
-  // document for a privileged context at worker creation time, pass
-  // it in via WorkerThreadStartupData, and check it here.
-  if (GetSecurityOrigin()->IsPotentiallyTrustworthy())
-    return true;
-  error_message = GetSecurityOrigin()->IsPotentiallyTrustworthyErrorMessage();
-  return false;
-}
-
-service_manager::InterfaceProvider* WorkerGlobalScope::GetInterfaceProvider() {
-  return &interface_provider_;
 }
 
 BrowserInterfaceBrokerProxy& WorkerGlobalScope::GetBrowserInterfaceBroker() {
@@ -449,7 +435,7 @@ WorkerGlobalScope::WorkerGlobalScope(
     : WorkerOrWorkletGlobalScope(
           thread->GetIsolate(),
           CreateSecurityOrigin(creation_params.get()),
-          Agent::CreateForWorkerOrWorklet(
+          MakeGarbageCollected<Agent>(
               thread->GetIsolate(),
               (creation_params->agent_cluster_id.is_empty()
                    ? base::UnguessableToken::Create()
@@ -465,7 +451,6 @@ WorkerGlobalScope::WorkerGlobalScope(
       script_type_(creation_params->script_type),
       user_agent_(creation_params->user_agent),
       thread_(thread),
-      timers_(GetTaskRunner(TaskType::kJavascriptTimer)),
       time_origin_(time_origin),
       font_selector_(MakeGarbageCollected<OffscreenFontSelector>(this)),
       script_eval_state_(ScriptEvalState::kPauseAfterFetch) {
@@ -482,15 +467,9 @@ WorkerGlobalScope::WorkerGlobalScope(
       creation_params->outside_content_security_policy_headers);
   SetWorkerSettings(std::move(creation_params->worker_settings));
 
-  // TODO(sammc): Require a valid |creation_params->interface_provider| once all
-  // worker types provide a valid |creation_params->interface_provider|.
-  if (creation_params->interface_provider.is_valid()) {
-    interface_provider_.Bind(
-        mojo::MakeProxy(service_manager::mojom::InterfaceProviderPtrInfo(
-            creation_params->interface_provider.PassHandle(),
-            service_manager::mojom::InterfaceProvider::Version_)));
-  }
-
+  // TODO(sammc): Require a valid |creation_params->browser_interface_broker|
+  // once all worker types provide a valid
+  // |creation_params->browser_interface_broker|.
   if (creation_params->browser_interface_broker.is_valid()) {
     auto pipe = creation_params->browser_interface_broker.PassPipe();
     browser_interface_broker_proxy_.Bind(
@@ -501,7 +480,8 @@ WorkerGlobalScope::WorkerGlobalScope(
   // A FeaturePolicy is created by FeaturePolicy::CreateFromParentPolicy, even
   // if the parent policy is null.
   DCHECK(creation_params->worker_feature_policy);
-  SetFeaturePolicy(std::move(creation_params->worker_feature_policy));
+  GetSecurityContext().SetFeaturePolicy(
+      std::move(creation_params->worker_feature_policy));
 }
 
 void WorkerGlobalScope::ExceptionThrown(ErrorEvent* event) {
@@ -524,7 +504,7 @@ NOINLINE void WorkerGlobalScope::InitializeURL(const KURL& url) {
   if (GetSecurityOrigin()->IsOpaque()) {
     DCHECK(SecurityOrigin::Create(url)->IsOpaque());
   } else {
-    DCHECK(GetSecurityOrigin()->IsSameSchemeHostPort(
+    DCHECK(GetSecurityOrigin()->IsSameOriginWith(
         SecurityOrigin::Create(url).get()));
   }
   url_ = url;
@@ -555,7 +535,6 @@ TrustedTypePolicyFactory* WorkerGlobalScope::GetTrustedTypes() const {
 void WorkerGlobalScope::Trace(blink::Visitor* visitor) {
   visitor->Trace(location_);
   visitor->Trace(navigator_);
-  visitor->Trace(timers_);
   visitor->Trace(pending_error_events_);
   visitor->Trace(font_selector_);
   visitor->Trace(trusted_types_);

@@ -12,7 +12,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
-#include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -21,7 +20,9 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "printing/buildflags/buildflags.h"
 #include "printing/common/metafile_utils.h"
 #include "third_party/blink/public/web/web_node.h"
@@ -95,10 +96,6 @@ class PrintRenderFrameHelper
   class Delegate {
    public:
     virtual ~Delegate() {}
-
-    // Cancels prerender if it's currently in progress and returns true if the
-    // cancellation succeeded.
-    virtual bool CancelPrerender(content::RenderFrame* render_frame) = 0;
 
     // Returns the element to be printed. Returns a null WebElement if
     // a pdf plugin element can't be extracted from the frame.
@@ -227,7 +224,7 @@ class PrintRenderFrameHelper
   void PrintForSystemDialog() override;
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void InitiatePrintPreview(
-      mojom::PrintRendererAssociatedPtrInfo print_renderer,
+      mojo::PendingAssociatedRemote<mojom::PrintRenderer> print_renderer,
       bool has_selection) override;
   void OnPrintPreviewDialogClosed() override;
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -447,7 +444,7 @@ class PrintRenderFrameHelper
 
   // Used to render print documents from an external source (ARC, Crostini,
   // etc.).
-  mojom::PrintRendererAssociatedPtr print_renderer_;
+  mojo::AssociatedRemote<mojom::PrintRenderer> print_renderer_;
 
   mojo::AssociatedReceiverSet<mojom::PrintRenderFrame> receivers_;
 
@@ -523,6 +520,7 @@ class PrintRenderFrameHelper
 
     int total_page_count() const;
     const std::vector<int>& pages_to_render() const;
+    int pages_rendered_count() const;
     MetafileSkia* metafile();
     int last_error() const;
 

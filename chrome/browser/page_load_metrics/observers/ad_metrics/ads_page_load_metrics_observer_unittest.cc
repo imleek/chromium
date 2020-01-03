@@ -1783,10 +1783,16 @@ TEST_F(AdsPageLoadMetricsObserverTest, HeavyAdFeatureOff_UMARecorded) {
 
   histogram_tester().ExpectTotalCount(
       SuffixedHistogram("HeavyAds.InterventionType2"), 0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("HeavyAds.IgnoredByReload"), 0);
 
   // There were heavy ads on the page and the page was navigated not reloaded.
   histogram_tester().ExpectUniqueSample(
       SuffixedHistogram("HeavyAds.UserDidReload"), false, 1);
+
+  // Histogram is not logged when no frames are unloaded.
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("HeavyAds.NetworkBytesAtFrameUnload"), 0);
 }
 
 TEST_F(AdsPageLoadMetricsObserverTest, HeavyAdNetworkUsage_InterventionFired) {
@@ -1803,6 +1809,11 @@ TEST_F(AdsPageLoadMetricsObserverTest, HeavyAdNetworkUsage_InterventionFired) {
   // Verify we did not trigger the intervention.
   EXPECT_FALSE(HasInterventionReportsAfterFlush(ad_frame));
 
+  // Verify that prior to an intervention is triggered we do not log
+  // NetworkBytesAtFrameUnload.
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("HeavyAds.NetworkBytesAtFrameUnload"), 0);
+
   ErrorPageWaiter waiter(web_contents());
 
   // Load enough bytes to trigger the intervention.
@@ -1818,6 +1829,14 @@ TEST_F(AdsPageLoadMetricsObserverTest, HeavyAdNetworkUsage_InterventionFired) {
   histogram_tester().ExpectUniqueSample(
       SuffixedHistogram("HeavyAds.InterventionType2"),
       FrameData::HeavyAdStatus::kNetwork, 1);
+
+  // Verify that unloading a heavy ad due to network usage logs the network
+  // bytes to UMA.
+  histogram_tester().ExpectUniqueSample(
+      SuffixedHistogram("HeavyAds.NetworkBytesAtFrameUnload"),
+      heavy_ad_thresholds::kMaxNetworkBytes / 1024, 1);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("HeavyAds.NetworkBytesAtFrameUnload"), 1);
 }
 
 TEST_F(AdsPageLoadMetricsObserverTest,
@@ -1837,6 +1856,10 @@ TEST_F(AdsPageLoadMetricsObserverTest,
   histogram_tester().ExpectTotalCount(
       SuffixedHistogram("HeavyAds.InterventionType2"), 0);
 
+  // Histogram is not logged before the intervention is fired.
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("HeavyAds.NetworkBytesAtFrameUnload"), 0);
+
   ErrorPageWaiter waiter(web_contents());
 
   // Load enough bytes to meet the noised threshold criteria.
@@ -1848,6 +1871,14 @@ TEST_F(AdsPageLoadMetricsObserverTest,
       FrameData::HeavyAdStatus::kNetwork, 1);
   histogram_tester().ExpectUniqueSample(
       SuffixedHistogram("HeavyAds.DisallowedByBlocklist"), false, 1);
+
+  // Verify that unloading a heavy ad due to network usage logs the bytes to
+  // UMA.
+  histogram_tester().ExpectUniqueSample(
+      SuffixedHistogram("HeavyAds.NetworkBytesAtFrameUnload"),
+      heavy_ad_thresholds::kMaxNetworkBytes / 1024, 1);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("HeavyAds.NetworkBytesAtFrameUnload"), 1);
 }
 
 TEST_F(AdsPageLoadMetricsObserverTest,
@@ -1981,6 +2012,11 @@ TEST_F(AdsPageLoadMetricsObserverTest, HeavyAdPeakCpuUsage_InterventionFired) {
   histogram_tester().ExpectUniqueSample(
       SuffixedHistogram("HeavyAds.InterventionType2"),
       FrameData::HeavyAdStatus::kPeakCpu, 1);
+
+  // Verify we do not record UMA specific to network byte interventions when
+  // the intervention triggers for CPU.
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("HeavyAds.NetworkBytesAtFrameUnload"), 0);
 }
 
 TEST_F(AdsPageLoadMetricsObserverTest, HeavyAdFeatureDisabled_NotFired) {
@@ -2087,6 +2123,35 @@ TEST_F(AdsPageLoadMetricsObserverTest, HeavyAdPageReload_MetricsRecorded) {
       SuffixedHistogram("HeavyAds.UserDidReload"), true, 1);
 }
 
+// Verifies when a user reloads a page we do not trigger the heavy ad
+// intevention.
+TEST_F(AdsPageLoadMetricsObserverTest, HeavyAdPageReload_InterventionIgnored) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kHeavyAdIntervention);
+
+  RenderFrameHost* main_frame = NavigateMainFrame(kNonAdUrl);
+
+  // Reload the page.
+  NavigationSimulator::Reload(web_contents());
+
+  RenderFrameHost* ad_frame = CreateAndNavigateSubFrame(kAdUrl, main_frame);
+
+  // Add enough data to trigger the intervention.
+  ResourceDataUpdate(ad_frame, ResourceCached::kNotCached,
+                     (heavy_ad_thresholds::kMaxNetworkBytes / 1024) + 1);
+
+  // Verify we did not trigger the intervention.
+  EXPECT_FALSE(HasInterventionReportsAfterFlush(ad_frame));
+  histogram_tester().ExpectUniqueSample(
+      SuffixedHistogram("HeavyAds.IgnoredByReload"), true, 1);
+
+  // Send another data update to the frame to ensure we do not record
+  // IgnoredByReload multiple times for a single frame.
+  ResourceDataUpdate(ad_frame, ResourceCached::kNotCached, 1);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("HeavyAds.IgnoredByReload"), 1);
+}
+
 // Verifies when there is no heavy ad on the page, we do not record aggregate
 // heavy ad metrics.
 TEST_F(AdsPageLoadMetricsObserverTest,
@@ -2152,6 +2217,8 @@ TEST_F(AdsPageLoadMetricsObserverTest,
   histogram_tester().ExpectUniqueSample(
       SuffixedHistogram("HeavyAds.InterventionType2"),
       FrameData::HeavyAdStatus::kNetwork, 1);
+  histogram_tester().ExpectUniqueSample(
+      SuffixedHistogram("HeavyAds.IgnoredByReload"), false, 1);
 
   // This histogram should not be recorded when the blocklist is disabled.
   histogram_tester().ExpectTotalCount(

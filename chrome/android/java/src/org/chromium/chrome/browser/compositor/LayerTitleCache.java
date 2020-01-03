@@ -22,6 +22,7 @@ import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabFavicon;
+import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.LocalizationUtils;
@@ -126,7 +127,8 @@ public class LayerTitleCache implements TitleCache {
     private String getUpdatedTitleInternal(Tab tab, String titleString,
             boolean fetchFaviconFromHistory) {
         final int tabId = tab.getId();
-        boolean isHTSEnabled = !DeviceFormFactor.isNonMultiDisplayContextOnTablet(tab.getActivity())
+        boolean isHTSEnabled =
+                !DeviceFormFactor.isNonMultiDisplayContextOnTablet(((TabImpl) tab).getActivity())
                 && ChromeFeatureList.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID);
         boolean isDarkTheme = tab.isIncognito() && !isHTSEnabled;
         Bitmap originalFavicon = TabFavicon.getBitmap(tab);
@@ -163,10 +165,7 @@ public class LayerTitleCache implements TitleCache {
         if (mFaviconHelper == null) mFaviconHelper = new FaviconHelper();
 
         // Since tab#getProfile() is not available by this time, we will use whatever last used
-        // profile. This should be normal profile since fetching favicons should normally happen on
-        // a cold start. Return otherwise.
-        if (Profile.getLastUsedProfile().hasOffTheRecordProfile()) return;
-
+        // profile.
         mFaviconHelper.getLocalFaviconImageForURL(
                 Profile.getLastUsedProfile(),
                 tab.getUrl(),

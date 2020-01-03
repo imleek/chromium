@@ -185,21 +185,12 @@ void ObjectPaintInvalidator::
   Helper::Traverse(object_);
 }
 
-void ObjectPaintInvalidator::InvalidateDisplayItemClient(
-    const DisplayItemClient& client,
-    PaintInvalidationReason reason) {
-  // It's caller's responsibility to ensure PaintingLayer's NeedsRepaint is set.
-  // Don't set the flag here because getting PaintLayer has cost and the caller
-  // can use various ways (e.g. PaintInvalidatinContext::painting_layer) to
-  // reduce the cost.
+#if DCHECK_IS_ON()
+void ObjectPaintInvalidator::CheckPaintLayerNeedsRepaint() {
   DCHECK(!object_.PaintingLayer() ||
          object_.PaintingLayer()->SelfNeedsRepaint());
-
-  client.Invalidate(reason);
-
-  if (LocalFrameView* frame_view = object_.GetFrameView())
-    frame_view->TrackObjectPaintInvalidation(client, reason);
 }
+#endif
 
 void ObjectPaintInvalidator::SlowSetPaintingLayerNeedsRepaint() {
   if (PaintLayer* painting_layer = object_.PaintingLayer())
@@ -248,6 +239,11 @@ ObjectPaintInvalidatorWithContext::ComputePaintInvalidationReason() {
         .UpdatePreviousOutlineMayBeAffectedByDescendants();
     return PaintInvalidationReason::kOutline;
   }
+
+  // Force full paint invalidation if the object has background-clip:text to
+  // update the background on any change in the subtree.
+  if (object_.StyleRef().BackgroundClip() == EFillBox::kText)
+    return PaintInvalidationReason::kBackground;
 
   // If the size is zero on one of our bounds then we know we're going to have
   // to do a full invalidation of either old bounds or new bounds.

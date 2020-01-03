@@ -271,7 +271,6 @@ void SandboxFileSystemBackendDelegate::OpenFileSystem(
       (quota_manager_proxy_.get())
           ? base::BindOnce(&QuotaManagerProxy::NotifyStorageAccessed,
                            quota_manager_proxy_,
-                           storage::QuotaClient::kFileSystem,
                            url::Origin::Create(origin_url),
                            FileSystemTypeToQuotaStorageType(type))
           : base::DoNothing();
@@ -697,7 +696,7 @@ void SandboxFileSystemBackendDelegate::CopyFileSystem(
 
     // Make sure we're not about to delete our own file system.
     CHECK_NE(base_path.value(), dest_path.value());
-    base::DeleteFile(dest_path, true);
+    base::DeleteFileRecursively(dest_path);
 
     dest_path = destination->GetBaseDirectoryForOriginAndType(
         origin_url, type, true /* create */);

@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/debug/alias.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
@@ -26,8 +27,9 @@ namespace {
 // have more control over initialization timing. Leaky.
 FeatureList* g_feature_list_instance = nullptr;
 
-// Tracks whether the FeatureList instance was initialized via an accessor.
-bool g_initialized_from_accessor = false;
+// Tracks whether the FeatureList instance was initialized via an accessor, and
+// which Feature that accessor was for, if so.
+const Feature* g_initialized_from_accessor = nullptr;
 
 #if DCHECK_IS_ON()
 const char* g_reason_overrides_disallowed = nullptr;
@@ -84,19 +86,6 @@ struct FeatureEntry {
 // Only called in DCHECKs.
 bool IsValidFeatureOrFieldTrialName(const std::string& name) {
   return IsStringASCII(name) && name.find_first_of(",<*") == std::string::npos;
-}
-
-// TODO(crbug.com/1018667): Remove this function once the DCHECK has been turned
-// into an equality check.
-bool MatchesSelfOrAncestor(const FieldTrialList* expected,
-                           const FieldTrialList* actual) {
-  if (expected == actual)
-    return true;
-
-  if (actual == nullptr)
-    return false;
-
-  return MatchesSelfOrAncestor(expected, actual->GetPreviousGlobal());
 }
 
 }  // namespace
@@ -248,7 +237,7 @@ void FeatureList::GetCommandLineFeatureOverrides(
 // static
 bool FeatureList::IsEnabled(const Feature& feature) {
   if (!g_feature_list_instance) {
-    g_initialized_from_accessor = true;
+    g_initialized_from_accessor = &feature;
     return feature.default_state == FEATURE_ENABLED_BY_DEFAULT;
   }
   return g_feature_list_instance->IsFeatureEnabled(feature);
@@ -257,7 +246,7 @@ bool FeatureList::IsEnabled(const Feature& feature) {
 // static
 FieldTrial* FeatureList::GetFieldTrial(const Feature& feature) {
   if (!g_feature_list_instance) {
-    g_initialized_from_accessor = true;
+    g_initialized_from_accessor = &feature;
     return nullptr;
   }
   return g_feature_list_instance->GetAssociatedFieldTrial(feature);
@@ -292,7 +281,10 @@ bool FeatureList::InitializeInstance(
   // If the singleton was previously initialized from within an accessor, we
   // want to prevent callers from reinitializing the singleton and masking the
   // accessor call(s) which likely returned incorrect information.
-  CHECK(!g_initialized_from_accessor);
+  if (g_initialized_from_accessor) {
+    DEBUG_ALIAS_FOR_CSTR(accessor_name, g_initialized_from_accessor->name, 128);
+    CHECK(!g_initialized_from_accessor);
+  }
   bool instance_existed_before = false;
   if (g_feature_list_instance) {
     if (g_feature_list_instance->initialized_from_command_line_)
@@ -342,7 +334,7 @@ void FeatureList::SetInstance(std::unique_ptr<FeatureList> instance) {
 std::unique_ptr<FeatureList> FeatureList::ClearInstanceForTesting() {
   FeatureList* old_instance = g_feature_list_instance;
   g_feature_list_instance = nullptr;
-  g_initialized_from_accessor = false;
+  g_initialized_from_accessor = nullptr;
   return WrapUnique(old_instance);
 }
 
@@ -452,11 +444,8 @@ void FeatureList::GetFeatureOverridesImpl(std::string* enable_overrides,
   // active one. If not, it likely indicates that this FeatureList has override
   // entries from a freed FieldTrial, which may be caused by an incorrect test
   // set up.
-  // TODO(crbug.com/1018667): Turn the DCHECK below into a equality check.
-  if (field_trial_list_) {
-    DCHECK(MatchesSelfOrAncestor(field_trial_list_,
-                                 FieldTrialList::GetInstance()));
-  }
+  if (field_trial_list_)
+    DCHECK_EQ(field_trial_list_, FieldTrialList::GetInstance());
 
   enable_overrides->clear();
   disable_overrides->clear();

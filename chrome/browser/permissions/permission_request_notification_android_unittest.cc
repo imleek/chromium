@@ -13,9 +13,7 @@
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/notifications/stub_notification_display_service.h"
-#include "chrome/browser/permissions/adaptive_notification_permission_ui_selector.h"
 #include "chrome/browser/permissions/mock_permission_request.h"
-#include "chrome/browser/permissions/permission_features.h"
 #include "chrome/browser/permissions/permission_prompt_android.h"
 #include "chrome/browser/ui/permission_bubble/permission_prompt.h"
 #include "chrome/common/chrome_features.h"
@@ -173,25 +171,4 @@ TEST_F(PermissionRequestNotificationAndroidTest, Closing_CallsDelegateClosing) {
       PermissionRequestNotificationAndroid::NotificationIdForOrigin(
           kExampleUrl),
       true);
-}
-
-TEST_F(PermissionRequestNotificationAndroidTest, ShouldShowAsNotification) {
-  EXPECT_FALSE(PermissionRequestNotificationAndroid::ShouldShowAsNotification(
-      profile(), ContentSettingsType::NOTIFICATIONS));
-  EXPECT_FALSE(PermissionRequestNotificationAndroid::ShouldShowAsNotification(
-      profile(), ContentSettingsType::GEOLOCATION));
-
-  base::FieldTrialParams params;
-  params[kQuietNotificationPromptsUIFlavorParameterName] =
-      kQuietNotificationPromptsHeadsUpNotification;
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeatureWithParameters(
-      features::kQuietNotificationPrompts, params);
-  AdaptiveNotificationPermissionUiSelector::GetForProfile(profile())
-      ->set_should_show_quiet_ui_for_testing(true);
-
-  EXPECT_TRUE(PermissionRequestNotificationAndroid::ShouldShowAsNotification(
-      profile(), ContentSettingsType::NOTIFICATIONS));
-  EXPECT_FALSE(PermissionRequestNotificationAndroid::ShouldShowAsNotification(
-      profile(), ContentSettingsType::GEOLOCATION));
 }

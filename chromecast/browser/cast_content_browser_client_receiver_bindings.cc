@@ -10,22 +10,25 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
+#include "base/threading/sequence_local_storage_slot.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chromecast/browser/application_media_info_manager.h"
 #include "chromecast/browser/cast_browser_main_parts.h"
 #include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/media/media_caps_impl.h"
+#include "chromecast/browser/service_connector.h"
 #include "chromecast/chromecast_buildflags.h"
 #include "chromecast/media/cdm/cast_cdm_factory.h"
 #include "components/network_hints/browser/simple_network_hints_handler_impl.h"
 #include "content/public/browser/render_process_host.h"
 #include "media/mojo/buildflags.h"
+#include "services/service_manager/public/cpp/binder_map.h"
 
 #if BUILDFLAG(ENABLE_CAST_RENDERER)
 #include "chromecast/media/service/cast_mojo_media_client.h"
 #include "chromecast/media/service/video_geometry_setter_service.h"
-#include "media/mojo/mojom/constants.mojom.h"   // nogncheck
 #include "media/mojo/services/media_service.h"  // nogncheck
 #endif  // BUILDFLAG(ENABLE_CAST_RENDERER)
 
@@ -40,6 +43,7 @@
 
 #if defined(OS_ANDROID)
 #include "components/cdm/browser/media_drm_storage_impl.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "url/origin.h"
 #else
 #include "chromecast/browser/memory_pressure_controller_impl.h"
@@ -61,8 +65,9 @@ void AllowEmptyOriginIdCB(base::OnceCallback<void(bool)> callback) {
   std::move(callback).Run(false);
 }
 
-void CreateMediaDrmStorage(content::RenderFrameHost* render_frame_host,
-                           ::media::mojom::MediaDrmStorageRequest request) {
+void CreateMediaDrmStorage(
+    content::RenderFrameHost* render_frame_host,
+    mojo::PendingReceiver<::media::mojom::MediaDrmStorage> receiver) {
   DVLOG(1) << __func__;
   PrefService* pref_service = CastBrowserProcess::GetInstance()->pref_service();
   DCHECK(pref_service);
@@ -76,7 +81,7 @@ void CreateMediaDrmStorage(content::RenderFrameHost* render_frame_host,
   // away.
   new cdm::MediaDrmStorageImpl(
       render_frame_host, pref_service, base::BindRepeating(&CreateOriginId),
-      base::BindRepeating(&AllowEmptyOriginIdCB), std::move(request));
+      base::BindRepeating(&AllowEmptyOriginIdCB), std::move(receiver));
 }
 #endif  // defined(OS_ANDROID)
 
@@ -87,6 +92,13 @@ void StartExternalMojoBrokerService(
       std::make_unique<external_mojo::BrokerService>(std::move(request)));
 }
 #endif  // BUILDFLAG(ENABLE_EXTERNAL_MOJO_SERVICES)
+
+void BindNetworkHintsHandler(
+    content::RenderFrameHost* frame_host,
+    mojo::PendingReceiver<network_hints::mojom::NetworkHintsHandler> receiver) {
+  network_hints::SimpleNetworkHintsHandlerImpl::Create(frame_host,
+                                                       std::move(receiver));
+}
 
 }  // namespace
 
@@ -119,6 +131,9 @@ void CastContentBrowserClient::ExposeInterfacesToMediaService(
       base::BindRepeating(&CreateMediaDrmStorage, render_frame_host));
 #endif  // defined(OS_ANDROID)
 
+  registry->AddInterface(base::BindRepeating(&ServiceConnector::BindReceiver,
+                                             kMediaServiceClientId));
+
   std::string application_session_id;
   bool mixer_audio_enabled;
   GetApplicationMediaInfo(&application_session_id, &mixer_audio_enabled,
@@ -128,10 +143,28 @@ void CastContentBrowserClient::ExposeInterfacesToMediaService(
       std::move(application_session_id), mixer_audio_enabled));
 }
 
+void CastContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
+    content::RenderFrameHost* render_frame_host,
+    service_manager::BinderMapWithContext<content::RenderFrameHost*>* map) {
+  map->Add<network_hints::mojom::NetworkHintsHandler>(
+      base::BindRepeating(&BindNetworkHintsHandler));
+}
+
+mojo::Remote<::media::mojom::MediaService>
+CastContentBrowserClient::RunSecondaryMediaService() {
+  mojo::Remote<::media::mojom::MediaService> remote;
+#if BUILDFLAG(ENABLE_CAST_RENDERER)
+  GetMediaTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&CastContentBrowserClient::CreateMediaService,
+                                base::Unretained(this),
+                                remote.BindNewPipeAndPassReceiver()));
+#endif  // BUILDFLAG(ENABLE_CAST_RENDERER)
+  return remote;
+}
+
 #if BUILDFLAG(ENABLE_CAST_RENDERER)
 void CastContentBrowserClient::CreateMediaService(
-    service_manager::mojom::ServiceRequest request) {
-  std::unique_ptr<::media::MediaService> service;
+    mojo::PendingReceiver<::media::mojom::MediaService> receiver) {
   DCHECK(GetMediaTaskRunner() &&
          GetMediaTaskRunner()->BelongsToCurrentThread());
   if (!video_geometry_setter_service_) {
@@ -139,14 +172,16 @@ void CastContentBrowserClient::CreateMediaService(
   }
   auto mojo_media_client = std::make_unique<media::CastMojoMediaClient>(
       GetCmaBackendFactory(),
-      base::Bind(&CastContentBrowserClient::CreateCdmFactory,
-                 base::Unretained(this)),
+      base::BindRepeating(&CastContentBrowserClient::CreateCdmFactory,
+                          base::Unretained(this)),
       GetVideoModeSwitcher(), GetVideoResolutionPolicy());
   mojo_media_client->SetVideoGeometrySetterService(
       video_geometry_setter_service_.get());
-  service = std::make_unique<::media::MediaService>(
-      std::move(mojo_media_client), std::move(request));
-  service_manager::Service::RunAsyncUntilTermination(std::move(service));
+
+  static base::NoDestructor<
+      base::SequenceLocalStorageSlot<::media::MediaService>>
+      service;
+  service->emplace(std::move(mojo_media_client), std::move(receiver));
 }
 
 void CastContentBrowserClient::CreateVideoGeometrySetterServiceOnMediaThread() {
@@ -185,16 +220,6 @@ void CastContentBrowserClient::BindGpuHostReceiver(
 void CastContentBrowserClient::RunServiceInstance(
     const service_manager::Identity& identity,
     mojo::PendingReceiver<service_manager::mojom::Service>* receiver) {
-#if BUILDFLAG(ENABLE_CAST_RENDERER)
-  if (identity.name() == ::media::mojom::kMediaRendererServiceName) {
-    service_manager::mojom::ServiceRequest request(std::move(*receiver));
-    GetMediaTaskRunner()->PostTask(
-        FROM_HERE, base::BindOnce(&CastContentBrowserClient::CreateMediaService,
-                                  base::Unretained(this), std::move(request)));
-    return;
-  }
-#endif  // BUILDFLAG(ENABLE_CAST_RENDERER)
-
 #if BUILDFLAG(ENABLE_EXTERNAL_MOJO_SERVICES)
   if (identity.name() == external_mojo::BrokerService::kServiceName) {
     StartExternalMojoBrokerService(std::move(*receiver));
@@ -213,10 +238,6 @@ void CastContentBrowserClient::BindHostReceiverForRenderer(
     return;
   }
 #endif
-  if (auto r = receiver.As<::network_hints::mojom::NetworkHintsHandler>()) {
-    network_hints::SimpleNetworkHintsHandlerImpl::Create(
-        render_process_host->GetID(), std::move(r));
-  }
   ContentBrowserClient::BindHostReceiverForRenderer(render_process_host,
                                                     std::move(receiver));
 }

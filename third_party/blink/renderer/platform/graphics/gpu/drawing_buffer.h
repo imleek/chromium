@@ -37,6 +37,9 @@
 #include "cc/layers/texture_layer_client.h"
 #include "cc/resources/cross_thread_shared_bitmap.h"
 #include "cc/resources/shared_bitmap_id_registrar.h"
+#include "gpu/GLES2/gl2extchromium.h"
+#include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/config/gpu_feature_info.h"
@@ -191,7 +194,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
   void SetBuffersToAutoClear(GLbitfield bitmask);
   GLbitfield GetBuffersToAutoClear() const;
 
-  void SetIsHidden(bool);
+  void SetIsInHiddenPage(bool);
   void SetFilterQuality(SkFilterQuality);
   SkFilterQuality FilterQuality() const { return filter_quality_; }
 
@@ -240,6 +243,14 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
                              const IntRect& src_sub_rectangle,
                              SourceDrawingBuffer);
 
+  bool CopyToPlatformMailbox(gpu::raster::RasterInterface*,
+                             gpu::Mailbox dst_mailbox,
+                             GLenum dst_texture_target,
+                             bool flip_y,
+                             const IntPoint& dst_texture_offset,
+                             const IntRect& src_sub_rectangle,
+                             SourceDrawingBuffer src_buffer);
+
   sk_sp<SkData> PaintRenderingResultsToDataArray(SourceDrawingBuffer);
 
   int SampleCount() const { return sample_count_; }
@@ -254,7 +265,6 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
   void RestoreAllState();
 
   bool UsingSwapChain() const { return using_swap_chain_; }
-  void PresentSwapChain();
 
   // This class helps implement correct semantics for BlitFramebuffer
   // when the DrawingBuffer is using a CHROMIUM image for its backing
@@ -386,6 +396,11 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
     DISALLOW_COPY_AND_ASSIGN(ColorBuffer);
   };
 
+  template <typename CopyFunction>
+  bool CopyToPlatformInternal(gpu::InterfaceBase* dst_interface,
+                              SourceDrawingBuffer src_buffer,
+                              const CopyFunction& copy_function);
+
   // The same as clearFramebuffers(), but leaves GL state dirty.
   void ClearFramebuffersInternal(GLbitfield clear_mask);
 
@@ -483,6 +498,9 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
   // Reallocate Multisampled renderbuffer, used by explicit resolve when resize
   // and GPU switch
   bool ReallocateMultisampleRenderbuffer(const IntSize&);
+
+  // Presents swap chain if swap chain is being used and contents have changed.
+  void PresentSwapChainIfNeeded();
 
   // Weak, reset by beginDestruction.
   Client* client_ = nullptr;
@@ -609,7 +627,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
 
   bool opengl_flip_y_extension_;
 
-  gl::GpuPreference initial_gpu_;
+  const gl::GpuPreference initial_gpu_;
   gl::GpuPreference current_active_gpu_;
 
   DISALLOW_COPY_AND_ASSIGN(DrawingBuffer);

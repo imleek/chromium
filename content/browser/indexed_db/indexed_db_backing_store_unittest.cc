@@ -18,6 +18,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
@@ -38,6 +39,7 @@
 #include "content/public/test/test_utils.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_data_handle.h"
+#include "storage/browser/blob/blob_impl.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "storage/browser/test/mock_quota_manager_proxy.h"
@@ -74,7 +76,8 @@ class TestableIndexedDBBackingStore : public IndexedDBBackingStore {
       std::unique_ptr<TransactionalLevelDBDatabase> db,
       BlobFilesCleanedCallback blob_files_cleaned,
       ReportOutstandingBlobsCallback report_outstanding_blobs,
-      base::SequencedTaskRunner* task_runner)
+      scoped_refptr<base::SequencedTaskRunner> idb_task_runner,
+      scoped_refptr<base::SequencedTaskRunner> io_task_runner)
       : IndexedDBBackingStore(backing_store_mode,
                               leveldb_factory,
                               origin,
@@ -82,14 +85,12 @@ class TestableIndexedDBBackingStore : public IndexedDBBackingStore {
                               std::move(db),
                               std::move(blob_files_cleaned),
                               std::move(report_outstanding_blobs),
-                              task_runner),
+                              std::move(idb_task_runner),
+                              std::move(io_task_runner)),
         database_id_(0) {}
   ~TestableIndexedDBBackingStore() override = default;
 
-  const std::vector<IndexedDBBackingStore::Transaction::WriteDescriptor>&
-  writes() const {
-    return writes_;
-  }
+  const std::vector<WriteDescriptor>& writes() const { return writes_; }
   void ClearWrites() { writes_.clear(); }
   const std::vector<int64_t>& removals() const { return removals_; }
   void ClearRemovals() { removals_.clear(); }
@@ -99,10 +100,9 @@ class TestableIndexedDBBackingStore : public IndexedDBBackingStore {
   }
 
  protected:
-  bool WriteBlobFile(
-      int64_t database_id,
-      const Transaction::WriteDescriptor& descriptor,
-      Transaction::ChainedBlobWriter* chained_blob_writer) override {
+  bool WriteBlobFile(int64_t database_id,
+                     const WriteDescriptor& descriptor,
+                     ChainedBlobWriter* chained_blob_writer) override {
     if (KeyPrefix::IsValidDatabaseId(database_id_)) {
       if (database_id_ != database_id) {
         return false;
@@ -111,10 +111,9 @@ class TestableIndexedDBBackingStore : public IndexedDBBackingStore {
       database_id_ = database_id;
     }
     writes_.push_back(descriptor);
-    task_runner()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&Transaction::ChainedBlobWriter::ReportWriteCompletion,
-                       chained_blob_writer, true, 1));
+    idb_task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&ChainedBlobWriter::ReportWriteCompletion,
+                                  chained_blob_writer, true, 1));
     return true;
   }
 
@@ -129,7 +128,7 @@ class TestableIndexedDBBackingStore : public IndexedDBBackingStore {
 
  private:
   int64_t database_id_;
-  std::vector<Transaction::WriteDescriptor> writes_;
+  std::vector<WriteDescriptor> writes_;
 
   // This is modified in an overridden virtual function that is properly const
   // in the real implementation, therefore must be mutable here.
@@ -158,11 +157,12 @@ class TestIDBFactory : public IndexedDBFactoryImpl {
       IndexedDBBackingStore::BlobFilesCleanedCallback blob_files_cleaned,
       IndexedDBBackingStore::ReportOutstandingBlobsCallback
           report_outstanding_blobs,
-      base::SequencedTaskRunner* task_runner) override {
+      scoped_refptr<base::SequencedTaskRunner> idb_task_runner,
+      scoped_refptr<base::SequencedTaskRunner> io_task_runner) override {
     return std::make_unique<TestableIndexedDBBackingStore>(
         backing_store_mode, leveldb_factory, origin, blob_path, std::move(db),
         std::move(blob_files_cleaned), std::move(report_outstanding_blobs),
-        task_runner);
+        std::move(idb_task_runner), std::move(io_task_runner));
   }
 
  private:
@@ -184,6 +184,7 @@ class IndexedDBBackingStoreTest : public testing::Test {
     idb_context_ = base::MakeRefCounted<IndexedDBContextImpl>(
         temp_dir_.GetPath(), special_storage_policy_, quota_manager_proxy_,
         base::DefaultClock::GetInstance(),
+        base::SequencedTaskRunnerHandle::Get(),
         base::SequencedTaskRunnerHandle::Get());
 
     CreateFactoryAndBackingStore();
@@ -268,7 +269,7 @@ class IndexedDBBackingStoreTest : public testing::Test {
 
     // Wait until the context has fully destroyed.
     scoped_refptr<base::SequencedTaskRunner> task_runner =
-        idb_context_->TaskRunner();
+        idb_context_->IDBTaskRunner();
     idb_context_.reset();
     {
       base::RunLoop loop;
@@ -285,7 +286,8 @@ class IndexedDBBackingStoreTest : public testing::Test {
   // folders to be deleted when inside files are in use/exist).
   void CycleIDBTaskRunner() {
     base::RunLoop cycle_loop;
-    idb_context_->TaskRunner()->PostTask(FROM_HERE, cycle_loop.QuitClosure());
+    idb_context_->IDBTaskRunner()->PostTask(FROM_HERE,
+                                            cycle_loop.QuitClosure());
     cycle_loop.Run();
   }
 
@@ -323,28 +325,47 @@ class IndexedDBBackingStoreTestWithBlobs : public IndexedDBBackingStoreTest {
     blob_context_ = std::make_unique<storage::BlobStorageContext>();
 
     // useful keys and values during tests
-    blob_info_.push_back(
-        IndexedDBBlobInfo(CreateBlob(), base::UTF8ToUTF16("blob type"), 1));
-    blob_info_.push_back(IndexedDBBlobInfo(
-        CreateBlob(), base::FilePath(FILE_PATH_LITERAL("path/to/file")),
+    blob_info_.push_back(CreateBlobInfo(base::UTF8ToUTF16("blob type"), 1));
+    blob_info_.push_back(CreateBlobInfo(
+        base::FilePath(FILE_PATH_LITERAL("path/to/file")),
         base::UTF8ToUTF16("file name"), base::UTF8ToUTF16("file type")));
-    blob_info_.push_back(IndexedDBBlobInfo(CreateBlob(), base::FilePath(),
-                                           base::UTF8ToUTF16("file name"),
-                                           base::UTF8ToUTF16("file type")));
+    blob_info_.push_back(CreateBlobInfo(base::FilePath(),
+                                        base::UTF8ToUTF16("file name"),
+                                        base::UTF8ToUTF16("file type")));
     value3_ = IndexedDBValue("value3", blob_info_);
-
     key3_ = IndexedDBKey(ASCIIToUTF16("key3"));
   }
 
-  std::unique_ptr<storage::BlobDataHandle> CreateBlob() {
-    return blob_context_->AddFinishedBlob(
-        std::make_unique<storage::BlobDataBuilder>(base::GenerateGUID()));
+  IndexedDBBlobInfo CreateBlobInfo(const base::FilePath& file_path,
+                                   const base::string16& file_name,
+                                   const base::string16& type) {
+    auto uuid = base::GenerateGUID();
+    auto handle = blob_context_->AddFinishedBlob(
+        std::make_unique<storage::BlobDataBuilder>(uuid));
+
+    mojo::PendingRemote<blink::mojom::Blob> remote;
+    auto receiver = remote.InitWithNewPipeAndPassReceiver();
+    storage::BlobImpl::Create(std::move(handle), std::move(receiver));
+    IndexedDBBlobInfo info(std::move(remote), uuid, file_path, file_name, type);
+    return info;
+  }
+
+  IndexedDBBlobInfo CreateBlobInfo(const base::string16& type, int64_t size) {
+    auto uuid = base::GenerateGUID();
+    auto handle = blob_context_->AddFinishedBlob(
+        std::make_unique<storage::BlobDataBuilder>(uuid));
+
+    mojo::PendingRemote<blink::mojom::Blob> remote;
+    auto receiver = remote.InitWithNewPipeAndPassReceiver();
+    storage::BlobImpl::Create(std::move(handle), std::move(receiver));
+    IndexedDBBlobInfo info(std::move(remote), uuid, type, size);
+    return info;
   }
 
   // This just checks the data that survive getting stored and recalled, e.g.
   // the file path and UUID will change and thus aren't verified.
   bool CheckBlobInfoMatches(const std::vector<IndexedDBBlobInfo>& reads) const {
-    DCHECK(idb_context_->TaskRunner()->RunsTasksInCurrentSequence());
+    DCHECK(idb_context_->IDBTaskRunner()->RunsTasksInCurrentSequence());
 
     if (blob_info_.size() != reads.size())
       return false;
@@ -368,7 +389,7 @@ class IndexedDBBackingStoreTestWithBlobs : public IndexedDBBackingStoreTest {
 
   bool CheckBlobReadsMatchWrites(
       const std::vector<IndexedDBBlobInfo>& reads) const {
-    DCHECK(idb_context_->TaskRunner()->RunsTasksInCurrentSequence());
+    DCHECK(idb_context_->IDBTaskRunner()->RunsTasksInCurrentSequence());
 
     if (backing_store_->writes().size() != reads.size())
       return false;
@@ -384,14 +405,51 @@ class IndexedDBBackingStoreTestWithBlobs : public IndexedDBBackingStoreTest {
     return true;
   }
 
-  bool CheckBlobWrites() const {
-    DCHECK(idb_context_->TaskRunner()->RunsTasksInCurrentSequence());
+  void GetBlobUUIDsForCheckBlobWrites() {
+    DCHECK(idb_context_->IDBTaskRunner()->RunsTasksInCurrentSequence());
+
+    blob_remote_uuids_.clear();
+    blob_remote_uuids_.resize(backing_store_->writes().size(), "");
+
+    base::RunLoop loop;
+
+    size_t num_blobs = 0;
+    for (size_t i = 0; i < backing_store_->writes().size(); ++i) {
+      if (!backing_store_->writes()[i].is_file())
+        num_blobs++;
+    }
+    if (num_blobs == 0)
+      return;
+
+    for (size_t i = 0; i < backing_store_->writes().size(); ++i) {
+      const WriteDescriptor& desc = backing_store_->writes()[i];
+      if (desc.is_file())
+        continue;
+      desc.blob()->GetInternalUUID(
+          base::BindLambdaForTesting([&, i](const std::string& uuid) {
+            blob_remote_uuids_[i] = uuid;
+            num_blobs--;
+            if (num_blobs == 0)
+              loop.QuitClosure().Run();
+          }));
+    }
+    loop.Run();
+  }
+
+  bool CheckBlobWrites() {
+    DCHECK(idb_context_->IDBTaskRunner()->RunsTasksInCurrentSequence());
+
+    // Clear uuids so that GetBlobUUIDsForCheckBlobWrites must be re-called.
+    std::vector<std::string> uuids;
+    uuids.swap(blob_remote_uuids_);
+
+    DCHECK_EQ(uuids.size(), backing_store_->writes().size())
+        << "Run GetBlobUUIDsForCheckBlobWrites first";
 
     if (backing_store_->writes().size() != blob_info_.size())
       return false;
     for (size_t i = 0; i < backing_store_->writes().size(); ++i) {
-      const IndexedDBBackingStore::Transaction::WriteDescriptor& desc =
-          backing_store_->writes()[i];
+      const WriteDescriptor& desc = backing_store_->writes()[i];
       const IndexedDBBlobInfo& info = blob_info_[i];
       if (desc.is_file() != info.is_file()) {
         if (!info.is_file() || !info.file_path().empty())
@@ -400,7 +458,7 @@ class IndexedDBBackingStoreTestWithBlobs : public IndexedDBBackingStoreTest {
         if (desc.file_path() != info.file_path())
           return false;
       } else {
-        if (desc.blob()->uuid() != info.blob_handle()->uuid())
+        if (uuids[i] != info.uuid())
           return false;
       }
     }
@@ -408,7 +466,7 @@ class IndexedDBBackingStoreTestWithBlobs : public IndexedDBBackingStoreTest {
   }
 
   bool CheckBlobRemovals() const {
-    DCHECK(idb_context_->TaskRunner()->RunsTasksInCurrentSequence());
+    DCHECK(idb_context_->IDBTaskRunner()->RunsTasksInCurrentSequence());
 
     if (backing_store_->removals().size() != backing_store_->writes().size())
       return false;
@@ -431,6 +489,8 @@ class IndexedDBBackingStoreTestWithBlobs : public IndexedDBBackingStoreTest {
   // can be used to verify the state as a test progresses.
   std::vector<IndexedDBBlobInfo> blob_info_;
 
+  std::vector<std::string> blob_remote_uuids_;
+
   DISALLOW_COPY_AND_ASSIGN(IndexedDBBackingStoreTestWithBlobs);
 };
 
@@ -439,23 +499,21 @@ class TestCallback {
   TestCallback() = default;
   ~TestCallback() = default;
 
-  IndexedDBBackingStore::BlobWriteCallback CreateCallback() {
-    return base::BindLambdaForTesting(
-        [this](IndexedDBBackingStore::BlobWriteResult result) {
-          this->called = true;
-          switch (result) {
-            case IndexedDBBackingStore::BlobWriteResult::kFailure:
-              // Not tested.
-              this->succeeded = false;
-              break;
-            case IndexedDBBackingStore::BlobWriteResult::kRunPhaseTwoAsync:
-            case IndexedDBBackingStore::BlobWriteResult::
-                kRunPhaseTwoAndReturnResult:
-              this->succeeded = true;
-              break;
-          }
-          return leveldb::Status::OK();
-        });
+  BlobWriteCallback CreateCallback() {
+    return base::BindLambdaForTesting([this](BlobWriteResult result) {
+      this->called = true;
+      switch (result) {
+        case BlobWriteResult::kFailure:
+          // Not tested.
+          this->succeeded = false;
+          break;
+        case BlobWriteResult::kRunPhaseTwoAsync:
+        case BlobWriteResult::kRunPhaseTwoAndReturnResult:
+          this->succeeded = true;
+          break;
+      }
+      return leveldb::Status::OK();
+    });
   }
   bool called = false;
   bool succeeded = false;
@@ -466,14 +524,15 @@ class TestCallback {
 
 TEST_F(IndexedDBBackingStoreTest, PutGetConsistency) {
   base::RunLoop loop;
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         const IndexedDBKey key = key1_;
         IndexedDBValue value = value1_;
         {
           IndexedDBBackingStore::Transaction transaction1(
               backing_store()->AsWeakPtr(),
-              blink::mojom::IDBTransactionDurability::Relaxed);
+              blink::mojom::IDBTransactionDurability::Relaxed,
+              blink::mojom::IDBTransactionMode::ReadWrite);
           transaction1.Begin(CreateDummyLock());
           IndexedDBBackingStore::RecordIdentifier record;
           leveldb::Status s = backing_store()->PutRecord(&transaction1, 1, 1,
@@ -491,7 +550,8 @@ TEST_F(IndexedDBBackingStoreTest, PutGetConsistency) {
         {
           IndexedDBBackingStore::Transaction transaction2(
               backing_store()->AsWeakPtr(),
-              blink::mojom::IDBTransactionDurability::Relaxed);
+              blink::mojom::IDBTransactionDurability::Relaxed,
+              blink::mojom::IDBTransactionMode::ReadWrite);
           transaction2.Begin(CreateDummyLock());
           IndexedDBValue result_value;
           EXPECT_TRUE(backing_store()
@@ -519,12 +579,13 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, PutGetConsistencyWithBlobs) {
   std::unique_ptr<IndexedDBBackingStore::Transaction> transaction3;
   TestCallback callback_creator3;
 
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         // Initiate transaction1 - writing blobs.
         transaction1 = std::make_unique<IndexedDBBackingStore::Transaction>(
             backing_store()->AsWeakPtr(),
-            blink::mojom::IDBTransactionDurability::Relaxed);
+            blink::mojom::IDBTransactionDurability::Relaxed,
+            blink::mojom::IDBTransactionMode::ReadWrite);
         transaction1->Begin(CreateDummyLock());
         IndexedDBBackingStore::RecordIdentifier record;
         EXPECT_TRUE(
@@ -537,7 +598,9 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, PutGetConsistencyWithBlobs) {
       }));
   RunAllTasksUntilIdle();
 
-  idb_context_->TaskRunner()->PostTask(
+  GetBlobUUIDsForCheckBlobWrites();
+
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         // Finish up transaction1, verifying blob writes.
         EXPECT_TRUE(callback_creator1.called);
@@ -548,7 +611,8 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, PutGetConsistencyWithBlobs) {
         // Initiate transaction2, reading blobs.
         IndexedDBBackingStore::Transaction transaction2(
             backing_store()->AsWeakPtr(),
-            blink::mojom::IDBTransactionDurability::Relaxed);
+            blink::mojom::IDBTransactionDurability::Relaxed,
+            blink::mojom::IDBTransactionMode::ReadWrite);
         transaction2.Begin(CreateDummyLock());
         IndexedDBValue result_value;
         EXPECT_TRUE(backing_store()
@@ -570,7 +634,8 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, PutGetConsistencyWithBlobs) {
         // Initiate transaction3, deleting blobs.
         transaction3 = std::make_unique<IndexedDBBackingStore::Transaction>(
             backing_store()->AsWeakPtr(),
-            blink::mojom::IDBTransactionDurability::Relaxed);
+            blink::mojom::IDBTransactionDurability::Relaxed,
+            blink::mojom::IDBTransactionMode::ReadWrite);
         transaction3->Begin(CreateDummyLock());
         EXPECT_TRUE(backing_store()
                         ->DeleteRange(transaction3.get(), 1, 1,
@@ -582,7 +647,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, PutGetConsistencyWithBlobs) {
       }));
   RunAllTasksUntilIdle();
 
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         // Finish up transaction 3, verifying blob deletes.
         EXPECT_TRUE(transaction3->CommitPhaseTwo().ok());
@@ -615,44 +680,32 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, DeleteRange) {
     TestCallback callback_creator1;
     std::unique_ptr<IndexedDBBackingStore::Transaction> transaction2;
     TestCallback callback_creator2;
-    std::vector<std::unique_ptr<storage::BlobDataHandle>> blobs;
+    std::vector<IndexedDBBlobInfo> blob_infos;
 
-    for (size_t j = 0; j < 4; ++j)
-      blobs.push_back(CreateBlob());
+    for (size_t j = 0; j < 4; ++j) {
+      std::string type = "type " + base::NumberToString(j);
+      blob_infos.push_back(CreateBlobInfo(base::UTF8ToUTF16(type), 1));
+    }
 
-    idb_context_->TaskRunner()->PostTask(
+    idb_context_->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
           // Reset from previous iteration.
           backing_store()->ClearWrites();
           backing_store()->ClearRemovals();
 
           std::vector<IndexedDBValue> values = {
-              IndexedDBValue(
-                  "value0",
-                  {IndexedDBBlobInfo(
-                      std::make_unique<storage::BlobDataHandle>(*blobs[0]),
-                      base::UTF8ToUTF16("type 0"), 1)}),
-              IndexedDBValue(
-                  "value1",
-                  {IndexedDBBlobInfo(
-                      std::make_unique<storage::BlobDataHandle>(*blobs[1]),
-                      base::UTF8ToUTF16("type 1"), 1)}),
-              IndexedDBValue(
-                  "value2",
-                  {IndexedDBBlobInfo(
-                      std::make_unique<storage::BlobDataHandle>(*blobs[2]),
-                      base::UTF8ToUTF16("type 2"), 1)}),
-              IndexedDBValue(
-                  "value3",
-                  {IndexedDBBlobInfo(
-                      std::make_unique<storage::BlobDataHandle>(*blobs[3]),
-                      base::UTF8ToUTF16("type 3"), 1)})};
+              IndexedDBValue("value0", {blob_infos[0]}),
+              IndexedDBValue("value1", {blob_infos[1]}),
+              IndexedDBValue("value2", {blob_infos[2]}),
+              IndexedDBValue("value3", {blob_infos[3]}),
+          };
           ASSERT_GE(keys.size(), values.size());
 
           // Initiate transaction1 - write records.
           transaction1 = std::make_unique<IndexedDBBackingStore::Transaction>(
               backing_store()->AsWeakPtr(),
-              blink::mojom::IDBTransactionDurability::Relaxed);
+              blink::mojom::IDBTransactionDurability::Relaxed,
+              blink::mojom::IDBTransactionMode::ReadWrite);
           transaction1->Begin(CreateDummyLock());
           IndexedDBBackingStore::RecordIdentifier record;
           for (size_t i = 0; i < values.size(); ++i) {
@@ -670,7 +723,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, DeleteRange) {
         }));
     RunAllTasksUntilIdle();
 
-    idb_context_->TaskRunner()->PostTask(
+    idb_context_->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
           // Finish committing transaction1.
           EXPECT_TRUE(callback_creator1.called);
@@ -680,7 +733,8 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, DeleteRange) {
           // Initiate transaction 2 - delete range.
           transaction2 = std::make_unique<IndexedDBBackingStore::Transaction>(
               backing_store()->AsWeakPtr(),
-              blink::mojom::IDBTransactionDurability::Relaxed);
+              blink::mojom::IDBTransactionDurability::Relaxed,
+              blink::mojom::IDBTransactionMode::ReadWrite);
           transaction2->Begin(CreateDummyLock());
           IndexedDBValue result_value;
           EXPECT_TRUE(backing_store()
@@ -695,7 +749,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, DeleteRange) {
         }));
     RunAllTasksUntilIdle();
 
-    idb_context_->TaskRunner()->PostTask(
+    idb_context_->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
           // Finish committing transaction2.
           EXPECT_TRUE(callback_creator2.called);
@@ -736,44 +790,32 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, DeleteRangeEmptyRange) {
     TestCallback callback_creator1;
     std::unique_ptr<IndexedDBBackingStore::Transaction> transaction2;
     TestCallback callback_creator2;
-    std::vector<std::unique_ptr<storage::BlobDataHandle>> blobs;
+    std::vector<IndexedDBBlobInfo> blob_infos;
 
-    for (size_t j = 0; j < 4; ++j)
-      blobs.push_back(CreateBlob());
+    for (size_t j = 0; j < 4; ++j) {
+      std::string type = "type " + base::NumberToString(j);
+      blob_infos.push_back(CreateBlobInfo(base::UTF8ToUTF16(type), 1));
+    }
 
-    idb_context_->TaskRunner()->PostTask(
+    idb_context_->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
           // Reset from previous iteration.
           backing_store()->ClearWrites();
           backing_store()->ClearRemovals();
 
           std::vector<IndexedDBValue> values = {
-              IndexedDBValue(
-                  "value0",
-                  {IndexedDBBlobInfo(
-                      std::make_unique<storage::BlobDataHandle>(*blobs[0]),
-                      base::UTF8ToUTF16("type 0"), 1)}),
-              IndexedDBValue(
-                  "value1",
-                  {IndexedDBBlobInfo(
-                      std::make_unique<storage::BlobDataHandle>(*blobs[1]),
-                      base::UTF8ToUTF16("type 1"), 1)}),
-              IndexedDBValue(
-                  "value2",
-                  {IndexedDBBlobInfo(
-                      std::make_unique<storage::BlobDataHandle>(*blobs[2]),
-                      base::UTF8ToUTF16("type 2"), 1)}),
-              IndexedDBValue(
-                  "value3",
-                  {IndexedDBBlobInfo(
-                      std::make_unique<storage::BlobDataHandle>(*blobs[3]),
-                      base::UTF8ToUTF16("type 3"), 1)})};
+              IndexedDBValue("value0", {blob_infos[0]}),
+              IndexedDBValue("value1", {blob_infos[1]}),
+              IndexedDBValue("value2", {blob_infos[2]}),
+              IndexedDBValue("value3", {blob_infos[3]}),
+          };
           ASSERT_GE(keys.size(), values.size());
 
           // Initiate transaction1 - write records.
           transaction1 = std::make_unique<IndexedDBBackingStore::Transaction>(
               backing_store()->AsWeakPtr(),
-              blink::mojom::IDBTransactionDurability::Relaxed);
+              blink::mojom::IDBTransactionDurability::Relaxed,
+              blink::mojom::IDBTransactionMode::ReadWrite);
           transaction1->Begin(CreateDummyLock());
 
           IndexedDBBackingStore::RecordIdentifier record;
@@ -791,7 +833,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, DeleteRangeEmptyRange) {
         }));
     RunAllTasksUntilIdle();
 
-    idb_context_->TaskRunner()->PostTask(
+    idb_context_->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
           // Finish committing transaction1.
           EXPECT_TRUE(callback_creator1.called);
@@ -801,7 +843,8 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, DeleteRangeEmptyRange) {
           // Initiate transaction 2 - delete range.
           transaction2 = std::make_unique<IndexedDBBackingStore::Transaction>(
               backing_store()->AsWeakPtr(),
-              blink::mojom::IDBTransactionDurability::Relaxed);
+              blink::mojom::IDBTransactionDurability::Relaxed,
+              blink::mojom::IDBTransactionMode::ReadWrite);
           transaction2->Begin(CreateDummyLock());
           IndexedDBValue result_value;
           EXPECT_TRUE(backing_store()
@@ -816,7 +859,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, DeleteRangeEmptyRange) {
         }));
     RunAllTasksUntilIdle();
 
-    idb_context_->TaskRunner()->PostTask(
+    idb_context_->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
           // Finish committing transaction2.
           EXPECT_TRUE(callback_creator2.called);
@@ -840,12 +883,13 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, BlobJournalInterleavedTransactions) {
   std::unique_ptr<IndexedDBBackingStore::Transaction> transaction2;
   TestCallback callback_creator2;
 
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         // Initiate transaction1.
         transaction1 = std::make_unique<IndexedDBBackingStore::Transaction>(
             backing_store()->AsWeakPtr(),
-            blink::mojom::IDBTransactionDurability::Relaxed);
+            blink::mojom::IDBTransactionDurability::Relaxed,
+            blink::mojom::IDBTransactionMode::ReadWrite);
         transaction1->Begin(CreateDummyLock());
         IndexedDBBackingStore::RecordIdentifier record1;
         EXPECT_TRUE(
@@ -858,7 +902,9 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, BlobJournalInterleavedTransactions) {
       }));
   RunAllTasksUntilIdle();
 
-  idb_context_->TaskRunner()->PostTask(
+  GetBlobUUIDsForCheckBlobWrites();
+
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         // Verify transaction1 phase one completed.
         EXPECT_TRUE(callback_creator1.called);
@@ -869,7 +915,8 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, BlobJournalInterleavedTransactions) {
         // Initiate transaction2.
         transaction2 = std::make_unique<IndexedDBBackingStore::Transaction>(
             backing_store()->AsWeakPtr(),
-            blink::mojom::IDBTransactionDurability::Relaxed);
+            blink::mojom::IDBTransactionDurability::Relaxed,
+            blink::mojom::IDBTransactionMode::ReadWrite);
         transaction2->Begin(CreateDummyLock());
         IndexedDBBackingStore::RecordIdentifier record2;
         EXPECT_TRUE(
@@ -882,7 +929,9 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, BlobJournalInterleavedTransactions) {
       }));
   RunAllTasksUntilIdle();
 
-  idb_context_->TaskRunner()->PostTask(
+  GetBlobUUIDsForCheckBlobWrites();
+
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         // Verify transaction2 phase one completed.
         EXPECT_TRUE(callback_creator2.called);
@@ -904,18 +953,19 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, BlobJournalInterleavedTransactions) {
   RunAllTasksUntilIdle();
 }
 
-TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
+TEST_F(IndexedDBBackingStoreTestWithBlobs, ActiveBlobJournal) {
   std::unique_ptr<IndexedDBBackingStore::Transaction> transaction1;
   TestCallback callback_creator1;
   std::unique_ptr<IndexedDBBackingStore::Transaction> transaction3;
   TestCallback callback_creator3;
   IndexedDBValue read_result_value;
 
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         transaction1 = std::make_unique<IndexedDBBackingStore::Transaction>(
             backing_store()->AsWeakPtr(),
-            blink::mojom::IDBTransactionDurability::Relaxed);
+            blink::mojom::IDBTransactionDurability::Relaxed,
+            blink::mojom::IDBTransactionMode::ReadWrite);
         transaction1->Begin(CreateDummyLock());
         IndexedDBBackingStore::RecordIdentifier record;
         EXPECT_TRUE(
@@ -928,7 +978,9 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
       }));
   RunAllTasksUntilIdle();
 
-  idb_context_->TaskRunner()->PostTask(
+  GetBlobUUIDsForCheckBlobWrites();
+
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         EXPECT_TRUE(callback_creator1.called);
         EXPECT_TRUE(callback_creator1.succeeded);
@@ -937,7 +989,8 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
 
         IndexedDBBackingStore::Transaction transaction2(
             backing_store()->AsWeakPtr(),
-            blink::mojom::IDBTransactionDurability::Relaxed);
+            blink::mojom::IDBTransactionDurability::Relaxed,
+            blink::mojom::IDBTransactionMode::ReadWrite);
         transaction2.Begin(CreateDummyLock());
         EXPECT_TRUE(
             backing_store()
@@ -959,7 +1012,8 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
 
         transaction3 = std::make_unique<IndexedDBBackingStore::Transaction>(
             backing_store()->AsWeakPtr(),
-            blink::mojom::IDBTransactionDurability::Relaxed);
+            blink::mojom::IDBTransactionDurability::Relaxed,
+            blink::mojom::IDBTransactionMode::ReadWrite);
         transaction3->Begin(CreateDummyLock());
         EXPECT_TRUE(backing_store()
                         ->DeleteRange(transaction3.get(), 1, 1,
@@ -971,20 +1025,19 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
       }));
   RunAllTasksUntilIdle();
 
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         EXPECT_TRUE(callback_creator3.called);
         EXPECT_TRUE(callback_creator3.succeeded);
         EXPECT_TRUE(transaction3->CommitPhaseTwo().ok());
         EXPECT_EQ(0U, backing_store()->removals().size());
         for (size_t i = 0; i < read_result_value.blob_info.size(); ++i) {
-          read_result_value.blob_info[i].release_callback().Run(
-              read_result_value.blob_info[i].file_path());
+          read_result_value.blob_info[i].release_callback().Run();
         }
       }));
   RunAllTasksUntilIdle();
 
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         EXPECT_TRUE(backing_store()->IsBlobCleanupPending());
 #if DCHECK_IS_ON()
@@ -1015,7 +1068,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, LiveBlobJournal) {
 // and object_store_id still work.
 TEST_F(IndexedDBBackingStoreTest, HighIds) {
   base::RunLoop loop;
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         IndexedDBKey key1 = key1_;
         IndexedDBKey key2 = key2_;
@@ -1034,7 +1087,8 @@ TEST_F(IndexedDBBackingStoreTest, HighIds) {
         {
           IndexedDBBackingStore::Transaction transaction1(
               backing_store()->AsWeakPtr(),
-              blink::mojom::IDBTransactionDurability::Relaxed);
+              blink::mojom::IDBTransactionDurability::Relaxed,
+              blink::mojom::IDBTransactionMode::ReadWrite);
           transaction1.Begin(CreateDummyLock());
           IndexedDBBackingStore::RecordIdentifier record;
           leveldb::Status s = backing_store()->PutRecord(
@@ -1064,7 +1118,8 @@ TEST_F(IndexedDBBackingStoreTest, HighIds) {
         {
           IndexedDBBackingStore::Transaction transaction2(
               backing_store()->AsWeakPtr(),
-              blink::mojom::IDBTransactionDurability::Relaxed);
+              blink::mojom::IDBTransactionDurability::Relaxed,
+              blink::mojom::IDBTransactionMode::ReadWrite);
           transaction2.Begin(CreateDummyLock());
           IndexedDBValue result_value;
           leveldb::Status s = backing_store()->GetRecord(
@@ -1103,7 +1158,7 @@ TEST_F(IndexedDBBackingStoreTest, HighIds) {
 // Make sure that other invalid ids do not crash.
 TEST_F(IndexedDBBackingStoreTest, InvalidIds) {
   base::RunLoop loop;
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         const IndexedDBKey key = key1_;
         IndexedDBValue value = value1_;
@@ -1118,7 +1173,8 @@ TEST_F(IndexedDBBackingStoreTest, InvalidIds) {
 
         IndexedDBBackingStore::Transaction transaction1(
             backing_store()->AsWeakPtr(),
-            blink::mojom::IDBTransactionDurability::Relaxed);
+            blink::mojom::IDBTransactionDurability::Relaxed,
+            blink::mojom::IDBTransactionMode::ReadWrite);
         transaction1.Begin(CreateDummyLock());
 
         IndexedDBBackingStore::RecordIdentifier record;
@@ -1179,7 +1235,7 @@ TEST_F(IndexedDBBackingStoreTest, InvalidIds) {
 
 TEST_F(IndexedDBBackingStoreTest, CreateDatabase) {
   base::RunLoop loop;
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         const base::string16 database_name(ASCIIToUTF16("db1"));
         int64_t database_id;
@@ -1210,7 +1266,8 @@ TEST_F(IndexedDBBackingStoreTest, CreateDatabase) {
 
           IndexedDBBackingStore::Transaction transaction(
               backing_store()->AsWeakPtr(),
-              blink::mojom::IDBTransactionDurability::Relaxed);
+              blink::mojom::IDBTransactionDurability::Relaxed,
+              blink::mojom::IDBTransactionMode::ReadWrite);
           transaction.Begin(CreateDummyLock());
 
           IndexedDBObjectStoreMetadata object_store;
@@ -1269,14 +1326,15 @@ TEST_F(IndexedDBBackingStoreTest, CreateDatabase) {
   {
     // Cycle the idb runner to help clean up tasks for the Windows tests.
     base::RunLoop cycle_loop;
-    idb_context_->TaskRunner()->PostTask(FROM_HERE, cycle_loop.QuitClosure());
+    idb_context_->IDBTaskRunner()->PostTask(FROM_HERE,
+                                            cycle_loop.QuitClosure());
     cycle_loop.Run();
   }
 }
 
 TEST_F(IndexedDBBackingStoreTest, GetDatabaseNames) {
   base::RunLoop loop;
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         const base::string16 db1_name(ASCIIToUTF16("db1"));
         const int64_t db1_version = 1LL;
@@ -1389,7 +1447,7 @@ TEST_F(IndexedDBBackingStoreTest, SchemaUpgradeWithoutBlobsSurvives) {
 
   // The database metadata needs to be written so we can verify the blob entry
   // keys are not detected.
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         const base::string16 database_name(ASCIIToUTF16("db1"));
         const int64_t version = 9;
@@ -1412,7 +1470,8 @@ TEST_F(IndexedDBBackingStoreTest, SchemaUpgradeWithoutBlobsSurvives) {
 
           IndexedDBBackingStore::Transaction transaction(
               backing_store()->AsWeakPtr(),
-              blink::mojom::IDBTransactionDurability::Relaxed);
+              blink::mojom::IDBTransactionDurability::Relaxed,
+              blink::mojom::IDBTransactionMode::ReadWrite);
           transaction.Begin(CreateDummyLock());
 
           IndexedDBObjectStoreMetadata object_store;
@@ -1432,7 +1491,7 @@ TEST_F(IndexedDBBackingStoreTest, SchemaUpgradeWithoutBlobsSurvives) {
         }
       }));
   RunAllTasksUntilIdle();
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         const IndexedDBKey key = key1_;
         IndexedDBValue value = value1_;
@@ -1440,7 +1499,8 @@ TEST_F(IndexedDBBackingStoreTest, SchemaUpgradeWithoutBlobsSurvives) {
         // Save a value.
         IndexedDBBackingStore::Transaction transaction1(
             backing_store()->AsWeakPtr(),
-            blink::mojom::IDBTransactionDurability::Relaxed);
+            blink::mojom::IDBTransactionDurability::Relaxed,
+            blink::mojom::IDBTransactionMode::ReadWrite);
         transaction1.Begin(CreateDummyLock());
         IndexedDBBackingStore::RecordIdentifier record;
         leveldb::Status s = backing_store()->PutRecord(
@@ -1467,14 +1527,15 @@ TEST_F(IndexedDBBackingStoreTest, SchemaUpgradeWithoutBlobsSurvives) {
   DestroyFactoryAndBackingStore();
   CreateFactoryAndBackingStore();
 
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         const IndexedDBKey key = key1_;
         IndexedDBValue value = value1_;
 
         IndexedDBBackingStore::Transaction transaction2(
             backing_store()->AsWeakPtr(),
-            blink::mojom::IDBTransactionDurability::Relaxed);
+            blink::mojom::IDBTransactionDurability::Relaxed,
+            blink::mojom::IDBTransactionMode::ReadWrite);
         transaction2.Begin(CreateDummyLock());
         IndexedDBValue result_value;
         EXPECT_TRUE(backing_store()
@@ -1519,7 +1580,7 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, SchemaUpgradeWithBlobsCorrupt) {
 
   // The database metadata needs to be written so the blob entry keys can
   // be detected.
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         const base::string16 database_name(ASCIIToUTF16("db1"));
         const int64_t version = 9;
@@ -1542,7 +1603,8 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, SchemaUpgradeWithBlobsCorrupt) {
 
           IndexedDBBackingStore::Transaction transaction(
               backing_store()->AsWeakPtr(),
-              blink::mojom::IDBTransactionDurability::Relaxed);
+              blink::mojom::IDBTransactionDurability::Relaxed,
+              blink::mojom::IDBTransactionMode::ReadWrite);
           transaction.Begin(CreateDummyLock());
 
           IndexedDBObjectStoreMetadata object_store;
@@ -1563,12 +1625,13 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, SchemaUpgradeWithBlobsCorrupt) {
       }));
   RunAllTasksUntilIdle();
 
-  idb_context_->TaskRunner()->PostTask(
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         // Initiate transaction1 - writing blobs.
         transaction1 = std::make_unique<IndexedDBBackingStore::Transaction>(
             backing_store()->AsWeakPtr(),
-            blink::mojom::IDBTransactionDurability::Relaxed);
+            blink::mojom::IDBTransactionDurability::Relaxed,
+            blink::mojom::IDBTransactionMode::ReadWrite);
         transaction1->Begin(CreateDummyLock());
         IndexedDBBackingStore::RecordIdentifier record;
         EXPECT_TRUE(backing_store()
@@ -1581,7 +1644,9 @@ TEST_F(IndexedDBBackingStoreTestWithBlobs, SchemaUpgradeWithBlobsCorrupt) {
       }));
   RunAllTasksUntilIdle();
 
-  idb_context_->TaskRunner()->PostTask(
+  GetBlobUUIDsForCheckBlobWrites();
+
+  idb_context_->IDBTaskRunner()->PostTask(
       FROM_HERE, base::BindLambdaForTesting([&]() {
         // Finish up transaction1, verifying blob writes.
         EXPECT_TRUE(callback_creator1.called);

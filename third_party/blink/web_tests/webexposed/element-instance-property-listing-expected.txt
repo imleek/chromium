@@ -172,7 +172,6 @@ namespace http://www.w3.org/1999/xhtml
     property onanimationiteration
     property onanimationstart
     property onauxclick
-    property onbeforeactivate
     property onbeforecopy
     property onbeforecut
     property onbeforepaste
@@ -238,6 +237,7 @@ namespace http://www.w3.org/1999/xhtml
     property onpointerup
     property onprogress
     property onratechange
+    property onrendersubtreeactivation
     property onreset
     property onresize
     property onscroll
@@ -287,6 +287,7 @@ namespace http://www.w3.org/1999/xhtml
     property replaceWith
     property requestFullscreen
     property requestPointerLock
+    property resetSubtreeRendered
     property role
     property scroll
     property scrollBy
@@ -643,6 +644,7 @@ html element iframe
     property contentDocument
     property contentWindow
     property csp
+    property disallowDocumentAccess
     property featurePolicy
     property frameBorder
     property getSVGDocument
@@ -1137,6 +1139,7 @@ html element video
     property autoplay
     property buffered
     property canPlayType
+    property cancelAnimationFrame
     property captureStream
     property controls
     property controlsList
@@ -1172,6 +1175,7 @@ html element video
     property preload
     property readyState
     property remote
+    property requestAnimationFrame
     property requestPictureInPicture
     property seekable
     property seeking
@@ -1350,7 +1354,6 @@ namespace http://www.w3.org/2000/svg
     property onanimationiteration
     property onanimationstart
     property onauxclick
-    property onbeforeactivate
     property onbeforecopy
     property onbeforecut
     property onbeforepaste
@@ -1416,6 +1419,7 @@ namespace http://www.w3.org/2000/svg
     property onpointerup
     property onprogress
     property onratechange
+    property onrendersubtreeactivation
     property onreset
     property onresize
     property onscroll
@@ -1465,6 +1469,7 @@ namespace http://www.w3.org/2000/svg
     property replaceWith
     property requestFullscreen
     property requestPointerLock
+    property resetSubtreeRendered
     property role
     property scroll
     property scrollBy
@@ -1583,7 +1588,6 @@ svg element defs
     property systemLanguage
     property transform
 svg element desc
-svg element discard
 svg element ellipse
     property cx
     property cy

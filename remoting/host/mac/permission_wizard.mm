@@ -12,6 +12,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "remoting/base/string_resources.h"
@@ -154,7 +155,18 @@ void PermissionWizard::Impl::OnPermissionCheckResult(bool result) {
 @implementation PermissionWizardController {
   NSTextField* _instructionText;
   NSButton* _cancelButton;
+  NSButton* _launchA11yButton;
+  NSButton* _launchScreenRecordingButton;
   NSButton* _nextButton;
+  NSButton* _okButton;
+
+  // This class modifies the NSApplicationActivationPolicy in order to show a
+  // Dock icon when presenting the dialog window. This is needed because the
+  // native-messaging host sets LSUIElement=YES in its plist to hide the Dock
+  // icon. This field stores the previous setting so it can be restored when
+  // the window is closed (so this class will still do the right thing if it is
+  // instantiated from an app that normally shows a Dock icon).
+  NSApplicationActivationPolicy _originalActivationPolicy;
 
   // The page of the wizard being shown.
   WizardPage _page;
@@ -188,10 +200,12 @@ void PermissionWizard::Impl::OnPermissionCheckResult(bool result) {
     _page = WizardPage::ACCESSIBILITY;
     _autoAdvance = YES;
   }
+  _originalActivationPolicy = [NSApp activationPolicy];
   return self;
 }
 
 - (void)hide {
+  [NSApp setActivationPolicy:_originalActivationPolicy];
   [self close];
 }
 
@@ -224,15 +238,46 @@ void PermissionWizard::Impl::OnPermissionCheckResult(bool result) {
   _cancelButton.bezelStyle = NSBezelStyleRegularSquare;
   _cancelButton.title =
       l10n_util::GetNSString(IDS_MAC_PERMISSION_WIZARD_CANCEL_BUTTON);
+  _cancelButton.keyEquivalent = @"\e";
   _cancelButton.action = @selector(onCancel:);
   _cancelButton.target = self;
+
+  _launchA11yButton = [[[NSButton alloc] init] autorelease];
+  _launchA11yButton.translatesAutoresizingMaskIntoConstraints = NO;
+  _launchA11yButton.buttonType = NSButtonTypeMomentaryPushIn;
+  _launchA11yButton.bezelStyle = NSBezelStyleRegularSquare;
+  _launchA11yButton.title =
+      l10n_util::GetNSString(IDS_ACCESSIBILITY_PERMISSION_DIALOG_OPEN_BUTTON);
+  _launchA11yButton.action = @selector(onLaunchA11y:);
+  _launchA11yButton.target = self;
+
+  _launchScreenRecordingButton = [[[NSButton alloc] init] autorelease];
+  _launchScreenRecordingButton.translatesAutoresizingMaskIntoConstraints = NO;
+  _launchScreenRecordingButton.buttonType = NSButtonTypeMomentaryPushIn;
+  _launchScreenRecordingButton.bezelStyle = NSBezelStyleRegularSquare;
+  _launchScreenRecordingButton.title = l10n_util::GetNSString(
+      IDS_SCREEN_RECORDING_PERMISSION_DIALOG_OPEN_BUTTON);
+  _launchScreenRecordingButton.action = @selector(onLaunchScreenRecording:);
+  _launchScreenRecordingButton.target = self;
 
   _nextButton = [[[NSButton alloc] init] autorelease];
   _nextButton.translatesAutoresizingMaskIntoConstraints = NO;
   _nextButton.buttonType = NSButtonTypeMomentaryPushIn;
   _nextButton.bezelStyle = NSBezelStyleRegularSquare;
+  _nextButton.title =
+      l10n_util::GetNSString(IDS_MAC_PERMISSION_WIZARD_NEXT_BUTTON);
+  _nextButton.keyEquivalent = @"\r";
   _nextButton.action = @selector(onNext:);
   _nextButton.target = self;
+
+  _okButton = [[[NSButton alloc] init] autorelease];
+  _okButton.translatesAutoresizingMaskIntoConstraints = NO;
+  _okButton.buttonType = NSButtonTypeMomentaryPushIn;
+  _okButton.bezelStyle = NSBezelStyleRegularSquare;
+  _okButton.title = l10n_util::GetNSString(IDS_MAC_PERMISSION_WIZARD_OK_BUTTON);
+  _okButton.keyEquivalent = @"\r";
+  _okButton.action = @selector(onOk:);
+  _okButton.target = self;
 
   NSStackView* iconAndTextStack = [[[NSStackView alloc] init] autorelease];
   iconAndTextStack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -246,7 +291,11 @@ void PermissionWizard::Impl::OnPermissionCheckResult(bool result) {
   buttonsStack.translatesAutoresizingMaskIntoConstraints = NO;
   buttonsStack.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   [buttonsStack addView:_cancelButton inGravity:NSStackViewGravityTrailing];
+  [buttonsStack addView:_launchA11yButton inGravity:NSStackViewGravityTrailing];
+  [buttonsStack addView:_launchScreenRecordingButton
+              inGravity:NSStackViewGravityTrailing];
   [buttonsStack addView:_nextButton inGravity:NSStackViewGravityTrailing];
+  [buttonsStack addView:_okButton inGravity:NSStackViewGravityTrailing];
 
   NSStackView* mainStack = [[[NSStackView alloc] init] autorelease];
   mainStack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -256,6 +305,12 @@ void PermissionWizard::Impl::OnPermissionCheckResult(bool result) {
   [mainStack addView:buttonsStack inGravity:NSStackViewGravityBottom];
 
   [self.window.contentView addSubview:mainStack];
+
+  // Update button visibility, instructional text etc before window is
+  // presented, to ensure correct layout. This updates the window's
+  // first-responder, so it needs to happen after the child views are added to
+  // the contentView.
+  [self updateUI];
 
   NSDictionary* views = @{
     @"iconAndText" : iconAndTextStack,
@@ -298,21 +353,34 @@ void PermissionWizard::Impl::OnPermissionCheckResult(bool result) {
   [self hide];
 }
 
-- (void)onNext:(id)sender {
-  if (_page == WizardPage::ALL_SET) {
-    // OK button closes the window.
-    _impl->NotifyCompletion(true);
-    [self hide];
-    return;
-  }
-  if (_hasPermission) {
-    [self advanceToNextPage];
-  } else {
-    [self launchSystemPreferences];
-  }
+- (void)onLaunchA11y:(id)sender {
+  // Launch the Security and Preferences pane with Accessibility selected.
+  [[NSWorkspace sharedWorkspace]
+      openURL:[NSURL
+                  URLWithString:@"x-apple.systempreferences:com.apple."
+                                @"preference.security?Privacy_Accessibility"]];
 }
 
-// Updates the dialog controls according to the object's state.
+- (void)onLaunchScreenRecording:(id)sender {
+  [[NSWorkspace sharedWorkspace]
+      openURL:[NSURL
+                  URLWithString:@"x-apple.systempreferences:com.apple."
+                                @"preference.security?Privacy_ScreenCapture"]];
+}
+
+- (void)onNext:(id)sender {
+  [self advanceToNextPage];
+}
+
+- (void)onOk:(id)sender {
+  // OK button closes the window.
+  _impl->NotifyCompletion(true);
+  [self hide];
+}
+
+// Updates the dialog controls according to the object's state. This also
+// updates the first-responder button, so it should only be called when the
+// state needs to change.
 - (void)updateUI {
   base::string16 bundleName = base::UTF8ToUTF16(_impl->GetBundleName());
   switch (_page) {
@@ -339,37 +407,52 @@ void PermissionWizard::Impl::OnPermissionCheckResult(bool result) {
     default:
       NOTREACHED();
   }
-  _cancelButton.hidden = (_page == WizardPage::ALL_SET);
-  [self updateNextButton];
+  [self updateButtons];
 }
 
-// Updates |_nextButton| according to the object's state.
-- (void)updateNextButton {
+// Updates the buttons according to the object's state. This updates the
+// first-responder, so this should only be called when the buttons need to be
+// changed.
+- (void)updateButtons {
+  // Launch buttons are always visible on their associated pages.
+  _launchA11yButton.hidden = (_page != WizardPage::ACCESSIBILITY);
+  _launchScreenRecordingButton.hidden = (_page != WizardPage::SCREEN_RECORDING);
+
+  // OK is visible on ALL_SET, Cancel/Next are visible on all other pages.
+  _cancelButton.hidden = (_page == WizardPage::ALL_SET);
+  _nextButton.hidden = (_page == WizardPage::ALL_SET);
+  _okButton.hidden = (_page != WizardPage::ALL_SET);
+
+  // User can only advance if permission is granted.
+  _nextButton.enabled = _hasPermission;
+
+  // Give focus to the most appropriate button.
   if (_page == WizardPage::ALL_SET) {
-    _nextButton.title =
-        l10n_util::GetNSString(IDS_MAC_PERMISSION_WIZARD_OK_BUTTON);
-    return;
+    [self.window makeFirstResponder:_okButton];
+  } else if (_hasPermission) {
+    [self.window makeFirstResponder:_nextButton];
+  } else {
+    switch (_page) {
+      case WizardPage::ACCESSIBILITY:
+        [self.window makeFirstResponder:_launchA11yButton];
+        break;
+      case WizardPage::SCREEN_RECORDING:
+        [self.window makeFirstResponder:_launchScreenRecordingButton];
+        break;
+      default:
+        NOTREACHED();
+    }
   }
 
-  if (_hasPermission) {
-    _nextButton.title =
-        l10n_util::GetNSString(IDS_MAC_PERMISSION_WIZARD_NEXT_BUTTON);
-    return;
-  }
-
-  // Permission is not granted, so show the appropriate launch text.
-  switch (_page) {
-    case WizardPage::ACCESSIBILITY:
-      _nextButton.title = l10n_util::GetNSString(
-          IDS_ACCESSIBILITY_PERMISSION_DIALOG_OPEN_BUTTON);
-      break;
-    case WizardPage::SCREEN_RECORDING:
-      _nextButton.title = l10n_util::GetNSString(
-          IDS_SCREEN_RECORDING_PERMISSION_DIALOG_OPEN_BUTTON);
-      break;
-    default:
-      NOTREACHED();
-  }
+  // Set the button tab-order (key view loop). Hidden/disabled buttons are
+  // skipped, so it is OK to set the overall order for every button. This needs
+  // to be done after setting the first-responder, otherwise the system chooses
+  // an order which may not be correct.
+  _cancelButton.nextKeyView = _launchA11yButton;
+  _launchA11yButton.nextKeyView = _launchScreenRecordingButton;
+  _launchScreenRecordingButton.nextKeyView = _nextButton;
+  _nextButton.nextKeyView = _okButton;
+  _okButton.nextKeyView = _cancelButton;
 }
 
 - (void)advanceToNextPage {
@@ -392,10 +475,11 @@ void PermissionWizard::Impl::OnPermissionCheckResult(bool result) {
       NOTREACHED();
   }
 
-  // Kick off a permission check for the new page. The UI will be updated only
-  // after the result comes back.
+  // Kick off a permission check for the new page. Update the UI now, so the
+  // Next button is disabled and can't be accidentally double-pressed.
   _hasPermission = NO;
   _autoAdvance = YES;
+  [self updateUI];
   [self requestPermissionCheck:base::TimeDelta()];
 }
 
@@ -413,33 +497,21 @@ void PermissionWizard::Impl::OnPermissionCheckResult(bool result) {
   }
 }
 
-- (void)launchSystemPreferences {
-  switch (_page) {
-    case WizardPage::ACCESSIBILITY:
-      // Launch the Security and Preferences pane with Accessibility selected.
-      [[NSWorkspace sharedWorkspace]
-          openURL:[NSURL URLWithString:
-                             @"x-apple.systempreferences:com.apple."
-                             @"preference.security?Privacy_Accessibility"]];
-      break;
-    case WizardPage::SCREEN_RECORDING:
-      // Launch the Security and Preferences pane with Screen Recording
-      // selected.
-      [[NSWorkspace sharedWorkspace]
-          openURL:[NSURL URLWithString:
-                             @"x-apple.systempreferences:com.apple."
-                             @"preference.security?Privacy_ScreenCapture"]];
-      return;
-    default:
-      NOTREACHED();
-  }
-}
-
 - (void)onPermissionCheckResult:(bool)result {
   if (_cancelled)
     return;
 
   _hasPermission = result;
+
+  // Ugly workaround for crbug.com/1031343:
+  // Polling stops when permission is granted. Posting a task to execute in the
+  // future seems to keep the system's UI message-pump active, in order to
+  // render the button outlines.
+  // TODO(lambroslambrou): Remove this hack and fix the underlying problem.
+  if (_hasPermission) {
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, base::DoNothing(), base::TimeDelta::Max());
+  }
 
   if (_hasPermission && _autoAdvance) {
     // Skip showing the "Next" button, and immediately kick off a permission
@@ -448,11 +520,17 @@ void PermissionWizard::Impl::OnPermissionCheckResult(bool result) {
     return;
   }
 
-  // Update the whole UI, not just the "Next" button, in case a different page
-  // was previously shown.
-  [self updateUI];
+  // Don't update the UI if permission denied, because that resets the button
+  // focus, preventing the user from tabbing between buttons while polling for
+  // permission status.
+  if (_hasPermission) {
+    // Update the whole UI, not just the "Next" button, in case a different page
+    // was previously shown.
+    [self updateUI];
 
-  if (!_hasPermission) {
+    // Bring the window to the front again, to prompt the user to hit Next.
+    [self presentWindow];
+  } else {
     // Permission denied, so turn off auto-advance for this page, and present
     // the dialog to the user if needed. After the user grants this permission,
     // they should be able to click "Next" to acknowledge and advance the
@@ -461,6 +539,10 @@ void PermissionWizard::Impl::OnPermissionCheckResult(bool result) {
     // shown when a permission-check fails.
     _autoAdvance = NO;
     if (![self window].visible) {
+      // Only present the window if it was previously hidden. This method will
+      // bring the window on top of other windows, which should not happen
+      // during regular polling for permission status, as the user is focused on
+      // the System Preferences applet.
       [self presentWindow];
     }
 
@@ -473,6 +555,10 @@ void PermissionWizard::Impl::OnPermissionCheckResult(bool result) {
   [self.window makeKeyAndOrderFront:NSApp];
   [self.window center];
   [self showWindow:nil];
+  [NSApp activateIgnoringOtherApps:YES];
+
+  // Show the application icon in the dock.
+  [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 }
 
 @end

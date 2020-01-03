@@ -12,7 +12,7 @@ wayland_protocol("gtk_primary_selection_protocol") {
 
 wayland_protocol("xdg_shell_protocol") {
   sources = [
-    "src/unstable/xdg-shell/xdg-shell-unstable-v5.xml",
+    "src/stable/xdg-shell/xdg-shell.xml",
     "src/unstable/xdg-shell/xdg-shell-unstable-v6.xml",
   ]
 }
@@ -146,5 +146,11 @@ wayland_protocol("linux_explicit_synchronization_protocol") {
 wayland_protocol("wayland_drm_protocol") {
   sources = [
     "mesa/wayland-drm/wayland-drm.xml",
+  ]
+}
+
+wayland_protocol("color_space_protocol") {
+  sources = [
+    "unstable/color-space/color-space-unstable-v1.xml",
   ]
 }

@@ -14,6 +14,7 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/wm/core/window_util.h"
 
 namespace ash {
 namespace {
@@ -30,9 +31,6 @@ constexpr gfx::Size kIconSize{24, 24};
 
 // The font delta of the window title.
 constexpr int kLabelFontDelta = 2;
-
-// TODO(sammiequon): Combine this with the duplicate in overview.
-constexpr int kHeaderHeightDp = 40;
 
 // Values of the backdrop.
 constexpr int kBackdropRoundingDp = 4;
@@ -101,19 +99,10 @@ WindowMiniView::WindowMiniView(aura::Window* source_window,
           kHorizontalLabelPaddingDp));
   AddChildViewOf(this, header_view_);
 
-  // Prefer kAppIconKey over kWindowIconKey as the app icon is typically larger.
-  gfx::ImageSkia* icon = source_window->GetProperty(aura::client::kAppIconKey);
-  if (!icon || icon->size().IsEmpty())
-    icon = source_window->GetProperty(aura::client::kWindowIconKey);
-  if (icon && !icon->size().IsEmpty()) {
-    image_view_ = new views::ImageView();
-    image_view_->SetImage(gfx::ImageSkiaOperations::CreateResizedImage(
-        *icon, skia::ImageOperations::RESIZE_BEST, kIconSize));
-    image_view_->SetSize(kIconSize);
-    AddChildViewOf(header_view_, image_view_);
-  }
+  UpdateIconView();
 
-  title_label_ = new views::Label(source_window->GetTitle());
+  title_label_ =
+      new views::Label(wm::GetTransientRoot(source_window_)->GetTitle());
   title_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   title_label_->SetAutoColorReadabilityEnabled(false);
   title_label_->SetEnabledColor(kLabelColor);
@@ -158,6 +147,17 @@ void WindowMiniView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->SetName(title_label_->GetText());
 }
 
+void WindowMiniView::OnWindowPropertyChanged(aura::Window* window,
+                                             const void* key,
+                                             intptr_t old) {
+  // Update the icon if it changes in the middle of an overview or alt tab
+  // session (due to device scale factor change or other).
+  if (key != aura::client::kAppIconKey && key != aura::client::kWindowIconKey)
+    return;
+
+  UpdateIconView();
+}
+
 void WindowMiniView::OnWindowDestroying(aura::Window* window) {
   if (window != source_window_)
     return;
@@ -168,7 +168,26 @@ void WindowMiniView::OnWindowDestroying(aura::Window* window) {
 }
 
 void WindowMiniView::OnWindowTitleChanged(aura::Window* window) {
-  title_label_->SetText(window->GetTitle());
+  title_label_->SetText(wm::GetTransientRoot(window)->GetTitle());
+}
+
+void WindowMiniView::UpdateIconView() {
+  aura::Window* transient_root = wm::GetTransientRoot(source_window_);
+  // Prefer kAppIconKey over kWindowIconKey as the app icon is typically larger.
+  gfx::ImageSkia* icon = transient_root->GetProperty(aura::client::kAppIconKey);
+  if (!icon || icon->size().IsEmpty())
+    icon = transient_root->GetProperty(aura::client::kWindowIconKey);
+  if (!icon)
+    return;
+
+  if (!icon_view_) {
+    icon_view_ = new views::ImageView();
+    icon_view_->SetSize(kIconSize);
+    AddChildViewOf(header_view_, icon_view_);
+  }
+
+  icon_view_->SetImage(gfx::ImageSkiaOperations::CreateResizedImage(
+      *icon, skia::ImageOperations::RESIZE_BEST, kIconSize));
 }
 
 }  // namespace ash

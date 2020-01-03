@@ -4,10 +4,11 @@
 
 import web_idl
 
+from . import name_style
 from .clang_format import clang_format
 from .code_node import CodeNode
 from .code_node import LiteralNode
-from .code_node import SymbolScopeNode
+from .code_node import SequenceNode
 from .codegen_accumulator import CodeGenAccumulator
 from .path_manager import PathManager
 
@@ -18,6 +19,25 @@ def make_copyright_header():
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.\
 """)
+
+
+def make_forward_declarations(accumulator):
+    assert isinstance(accumulator, CodeGenAccumulator)
+
+    class ForwardDeclarations(object):
+        def __init__(self, accumulator):
+            self._accumulator = accumulator
+
+        def __str__(self):
+            return "\n".join([
+                "class {};".format(class_name)
+                for class_name in sorted(self._accumulator.class_decls)
+            ] + [
+                "struct {};".format(struct_name)
+                for struct_name in sorted(self._accumulator.struct_decls)
+            ])
+
+    return LiteralNode(ForwardDeclarations(accumulator))
 
 
 def make_header_include_directives(accumulator):
@@ -36,11 +56,17 @@ def make_header_include_directives(accumulator):
     return LiteralNode(HeaderIncludeDirectives(accumulator))
 
 
+def component_export(component):
+    assert isinstance(component, web_idl.Component)
+
+    return name_style.macro(component, "EXPORT")
+
+
 def enclose_with_header_guard(code_node, header_guard):
     assert isinstance(code_node, CodeNode)
     assert isinstance(header_guard, str)
 
-    return SymbolScopeNode([
+    return SequenceNode([
         LiteralNode("#ifndef {}".format(header_guard)),
         LiteralNode("#define {}".format(header_guard)),
         LiteralNode(""),
@@ -54,7 +80,7 @@ def enclose_with_namespace(code_node, namespace):
     assert isinstance(code_node, CodeNode)
     assert isinstance(namespace, str)
 
-    return SymbolScopeNode([
+    return SequenceNode([
         LiteralNode("namespace {} {{".format(namespace)),
         LiteralNode(""),
         code_node,

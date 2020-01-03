@@ -616,7 +616,7 @@ TEST_F(WorkspaceLayoutManagerTest, AdjustSnappedBoundsWidth) {
 
   // Set shelf alignment to left, which will change display work area.
   Shelf* shelf = GetPrimaryShelf();
-  shelf->SetAlignment(SHELF_ALIGNMENT_LEFT);
+  shelf->SetAlignment(ShelfAlignment::kLeft);
   const gfx::Rect new_work_area =
       display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
   EXPECT_NE(work_area, new_work_area);
@@ -631,7 +631,7 @@ TEST_F(WorkspaceLayoutManagerTest, AdjustSnappedBoundsWidth) {
   EXPECT_EQ(new_expected_right_snapped_bounds, window2->bounds());
 
   // Set shelf alignment to bottom again.
-  shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+  shelf->SetAlignment(ShelfAlignment::kBottom);
   EXPECT_EQ(expected_left_snapped_bounds, window1->bounds());
   EXPECT_EQ(expected_right_snapped_bounds, window2->bounds());
 }
@@ -1080,7 +1080,7 @@ TEST_F(WorkspaceLayoutManagerSoloTest, NotResizeWhenScreenIsLocked) {
   window->Show();
 
   Shelf* shelf = GetPrimaryShelf();
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
 
   window->SetBounds(
       screen_util::GetMaximizedWindowBoundsInParent(window.get()));
@@ -1279,17 +1279,17 @@ TEST_F(WorkspaceLayoutManagerBackdropTest,
 
   EXPECT_EQ(fullscreen_size,
             default_container()->children()[0]->bounds().size());
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlwaysHidden);
   shelf_layout_manager->UpdateVisibilityState();
 
   // When the shelf is re-shown WorkspaceLayoutManager shrinks all children but
   // the backdrop.
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kNever);
   shelf_layout_manager->UpdateVisibilityState();
   EXPECT_EQ(fullscreen_size,
             default_container()->children()[0]->bounds().size());
 
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlwaysHidden);
   shelf_layout_manager->UpdateVisibilityState();
   EXPECT_EQ(fullscreen_size,
             default_container()->children()[0]->bounds().size());

@@ -9,6 +9,7 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/json/json_string_value_serializer.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/sync/base/encryptor.h"
@@ -91,6 +92,18 @@ KeyDerivationParams GetKeyDerivationParamsFromSpecifics(
   }
 
   return KeyDerivationParams::CreateWithUnsupportedMethod();
+}
+
+// We need to apply base64 encoding before deriving Nigori keys because the
+// underlying crypto libraries (in particular the Java counterparts in JDK's
+// implementation for PBKDF2) assume the keys are utf8.
+std::vector<std::string> Base64EncodeKeys(
+    const std::vector<std::vector<uint8_t>>& keys) {
+  std::vector<std::string> encoded_keystore_keys;
+  for (const std::vector<uint8_t>& key : keys) {
+    encoded_keystore_keys.push_back(base::Base64Encode(key));
+  }
+  return encoded_keystore_keys;
 }
 
 bool SpecificsHasValidKeyDerivationParams(const NigoriSpecifics& specifics) {
@@ -288,11 +301,49 @@ sync_pb::NigoriKey UnpackExplicitPassphraseKey(const Encryptor& encryptor,
   return key;
 }
 
+// Returns Base64 encoded keystore keys or empty vector if errors occur. Should
+// be aligned with Directory implementation (UnpackKeystoreBootstrapToken())
+// unless it is removed.
+std::vector<std::string> UnpackKeystoreKeys(
+    const std::string& packed_keystore_keys,
+    const Encryptor& encryptor) {
+  DCHECK(!packed_keystore_keys.empty());
+
+  std::string base64_decoded_packed_keys;
+  if (!base::Base64Decode(packed_keystore_keys, &base64_decoded_packed_keys)) {
+    return std::vector<std::string>();
+  }
+  std::string decrypted_packed_keys;
+  if (!encryptor.DecryptString(base64_decoded_packed_keys,
+                               &decrypted_packed_keys)) {
+    return std::vector<std::string>();
+  }
+
+  JSONStringValueDeserializer json_deserializer(decrypted_packed_keys);
+  std::unique_ptr<base::Value> deserialized_keys(json_deserializer.Deserialize(
+      /*error_code=*/nullptr, /*error_message=*/nullptr));
+  if (!deserialized_keys) {
+    return std::vector<std::string>();
+  }
+  base::ListValue* list_value = nullptr;
+  if (!deserialized_keys->GetAsList(&list_value)) {
+    return std::vector<std::string>();
+  }
+
+  std::vector<std::string> keystore_keys(list_value->GetSize());
+  for (size_t i = 0; i < keystore_keys.size(); ++i) {
+    if (!list_value->GetString(i, &keystore_keys[i])) {
+      return std::vector<std::string>();
+    }
+  }
+  return keystore_keys;
+}
+
 ModelTypeSet GetEncryptedTypes(bool encrypt_everything) {
   if (encrypt_everything) {
     return EncryptableUserTypes();
   }
-  return SyncEncryptionHandler::SensitiveTypes();
+  return AlwaysEncryptedUserTypes();
 }
 
 }  // namespace
@@ -394,7 +445,8 @@ NigoriSyncBridgeImpl::NigoriSyncBridgeImpl(
     std::unique_ptr<NigoriStorage> storage,
     const Encryptor* encryptor,
     const base::RepeatingCallback<std::string()>& random_salt_generator,
-    const std::string& packed_explicit_passphrase_key)
+    const std::string& packed_explicit_passphrase_key,
+    const std::string& packed_keystore_keys)
     : encryptor_(encryptor),
       processor_(std::move(processor)),
       storage_(std::move(storage)),
@@ -423,6 +475,8 @@ NigoriSyncBridgeImpl::NigoriSyncBridgeImpl(
            switches::kSyncSupportTrustedVaultPassphrase))) {
     // We either have no Nigori node stored locally or it was corrupted.
     processor_->ModelReadyToSync(this, NigoriMetadataBatch());
+    // Keystore keys needs migration independently of having local Nigori node.
+    MaybeMigrateKeystoreKeys(packed_keystore_keys);
     return;
   }
 
@@ -435,6 +489,10 @@ NigoriSyncBridgeImpl::NigoriSyncBridgeImpl(
   metadata_batch.model_type_state = deserialized_data->model_type_state();
   metadata_batch.entity_metadata = deserialized_data->entity_metadata();
   processor_->ModelReadyToSync(this, std::move(metadata_batch));
+
+  // Attempt migration of keystore keys after deserialization to not overwrite
+  // newer keys.
+  MaybeMigrateKeystoreKeys(packed_keystore_keys);
 
   if (state_.passphrase_type == NigoriSpecifics::UNKNOWN) {
     // Commit with keystore initialization wasn't successfully completed before
@@ -569,7 +627,7 @@ void NigoriSyncBridgeImpl::SetDecryptionPassphrase(
 }
 
 void NigoriSyncBridgeImpl::AddTrustedVaultDecryptionKeys(
-    const std::vector<std::string>& keys) {
+    const std::vector<std::vector<uint8_t>>& keys) {
   // This API gets plumbed and ultimately exposed to layers outside the sync
   // codebase and even outside the browser, so there are no preconditions and
   // instead we ignore invalid or partially invalid input.
@@ -578,12 +636,11 @@ void NigoriSyncBridgeImpl::AddTrustedVaultDecryptionKeys(
     return;
   }
 
+  const std::vector<std::string> encoded_keys = Base64EncodeKeys(keys);
   NigoriKeyBag tmp_key_bag = NigoriKeyBag::CreateEmpty();
-  for (const std::string& key : keys) {
-    if (!key.empty()) {
-      tmp_key_bag.AddKey(Nigori::CreateByDerivation(
-          GetKeyDerivationParamsForPendingKeys(), key));
-    }
+  for (const std::string& encoded_key : encoded_keys) {
+    tmp_key_bag.AddKey(Nigori::CreateByDerivation(
+        GetKeyDerivationParamsForPendingKeys(), encoded_key));
   }
 
   base::Optional<ModelError> error = TryDecryptPendingKeysWith(tmp_key_bag);
@@ -605,12 +662,19 @@ void NigoriSyncBridgeImpl::AddTrustedVaultDecryptionKeys(
 
 void NigoriSyncBridgeImpl::EnableEncryptEverything() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  NOTIMPLEMENTED();
+  // This method is relevant only for Directory implementation. USS
+  // implementation catches that as part of SetEncryptionPassphrase(), which
+  // is always called together with this method.
+  // TODO(crbug.com/1033040): remove this method and clean up calling sides.
 }
 
 bool NigoriSyncBridgeImpl::IsEncryptEverythingEnabled() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  NOTIMPLEMENTED();
+  // This method is relevant only for Directory implementation and used only
+  // for testing.
+  // TODO(crbug.com/1033040): remove this method or at least append ForTesting
+  // suffix.
+  NOTREACHED();
   return false;
 }
 
@@ -646,23 +710,14 @@ bool NigoriSyncBridgeImpl::NeedKeystoreKey() const {
 }
 
 bool NigoriSyncBridgeImpl::SetKeystoreKeys(
-    const std::vector<std::string>& keys) {
+    const std::vector<std::vector<uint8_t>>& keys) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (keys.empty() || keys.back().empty()) {
     return false;
   }
 
-  std::vector<std::string> encoded_keystore_keys(keys.size());
-  for (size_t i = 0; i < keys.size(); ++i) {
-    // We need to apply base64 encoding before using the keys to provide
-    // backward compatibility with non-USS implementation. It's actually needed
-    // only for the keys persisting, but was applied before passing keys to
-    // cryptographer, so we have to do the same.
-    base::Base64Encode(keys[i], &encoded_keystore_keys[i]);
-  }
-
   state_.keystore_keys_cryptographer =
-      KeystoreKeysCryptographer::FromKeystoreKeys(encoded_keystore_keys);
+      KeystoreKeysCryptographer::FromKeystoreKeys(Base64EncodeKeys(keys));
   if (!state_.keystore_keys_cryptographer) {
     state_.keystore_keys_cryptographer =
         KeystoreKeysCryptographer::CreateEmpty();
@@ -683,18 +738,6 @@ bool NigoriSyncBridgeImpl::SetKeystoreKeys(
   // Note: we don't need to persist keystore keys here, because we will receive
   // Nigori node right after this method and persist all the data during
   // UpdateLocalState().
-  // TODO(crbug.com/922900): verify that this method is always called before
-  // update or init of Nigori node. If this is the case we don't need to touch
-  // cryptographer here. If this is not the case, old code is actually broken:
-  // 1. Receive and persist the Nigori node after key rotation on different
-  // client.
-  // 2. Browser crash.
-  // 3. After load we don't request new Nigori node from the server (we already
-  // have the newest one), so logic with simultaneous sending of Nigori node
-  // and keystore keys doesn't help. We don't request new keystore keys
-  // explicitly (we already have one). We can't decrypt and use Nigori node
-  // with old keystore keys.
-  NOTIMPLEMENTED();
   return true;
 }
 
@@ -799,6 +842,7 @@ base::Optional<ModelError> NigoriSyncBridgeImpl::UpdateLocalState(
 
   const sync_pb::EncryptedData& encryption_keybag =
       specifics.encryption_keybag();
+  base::Optional<ModelError> error;
   switch (state_.passphrase_type) {
     case NigoriSpecifics::UNKNOWN:
       // NigoriSpecifics with UNKNOWN type is not valid and shouldn't reach
@@ -806,14 +850,10 @@ base::Optional<ModelError> NigoriSyncBridgeImpl::UpdateLocalState(
       // it can't be in this state as well.
       NOTREACHED();
       break;
-    case NigoriSpecifics::KEYSTORE_PASSPHRASE: {
-      base::Optional<ModelError> error = UpdateCryptographerFromKeystoreNigori(
+    case NigoriSpecifics::KEYSTORE_PASSPHRASE:
+      error = UpdateCryptographerFromKeystoreNigori(
           encryption_keybag, specifics.keystore_decryptor_token());
-      if (error) {
-        return error;
-      }
       break;
-    }
     case NigoriSpecifics::CUSTOM_PASSPHRASE:
       state_.custom_passphrase_key_derivation_params =
           GetKeyDerivationParamsFromSpecifics(specifics);
@@ -821,7 +861,10 @@ base::Optional<ModelError> NigoriSyncBridgeImpl::UpdateLocalState(
     case NigoriSpecifics::IMPLICIT_PASSPHRASE:
     case NigoriSpecifics::FROZEN_IMPLICIT_PASSPHRASE:
     case NigoriSpecifics::TRUSTED_VAULT_PASSPHRASE:
-      UpdateCryptographerFromNonKeystoreNigori(encryption_keybag);
+      error = UpdateCryptographerFromNonKeystoreNigori(encryption_keybag);
+  }
+  if (error) {
+    return error;
   }
 
   if (passphrase_type_changed) {
@@ -894,46 +937,30 @@ NigoriSyncBridgeImpl::UpdateCryptographerFromKeystoreNigori(
   return base::nullopt;
 }
 
-void NigoriSyncBridgeImpl::UpdateCryptographerFromNonKeystoreNigori(
+base::Optional<ModelError>
+NigoriSyncBridgeImpl::UpdateCryptographerFromNonKeystoreNigori(
     const sync_pb::EncryptedData& encryption_keybag) {
-  // TODO(crbug.com/922900): support the case when client knows passphrase.
-  NOTIMPLEMENTED();
   DCHECK(!encryption_keybag.blob().empty());
 
-  // TODO(crbug.com/922900): consider detection of protocol violation instead
-  // of cleaning previously set |pending_keys|. If they was set, they should
-  // remain set after exiting this function (but might have different value).
-  // Clean up previous pending keys state.
-  state_.pending_keys.reset();
-
-  if (!state_.cryptographer->CanDecrypt(encryption_keybag)) {
-    // Historically, prior to USS, key derived from explicit passphrase was
-    // stored in prefs and effectively we do migration here.
-    NigoriKeyBag key_bag = NigoriKeyBag::CreateEmpty();
-    const std::string key_name =
-        key_bag.AddKeyFromProto(explicit_passphrase_key_);
-    if (key_bag.CanDecrypt(encryption_keybag)) {
-      state_.cryptographer->EmplaceKeysFrom(key_bag);
-      DCHECK(state_.cryptographer->CanDecrypt(encryption_keybag));
-      state_.cryptographer->SelectDefaultEncryptionKey(key_name);
-    } else {
-      // This will lead to OnPassphraseRequired() call later.
-      state_.pending_keys = encryption_keybag;
-      state_.cryptographer->ClearDefaultEncryptionKey();
-      return;
-    }
+  // Attempt to decrypt |encryption_keybag| with current default key and
+  // restored |explicit_passphrase_key_|. Note: key derived from explicit
+  // passphrase was stored in prefs prior to USS, and using
+  // |explicit_passphrase_key_| here effectively does migration.
+  NigoriKeyBag decryption_key_bag = NigoriKeyBag::CreateEmpty();
+  // If |explicit_passphrase_key_| is empty, following line is no-op.
+  // TODO(crbug.com/1020084): don't allow decryption with
+  // |explicit_passphrase_key_| for TRUSTED_VAULT_PASSPHRASE.
+  decryption_key_bag.AddKeyFromProto(explicit_passphrase_key_);
+  if (state_.cryptographer->CanEncrypt()) {
+    // TODO(crbug.com/922900): don't allow decryption with default key if
+    // |passphrase_type| was changed.
+    decryption_key_bag.AddKeyFromProto(
+        state_.cryptographer->ExportDefaultKey());
   }
-  // |cryptographer_| can already have explicit passphrase, in that case it
-  // should be able to decrypt |encryption_keybag|. We need to take keys from
-  // |encryption_keybag| since some other client can write old keys to
-  // |encryption_keybag| and could encrypt some data with them.
-  // TODO(crbug.com/922900): find and document at least one real case
-  // corresponding to the sentence above.
-  // TODO(crbug.com/922900): we may also need to rewrite Nigori with keys
-  // currently stored in cryptographer, in case it doesn't have them already.
-  sync_pb::NigoriKeyBag key_bag;
-  state_.cryptographer->Decrypt(encryption_keybag, &key_bag);
-  state_.cryptographer->EmplaceKeysFrom(NigoriKeyBag::CreateFromProto(key_bag));
+
+  state_.pending_keys = encryption_keybag;
+  state_.cryptographer->ClearDefaultEncryptionKey();
+  return TryDecryptPendingKeysWith(decryption_key_bag);
 }
 
 base::Optional<ModelError> NigoriSyncBridgeImpl::TryDecryptPendingKeysWith(
@@ -1025,7 +1052,8 @@ void NigoriSyncBridgeImpl::ApplyDisableSyncChanges() {
   broadcasting_observer_->OnCryptographerStateChanged(
       state_.cryptographer.get(),
       /*has_pending_keys=*/false);
-  broadcasting_observer_->OnEncryptedTypesChanged(SensitiveTypes(), false);
+  broadcasting_observer_->OnEncryptedTypesChanged(AlwaysEncryptedUserTypes(),
+                                                  false);
 }
 
 const CryptographerImpl& NigoriSyncBridgeImpl::GetCryptographerForTesting()
@@ -1121,8 +1149,9 @@ void NigoriSyncBridgeImpl::MaybeNotifyBootstrapTokenUpdated() const {
       NOTREACHED();
       return;
     case NigoriSpecifics::KEYSTORE_PASSPHRASE:
-      // TODO(crbug.com/922900): notify about keystore bootstrap token updates.
-      NOTIMPLEMENTED();
+      // TODO(crbug.com/922900): notify about keystore bootstrap token updates
+      // if decided to support keystore keys migration on transit to Directory
+      // implementation.
       return;
     case NigoriSpecifics::TRUSTED_VAULT_PASSPHRASE:
       // This may be problematic for the MIGRATION_DONE case because the local
@@ -1164,6 +1193,28 @@ sync_pb::NigoriLocalData NigoriSyncBridgeImpl::SerializeAsNigoriLocalData()
 void NigoriSyncBridgeImpl::MaybeTriggerKeystoreKeyRotation() {
   if (state_.NeedsKeystoreKeyRotation()) {
     QueuePendingLocalCommit(PendingLocalNigoriCommit::ForKeystoreKeyRotation());
+  }
+}
+
+void NigoriSyncBridgeImpl::MaybeMigrateKeystoreKeys(
+    const std::string& packed_keystore_keys) {
+  if (!state_.keystore_keys_cryptographer->IsEmpty() ||
+      packed_keystore_keys.empty()) {
+    return;
+  }
+  std::vector<std::string> keystore_keys =
+      UnpackKeystoreKeys(packed_keystore_keys, *encryptor_);
+  if (keystore_keys.empty()) {
+    // Error occurred during unpacking.
+    return;
+  }
+
+  state_.keystore_keys_cryptographer =
+      KeystoreKeysCryptographer::FromKeystoreKeys(keystore_keys);
+  if (!state_.keystore_keys_cryptographer) {
+    // Crypto error occurred during cryptographer creation.
+    state_.keystore_keys_cryptographer =
+        KeystoreKeysCryptographer::CreateEmpty();
   }
 }
 

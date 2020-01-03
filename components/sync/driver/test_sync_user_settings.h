@@ -6,7 +6,6 @@
 #define COMPONENTS_SYNC_DRIVER_TEST_SYNC_USER_SETTINGS_H_
 
 #include <string>
-#include <vector>
 
 #include "components/sync/driver/sync_user_settings.h"
 
@@ -35,7 +34,6 @@ class TestSyncUserSettings : public SyncUserSettings {
   void SetSelectedTypes(bool sync_everything,
                         UserSelectableTypeSet types) override;
   UserSelectableTypeSet GetRegisteredSelectableTypes() const override;
-  UserSelectableTypeSet GetForcedTypes() const override;
 
 #if defined(OS_CHROMEOS)
   bool IsSyncAllOsTypesEnabled() const override;
@@ -44,7 +42,7 @@ class TestSyncUserSettings : public SyncUserSettings {
                           UserSelectableOsTypeSet types) override;
   UserSelectableOsTypeSet GetRegisteredSelectableOsTypes() const override;
 
-  bool GetOsSyncFeatureEnabled() const override;
+  bool IsOsSyncFeatureEnabled() const override;
   void SetOsSyncFeatureEnabled(bool enabled) override;
 #endif
 
@@ -62,9 +60,6 @@ class TestSyncUserSettings : public SyncUserSettings {
 
   void SetEncryptionPassphrase(const std::string& passphrase) override;
   bool SetDecryptionPassphrase(const std::string& passphrase) override;
-  void AddTrustedVaultDecryptionKeys(
-      const std::string& gaia_id,
-      const std::vector<std::string>& keys) override;
 
   void SetFirstSetupComplete();
   void ClearFirstSetupComplete();

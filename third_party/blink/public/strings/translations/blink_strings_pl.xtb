@@ -82,7 +82,6 @@
 <translation id="3822383571486410024">Wydłuż ten tekst przynajmniej do <ph name="MIN_CHARACTERS" /> znaków (teraz używasz <ph name="CURRENT_LENGTH" /> znaków).</translation>
 <translation id="383465348367842624">Część przed znakiem „<ph name="ATSIGN" />” nie może zawierać symbolu „<ph name="INVALIDCHARACTER" />”.</translation>
 <translation id="3846214748874656680">Zamknij pełny ekran</translation>
-<translation id="3889183436948184105">wersja</translation>
 <translation id="3920932319529768807">podsumowanie</translation>
 <translation id="3924558731517983934">aplikacja</translation>
 <translation id="3944740393230681990">prolog</translation>
@@ -114,9 +113,12 @@
 <translation id="479989351350248267">search</translation>
 <translation id="4812940957355064477">Wpisz liczbę.</translation>
 <translation id="4912536737030637138">pozycja bibliograficzna</translation>
+<translation id="492244087561876220">komentarz</translation>
+<translation id="4971739861736909480">Wybrano <ph name="ACCNAME" /></translation>
 <translation id="4975562563186953947">Wybrano: <ph name="SELECTED_COUNT" /></translation>
 <translation id="4992066212339426712">Wyłącz wyciszenie</translation>
 <translation id="49969490063480558">Podaj część po znaku „<ph name="ATSIGN" />”. Adres „<ph name="INVALIDADDRESS" />” jest niepełny.</translation>
+<translation id="5022314756875057021">grupa wierszy</translation>
 <translation id="5034860022980953847">wskaźnik postępu</translation>
 <translation id="5090250355906949916">pasek czasu odtwarzania filmu</translation>
 <translation id="5093189678851173835">epigraf</translation>
@@ -217,6 +219,7 @@
 <translation id="7888071071722539607">Uwzględnij znak „<ph name="ATSIGN" />” w adresie e-mail. W adresie „<ph name="INVALIDADDRESS" />” brakuje znaku „<ph name="ATSIGN" />”.</translation>
 <translation id="7891486169920085145">podział</translation>
 <translation id="795667975304826397">Nie wybrano pliku</translation>
+<translation id="7962328325860248200">Nie wybrano: <ph name="ACCNAME" /></translation>
 <translation id="8034303206267677282">ważne</translation>
 <translation id="8053789581856978548">pole tekstowe wyszukiwania</translation>
 <translation id="8057695513531652401">uwaga</translation>

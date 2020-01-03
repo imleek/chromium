@@ -22,8 +22,8 @@
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/browser/web_package/bundled_exchanges_handle_tracker.h"
 #include "content/browser/web_package/prefetched_signed_exchange_cache.h"
+#include "content/browser/web_package/web_bundle_handle_tracker.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/browser/webui/web_ui_impl.h"
 #include "content/common/frame_messages.h"
@@ -45,7 +45,6 @@
 #include "content/public/common/navigation_policy.h"
 #include "content/public/common/url_utils.h"
 #include "net/base/net_errors.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "url/gurl.h"
 #include "url/url_util.h"
@@ -167,6 +166,12 @@ void NavigatorImpl::DidNavigate(
     }
   }
 
+  // For browser initiated navigation and same document navigation, frame policy
+  // in commit_params is nullopt and should use fallback value instead.
+  const blink::FramePolicy pending_frame_policy =
+      navigation_request->commit_params().frame_policy.value_or(
+          frame_tree_node->pending_frame_policy());
+
   // DidNavigateFrame() must be called before replicating the new origin and
   // other properties to proxies.  This is because it destroys the subframes of
   // the frame we're navigating from, which might trigger those subframes to
@@ -174,7 +179,7 @@ void NavigatorImpl::DidNavigate(
   // frame's origin.  See https://crbug.com/825283.
   frame_tree_node->render_manager()->DidNavigateFrame(
       render_frame_host, params.gesture == NavigationGestureUser,
-      is_same_document_navigation);
+      is_same_document_navigation, pending_frame_policy);
 
   // Save the new page's origin and other properties, and replicate them to
   // proxies, including the proxy created in DidNavigateFrame() to replace the
@@ -186,7 +191,8 @@ void NavigatorImpl::DidNavigate(
 
   // Save the activation status of the previous page here before it gets reset
   // in FrameTreeNode::ResetForNavigation.
-  bool previous_document_was_activated = frame_tree->root()->HasBeenActivated();
+  bool previous_document_was_activated =
+      frame_tree->root()->HasStickyUserActivation();
 
   // Navigating to a new location means a new, fresh set of http headers and/or
   // <meta> elements - we need to reset CSP and Feature Policy.
@@ -525,8 +531,7 @@ void NavigatorImpl::OnBeginNavigation(
     mojo::PendingRemote<blink::mojom::NavigationInitiator> navigation_initiator,
     scoped_refptr<PrefetchedSignedExchangeCache>
         prefetched_signed_exchange_cache,
-    std::unique_ptr<BundledExchangesHandleTracker>
-        bundled_exchanges_handle_tracker) {
+    std::unique_ptr<WebBundleHandleTracker> web_bundle_handle_tracker) {
   // TODO(clamy): the url sent by the renderer should be validated with
   // FilterURL.
   // This is a renderer-initiated navigation.
@@ -566,14 +571,6 @@ void NavigatorImpl::OnBeginNavigation(
       GetNavigationEntryForRendererInitiatedNavigation(*common_params,
                                                        frame_tree_node);
   NavigationEntryImpl* current_entry = controller_->GetLastCommittedEntry();
-  if (current_entry && common_params->url == current_entry->GetReferrer().url) {
-    // Looks like a potential client redirect loop. Turn off any preview
-    // interventions in case they are at fault. Motivated by crbug.com/987062
-    common_params->previews_state = PREVIEWS_OFF;
-    UMA_HISTOGRAM_BOOLEAN("Navigation.ClientRedirectCycle.RedirectToReferrer",
-                          true);
-  }
-
   // Only consult the delegate for override state if there is no current entry,
   // since that state should only apply to newly created tabs (and not cases
   // where the NavigationEntry recorded the state).
@@ -589,7 +586,7 @@ void NavigatorImpl::OnBeginNavigation(
           std::move(blob_url_loader_factory), std::move(navigation_client),
           std::move(navigation_initiator),
           std::move(prefetched_signed_exchange_cache),
-          std::move(bundled_exchanges_handle_tracker)));
+          std::move(web_bundle_handle_tracker)));
   NavigationRequest* navigation_request = frame_tree_node->navigation_request();
 
   // This frame has already run beforeunload before it sent this IPC.  See if

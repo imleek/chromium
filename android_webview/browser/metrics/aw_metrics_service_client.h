@@ -19,6 +19,7 @@
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 
+class PrefRegistrySimple;
 class PrefService;
 
 namespace metrics {
@@ -103,6 +104,9 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
   AwMetricsServiceClient();
   ~AwMetricsServiceClient() override;
 
+  // Registers local state prefs used by this class.
+  static void RegisterPrefs(PrefRegistrySimple* registry);
+
   void Initialize(PrefService* pref_service);
   void SetHaveMetricsConsent(bool user_consent, bool app_consent);
   void SetFastStartupForTesting(bool fast_startup_for_testing);
@@ -122,7 +126,7 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
   bool GetBrand(std::string* brand_code) override;
   metrics::SystemProfileProto::Channel GetChannel() override;
   std::string GetVersionString() override;
-  void CollectFinalMetricsForLog(const base::Closure& done_callback) override;
+  void CollectFinalMetricsForLog(base::OnceClosure done_callback) override;
   std::unique_ptr<metrics::MetricsLogUploader> CreateUploader(
       const GURL& server_url,
       const GURL& insecure_server_url,
@@ -185,6 +189,7 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
   bool user_consent_ = false;
   bool app_consent_ = false;
   bool is_in_sample_ = false;
+  bool is_in_package_name_sample_ = false;
   bool fast_startup_for_testing_ = false;
 
   // When non-zero, this overrides the default value in

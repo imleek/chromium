@@ -109,7 +109,7 @@ constexpr net::NetworkTrafficAnnotationTag
 bool RequestIsSafeToServe(const net::HttpServerRequestInfo& info) {
   // For browser-originating requests, serve only those that are coming from
   // pages loaded off localhost or fixed IPs.
-  std::string header = info.headers["host"];
+  std::string header = info.GetHeaderValue("host");
   if (header.empty())
     return true;
   GURL url = GURL("http://" + header);
@@ -131,7 +131,7 @@ class ServerWrapper : net::HttpServer::Delegate {
 
   void AcceptWebSocket(int connection_id,
                        const net::HttpServerRequestInfo& request);
-  void SendOverWebSocket(int connection_id, const std::string& message);
+  void SendOverWebSocket(int connection_id, std::string message);
   void SendResponse(int connection_id,
                     const net::HttpServerResponseInfo& response);
   void Send200(int connection_id,
@@ -180,9 +180,8 @@ void ServerWrapper::AcceptWebSocket(int connection_id,
                            kDevtoolsHttpHandlerTrafficAnnotation);
 }
 
-void ServerWrapper::SendOverWebSocket(int connection_id,
-                                      const std::string& message) {
-  server_->SendOverWebSocket(connection_id, message,
+void ServerWrapper::SendOverWebSocket(int connection_id, std::string message) {
+  server_->SendOverWebSocket(connection_id, std::move(message),
                              kDevtoolsHttpHandlerTrafficAnnotation);
 }
 
@@ -336,10 +335,11 @@ class DevToolsAgentHostClientImpl : public DevToolsAgentHostClient {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     DCHECK(agent_host == agent_host_.get());
 
-    std::string message =
-        "{ \"method\": \"Inspector.detached\", "
-        "\"params\": { \"reason\": \"target_closed\"} }";
-    DispatchProtocolMessage(agent_host, message);
+    constexpr char kMsg[] =
+        "{\"method\":\"Inspector.detached\","
+        "\"params\":{\"reason\":\"target_closed\"}}";
+    DispatchProtocolMessage(
+        agent_host, base::as_bytes(base::make_span(kMsg, strlen(kMsg))));
 
     agent_host_ = nullptr;
     task_runner_->PostTask(
@@ -349,16 +349,17 @@ class DevToolsAgentHostClientImpl : public DevToolsAgentHostClient {
   }
 
   void DispatchProtocolMessage(DevToolsAgentHost* agent_host,
-                               const std::string& message) override {
+                               base::span<const uint8_t> message) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     DCHECK(agent_host == agent_host_.get());
-    task_runner_->PostTask(FROM_HERE,
-                           base::BindOnce(&ServerWrapper::SendOverWebSocket,
-                                          base::Unretained(server_wrapper_),
-                                          connection_id_, message));
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&ServerWrapper::SendOverWebSocket,
+                       base::Unretained(server_wrapper_), connection_id_,
+                       std::string(message.begin(), message.end())));
   }
 
-  void OnMessage(const std::string& message) {
+  void OnMessage(base::span<const uint8_t> message) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     if (agent_host_)
       agent_host_->DispatchProtocolMessage(this, message);
@@ -574,7 +575,7 @@ void DevToolsHttpHandler::OnJsonRequest(
     version.SetString("User-Agent",
                       GetContentClient()->browser()->GetUserAgent());
     version.SetString("V8-Version", V8_VERSION_STRING);
-    std::string host = info.headers["host"];
+    std::string host = info.GetHeaderValue("host");
     version.SetString(
         kTargetWebSocketDebuggerUrlField,
         base::StringPrintf("ws://%s%s", host.c_str(), browser_guid_.c_str()));
@@ -597,7 +598,8 @@ void DevToolsHttpHandler::OnJsonRequest(
     DevToolsAgentHost::List list =
         manager->delegate() ? manager->delegate()->RemoteDebuggingTargets()
                             : DevToolsAgentHost::GetOrCreateAll();
-    RespondToJsonList(connection_id, info.headers["host"], std::move(list));
+    RespondToJsonList(connection_id, info.GetHeaderValue("host"),
+                      std::move(list));
     return;
   }
 
@@ -612,7 +614,7 @@ void DevToolsHttpHandler::OnJsonRequest(
                "Could not create new page");
       return;
     }
-    std::string host = info.headers["host"];
+    std::string host = info.GetHeaderValue("host");
     std::unique_ptr<base::DictionaryValue> dictionary(
         SerializeDescriptor(agent_host, host));
     SendJson(connection_id, net::HTTP_OK, dictionary.get(), std::string());
@@ -710,8 +712,8 @@ void DevToolsHttpHandler::OnWebSocketRequest(
     scoped_refptr<DevToolsAgentHost> browser_agent =
         DevToolsAgentHost::CreateForBrowser(
             thread_->task_runner(),
-            base::Bind(&DevToolsSocketFactory::CreateForTethering,
-                       base::Unretained(socket_factory_.get())));
+            base::BindRepeating(&DevToolsSocketFactory::CreateForTethering,
+                                base::Unretained(socket_factory_.get())));
     connection_to_client_[connection_id].reset(new DevToolsAgentHostClientImpl(
         thread_->task_runner(), server_wrapper_.get(), connection_id,
         browser_agent));
@@ -739,12 +741,12 @@ void DevToolsHttpHandler::OnWebSocketRequest(
   AcceptWebSocket(connection_id, request);
 }
 
-void DevToolsHttpHandler::OnWebSocketMessage(
-    int connection_id,
-    const std::string& data) {
+void DevToolsHttpHandler::OnWebSocketMessage(int connection_id,
+                                             std::string data) {
   auto it = connection_to_client_.find(connection_id);
-  if (it != connection_to_client_.end())
-    it->second->OnMessage(data);
+  if (it != connection_to_client_.end()) {
+    it->second->OnMessage(base::as_bytes(base::make_span(data)));
+  }
 }
 
 void DevToolsHttpHandler::OnClose(int connection_id) {

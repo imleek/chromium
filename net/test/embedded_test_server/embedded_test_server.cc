@@ -25,7 +25,7 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/port_util.h"
-#include "net/cert/pem_tokenizer.h"
+#include "net/cert/pem.h"
 #include "net/cert/test_root_certs.h"
 #include "net/log/net_log_source.h"
 #include "net/socket/ssl_server_socket.h"
@@ -85,6 +85,12 @@ void EmbeddedTestServer::SetConnectionListener(
   DCHECK(!io_thread_.get())
       << "ConnectionListener must be set before starting the server.";
   connection_listener_ = listener;
+}
+
+EmbeddedTestServerHandle EmbeddedTestServer::StartAndReturnHandle(int port) {
+  if (!Start(port))
+    return EmbeddedTestServerHandle();
+  return EmbeddedTestServerHandle(this);
 }
 
 bool EmbeddedTestServer::Start(int port) {
@@ -244,9 +250,10 @@ void EmbeddedTestServer::HandleRequest(HttpConnection* connection,
   }
 
   response->SendResponse(
-      base::Bind(&HttpConnection::SendResponseBytes, connection->GetWeakPtr()),
-      base::Bind(&EmbeddedTestServer::DidClose, weak_factory_.GetWeakPtr(),
-                 connection));
+      base::BindRepeating(&HttpConnection::SendResponseBytes,
+                          connection->GetWeakPtr()),
+      base::BindOnce(&EmbeddedTestServer::DidClose, weak_factory_.GetWeakPtr(),
+                     connection));
 }
 
 GURL EmbeddedTestServer::GetURL(const std::string& relative_url) const {
@@ -323,6 +330,8 @@ std::string EmbeddedTestServer::GetCertificateName() const {
       return "ok_cert_by_intermediate.pem";
     case CERT_BAD_VALIDITY:
       return "bad_validity.pem";
+    case CERT_TEST_NAMES:
+      return "test_names.pem";
   }
 
   return "ok_cert.pem";
@@ -526,6 +535,28 @@ bool EmbeddedTestServer::PostTaskToIOThreadAndWait(
   run_loop.Run();
 
   return true;
+}
+
+EmbeddedTestServerHandle::EmbeddedTestServerHandle(
+    EmbeddedTestServerHandle&& other) {
+  operator=(std::move(other));
+}
+
+EmbeddedTestServerHandle& EmbeddedTestServerHandle::operator=(
+    EmbeddedTestServerHandle&& other) {
+  EmbeddedTestServerHandle temporary;
+  std::swap(other.test_server_, temporary.test_server_);
+  std::swap(temporary.test_server_, test_server_);
+  return *this;
+}
+
+EmbeddedTestServerHandle::EmbeddedTestServerHandle(
+    EmbeddedTestServer* test_server)
+    : test_server_(test_server) {}
+
+EmbeddedTestServerHandle::~EmbeddedTestServerHandle() {
+  if (test_server_)
+    EXPECT_TRUE(test_server_->ShutdownAndWaitUntilComplete());
 }
 
 }  // namespace test_server

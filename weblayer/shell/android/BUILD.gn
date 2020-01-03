@@ -21,14 +21,20 @@ android_assets("weblayer_shell_assets") {
   ]
 }
 
+android_resources("weblayer_shell_resources") {
+  resource_dirs = [ "shell_apk/res" ]
+  custom_package = "org.chromium.weblayer.shell"
+}
+
 android_library("weblayer_shell_java") {
   testonly = true
 
   deps = [
+    ":weblayer_shell_resources",
     "//third_party/android_deps:android_support_v4_java",
     "//weblayer/public/java",
   ]
-  java_files = [
+  sources = [
     "shell_apk/src/org/chromium/weblayer/shell/InstrumentationActivity.java",
     "shell_apk/src/org/chromium/weblayer/shell/WebLayerShellActivity.java",
   ]
@@ -102,6 +108,7 @@ if (public_android_sdk) {
       "@WrappedPath(apks/WebLayerShellSystemWebView.apk)",
       "--support-apk-path",
       "@WrappedPath(apks/TrichromeLibrary.apk)",
+      "--support-apk-path",
       "@WrappedPath(apks/TrichromeWebView.apk)",
       "--switch-webview-to",
       system_webview_package_name,
@@ -160,6 +167,7 @@ android_apk("weblayer_support_apk") {
 
   # Transitive dependencies
   deps += [
+    "//components/safe_browsing/android:safe_browsing_java",
     "//components/viz/service:service_java",
     "//media/base/android:media_java",
     "//media/capture/video/android:capture_java",

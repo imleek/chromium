@@ -84,6 +84,10 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableAutomaticLazyFrameLoading(bool);
   BLINK_PLATFORM_EXPORT static void EnableAutomaticLazyImageLoading(bool);
   BLINK_PLATFORM_EXPORT static void EnableBackgroundFetch(bool);
+  BLINK_PLATFORM_EXPORT static void EnableBrowserVerifiedUserActivationKeyboard(
+      bool);
+  BLINK_PLATFORM_EXPORT static void EnableBrowserVerifiedUserActivationMouse(
+      bool);
   BLINK_PLATFORM_EXPORT static void EnableBlockingFocusWithoutUserActivation(
       bool);
   BLINK_PLATFORM_EXPORT static void EnableCacheInlineScriptCode(bool);
@@ -107,7 +111,6 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableFileSystem(bool);
   BLINK_PLATFORM_EXPORT static void EnableForceSynchronousHTMLParsing(bool);
   BLINK_PLATFORM_EXPORT static void EnableForceTallerSelectPopup(bool);
-  BLINK_PLATFORM_EXPORT static void EnableFormControlsRefresh(bool);
   BLINK_PLATFORM_EXPORT static void EnableGenericSensorExtraClasses(bool);
   BLINK_PLATFORM_EXPORT static void EnableImplicitRootScroller(bool);
   BLINK_PLATFORM_EXPORT static void EnableCSSOMViewScrollCoordinates(bool);
@@ -123,8 +126,6 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableMediaCapture(bool);
   BLINK_PLATFORM_EXPORT static void EnableMediaSession(bool);
   BLINK_PLATFORM_EXPORT static void EnableMiddleClickAutoscroll(bool);
-  BLINK_PLATFORM_EXPORT static void EnableMimeHandlerViewInCrossProcessFrame(
-      bool);
   BLINK_PLATFORM_EXPORT static void EnableNavigatorContentUtils(bool);
   BLINK_PLATFORM_EXPORT static void EnableNetInfoDownlinkMax(bool);
   BLINK_PLATFORM_EXPORT static void EnableNeverSlowMode(bool);
@@ -178,6 +179,7 @@ class WebRuntimeFeatures {
       bool);
   BLINK_PLATFORM_EXPORT static void EnableV8IdleTasks(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebAuth(bool);
+  BLINK_PLATFORM_EXPORT static void EnableWebAuthenticationFeaturePolicy(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebBluetooth(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebBluetoothScanning(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebGL2ComputeContext(bool);
@@ -190,11 +192,8 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableWebUsb(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXR(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXRARModule(bool);
-  BLINK_PLATFORM_EXPORT static void EnableWebXRARDOMOverlay(bool);
-  BLINK_PLATFORM_EXPORT static void EnableWebXRAnchors(bool);
-  BLINK_PLATFORM_EXPORT static void EnableWebXrGamepadModule(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXRHitTest(bool);
-  BLINK_PLATFORM_EXPORT static void EnableWebXRPlaneDetection(bool);
+  BLINK_PLATFORM_EXPORT static void EnableWebXRIncubations(bool);
   BLINK_PLATFORM_EXPORT static void EnableXSLT(bool);
   BLINK_PLATFORM_EXPORT static void ForceOverlayFullscreenVideo(bool);
   BLINK_PLATFORM_EXPORT static void EnableTimerThrottlingForBackgroundTabs(
@@ -211,6 +210,7 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableVideoFullscreenOrientationLock(bool);
   BLINK_PLATFORM_EXPORT static void EnableVideoRotateToFullscreen(bool);
   BLINK_PLATFORM_EXPORT static void EnableVideoFullscreenDetection(bool);
+  BLINK_PLATFORM_EXPORT static void EnableVideoPlaybackQuality(bool);
   BLINK_PLATFORM_EXPORT static void EnableMediaControlsOverlayPlayButton(bool);
   BLINK_PLATFORM_EXPORT static void EnableRemotePlaybackBackend(bool);
   BLINK_PLATFORM_EXPORT static void EnableMediaCastOverlayButton(bool);
@@ -224,7 +224,6 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableAutoplayIgnoresWebAudio(bool);
   BLINK_PLATFORM_EXPORT static void EnableMediaControlsExpandGesture(bool);
   BLINK_PLATFORM_EXPORT static void EnableTranslateService(bool);
-  BLINK_PLATFORM_EXPORT static void EnableMergeBlockingNonBlockingPools(bool);
   BLINK_PLATFORM_EXPORT static void EnableGetDisplayMedia(bool);
   BLINK_PLATFORM_EXPORT static void EnableAllowSyncXHRInPageDismissal(bool);
   BLINK_PLATFORM_EXPORT static void EnableShadowDOMV0(bool);

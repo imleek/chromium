@@ -11,7 +11,7 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/jni_string.h"
-#include "components/signin/internal/identity_manager/android/jni_headers/IdentityMutator_jni.h"
+#include "components/signin/public/android/jni_headers/IdentityMutator_jni.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #endif
 
@@ -52,8 +52,7 @@ void JniIdentityMutator::ReloadAllAccountsFromSystemWithPrimaryAccount(
   DCHECK(device_accounts_synchronizer);
   base::Optional<CoreAccountId> primary_account_id;
   if (j_primary_account_id) {
-    primary_account_id = CoreAccountId();
-    primary_account_id->id =
+    primary_account_id =
         ConvertFromJavaCoreAccountId(env, j_primary_account_id);
   }
   device_accounts_synchronizer->ReloadAllAccountsFromSystemWithPrimaryAccount(

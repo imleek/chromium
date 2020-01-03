@@ -269,7 +269,7 @@ using completion_block_util::GetSafeHTTPAuthCompletion;
       addTextFieldWithConfigurationHandler:^(UITextField* textField) {
         textField.text = defaultText;
         textField.accessibilityIdentifier =
-            kJavaScriptDialogTextFieldAccessibiltyIdentifier;
+            kJavaScriptDialogTextFieldAccessibilityIdentifier;
       }];
 
   [self addDialogCoordinator:alertCoordinator forWebState:webState];
@@ -442,6 +442,8 @@ using completion_block_util::GetSafeHTTPAuthCompletion;
   [self.delegate dialogPresenter:self
        willShowDialogForWebState:self.presentedDialogWebState];
   [self.presentedDialogCoordinator start];
+  self.presentedDialogCoordinator.alertController.view.accessibilityIdentifier =
+      kJavaScriptDialogAccessibilityIdentifier;
 }
 
 - (void)dialogCoordinatorWasStopped:(AlertCoordinator*)coordinator {

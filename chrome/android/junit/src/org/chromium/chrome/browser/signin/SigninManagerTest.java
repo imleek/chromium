@@ -30,14 +30,15 @@ import org.mockito.Mock;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.DisableNativeTestRule;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.test.DisableNativeTestRule;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountTrackerService;
-import org.chromium.components.signin.identitymanager.CoreAccountId;
-import org.chromium.components.signin.identitymanager.CoreAccountInfo;
+import org.chromium.components.signin.base.CoreAccountId;
+import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.identitymanager.IdentityMutator;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
 import org.chromium.components.sync.AndroidSyncSettings;
 
@@ -231,7 +232,7 @@ public class SigninManagerTest {
 
         mSigninManager.onFirstRunCheckDone(); // Allow sign-in.
 
-        mSigninManager.signIn(account.getAccount(), null);
+        mSigninManager.signIn(SigninAccessPoint.UNKNOWN, account.getAccount(), null);
         assertTrue(mSigninManager.isOperationInProgress());
         AtomicInteger callCount = new AtomicInteger(0);
         mSigninManager.runAfterOperationInProgress(callCount::incrementAndGet);
@@ -261,7 +262,7 @@ public class SigninManagerTest {
 
         mSigninManager.onFirstRunCheckDone(); // Allow sign-in.
 
-        mSigninManager.signIn(account.getAccount(), null);
+        mSigninManager.signIn(SigninAccessPoint.UNKNOWN, account.getAccount(), null);
         assertTrue(mSigninManager.isOperationInProgress());
 
         // The following should throw an assertion error

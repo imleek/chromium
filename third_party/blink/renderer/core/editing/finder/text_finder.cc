@@ -249,7 +249,7 @@ void TextFinder::SetFindEndstateFocusAndSelection() {
   Node* node = active_match->FirstNode();
   if (node && node->IsInShadowTree()) {
     if (Node* host = node->OwnerShadowHost()) {
-      if (IsHTMLInputElement(*host) || IsHTMLTextAreaElement(*host))
+      if (IsA<HTMLInputElement>(*host) || IsA<HTMLTextAreaElement>(*host))
         node = host;
     }
   }
@@ -559,9 +559,9 @@ Vector<WebFloatRect> TextFinder::FindMatchRects() {
   return match_rects;
 }
 
-int TextFinder::SelectNearestFindMatch(const WebFloatPoint& point,
+int TextFinder::SelectNearestFindMatch(const gfx::PointF& point,
                                        WebRect* selection_rect) {
-  int index = NearestFindMatch(point, nullptr);
+  int index = NearestFindMatch(FloatPoint(point), nullptr);
   if (index != -1)
     return SelectFindMatch(static_cast<unsigned>(index), selection_rect);
 
@@ -673,8 +673,6 @@ TextFinder::TextFinder(WebLocalFrameImpl& owner_frame)
       should_locate_active_rect_(false),
       scoping_in_progress_(false),
       find_match_rects_are_valid_(false) {}
-
-TextFinder::~TextFinder() = default;
 
 bool TextFinder::SetMarkerActive(Range* range, bool active) {
   if (!range || range->collapsed())

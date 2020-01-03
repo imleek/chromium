@@ -57,10 +57,6 @@ copy("chrome_camera_app_css") {
 
 copy("chrome_camera_app_images") {
   sources = [
-    "src/images/browser_button_back.svg",
-    "src/images/browser_button_delete.svg",
-    "src/images/browser_button_export.svg",
-    "src/images/browser_button_print.svg",
     "src/images/camera_app_icons_128.png",
     "src/images/camera_app_icons_48.png",
     "src/images/camera_button_fps_30.svg",
@@ -113,13 +109,16 @@ copy("chrome_camera_app_images") {
 copy("chrome_camera_app_js") {
   sources = [
     "src/js/background.js",
+    "src/js/background_ops.js",
+    "src/js/chrome_util.js",
     "src/js/gallerybutton.js",
     "src/js/google-analytics-bundle.js",
     "src/js/intent.js",
     "src/js/main.js",
     "src/js/metrics.js",
+    "src/js/namespace.js",
     "src/js/nav.js",
-    "src/js/scrollbar.js",
+    "src/js/perf.js",
     "src/js/sound.js",
     "src/js/state.js",
     "src/js/toast.js",
@@ -135,6 +134,8 @@ copy("chrome_camera_app_js") {
 
 copy("chrome_camera_app_js_browser_proxy") {
   sources = [
+    # TODO(b/129956426): Remove dependency used only in closure compiler check.
+    "src/js/browser_proxy/browser_proxy_interface.js",
     "src/js/browser_proxy/browser_proxy.js",
   ]
 
@@ -161,7 +162,6 @@ copy("chrome_camera_app_js_models") {
     "src/js/models/file_video_saver.js",
     "src/js/models/filenamer.js",
     "src/js/models/filesystem.js",
-    "src/js/models/gallery.js",
     "src/js/models/intent_video_saver.js",
     "src/js/models/result_saver.js",
     "src/js/models/video_saver_interface.js",
@@ -186,11 +186,9 @@ copy("chrome_camera_app_js_mojo") {
 
 copy("chrome_camera_app_js_views") {
   sources = [
-    "src/js/views/browser.js",
     "src/js/views/camera.js",
     "src/js/views/camera_intent.js",
     "src/js/views/dialog.js",
-    "src/js/views/gallery_base.js",
     "src/js/views/settings.js",
     "src/js/views/view.js",
     "src/js/views/warning.js",
@@ -234,6 +232,7 @@ copy("chrome_camera_app_sounds") {
 
 copy("chrome_camera_app_views") {
   sources = [
+    "src/views/background.html",
     "src/views/main.html",
   ]
 

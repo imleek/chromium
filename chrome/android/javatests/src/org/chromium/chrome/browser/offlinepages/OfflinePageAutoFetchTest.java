@@ -29,7 +29,8 @@ import org.chromium.chrome.browser.DeviceConditions;
 import org.chromium.chrome.browser.offlinepages.AutoFetchNotifier.NotificationAction;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.util.UrlConstants;
@@ -154,7 +155,7 @@ public class OfflinePageAutoFetchTest {
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mInitialHistograms = histogramSnapshot();
-            mProfile = activityTab().getProfile();
+            mProfile = ((TabImpl) activityTab()).getProfile();
             mOfflinePageBridge = OfflinePageBridge.getForProfile(mProfile);
 
             if (!NetworkChangeNotifier.isInitialized()) {

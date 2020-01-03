@@ -48,10 +48,12 @@ TEST_F(RenderProcessHostUnitTest, GuestsAreNotSuitableHosts) {
       SiteInstanceImpl::CreateForURL(browser_context(), test_url);
   EXPECT_FALSE(RenderProcessHostImpl::IsSuitableHost(
       &guest_host, browser_context(), site_instance->GetIsolationContext(),
-      site_instance->GetSiteURL(), site_instance->lock_url()));
+      site_instance->GetSiteURL(), site_instance->lock_url(),
+      site_instance->IsGuest()));
   EXPECT_TRUE(RenderProcessHostImpl::IsSuitableHost(
       process(), browser_context(), site_instance->GetIsolationContext(),
-      site_instance->GetSiteURL(), site_instance->lock_url()));
+      site_instance->GetSiteURL(), site_instance->lock_url(),
+      site_instance->IsGuest()));
   EXPECT_EQ(process(),
             RenderProcessHostImpl::GetExistingProcessHost(site_instance.get()));
 }
@@ -133,7 +135,7 @@ TEST_F(RenderProcessHostUnitTest, ReuseCommittedSite) {
   std::string unique_name("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(),
-      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      TestRenderFrameHost::CreateStubInterfaceProviderReceiver(),
       TestRenderFrameHost::CreateStubBrowserInterfaceBrokerReceiver(),
       blink::WebTreeScopeType::kDocument, std::string(), unique_name, false,
       base::UnguessableToken::Create(), blink::FramePolicy(),

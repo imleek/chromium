@@ -20,6 +20,7 @@ is_linux_without_udev = is_linux && !use_udev
 test("device_unittests") {
   sources = [
     "base/synchronization/one_writer_seqlock_unittest.cc",
+    "bluetooth/bluetooth_adapter_android_unittest.cc",
     "bluetooth/bluetooth_adapter_mac_metrics_unittest.mm",
     "bluetooth/bluetooth_adapter_mac_unittest.mm",
     "bluetooth/bluetooth_adapter_unittest.cc",
@@ -170,8 +171,6 @@ test("device_unittests") {
       "//device/fido:test_support",
       "//services/device/public/cpp/hid",
       "//services/device/public/mojom",
-      "//services/service_manager/public/cpp",
-      "//services/service_manager/public/mojom",
     ]
   }
 
@@ -328,6 +327,7 @@ test("device_unittests") {
       "vr/orientation/orientation_device_unittest.cc",
       "vr/util/fps_meter_unittest.cc",
       "vr/util/sliding_average_unittest.cc",
+      "vr/util/stage_utils_unittest.cc",
       "vr/vr_device_base_unittest.cc",
     ]
 
@@ -363,6 +363,7 @@ test("device_unittests") {
 if (is_android) {
   bluetooth_java_sources_needing_jni = [
     "bluetooth/test/android/java/src/org/chromium/device/bluetooth/Fakes.java",
+    "bluetooth/test/android/java/src/org/chromium/device/bluetooth/ChromeBluetoothScanFilter.java",
   ]
 
   generate_jni("bluetooth_test_jni_headers") {
@@ -372,7 +373,7 @@ if (is_android) {
 
   android_library("bluetooth_test_java") {
     testonly = true
-    java_files = bluetooth_java_sources_needing_jni
+    sources = bluetooth_java_sources_needing_jni
     deps = [
       "//base:base_java",
       "//components/location/android:location_java",
@@ -385,7 +386,9 @@ if (is_android) {
   }
 
   junit_binary("device_junit_tests") {
-    java_files = [ "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadMappingsTest.java" ]
+    sources = [
+      "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadMappingsTest.java",
+    ]
     deps = [
       "$google_play_services_package:google_play_services_base_java",
       "$google_play_services_package:google_play_services_basement_java",

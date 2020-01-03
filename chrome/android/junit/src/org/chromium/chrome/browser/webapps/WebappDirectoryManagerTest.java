@@ -19,7 +19,6 @@ import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.ContextUtils;
-import org.chromium.base.FileUtils;
 import org.chromium.base.PathUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -49,12 +48,6 @@ public class WebappDirectoryManagerTest {
     private static final String WEBAPK_ID_2 =
             WebApkConstants.WEBAPK_ID_PREFIX + WEBAPK_PACKAGE_NAME_2;
 
-    /** Deletes directory and all of its children. Recreates empty directory in its place. */
-    private void deleteDirectoryAndRecreate(File f) {
-        FileUtils.recursivelyDeleteFile(f);
-        Assert.assertTrue(f.mkdirs());
-    }
-
     private Context mContext;
 
     @Before
@@ -64,19 +57,10 @@ public class WebappDirectoryManagerTest {
         ThreadUtils.setThreadAssertsDisabledForTesting(true);
         PathUtils.setPrivateDataDirectorySuffix("chrome");
         WebappDirectoryManager.resetForTesting();
-
-        // Set up directories.
-        deleteDirectoryAndRecreate(mContext.getDataDir());
-        FileUtils.recursivelyDeleteFile(WebappDirectoryManager.getBaseWebappDirectory(mContext));
-        deleteDirectoryAndRecreate(mContext.getCodeCacheDir());
     }
 
     @After
     public void tearDown() {
-        FileUtils.recursivelyDeleteFile(mContext.getDataDir());
-        FileUtils.recursivelyDeleteFile(mContext.getCodeCacheDir());
-        FileUtils.recursivelyDeleteFile(WebappDirectoryManager.getBaseWebappDirectory(mContext));
-        FileUtils.recursivelyDeleteFile(WebappDirectoryManager.getWebApkUpdateDirectory());
         ThreadUtils.setThreadAssertsDisabledForTesting(false);
     }
 
@@ -86,7 +70,7 @@ public class WebappDirectoryManagerTest {
                     @Override
                     public void onWebappDataStorageRetrieved(WebappDataStorage storage) {}
                 });
-        ShadowApplication.getInstance().runBackgroundTasks();
+        ShadowApplication.runBackgroundTasks();
     }
 
     @Test

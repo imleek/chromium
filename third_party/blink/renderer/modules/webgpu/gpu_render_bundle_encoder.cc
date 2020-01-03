@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_bundle_descriptor.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_bundle_encoder_descriptor.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_pipeline.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
 
@@ -65,6 +66,27 @@ void GPURenderBundleEncoder::setBindGroup(
   GetProcs().renderBundleEncoderSetBindGroup(
       GetHandle(), index, bindGroup->GetHandle(), dynamicOffsets.size(),
       dynamicOffsets.data());
+}
+
+void GPURenderBundleEncoder::setBindGroup(
+    uint32_t index,
+    GPUBindGroup* bind_group,
+    const FlexibleUint32ArrayView& dynamic_offsets_data,
+    uint64_t dynamic_offsets_data_start,
+    uint32_t dynamic_offsets_data_length,
+    ExceptionState& exception_state) {
+  if (!ValidateSetBindGroupDynamicOffsets(
+          dynamic_offsets_data, dynamic_offsets_data_start,
+          dynamic_offsets_data_length, exception_state)) {
+    return;
+  }
+
+  const uint32_t* data =
+      dynamic_offsets_data.DataMaybeOnStack() + dynamic_offsets_data_start;
+
+  GetProcs().renderBundleEncoderSetBindGroup(GetHandle(), index,
+                                             bind_group->GetHandle(),
+                                             dynamic_offsets_data_length, data);
 }
 
 void GPURenderBundleEncoder::pushDebugGroup(String groupLabel) {
@@ -138,7 +160,7 @@ GPURenderBundle* GPURenderBundleEncoder::finish(
 
   WGPURenderBundle render_bundle =
       GetProcs().renderBundleEncoderFinish(GetHandle(), &dawn_desc);
-  return GPURenderBundle::Create(device_, render_bundle);
+  return MakeGarbageCollected<GPURenderBundle>(device_, render_bundle);
 }
 
 }  // namespace blink

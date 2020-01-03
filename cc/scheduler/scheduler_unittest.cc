@@ -51,7 +51,6 @@ class FakeSchedulerClient : public SchedulerClient,
 
   void Reset() {
     actions_.clear();
-    states_.clear();
     will_begin_impl_frame_causes_redraw_ = false;
     will_begin_impl_frame_requests_one_begin_impl_frame_ = false;
     invalidate_needs_redraw_ = true;
@@ -70,7 +69,6 @@ class FakeSchedulerClient : public SchedulerClient,
   const std::vector<std::string> Actions() const {
     return std::vector<std::string>(actions_.begin(), actions_.end());
   }
-  std::string StateForAction(int i) const { return states_[i]->ToString(); }
   base::TimeTicks posted_begin_impl_frame_deadline() const {
     return posted_begin_impl_frame_deadline_;
   }
@@ -126,7 +124,8 @@ class FakeSchedulerClient : public SchedulerClient,
     base::AutoReset<bool> mark_inside(&inside_action_, true);
     inside_begin_impl_frame_ = false;
   }
-  void DidNotProduceFrame(const viz::BeginFrameAck& ack) override {
+  void DidNotProduceFrame(const viz::BeginFrameAck& ack,
+                          FrameSkippedReason reason) override {
     EXPECT_FALSE(inside_action_);
     base::AutoReset<bool> mark_inside(&inside_action_, true);
     last_begin_frame_ack_ = ack;
@@ -206,7 +205,6 @@ class FakeSchedulerClient : public SchedulerClient,
     base::AutoReset<bool> mark_inside(&inside_action_, true);
     invalidate_needs_redraw_ = needs_redraw;
     actions_.push_back("ScheduledActionInvalidateLayerTreeFrameSink");
-    states_.push_back(scheduler_->AsValue());
   }
   void ScheduledActionPerformImplSideInvalidation() override {
     EXPECT_FALSE(inside_action_);
@@ -247,7 +245,6 @@ class FakeSchedulerClient : public SchedulerClient,
 
   void PushAction(const char* description) {
     actions_.push_back(description);
-    states_.push_back(scheduler_->AsValue());
   }
 
   // FakeExternalBeginFrameSource::Client implementation.
@@ -283,8 +280,6 @@ class FakeSchedulerClient : public SchedulerClient,
   viz::BeginFrameAck last_begin_frame_ack_;
   base::TimeTicks posted_begin_impl_frame_deadline_;
   std::vector<const char*> actions_;
-  std::vector<std::unique_ptr<base::trace_event::ConvertableToTraceFormat>>
-      states_;
   TestScheduler* scheduler_ = nullptr;
   base::TimeDelta frame_interval_;
 };
@@ -4257,14 +4252,17 @@ TEST_F(SchedulerTest, SendEarlyDidNotProduceFrameIfIdle) {
   EXPECT_SCOPED(AdvanceFrame());
   EXPECT_ACTIONS("WillBeginImplFrame", "ScheduledActionSendBeginMainFrame");
   auto begin_main_frame_args = client_->last_begin_main_frame_args();
-  EXPECT_NE(client_->last_begin_frame_ack().sequence_number,
-            begin_main_frame_args.sequence_number);
+  EXPECT_NE(client_->last_begin_frame_ack().frame_id.sequence_number,
+            begin_main_frame_args.frame_id.sequence_number);
 
   client_->Reset();
   scheduler_->NotifyBeginMainFrameStarted(task_runner_->NowTicks());
+  // Request a new commit before finishing the current one to simulate behavior
+  // seen in certain OOPIF renderers.
+  scheduler_->SetNeedsBeginMainFrame();
   scheduler_->BeginMainFrameAborted(CommitEarlyOutReason::FINISHED_NO_UPDATES);
-  EXPECT_EQ(client_->last_begin_frame_ack().sequence_number,
-            begin_main_frame_args.sequence_number);
+  EXPECT_EQ(client_->last_begin_frame_ack().frame_id.sequence_number,
+            begin_main_frame_args.frame_id.sequence_number);
 }
 
 }  // namespace

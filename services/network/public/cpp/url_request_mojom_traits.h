@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/component_export.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/memory/scoped_refptr.h"
 #include "mojo/public/cpp/base/file_mojom_traits.h"
 #include "mojo/public/cpp/base/file_path_mojom_traits.h"
@@ -23,6 +22,7 @@
 #include "services/network/public/cpp/network_isolation_key_mojom_traits.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/cpp/site_for_cookies_mojom_traits.h"
 #include "services/network/public/mojom/chunked_data_pipe_getter.mojom.h"
 #include "services/network/public/mojom/data_pipe_getter.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom-shared.h"
@@ -64,6 +64,10 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
       const network::ResourceRequest::TrustedParams& trusted_params) {
     return trusted_params.disable_secure_dns;
   }
+  static bool has_user_activation(
+      const network::ResourceRequest::TrustedParams& trusted_params) {
+    return trusted_params.has_user_activation;
+  }
 
   static bool Read(network::mojom::TrustedUrlRequestParamsDataView data,
                    network::ResourceRequest::TrustedParams* out);
@@ -78,7 +82,8 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   static const GURL& url(const network::ResourceRequest& request) {
     return request.url;
   }
-  static const GURL& site_for_cookies(const network::ResourceRequest& request) {
+  static const net::SiteForCookies& site_for_cookies(
+      const network::ResourceRequest& request) {
     return request.site_for_cookies;
   }
   static bool attach_same_site_cookies(
@@ -98,25 +103,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
     return request.isolated_world_origin;
   }
   static const GURL& referrer(const network::ResourceRequest& request) {
-    // TODO(crbug.com/912680, crbug.com/1020592): Move this back to
-    // NetworkServiceNetworkDelegate when the current cause of referrer
-    // mismatches is found.
-    if (request.referrer != net::URLRequestJob::ComputeReferrerForPolicy(
-                                request.referrer_policy, request.referrer,
-                                request.request_initiator, request.url)) {
-      // Record information to help debug issues like http://crbug.com/422871.
-      if (request.url.SchemeIsHTTPOrHTTPS()) {
-        auto referrer_policy = request.referrer_policy;
-        base::debug::Alias(&referrer_policy);
-        DEBUG_ALIAS_FOR_GURL(target_buf, request.url);
-        DEBUG_ALIAS_FOR_GURL(referrer_buf, request.referrer);
-        DEBUG_ALIAS_FOR_GURL(
-            initiator_buf,
-            request.request_initiator.value_or(url::Origin()).GetURL())
-        base::debug::DumpWithoutCrashing();
-      }
-    }
-
     return request.referrer;
   }
   static net::URLRequest::ReferrerPolicy referrer_policy(
@@ -183,6 +169,10 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   static int32_t fetch_request_context_type(
       const network::ResourceRequest& request) {
     return request.fetch_request_context_type;
+  }
+  static network::mojom::RequestDestination destination(
+      const network::ResourceRequest& request) {
+    return request.destination;
   }
   static const scoped_refptr<network::ResourceRequestBody>& request_body(
       const network::ResourceRequest& request) {

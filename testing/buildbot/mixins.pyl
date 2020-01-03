@@ -203,7 +203,7 @@
   'gpu_pool': {
     'swarming': {
       'dimensions': {
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -213,6 +213,13 @@
       'dimensions': {
         'device_type': 'hammerhead',
         'os': 'Android',
+      },
+    },
+  },
+  'host_mac_10.14': {
+    'swarming': {
+      'dimensions': {
+        'host os': 'Mac-10.14.6',
       },
     },
   },
@@ -269,7 +276,7 @@
       'dimensions': {
         'gpu': '1002:6613',
         'os': 'Ubuntu',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -278,7 +285,7 @@
       'dimensions': {
         'gpu': '8086:1912',
         'os': 'Ubuntu',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       }
     }
   },
@@ -288,7 +295,7 @@
         # Defined in bot_config.py in internal infradata/config workspace
         'gpu': 'intel-hd-630-ubuntu-stable',
         'os': 'linux-intel-stable',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       }
     }
   },
@@ -298,7 +305,7 @@
       'dimensions': {
         'gpu': '8086:5912-19.0.2',
         'os': 'Ubuntu-19.04',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -308,7 +315,7 @@
         # Defined in bot_config.py in internal infradata/config workspace
         'gpu': 'intel-uhd-630-ubuntu-stable',
         'os': 'Ubuntu-19.04',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
       # Same long expiration as win10_intel_uhd_630_stable due to capacity.
       # TODO(https://crbug.com/986939): Remove this when more devices
@@ -322,7 +329,7 @@
         # Defined in bot_config.py in internal infradata/config workspace
         'gpu': 'nvidia-quadro-p400-ubuntu-stable',
         'os': 'linux-nvidia-stable',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       }
     }
   },
@@ -331,7 +338,7 @@
       'dimensions': {
         'gpu': '10de:1cb3-418.56',
         'os': 'Ubuntu-19.04',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -411,7 +418,7 @@
       'dimensions': {
         'gpu': '1002:679e',
         'os': 'Mac-10.12.6',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -421,7 +428,7 @@
         'gpu': '1002:6821',
         'hidpi': '1',
         'os': 'mac-amd-stable',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -432,7 +439,7 @@
         'gpu': '1002:6821',
         'hidpi': '1',
         'os': 'Mac-10.13.6',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -442,7 +449,7 @@
         'gpu': '10de:0fe9',
         'hidpi': '1',
         'os': 'mac-nvidia-stable',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -453,7 +460,7 @@
         'gpu': '10de:0fe9',
         'hidpi': '1',
         'os': 'Mac-10.14.6',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -474,6 +481,8 @@
       'dimensions': {
         'device_os': None,
         'device_type': None,
+        'pool': 'chromium.tests.avd',
+        'ssd': '1',
       },
       'named_caches': [
         {
@@ -526,6 +535,8 @@
       'dimensions': {
         'device_os': None,
         'device_type': None,
+        'pool': 'chromium.tests.avd',
+        'ssd': '1',
       },
       'named_caches': [
         {
@@ -589,17 +600,16 @@
       'dimensions': {
         'gpu': '1002:699f',
         'os': 'Windows-10',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
   'win10_intel_hd_630_experimental': {
-    # Currently same as stable version.
     'swarming': {
       'dimensions': {
         'gpu': '8086:5912-26.20.100.7323',
         'os': 'Windows-10',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -609,7 +619,7 @@
         # Defined in bot_config.py in internal infradata/config workspace
         'gpu': 'intel-hd-630-win10-stable',
         'os': 'Windows-10',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -619,7 +629,7 @@
         # Defined in bot_config.py in internal infradata/config workspace
         'gpu': 'intel-uhd-630-win10-stable',
         'os': 'Windows-10',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
       # ~50% of the WebGL2 conformance tests time out with the default
       # 1 hour expiration, but the last shard times out with a 3 hour
@@ -634,7 +644,7 @@
       'dimensions': {
         'gpu': '10de:2184',
         'os': 'Windows-10',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -643,7 +653,7 @@
       'dimensions': {
         'gpu': '10de:1cb3-26.21.14.3102',
         'os': 'Windows-10',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -653,7 +663,7 @@
         # Defined in bot_config.py in internal infradata/config workspace
         'gpu': 'nvidia-quadro-p400-win10-stable',
         'os': 'Windows-10',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -669,7 +679,7 @@
       'dimensions': {
         'gpu': '1002:6613',
         'os': 'Windows-2008ServerR2-SP1',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -678,7 +688,7 @@
       'dimensions': {
         'gpu': '10de:1cb3-24.21.14.1195',
         'os': 'Windows-2008ServerR2-SP1',
-        'pool': 'Chrome-GPU',
+        'pool': 'chromium.tests.gpu',
       },
     },
   },
@@ -700,6 +710,20 @@
     'swarming': {
       'dimensions': {
         'cpu': 'x86-64',
+      },
+    },
+  },
+  'xcode_11b53': {
+    'swarming': {
+      'dimensions': {
+        'xcode_build_version': '11b53',
+      },
+    },
+  },
+  'xcode_parallelization': {
+    'swarming': {
+      'dimensions': {
+        'xcode_parallelization': 'true',
       },
     },
   },

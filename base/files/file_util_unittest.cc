@@ -60,7 +60,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 #endif
@@ -238,9 +237,12 @@ void SetReadOnly(const FilePath& path, bool read_only) {
              FILE_ATTRIBUTE_READONLY)
           : (attrs & (FILE_ATTRIBUTE_ARCHIVE | FILE_ATTRIBUTE_DIRECTORY));
 
-  // Ignore FILE_ATTRIBUTE_NOT_CONTENT_INDEXED if present.
+  // Ignore FILE_ATTRIBUTE_NOT_CONTENT_INDEXED and FILE_ATTRIBUTE_COMPRESSED
+  // if present. These flags are set by the operating system, depending on
+  // local configurations, such as compressing the file system. Not filtering
+  // out these flags could cause tests to fail even though they should pass.
   attrs = GetFileAttributes(path.value().c_str()) &
-          ~FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
+          ~(FILE_ATTRIBUTE_NOT_CONTENT_INDEXED | FILE_ATTRIBUTE_COMPRESSED);
   ASSERT_EQ(expected, attrs);
 #else
   // On all other platforms, it involves removing/setting the write bit.
@@ -742,6 +744,21 @@ TEST_F(FileUtilTest, MakeLongFilePathTest) {
   // MakeLongFilePath should return empty path if directory does not exist.
   EXPECT_TRUE(DeleteFile(short_test_dir, false));
   EXPECT_TRUE(MakeLongFilePath(short_test_dir).empty());
+}
+
+TEST_F(FileUtilTest, CreateWinHardlinkTest) {
+  // Link to a different file name in a sub-directory of |temp_dir_|.
+  FilePath test_dir = temp_dir_.GetPath().Append(FPL("test"));
+  ASSERT_TRUE(CreateDirectory(test_dir));
+  FilePath temp_file;
+  ASSERT_TRUE(CreateTemporaryFileInDir(temp_dir_.GetPath(), &temp_file));
+  FilePath link_to_file = test_dir.Append(FPL("linked_name"));
+  EXPECT_TRUE(CreateWinHardLink(link_to_file, temp_file));
+  EXPECT_TRUE(PathExists(link_to_file));
+
+  // Link two directories. This should fail. Verify that failure is returned
+  // by CreateWinHardLink.
+  EXPECT_FALSE(CreateWinHardLink(temp_dir_.GetPath(), test_dir));
 }
 
 #endif  // defined(OS_WIN)
@@ -3577,8 +3594,8 @@ class VerifyPathControlledByUserTest : public FileUtilTest {
     CreateTextFile(text_file_, L"This text file has some text in it.");
 
     // Get the user and group files are created with from |base_dir_|.
-    struct stat stat_buf;
-    ASSERT_EQ(0, stat(base_dir_.value().c_str(), &stat_buf));
+    stat_wrapper_t stat_buf;
+    ASSERT_EQ(0, File::Stat(base_dir_.value().c_str(), &stat_buf));
     uid_ = stat_buf.st_uid;
     ok_gids_.insert(stat_buf.st_gid);
     bad_gids_.insert(stat_buf.st_gid + 1);

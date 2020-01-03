@@ -1165,6 +1165,10 @@ void AwContents::SetDipScale(JNIEnv* env,
   SetDipScaleInternal(dip_scale);
 }
 
+void AwContents::OnInputEvent(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+  browser_view_renderer_.OnInputEvent();
+}
+
 void AwContents::SetDipScaleInternal(float dip_scale) {
   browser_view_renderer_.SetDipScale(dip_scale);
 }
@@ -1264,8 +1268,8 @@ void AwContents::InsertVisualStateCallback(
     const JavaParamRef<jobject>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   web_contents_->GetMainFrame()->InsertVisualStateCallback(
-      base::Bind(&InvokeVisualStateCallback, java_ref_, request_id,
-                 ScopedJavaGlobalRef<jobject>(env, callback)));
+      base::BindOnce(&InvokeVisualStateCallback, java_ref_, request_id,
+                     ScopedJavaGlobalRef<jobject>(env, callback)));
 }
 
 jint AwContents::GetEffectivePriority(

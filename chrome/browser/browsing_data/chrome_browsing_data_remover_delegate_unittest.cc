@@ -46,7 +46,7 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/language/url_language_histogram_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/permissions/adaptive_notification_permission_ui_selector.h"
+#include "chrome/browser/permissions/adaptive_quiet_notification_permission_ui_enabler.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
@@ -129,10 +129,11 @@
 #include "components/user_manager/scoped_user_manager.h"
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if defined(OS_LINUX)
 #include "chrome/common/chrome_paths.h"
+#include "components/crash/content/app/crashpad.h"
 #include "components/upload_list/crash_upload_list.h"
-#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
+#endif  // defined(OS_LINUX)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/mock_extension_special_storage_policy.h"
@@ -575,12 +576,12 @@ class RemovePermissionPromptCountsTest {
   }
 
   bool RecordIgnoreAndEmbargo(const GURL& url, ContentSettingsType permission) {
-    return autoblocker_->RecordIgnoreAndEmbargo(url, permission);
+    return autoblocker_->RecordIgnoreAndEmbargo(url, permission, false);
   }
 
   bool RecordDismissAndEmbargo(const GURL& url,
                                ContentSettingsType permission) {
-    return autoblocker_->RecordDismissAndEmbargo(url, permission);
+    return autoblocker_->RecordDismissAndEmbargo(url, permission, false);
   }
 
   void CheckEmbargo(const GURL& url,
@@ -2958,8 +2959,16 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, WipeOriginVerifierData) {
 }
 #endif  // defined(OS_ANDROID)
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if defined(OS_LINUX)
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, WipeCrashData) {
+#if !defined(OS_CHROMEOS)
+  // This test applies only when using a logfile of Crash uploads. Chrome Linux
+  // will use Crashpad's database instead of the logfile. Chrome Chrome OS
+  // continues to use the logfile even when Crashpad is enabled.
+  if (crash_reporter::IsCrashpadEnabled()) {
+    GTEST_SKIP();
+  }
+#endif
   base::FilePath crash_dir_path;
   base::PathService::Get(chrome::DIR_CRASH_DUMPS, &crash_dir_path);
   base::FilePath upload_log_path =
@@ -2992,23 +3001,23 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, WipeCrashData) {
 TEST_F(ChromeBrowsingDataRemoverDelegateTest,
        WipeNotificationPermissionPromptOutcomesData) {
   PrefService* prefs = GetProfile()->GetPrefs();
-  auto* permission_ui_selector =
-      AdaptiveNotificationPermissionUiSelector::GetForProfile(GetProfile());
+  auto* permission_ui_enabler =
+      AdaptiveQuietNotificationPermissionUiEnabler::GetForProfile(GetProfile());
   base::SimpleTestClock clock_;
   clock_.SetNow(base::Time::Now());
   base::Time first_recorded_time = clock_.Now();
 
-  permission_ui_selector->set_clock_for_testing(&clock_);
-  permission_ui_selector->RecordPermissionPromptOutcome(
+  permission_ui_enabler->set_clock_for_testing(&clock_);
+  permission_ui_enabler->RecordPermissionPromptOutcome(
       PermissionAction::DENIED);
   clock_.Advance(base::TimeDelta::FromDays(1));
-  permission_ui_selector->set_clock_for_testing(&clock_);
-  permission_ui_selector->RecordPermissionPromptOutcome(
+  permission_ui_enabler->set_clock_for_testing(&clock_);
+  permission_ui_enabler->RecordPermissionPromptOutcome(
       PermissionAction::DENIED);
   clock_.Advance(base::TimeDelta::FromDays(1));
   base::Time third_recorded_time = clock_.Now();
-  permission_ui_selector->set_clock_for_testing(&clock_);
-  permission_ui_selector->RecordPermissionPromptOutcome(
+  permission_ui_enabler->set_clock_for_testing(&clock_);
+  permission_ui_enabler->RecordPermissionPromptOutcome(
       PermissionAction::DENIED);
 
   constexpr char kNotificationPermissionActionsPrefPath[] =

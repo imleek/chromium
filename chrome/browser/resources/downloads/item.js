@@ -2,31 +2,34 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Polymer, html, beforeNextRender} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {BrowserProxy} from './browser_proxy.js';
-import {DangerType, States} from './constants.js';
-import {IconLoader} from './icon_loader.js';
 import './icons.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
 import 'chrome://resources/cr_elements/cr_icons_css.m.js';
-import {getInstance} from 'chrome://resources/cr_elements/cr_toast/cr_toast_manager.m.js';
 import 'chrome://resources/cr_elements/hidden_style_css.m.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/js/action_link.js';
 import 'chrome://resources/cr_elements/action_link_css.m.js';
-import {HTMLEscape} from 'chrome://resources/js/util.m.js';
-import {assert} from 'chrome://resources/js/assert.m.js';
 import './strings.m.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {FocusRowBehavior} from 'chrome://resources/js/cr/ui/focus_row_behavior.m.js';
-import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/paper-progress/paper-progress.js';
 import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
 
-  Polymer({
+import {getToastManager} from 'chrome://resources/cr_elements/cr_toast/cr_toast_manager.m.js';
+import {assert} from 'chrome://resources/js/assert.m.js';
+import {FocusRowBehavior} from 'chrome://resources/js/cr/ui/focus_row_behavior.m.js';
+import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {HTMLEscape} from 'chrome://resources/js/util.m.js';
+import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
+import {afterNextRender, beforeNextRender, html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {BrowserProxy} from './browser_proxy.js';
+import {DangerType, States} from './constants.js';
+import {IconLoader} from './icon_loader.js';
+
+Polymer({
     is: 'downloads-item',
 
     _template: html`{__html_template__}`,
@@ -116,6 +119,10 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
       useFileIcon_: Boolean,
     },
 
+    hostAttributes: {
+      role: 'row',
+    },
+
     observers: [
       // TODO(dbeam): this gets called way more when I observe data.byExtId
       // and data.byExtName directly. Why?
@@ -131,6 +138,13 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
     restoreFocusAfterCancel_: false,
 
     /** @override */
+    attached: function() {
+      afterNextRender(this, function() {
+        IronA11yAnnouncer.requestAvailability();
+      });
+    },
+
+    /** @override */
     ready: function() {
       this.mojoHandler_ = BrowserProxy.getInstance().handler;
       this.content = this.$.content;
@@ -142,10 +156,10 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
 
     /** Overrides FocusRowBehavior. */
     getCustomEquivalent: function(sampleElement) {
-      if (sampleElement.getAttribute('focus-type') == 'cancel') {
+      if (sampleElement.getAttribute('focus-type') === 'cancel') {
         return this.$$('[focus-type="retry"]');
       }
-      if (sampleElement.getAttribute('focus-type') == 'retry') {
+      if (sampleElement.getAttribute('focus-type') === 'retry') {
         return this.$$('[focus-type="pauseOrResume"]');
       }
       return null;
@@ -189,7 +203,7 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
      * @private
      */
     computeCompletelyOnDisk_: function() {
-      return this.data.state == States.COMPLETE &&
+      return this.data.state === States.COMPLETE &&
           !this.data.fileExternallyRemoved;
     },
 
@@ -221,11 +235,16 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
      * @private
      */
     computeDate_: function() {
-      assert(typeof this.data.hideDate == 'boolean');
+      assert(typeof this.data.hideDate === 'boolean');
       if (this.data.hideDate) {
         return '';
       }
       return assert(this.data.sinceString || this.data.dateString);
+    },
+
+    /** @private @return {boolean} */
+    computeDescriptionVisible_: function() {
+      return this.computeDescription_() !== '';
     },
 
     /**
@@ -294,8 +313,8 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
         const dangerType = this.data.dangerType;
 
         if ((loadTimeData.getBoolean('requestsApVerdicts') &&
-             dangerType == DangerType.UNCOMMON_CONTENT) ||
-            dangerType == DangerType.SENSITIVE_CONTENT_WARNING) {
+             dangerType === DangerType.UNCOMMON_CONTENT) ||
+            dangerType === DangerType.SENSITIVE_CONTENT_WARNING) {
           return 'cr:error';
         }
 
@@ -322,8 +341,8 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
      * @private
      */
     computeIsActive_: function() {
-      return this.data.state != States.CANCELLED &&
-          this.data.state != States.INTERRUPTED &&
+      return this.data.state !== States.CANCELLED &&
+          this.data.state !== States.INTERRUPTED &&
           !this.data.fileExternallyRemoved;
     },
 
@@ -332,7 +351,7 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
      * @private
      */
     computeIsDangerous_: function() {
-      return this.data.state == States.DANGEROUS;
+      return this.data.state === States.DANGEROUS;
     },
 
     /**
@@ -340,7 +359,7 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
      * @private
      */
     computeIsInProgress_: function() {
-      return this.data.state == States.IN_PROGRESS;
+      return this.data.state === States.IN_PROGRESS;
     },
 
     /**
@@ -349,10 +368,10 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
      */
     computeIsMalware_: function() {
       return this.isDangerous_ &&
-          (this.data.dangerType == DangerType.DANGEROUS_CONTENT ||
-           this.data.dangerType == DangerType.DANGEROUS_HOST ||
-           this.data.dangerType == DangerType.DANGEROUS_URL ||
-           this.data.dangerType == DangerType.POTENTIALLY_UNWANTED);
+          (this.data.dangerType === DangerType.DANGEROUS_CONTENT ||
+           this.data.dangerType === DangerType.DANGEROUS_HOST ||
+           this.data.dangerType === DangerType.DANGEROUS_URL ||
+           this.data.dangerType === DangerType.POTENTIALLY_UNWANTED);
     },
 
     /** @private */
@@ -408,8 +427,8 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
      * @private
      */
     computeShowCancel_: function() {
-      return this.data.state == States.IN_PROGRESS ||
-          this.data.state == States.PAUSED;
+      return this.data.state === States.IN_PROGRESS ||
+          this.data.state === States.PAUSED;
     },
 
     /**
@@ -446,7 +465,7 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
      * @private
      */
     isIndeterminate_: function() {
-      return this.data.percent == -1;
+      return this.data.percent === -1;
     },
 
     /** @private */
@@ -482,7 +501,7 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
         IconLoader.getInstance()
             .loadIcon(this.$['file-icon'], path)
             .then(success => {
-              if (path == this.data.filePath) {
+              if (path === this.data.filePath) {
                 this.useFileIcon_ = success;
               }
             });
@@ -541,13 +560,16 @@ import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
         // Make the file name collapsible.
         p.collapsible = !!p.arg;
       });
-      getInstance().showForStringPieces(
+      getToastManager().showForStringPieces(
           /**
            * @type {!Array<{collapsible: boolean,
            *                 value: string,
            *                 arg: (string|null)}>}
            */
-          (pieces), true);
+          (pieces));
+      this.fire('iron-announce', {
+        text: loadTimeData.getString('undoDescription'),
+      });
       this.mojoHandler_.remove(this.data.id);
     },
 

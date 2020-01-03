@@ -27,7 +27,8 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/find_bar/find_notification_details.h"
-#include "chrome/browser/ui/tabs/tab_group_visual_data.h"
+#include "chrome/browser/ui/tabs/tab_group.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_paths.h"
@@ -38,6 +39,9 @@
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sessions/core/tab_restore_service_observer.h"
+#include "components/tab_groups/tab_group_color.h"
+#include "components/tab_groups/tab_group_id.h"
+#include "components/tab_groups/tab_group_visual_data.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
@@ -676,8 +680,10 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreWindow) {
 }
 
 // https://crbug.com/825305: Timeout flakiness on Win7 Tests (dbg)(1) bot and
-// PASS/FAIL flakiness on Linux Chromium OS ASan LSan Tests (1) bot.
-#if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || defined(OS_WIN)
+// Mac10.13 Tests (dbg) and PASS/FAIL flakiness on Linux Chromium OS ASan LSan
+// Tests (1) bot.
+#if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
+    defined(OS_WIN) || (defined(OS_MACOSX) && !defined(NDEBUG))
 #define MAYBE_RestoreTabWithSpecialURL DISABLED_RestoreTabWithSpecialURL
 #else
 #define MAYBE_RestoreTabWithSpecialURL RestoreTabWithSpecialURL
@@ -708,9 +714,10 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, MAYBE_RestoreTabWithSpecialURL) {
 }
 
 // https://crbug.com/667932: Flakiness on linux_chromium_asan_rel_ng bot.
-// https://crbug.com/825305: Timeout flakiness on Win7 Tests (dbg)(1) bot.
+// https://crbug.com/825305: Timeout flakiness on Win7 Tests (dbg)(1) and
+// Mac10.13 Tests (dbg) bots.
 #if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
-    (defined(OS_WIN) && !defined(NDEBUG))
+    ((defined(OS_WIN) || defined(OS_MACOSX)) && !defined(NDEBUG))
 #define MAYBE_RestoreTabWithSpecialURLOnBack DISABLED_RestoreTabWithSpecialURLOnBack
 #else
 #define MAYBE_RestoreTabWithSpecialURLOnBack RestoreTabWithSpecialURLOnBack
@@ -901,24 +908,71 @@ class TabRestoreTestWithTabGroupsEnabled : public TabRestoreTest {
   base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(TabRestoreTestWithTabGroupsEnabled, RestoreGroupedTab) {
+// Closing the last tab in a group then restoring will place the group back with
+// its metadata.
+IN_PROC_BROWSER_TEST_F(TabRestoreTestWithTabGroupsEnabled,
+                       RestoreSingleGroupedTab) {
   const int tab_count = AddSomeTabs(browser(), 1);
   ASSERT_LE(2, tab_count);
 
   const int grouped_tab_index = tab_count - 1;
-  browser()->tab_strip_model()->AddToNewGroup({grouped_tab_index});
+  tab_groups::TabGroupId group_id =
+      browser()->tab_strip_model()->AddToNewGroup({grouped_tab_index});
+  const tab_groups::TabGroupVisualData visual_data(
+      base::ASCIIToUTF16("Foo"), tab_groups::TabGroupColorId::kCyan);
+
+  TabGroup* group =
+      browser()->tab_strip_model()->group_model()->GetTabGroup(group_id);
+
+  group->SetVisualData(visual_data);
   CloseTab(grouped_tab_index);
 
   ASSERT_NO_FATAL_FAILURE(RestoreTab(0, grouped_tab_index));
   ASSERT_EQ(tab_count, browser()->tab_strip_model()->count());
 
-  // Make sure the tab is *not* grouped when restored. We have not yet decided
-  // how to handle groups with the same group ID in different browser
-  // windows. Until we figure this out, we don't have a good way to handle
-  // restoring individual grouped tabs. TODO(crbug.com/930991): resolve this and
-  // change this expectation.
-  EXPECT_EQ(base::nullopt,
-            browser()->tab_strip_model()->GetTabGroupForTab(grouped_tab_index));
+  group = browser()->tab_strip_model()->group_model()->GetTabGroup(group_id);
+
+  EXPECT_EQ(group_id, browser()
+                          ->tab_strip_model()
+                          ->GetTabGroupForTab(grouped_tab_index)
+                          .value());
+  const tab_groups::TabGroupVisualData* data = group->visual_data();
+  EXPECT_EQ(data->title(), visual_data.title());
+  EXPECT_EQ(data->color(), visual_data.color());
+}
+
+// Closing a tab in a group then updating the metadata before restoring will
+// place the group back without updating the metadata.
+IN_PROC_BROWSER_TEST_F(TabRestoreTestWithTabGroupsEnabled,
+                       RestoreTabIntoGroup) {
+  const int tab_count = AddSomeTabs(browser(), 2);
+  ASSERT_LE(3, tab_count);
+
+  const int closed_tab_index = 1;
+
+  tab_groups::TabGroupId group_id =
+      browser()->tab_strip_model()->AddToNewGroup({0, 1});
+  const tab_groups::TabGroupVisualData visual_data_1(
+      base::ASCIIToUTF16("Foo1"), tab_groups::TabGroupColorId::kCyan);
+  const tab_groups::TabGroupVisualData visual_data_2(
+      base::ASCIIToUTF16("Foo2"), tab_groups::TabGroupColorId::kCyan);
+  TabGroup* group =
+      browser()->tab_strip_model()->group_model()->GetTabGroup(group_id);
+
+  group->SetVisualData(visual_data_1);
+  CloseTab(closed_tab_index);
+  group->SetVisualData(visual_data_2);
+
+  ASSERT_NO_FATAL_FAILURE(RestoreTab(0, closed_tab_index));
+  ASSERT_EQ(tab_count, browser()->tab_strip_model()->count());
+
+  EXPECT_EQ(group_id, browser()
+                          ->tab_strip_model()
+                          ->GetTabGroupForTab(closed_tab_index)
+                          .value());
+  const tab_groups::TabGroupVisualData* data = group->visual_data();
+  EXPECT_EQ(data->title(), visual_data_2.title());
+  EXPECT_EQ(data->color(), visual_data_2.color());
 }
 
 IN_PROC_BROWSER_TEST_F(TabRestoreTestWithTabGroupsEnabled,
@@ -931,15 +985,18 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTestWithTabGroupsEnabled,
 
   const int tab_count = AddSomeTabs(browser(), 3);
 
-  TabGroupId group1 = browser()->tab_strip_model()->AddToNewGroup(
+  TabGroupModel* group_model = browser()->tab_strip_model()->group_model();
+  tab_groups::TabGroupId group1 = browser()->tab_strip_model()->AddToNewGroup(
       {tab_count - 3, tab_count - 2});
-  TabGroupVisualData group1_data(base::ASCIIToUTF16("Foo"), SK_ColorRED);
-  browser()->tab_strip_model()->SetVisualDataForGroup(group1, group1_data);
+  tab_groups::TabGroupVisualData group1_data(base::ASCIIToUTF16("Foo"),
+                                             tab_groups::TabGroupColorId::kRed);
+  group_model->GetTabGroup(group1)->SetVisualData(group1_data);
 
-  TabGroupId group2 =
+  tab_groups::TabGroupId group2 =
       browser()->tab_strip_model()->AddToNewGroup({tab_count - 1});
-  TabGroupVisualData group2_data(base::ASCIIToUTF16("Bar"), SK_ColorBLUE);
-  browser()->tab_strip_model()->SetVisualDataForGroup(group2, group2_data);
+  tab_groups::TabGroupVisualData group2_data(
+      base::ASCIIToUTF16("Bar"), tab_groups::TabGroupColorId::kBlue);
+  group_model->GetTabGroup(group2)->SetVisualData(group2_data);
 
   CloseBrowserSynchronously(browser());
   ASSERT_EQ(1u, active_browser_list_->size());
@@ -948,6 +1005,8 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTestWithTabGroupsEnabled,
   ASSERT_EQ(2u, active_browser_list_->size());
 
   Browser* restored_window = GetBrowser(1);
+  TabGroupModel* restored_group_model =
+      restored_window->tab_strip_model()->group_model();
   ASSERT_EQ(tab_count, restored_window->tab_strip_model()->count());
   EXPECT_EQ(
       base::make_optional(group1),
@@ -960,9 +1019,9 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTestWithTabGroupsEnabled,
       restored_window->tab_strip_model()->GetTabGroupForTab(tab_count - 1));
 
   EXPECT_EQ(group1_data,
-            *restored_window->tab_strip_model()->GetVisualDataForGroup(group1));
+            *restored_group_model->GetTabGroup(group1)->visual_data());
   EXPECT_EQ(group2_data,
-            *restored_window->tab_strip_model()->GetVisualDataForGroup(group2));
+            *restored_group_model->GetTabGroup(group2)->visual_data());
 }
 
 // Ensure tab groups aren't restored if |features::kTabGroups| is disabled.

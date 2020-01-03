@@ -10,11 +10,13 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/optimization_guide/optimization_guide_features.h"
+#include "components/optimization_guide/optimization_guide_switches.h"
 #include "components/unified_consent/url_keyed_data_collection_consent_helper.h"
 
 namespace {
 
-bool IsUserDataSaverEnabledAndAllowedToFetchHints(Profile* profile) {
+bool IsUserDataSaverEnabledAndAllowedToFetchFromRemoteService(
+    Profile* profile) {
   // Check if they are a data saver user.
   if (!data_reduction_proxy::DataReductionProxySettings::
           IsDataSaverEnabledByUser(profile->IsOffTheRecord(),
@@ -33,10 +35,10 @@ bool IsUserDataSaverEnabledAndAllowedToFetchHints(Profile* profile) {
   return !info_bar_decider->NeedsToNotifyUser();
 }
 
-bool IsUserConsentedToAnonymousDataCollectionAndAllowedToFetchHints(
+bool IsUserConsentedToAnonymousDataCollectionAndAllowedToFetchFromRemoteService(
     Profile* profile) {
   if (!optimization_guide::features::
-          IsHintsFetchingForAnonymousDataConsentEnabled()) {
+          IsRemoteFetchingForAnonymousDataConsentEnabled()) {
     return false;
   }
 
@@ -54,16 +56,21 @@ bool IsUserConsentedToAnonymousDataCollectionAndAllowedToFetchHints(
 
 }  // namespace
 
-bool IsUserPermittedToFetchHints(Profile* profile) {
+bool IsUserPermittedToFetchFromRemoteOptimizationGuide(Profile* profile) {
+  if (optimization_guide::switches::
+          ShouldOverrideCheckingUserPermissionsToFetchHintsForTesting()) {
+    return true;
+  }
+
   if (profile->IsIncognitoProfile())
     return false;
 
-  if (!optimization_guide::features::IsHintsFetchingEnabled())
+  if (!optimization_guide::features::IsRemoteFetchingEnabled())
     return false;
 
-  if (IsUserDataSaverEnabledAndAllowedToFetchHints(profile))
+  if (IsUserDataSaverEnabledAndAllowedToFetchFromRemoteService(profile))
     return true;
 
-  return IsUserConsentedToAnonymousDataCollectionAndAllowedToFetchHints(
+  return IsUserConsentedToAnonymousDataCollectionAndAllowedToFetchFromRemoteService(
       profile);
 }

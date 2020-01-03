@@ -4,8 +4,8 @@
 
 #include "chrome/browser/download/mixed_content_download_blocking.h"
 
-#include <string>
-
+#include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
@@ -21,6 +21,8 @@
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+using download::DownloadSource;
 
 namespace {
 
@@ -41,30 +43,80 @@ InsecureDownloadExtensions GetExtensionEnumFromString(
 // Get the appropriate histogram metric name for the initiator/download security
 // state combo.
 std::string GetDownloadBlockingExtensionMetricName(
-    base::Optional<url::Origin> initiator,
-    bool dl_secure) {
-  if (!initiator.has_value()) {
-    if (dl_secure)
-      return kInsecureDownloadHistogramInitiatorUnknownTargetSecure;
-    return kInsecureDownloadHistogramInitiatorUnknownTargetInsecure;
+    InsecureDownloadSecurityStatus status) {
+  switch (status) {
+    case InsecureDownloadSecurityStatus::kInitiatorUnknownFileSecure:
+      return GetDLBlockingHistogramName(
+          kInsecureDownloadExtensionInitiatorUnknown,
+          kInsecureDownloadHistogramTargetSecure);
+    case InsecureDownloadSecurityStatus::kInitiatorUnknownFileInsecure:
+      return GetDLBlockingHistogramName(
+          kInsecureDownloadExtensionInitiatorUnknown,
+          kInsecureDownloadHistogramTargetInsecure);
+    case InsecureDownloadSecurityStatus::kInitiatorSecureFileSecure:
+      return GetDLBlockingHistogramName(
+          kInsecureDownloadExtensionInitiatorSecure,
+          kInsecureDownloadHistogramTargetSecure);
+    case InsecureDownloadSecurityStatus::kInitiatorSecureFileInsecure:
+      return GetDLBlockingHistogramName(
+          kInsecureDownloadExtensionInitiatorSecure,
+          kInsecureDownloadHistogramTargetInsecure);
+    case InsecureDownloadSecurityStatus::kInitiatorInsecureFileSecure:
+      return GetDLBlockingHistogramName(
+          kInsecureDownloadExtensionInitiatorInsecure,
+          kInsecureDownloadHistogramTargetSecure);
+    case InsecureDownloadSecurityStatus::kInitiatorInsecureFileInsecure:
+      return GetDLBlockingHistogramName(
+          kInsecureDownloadExtensionInitiatorInsecure,
+          kInsecureDownloadHistogramTargetInsecure);
+    case InsecureDownloadSecurityStatus::kInitiatorInferredSecureFileSecure:
+      return GetDLBlockingHistogramName(
+          kInsecureDownloadExtensionInitiatorInferredSecure,
+          kInsecureDownloadHistogramTargetSecure);
+    case InsecureDownloadSecurityStatus::kInitiatorInferredSecureFileInsecure:
+      return GetDLBlockingHistogramName(
+          kInsecureDownloadExtensionInitiatorInferredSecure,
+          kInsecureDownloadHistogramTargetInsecure);
+    case InsecureDownloadSecurityStatus::kInitiatorInferredInsecureFileSecure:
+      return GetDLBlockingHistogramName(
+          kInsecureDownloadExtensionInitiatorInferredInsecure,
+          kInsecureDownloadHistogramTargetSecure);
+    case InsecureDownloadSecurityStatus::kInitiatorInferredInsecureFileInsecure:
+      return GetDLBlockingHistogramName(
+          kInsecureDownloadExtensionInitiatorInferredInsecure,
+          kInsecureDownloadHistogramTargetInsecure);
+    case InsecureDownloadSecurityStatus::kDownloadIgnored:
+      NOTREACHED();
   }
-
-  if (initiator->GetURL().SchemeIsCryptographic()) {
-    if (dl_secure)
-      return kInsecureDownloadHistogramInitiatorSecureTargetSecure;
-    return kInsecureDownloadHistogramInitiatorSecureTargetInsecure;
-  }
-
-  if (dl_secure)
-    return kInsecureDownloadHistogramInitiatorInsecureTargetSecure;
-  return kInsecureDownloadHistogramInitiatorInsecureTargetInsecure;
+  NOTREACHED();
+  return std::string();
 }
 
 // Get appropriate enum value for the initiator/download security state combo
-// for histogram reporting.
+// for histogram reporting. |dl_secure| signifies whether the download was
+// a secure source. |inferred| is whether the initiator value is our best guess.
 InsecureDownloadSecurityStatus GetDownloadBlockingEnum(
     base::Optional<url::Origin> initiator,
-    bool dl_secure) {
+    bool dl_secure,
+    bool inferred) {
+  if (inferred) {
+    if (initiator->GetURL().SchemeIsCryptographic()) {
+      if (dl_secure) {
+        return InsecureDownloadSecurityStatus::
+            kInitiatorInferredSecureFileSecure;
+      }
+      return InsecureDownloadSecurityStatus::
+          kInitiatorInferredSecureFileInsecure;
+    }
+
+    if (dl_secure) {
+      return InsecureDownloadSecurityStatus::
+          kInitiatorInferredInsecureFileSecure;
+    }
+    return InsecureDownloadSecurityStatus::
+        kInitiatorInferredInsecureFileInsecure;
+  }
+
   if (!initiator.has_value()) {
     if (dl_secure)
       return InsecureDownloadSecurityStatus::kInitiatorUnknownFileSecure;
@@ -93,6 +145,44 @@ bool ShouldBlockFileAsMixedContent(const base::FilePath& path,
       "gz",  "zip", "bz2", "rar", "7z",  "tar",
   };
 
+  auto download_source = item.GetDownloadSource();
+  auto transition_type = item.GetTransitionType();
+
+  // Ignore downloads that don't qualify for blocking. At a minimum, this
+  // includes:
+  //  - retries/reloads (since the original DL would have been blocked, and
+  //    initiating context is lost on retry anyway),
+  //  - anything triggered directly from the address bar or similar.
+  //  - internal-Chrome downloads (e.g. downloading profile photos),
+  //  - webview/CCT,
+  //  - anything extension related,
+  //  - etc.
+  //
+  // TODO(1029062): INTERNAL_API is also used for background fetch. That
+  // probably isn't the correct behavior, since INTERNAL_API is otherwise used
+  // for Chrome stuff. Background fetch should probably be HTTPS-only.
+  //
+  // We permit DownloadSource::CONTEXT_MENU and DownloadSource::WEB_CONTENTS_API
+  // since we infer their 'initiator' as the tab page, below. However,
+  // eventually they will receive differing treatment.
+  if (download_source == DownloadSource::RETRY ||
+      (transition_type & ui::PAGE_TRANSITION_RELOAD) ||
+      (transition_type & ui::PAGE_TRANSITION_TYPED) ||
+      (transition_type & ui::PAGE_TRANSITION_FROM_ADDRESS_BAR) ||
+      (transition_type & ui::PAGE_TRANSITION_FORWARD_BACK) ||
+      (transition_type & ui::PAGE_TRANSITION_AUTO_TOPLEVEL) ||
+      (transition_type & ui::PAGE_TRANSITION_AUTO_BOOKMARK) ||
+      (transition_type & ui::PAGE_TRANSITION_FROM_API) ||
+      download_source == DownloadSource::OFFLINE_PAGE ||
+      download_source == DownloadSource::INTERNAL_API ||
+      download_source == DownloadSource::EXTENSION_API ||
+      download_source == DownloadSource::EXTENSION_INSTALLER) {
+    base::UmaHistogramEnumeration(
+        kInsecureDownloadHistogramName,
+        InsecureDownloadSecurityStatus::kDownloadIgnored);
+    return false;
+  }
+
   // Evaluate download security
   const GURL& dl_url = item.GetURL();
   bool is_download_secure = content::IsOriginSecure(dl_url) ||
@@ -120,6 +210,12 @@ bool ShouldBlockFileAsMixedContent(const base::FilePath& path,
 
   auto initiator = item.GetRequestInitiator();
 
+  bool is_inferred = false;
+  if (!initiator.has_value() && item.GetTabUrl().is_valid()) {
+    initiator = url::Origin::Create(item.GetTabUrl());
+    is_inferred = true;
+  }
+
   // Then see if that extension is blocked
   bool found_blocked_extension = false;
 #if defined(OS_WIN)
@@ -137,12 +233,13 @@ bool ShouldBlockFileAsMixedContent(const base::FilePath& path,
     }
   }
 
+  auto security_status =
+      GetDownloadBlockingEnum(initiator, is_download_secure, is_inferred);
   base::UmaHistogramEnumeration(
-      GetDownloadBlockingExtensionMetricName(initiator, is_download_secure),
+      GetDownloadBlockingExtensionMetricName(security_status),
       GetExtensionEnumFromString(extension));
-  base::UmaHistogramEnumeration(
-      kInsecureDownloadHistogramName,
-      GetDownloadBlockingEnum(initiator, is_download_secure));
+  base::UmaHistogramEnumeration(kInsecureDownloadHistogramName,
+                                security_status);
   download::RecordDownloadValidationMetrics(
       download::DownloadMetricsCallsite::kMixContentDownloadBlocking,
       download::CheckDownloadConnectionSecurity(dl_url, item.GetUrlChain()),

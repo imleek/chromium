@@ -17,22 +17,32 @@
         --tabstrip-background-color: $i18n{frameColor};
         --tabstrip-tab-border-radius: 8px;
         --tabstrip-tab-active-border-color: rgb(var(--google-blue-500-rgb));
+
+        overflow: hidden;
       }
 
       body {
         background: var(--tabstrip-background-color);
+        height: 100%;
         margin: 0;
+        overflow: hidden;
         padding: 0;
-        touch-action: pan-x;
-      }
-
-      ::-webkit-scrollbar {
-        display: none;
+        width: 100%;
       }
     </style>
   </head>
   <body>
-    <tabstrip-tab-list role="tablist"></tabstrip-tab-list>
+    <!--
+        The CSS variables defined inside of TabList's style tag are also
+        made available through TabList's class object in JavaScript.
+    -->
+    <tabstrip-tab-list
+        role="tablist"
+        style="
+          --tabstrip-new-tab-button-margin: 24px;
+          --tabstrip-new-tab-button-width: 50px;
+        ">
+    </tabstrip-tab-list>
     <script src="tab_list.js" type="module"></script>
   </body>
 </html>

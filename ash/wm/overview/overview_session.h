@@ -132,20 +132,26 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   // Sets the dragged window on the split view drag indicators.
   void SetSplitViewDragIndicatorsDraggedWindow(aura::Window* dragged_window);
 
-  // This function sets the window dragging state on the split view drag
-  // indicators on every root window. On |root_window_being_dragged_in|, the
-  // state is determined by forwarding the other three arguments to
-  // |SplitViewDragIndicators::ComputeWindowDraggingState|. On other root
-  // windows, as snap previews are not appropriate, the state is determined
-  // similarly but with |SplitViewController::NONE| instead of |snap_position|.
+  // If |state_on_root_window_being_dragged_in| is kNoDrag, this function sets
+  // the state on every root window to kNoDrag. Otherwise it sets the state on
+  // |root_window_being_dragged_in| to |state_on_root_window_being_dragged_in|,
+  // and sets the state on other root windows to kOtherDisplay.
   void UpdateSplitViewDragIndicatorsWindowDraggingStates(
       const aura::Window* root_window_being_dragged_in,
-      bool is_dragging,
-      SplitViewDragIndicators::WindowDraggingState non_snap_state,
-      SplitViewController::SnapPosition snap_position);
+      SplitViewDragIndicators::WindowDraggingState
+          state_on_root_window_being_dragged_in);
+
+  // Sets the state on every root window to kNoDrag.
+  void ResetSplitViewDragIndicatorsWindowDraggingStates();
 
   // See |OverviewGrid::RearrangeDuringDrag|.
   void RearrangeDuringDrag(aura::Window* dragged_window);
+
+  // Updates the appearance of each drop target to visually indicate when the
+  // dragged window is being dragged over it.
+  void UpdateDropTargetsBackgroundVisibilities(
+      OverviewItem* dragged_item,
+      const gfx::PointF& location_in_screen);
 
   // Retrieves the window grid whose root window matches |root_window|. Returns
   // nullptr if the window grid is not found.
@@ -171,6 +177,8 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   // Removes |overview_item| from the corresponding grid. No items are
   // repositioned.
   void RemoveItem(OverviewItem* overview_item);
+
+  void RemoveDropTargets();
 
   void InitiateDrag(OverviewItem* item,
                     const gfx::PointF& location_in_screen,
@@ -228,11 +236,10 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   // Shifts and fades the grid in |grid_list_| associated with |location|.
   // Returns a ui::ScopedLayerAnimationSettings object for the caller to
   // observe.
-  // TODO(sammiequon): Change |new_y| to use float.
   std::unique_ptr<ui::ScopedLayerAnimationSettings>
   UpdateGridAtLocationYPositionAndOpacity(
       int64_t display_id,
-      int new_y,
+      float new_y,
       float opacity,
       UpdateAnimationSettingsCallback callback);
 
@@ -274,9 +281,16 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
   void OnHighlightedItemActivated(OverviewItem* item);
   void OnHighlightedItemClosed(OverviewItem* item);
 
+  // Called explicitly (with no list of observers) by the |RootWindowController|
+  // of |root|, so that the associated grid is properly removed and destroyed.
+  // Note: Usually, when a display is removed, it causes a window activation
+  // which ends overview mode, and then this function does not get called. This
+  // function is only needed for when overview mode cannot be ended (see
+  // |OverviewController::CanEndOverview| and https://crbug.com/1024325).
+  void OnRootWindowClosing(aura::Window* root);
+
   // display::DisplayObserver:
   void OnDisplayAdded(const display::Display& display) override;
-  void OnDisplayRemoved(const display::Display& display) override;
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t metrics) override;
 
@@ -394,6 +408,10 @@ class ASH_EXPORT OverviewSession : public display::DisplayObserver,
 
   // The number of items in the overview.
   size_t num_items_ = 0;
+
+  // True if we are currently using keyboard (control + left/right) to scroll
+  // through the grid.
+  bool is_keyboard_scrolling_grid_ = false;
 
   // Stores the overview enter/exit type. See the enum declaration for
   // information on how these types affect overview mode.

@@ -18,11 +18,12 @@ import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.net.NetworkChangeNotifier;
 
 import java.util.HashMap;
@@ -111,7 +112,7 @@ public class OfflinePageTabObserver
      * @param tab The tab we are adding an observer for.
      */
     public static void addObserverForTab(Tab tab) {
-        OfflinePageTabObserver observer = getObserverForActivity(tab.getActivity());
+        OfflinePageTabObserver observer = getObserverForActivity(((TabImpl) tab).getActivity());
         observer.startObservingTab(tab);
         observer.maybeShowReloadSnackbar(tab, false);
     }
@@ -294,7 +295,7 @@ public class OfflinePageTabObserver
     @VisibleForTesting
     void showReloadSnackbar(Tab tab) {
         OfflinePageUtils.showReloadSnackbar(
-                tab.getActivity(), mSnackbarManager, mSnackbarController, tab.getId());
+                ((TabImpl) tab).getActivity(), mSnackbarManager, mSnackbarController, tab.getId());
     }
 
     @VisibleForTesting
@@ -328,7 +329,7 @@ public class OfflinePageTabObserver
                 RecordUserAction.record("OfflinePages.ReloadButtonClicked");
                 Tab foundTab = tabModelSelector.getTabById(tabId);
                 if (foundTab == null) return;
-                if (!OfflinePageUtils.isShowingTrustedOfflinePage(foundTab)) {
+                if (!OfflinePageUtils.isShowingTrustedOfflinePage(foundTab.getWebContents())) {
                     RecordUserAction.record("OfflinePages.ReloadButtonClickedViewingUntrustedPage");
                 }
                 // Delegates to Tab to reload the page. Tab will send the correct header in order to

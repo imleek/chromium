@@ -184,7 +184,8 @@ enum AuthenticationState {
                     accessPoint:(signin_metrics::AccessPoint)accessPoint
                     promoAction:(signin_metrics::PromoAction)promoAction
                  signInIdentity:(ChromeIdentity*)identity
-                     dispatcher:(id<ApplicationCommands>)dispatcher {
+                     dispatcher:(id<ApplicationCommands, BrowsingDataCommands>)
+                                    dispatcher {
   self = [super init];
   if (self) {
     _browser = browser;
@@ -452,6 +453,11 @@ enum AuthenticationState {
 }
 
 - (void)updateGradientColors {
+  [CATransaction begin];
+  // If this isn't set, the changes here are automatically animated. The other
+  // color changes for dark mode don't animate, however, so there ends up being
+  // visual desyncing.
+  [CATransaction setDisableActions:YES];
   UIColor* backgroundColor = self.backgroundColor;
 
   if (@available(iOS 13, *)) {
@@ -463,6 +469,7 @@ enum AuthenticationState {
     (id)[backgroundColor colorWithAlphaComponent:0].CGColor,
     (id)backgroundColor.CGColor
   ];
+  [CATransaction commit];
 }
 
 #pragma mark - UIAdaptivePresentationController
@@ -1146,9 +1153,8 @@ enum AuthenticationState {
   _timerGenerator = [timerGenerator copy];
 }
 
-+ (std::unique_ptr<base::AutoReset<BOOL>>)hideActivityIndicatorForTesting {
-  return std::make_unique<base::AutoReset<BOOL>>(
-      &gChromeSigninViewControllerShowsActivityIndicator, NO);
++ (void)setActivityIndicatorShownForTesting:(BOOL)shown {
+  gChromeSigninViewControllerShowsActivityIndicator = shown;
 }
 
 @end

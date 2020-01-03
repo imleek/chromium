@@ -23,8 +23,8 @@ import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ResourceId;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.vr.UiUnsupportedMode;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.content_public.browser.WebContents;
@@ -50,18 +50,22 @@ public class ConnectionInfoPopup implements OnClickListener, ModalDialogProperti
     private final LinearLayout mContainer;
     private final WebContents mWebContents;
     private final WebContentsObserver mWebContentsObserver;
-    private final int mPaddingWide, mPaddingThin;
+    private final int mPaddingWide;
+    private final int mPaddingThin;
     private final long mNativeConnectionInfoPopup;
     private final CertificateViewer mCertificateViewer;
-    private TextView mCertificateViewerTextView, mMoreInfoLink;
-    private ViewGroup mCertificateLayout, mDescriptionLayout;
+    private TextView mCertificateViewerTextView;
+    private TextView mMoreInfoLink;
+    private ViewGroup mCertificateLayout;
+    private ViewGroup mDescriptionLayout;
     private Button mResetCertDecisionsButton;
     private String mLinkUrl;
 
-    private ConnectionInfoPopup(Context context, Tab tab) {
+    private ConnectionInfoPopup(
+            Context context, ModalDialogManager modalDialogManager, WebContents webContents) {
         mContext = context;
-        mModalDialogManager = tab.getActivity().getModalDialogManager();
-        mWebContents = tab.getWebContents();
+        mModalDialogManager = modalDialogManager;
+        mWebContents = webContents;
 
         mCertificateViewer = new CertificateViewer(mContext);
 
@@ -255,11 +259,10 @@ public class ConnectionInfoPopup implements OnClickListener, ModalDialogProperti
      * visible.
      *
      * @param context Context which is used for launching a dialog.
-     * @param tab The tab hosting the web contents for which to show website information. This
-     *            information is retrieved for the visible entry.
+     * @param webContents The WebContents for which to show website information
      */
-    public static void show(Context context, Tab tab) {
-        new ConnectionInfoPopup(context, tab);
+    public static void show(ChromeActivity context, WebContents webContents) {
+        new ConnectionInfoPopup(context, context.getModalDialogManager(), webContents);
     }
 
     @NativeMethods

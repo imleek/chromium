@@ -20,6 +20,7 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 
 #if defined(OS_CHROMEOS)
+#include "ash/public/cpp/shelf_model.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
@@ -100,11 +101,10 @@ void WebAppUiManagerImpl::UninstallAndReplace(
 #endif
     }
 
-    if (apps::AppServiceProxyFactory::IsEnabled()) {
-      apps::AppServiceProxy* proxy =
-          apps::AppServiceProxyFactory::GetForProfile(profile_);
-      proxy->Uninstall(from_app, nullptr /* parent_window */);
-    }
+    apps::AppServiceProxy* proxy =
+        apps::AppServiceProxyFactory::GetForProfile(profile_);
+    DCHECK(proxy);
+    proxy->Uninstall(from_app, nullptr /* parent_window */);
   }
 }
 

@@ -9,7 +9,6 @@
 #include "base/time/time.h"
 #include "components/gcm_driver/instance_id/instance_id.h"
 #include "components/invalidation/impl/fcm_invalidation_listener.h"
-#include "components/invalidation/impl/invalidation_listener.h"
 #include "components/invalidation/impl/invalidation_logger.h"
 #include "components/invalidation/impl/invalidator_registrar_with_memory.h"
 #include "components/invalidation/public/invalidation_handler.h"
@@ -24,7 +23,7 @@ class InstanceIDDriver;
 
 namespace syncer {
 class FCMNetworkHandler;
-class PerUserTopicRegistrationManager;
+class PerUserTopicSubscriptionManager;
 }  // namespace syncer
 
 namespace invalidation {
@@ -34,9 +33,9 @@ using FCMNetworkHandlerCallback =
         const std::string& sender_id,
         const std::string& app_id)>;
 
-using PerUserTopicRegistrationManagerCallback =
+using PerUserTopicSubscriptionManagerCallback =
     base::RepeatingCallback<std::unique_ptr<
-        syncer::PerUserTopicRegistrationManager>(const std::string& project_id,
+        syncer::PerUserTopicSubscriptionManager>(const std::string& project_id,
                                                  bool migrate_prefs)>;
 
 // This InvalidationService wraps the C++ Invalidation Client (FCM) library.
@@ -50,9 +49,9 @@ class FCMInvalidationServiceBase
  public:
   FCMInvalidationServiceBase(
       FCMNetworkHandlerCallback fcm_network_handler_callback,
-      PerUserTopicRegistrationManagerCallback
-          per_user_topic_registration_manager_callback,
-      instance_id::InstanceIDDriver* client_id_driver,
+      PerUserTopicSubscriptionManagerCallback
+          per_user_topic_subscription_manager_callback,
+      instance_id::InstanceIDDriver* instance_id_driver,
       PrefService* pref_service,
       const std::string& sender_id = {});
 
@@ -66,6 +65,9 @@ class FCMInvalidationServiceBase
   // It is an error to have registered handlers when the service is destroyed.
   void RegisterInvalidationHandler(
       syncer::InvalidationHandler* handler) override;
+  // TODO(crbug.com/1029698,crbug.com/1029481): This methods updates the set of
+  // *topics* that we're *subscribed* to. Once the legacy Tango implementation
+  // (i.e. TiclInvalidationService) is gone, rename accordingly.
   bool UpdateRegisteredInvalidationIds(syncer::InvalidationHandler* handler,
                                        const syncer::ObjectIdSet& ids) override;
   void UnregisterInvalidationHandler(
@@ -83,7 +85,7 @@ class FCMInvalidationServiceBase
   void OnInvalidatorStateChange(syncer::InvalidatorState state) override;
 
  protected:
-  // Initializes with an injected invalidator.
+  // Initializes with an injected listener.
   void InitForTest(
       std::unique_ptr<syncer::FCMInvalidationListener> invalidation_listener);
 
@@ -110,15 +112,16 @@ class FCMInvalidationServiceBase
   struct Diagnostics {
     base::Time instance_id_requested;
     base::Time instance_id_received;
+    base::Time instance_id_cleared;
     base::Time service_was_stopped;
     base::Time service_was_started;
   };
 
   void PopulateClientID();
   void ResetClientID();
-  void OnInstanceIdReceived(const std::string& id);
-  void OnDeleteIDCompleted(instance_id::InstanceID::Result);
-  void DoUpdateRegisteredIdsIfNeeded();
+  void OnInstanceIDReceived(const std::string& instance_id);
+  void OnDeleteInstanceIDCompleted(instance_id::InstanceID::Result result);
+  void DoUpdateSubscribedTopicsIfNeeded();
   const std::string GetApplicationName();
 
   const std::string sender_id_;
@@ -129,10 +132,11 @@ class FCMInvalidationServiceBase
   InvalidationLogger logger_;
 
   FCMNetworkHandlerCallback fcm_network_handler_callback_;
-  PerUserTopicRegistrationManagerCallback
-      per_user_topic_registration_manager_callback_;
+  PerUserTopicSubscriptionManagerCallback
+      per_user_topic_subscription_manager_callback_;
 
   instance_id::InstanceIDDriver* const instance_id_driver_;
+  // The invalidator client ID, aka instance ID.
   std::string client_id_;
 
   PrefService* const pref_service_;

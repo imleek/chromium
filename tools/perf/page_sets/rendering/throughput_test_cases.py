@@ -12,7 +12,7 @@ class ThroughputMetricStory(rendering_story.RenderingStory):
   def RunPageInteractions(self, action_runner):
     with action_runner.CreateGestureInteraction('AnimationOnTap'):
       action_runner.PressKey(' ')
-      action_runner.Wait(5)
+      action_runner.Wait(10)
       action_runner.PressKey(' ')
 
 
@@ -28,6 +28,11 @@ class MainThirtyImplSixty(ThroughputMetricStory):
   SUPPORTED_PLATFORMS = platforms.ALL_PLATFORMS
   URL = ('file://../../../../chrome/test/data/perf/throughput_test_cases/'
          'main-impl-animations-throughput.html#30')
+  TAGS = ThroughputMetricStory.TAGS + [
+    story_tags.REPRESENTATIVE_MOBILE,
+    story_tags.REPRESENTATIVE_MAC_DESKTOP,
+    story_tags.REPRESENTATIVE_WIN_DESKTOP
+  ]
 
 
 class MainSixtyImplSixty(ThroughputMetricStory):
@@ -57,3 +62,20 @@ class MainSixtyImplZero(ThroughputMetricStory):
   URL = ('file://../../../../chrome/test/data/perf/throughput_test_cases/'
          'main-animations-throughput.html#60')
 
+class MainFifteenWithJankImplZero(ThroughputMetricStory):
+  BASE_NAME = 'main_15fps_with_jank_impl_0fps'
+  SUPPORTED_PLATFORMS = platforms.ALL_PLATFORMS
+  URL = ('file://../../../../chrome/test/data/perf/throughput_test_cases/'
+         'main-animations-throughput.html?jank#15')
+
+class MainSixtyWithJankImplZero(ThroughputMetricStory):
+  BASE_NAME = 'main_60fps_with_jank_impl_0fps'
+  SUPPORTED_PLATFORMS = platforms.ALL_PLATFORMS
+  URL = ('file://../../../../chrome/test/data/perf/throughput_test_cases/'
+         'main-animations-throughput.html?jank#60')
+
+class MainZeroWithJankImplZero(ThroughputMetricStory):
+  BASE_NAME = 'main_0fps_with_jank_impl_0fps'
+  SUPPORTED_PLATFORMS = platforms.ALL_PLATFORMS
+  URL = ('file://../../../../chrome/test/data/perf/throughput_test_cases/'
+         'main-animations-throughput.html?jank#0')

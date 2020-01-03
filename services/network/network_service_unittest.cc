@@ -21,9 +21,6 @@
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
-#include "mojo/public/cpp/bindings/receiver.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/escape.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
@@ -909,8 +906,9 @@ class NetworkServiceTestWithService : public testing::Test {
     network_context_->CreateURLLoaderFactory(
         loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
+    loader_.reset();
     loader_factory->CreateLoaderAndStart(
-        mojo::MakeRequest(&loader_), 1, 1, options, request,
+        loader_.BindNewPipeAndPassReceiver(), 1, 1, options, request,
         client_->CreateRemote(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   }
@@ -931,7 +929,7 @@ class NetworkServiceTestWithService : public testing::Test {
   std::unique_ptr<TestURLLoaderClient> client_;
   mojo::Remote<mojom::NetworkService> network_service_;
   mojo::Remote<mojom::NetworkContext> network_context_;
-  mojom::URLLoaderPtr loader_;
+  mojo::Remote<mojom::URLLoader> loader_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkServiceTestWithService);
 };
@@ -1199,15 +1197,21 @@ TEST_F(NetworkServiceTestWithService, CRLSetIsApplied) {
       net::GetTestCertsDirectory().AppendASCII("crlset_by_leaf_spki.raw"),
       &crl_set_bytes));
 
-  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)));
-  network_service_.FlushForTesting();
+  {
+    base::RunLoop run_loop;
+    service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)),
+                            run_loop.QuitClosure());
+    run_loop.Run();
+  }
 
   // Flush all connections in the context, to force a new connection. A new
   // verification should be attempted, due to the configuration having
   // changed, thus forcing the CRLSet to be checked.
-  base::RunLoop run_loop;
-  context()->CloseAllConnections(run_loop.QuitClosure());
-  run_loop.Run();
+  {
+    base::RunLoop run_loop;
+    context()->CloseAllConnections(run_loop.QuitClosure());
+    run_loop.Run();
+  }
 
   // Make sure the connection fails, due to the certificate being revoked.
   LoadURL(test_server.GetURL("/echo"), options);
@@ -1233,8 +1237,10 @@ TEST_F(NetworkServiceTestWithService, CRLSetIsPassedToNewContexts) {
       net::GetTestCertsDirectory().AppendASCII("crlset_by_leaf_spki.raw"),
       &crl_set_bytes));
 
-  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)));
-  network_service_.FlushForTesting();
+  base::RunLoop run_loop;
+  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)),
+                          run_loop.QuitClosure());
+  run_loop.Run();
 
   // Configure a new NetworkContext.
   CreateNetworkContext();
@@ -1264,8 +1270,12 @@ TEST_F(NetworkServiceTestWithService, CRLSetIsUpdatedIfNewer) {
       net::GetTestCertsDirectory().AppendASCII("crlset_by_root_subject.raw"),
       &crl_set_bytes));
 
-  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)));
-  network_service_.FlushForTesting();
+  {
+    base::RunLoop run_loop;
+    service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)),
+                            run_loop.QuitClosure());
+    run_loop.Run();
+  }
 
   CreateNetworkContext();
 
@@ -1280,15 +1290,21 @@ TEST_F(NetworkServiceTestWithService, CRLSetIsUpdatedIfNewer) {
                                          "crlset_by_root_subject_no_spki.raw"),
                                      &crl_set_bytes));
 
-  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)));
-  network_service_.FlushForTesting();
+  {
+    base::RunLoop run_loop;
+    service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)),
+                            run_loop.QuitClosure());
+    run_loop.Run();
+  }
 
   // Flush all connections in the context, to force a new connection. A new
   // verification should be attempted, due to the configuration having
   // changed, thus forcing the CRLSet to be checked.
-  base::RunLoop run_loop;
-  context()->CloseAllConnections(run_loop.QuitClosure());
-  run_loop.Run();
+  {
+    base::RunLoop run_loop;
+    context()->CloseAllConnections(run_loop.QuitClosure());
+    run_loop.Run();
+  }
 
   // Make sure the connection fails, due to the certificate being revoked.
   LoadURL(test_server.GetURL("/echo"), options);
@@ -1313,8 +1329,12 @@ TEST_F(NetworkServiceTestWithService, CRLSetDoesNotDowngrade) {
                                          "crlset_by_root_subject_no_spki.raw"),
                                      &crl_set_bytes));
 
-  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)));
-  network_service_.FlushForTesting();
+  {
+    base::RunLoop run_loop;
+    service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)),
+                            run_loop.QuitClosure());
+    run_loop.Run();
+  }
 
   CreateNetworkContext();
 
@@ -1333,15 +1353,21 @@ TEST_F(NetworkServiceTestWithService, CRLSetDoesNotDowngrade) {
       net::GetTestCertsDirectory().AppendASCII("crlset_by_root_subject.raw"),
       &crl_set_bytes));
 
-  service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)));
-  network_service_.FlushForTesting();
+  {
+    base::RunLoop run_loop;
+    service()->UpdateCRLSet(base::as_bytes(base::make_span(crl_set_bytes)),
+                            run_loop.QuitClosure());
+    run_loop.Run();
+  }
 
   // Flush all connections in the context, to force a new connection. A new
   // verification should be attempted, due to the configuration having
   // changed, thus forcing the CRLSet to be checked.
-  base::RunLoop run_loop;
-  context()->CloseAllConnections(run_loop.QuitClosure());
-  run_loop.Run();
+  {
+    base::RunLoop run_loop;
+    context()->CloseAllConnections(run_loop.QuitClosure());
+    run_loop.Run();
+  }
 
   // Make sure the connection still fails, due to the newer CRLSet still
   // applying.
@@ -1612,8 +1638,9 @@ class NetworkServiceNetworkDelegateTest : public NetworkServiceTest {
     network_context_->CreateURLLoaderFactory(
         loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
 
+    loader_.reset();
     loader_factory->CreateLoaderAndStart(
-        mojo::MakeRequest(&loader_), 1, 1, options, request,
+        loader_.BindNewPipeAndPassReceiver(), 1, 1, options, request,
         client_->CreateRemote(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   }
@@ -1660,7 +1687,7 @@ class NetworkServiceNetworkDelegateTest : public NetworkServiceTest {
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
   std::unique_ptr<TestURLLoaderClient> client_;
   mojo::Remote<mojom::NetworkContext> network_context_;
-  mojom::URLLoaderPtr loader_;
+  mojo::Remote<mojom::URLLoader> loader_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkServiceNetworkDelegateTest);
 };
@@ -1672,7 +1699,7 @@ class ClearSiteDataNetworkContextClient : public TestNetworkContextClient {
       : receiver_(this, std::move(receiver)) {}
   ~ClearSiteDataNetworkContextClient() override = default;
 
-  void OnClearSiteData(uint32_t process_id,
+  void OnClearSiteData(int32_t process_id,
                        int32_t routing_id,
                        const GURL& url,
                        const std::string& header_value,

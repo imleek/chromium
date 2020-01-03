@@ -886,33 +886,6 @@ TEST_F(LocalCardMigrationManagerTest,
       AutofillMetrics::SaveTypeMetric::SERVER, 1);
 }
 
-// When local card migration is attempted and some cards aren't selected,
-// 3 strikes should be added.
-TEST_F(LocalCardMigrationManagerTest,
-       MigrateCreditCard_StrikesAddedWhenSomeCardsNotSelected) {
-  LocalCardMigrationStrikeDatabase local_card_migration_strike_database =
-      LocalCardMigrationStrikeDatabase(strike_database_);
-  // LocalCardMigrationStrikeDatabase should initially have no strikes.
-  EXPECT_EQ(local_card_migration_strike_database.GetStrikes(), 0);
-
-  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                     test::NextYear().c_str(), "1", "guid1");
-  AddLocalCreditCard(personal_data_, "Flo Master", "5454545454545454", "11",
-                     test::NextYear().c_str(), "1", "guid2");
-  // Set the billing_customer_number to designate existence of a Payments
-  // account.
-  personal_data_.SetPaymentsCustomerData(
-      std::make_unique<PaymentsCustomerData>(/*customer_id=*/"123456"));
-  local_card_migration_manager_->GetMigratableCreditCards();
-
-  // Only select one of the two cards.
-  autofill_client_.set_migration_card_selections(
-      std::vector<std::string>{"guid1"});
-  local_card_migration_manager_->AttemptToOfferLocalCardMigration(true);
-
-  EXPECT_EQ(local_card_migration_strike_database.GetStrikes(), 3);
-}
-
 // When local card migration is accepted, UMA metrics for LocalCardMigration
 // strike count is logged.
 TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_StrikeCountUMALogged) {
@@ -945,51 +918,10 @@ TEST_F(LocalCardMigrationManagerTest, MigrateCreditCard_StrikeCountUMALogged) {
       1);
 }
 
-// Use one unsupported local card with more unsupported local cards available
-// but DoNotMigrateUnsupportedLocalCards experiment flag is off, will trigger
-// migration.
-TEST_F(LocalCardMigrationManagerTest,
-       MigrateCreditCard_MigrateUnsupportedWhenExpOff) {
-  scoped_feature_list_.InitAndDisableFeature(
-      features::kAutofillDoNotMigrateUnsupportedLocalCards);
-
-  // Set the billing_customer_number to designate existence of a Payments
-  // account.
-  personal_data_.SetPaymentsCustomerData(
-      std::make_unique<PaymentsCustomerData>(/*customer_id=*/"123456"));
-
-  // Add a local credit card whose |TypeAndLastFourDigits| matches what we will
-  // enter below.
-  AddLocalCreditCard(personal_data_, "Flo Master", "4111111111111111", "11",
-                     test::NextYear().c_str(), "1", "guid1");
-  // Add another local credit card.
-  AddLocalCreditCard(personal_data_, "Flo Master", "5555555555554444", "11",
-                     test::NextYear().c_str(), "1", "guid2");
-
-  // Set up our credit card form data.
-  FormData credit_card_form;
-  test::CreateTestCreditCardFormData(&credit_card_form, true, false);
-  FormsSeen(std::vector<FormData>(1, credit_card_form));
-
-  // Set up the supported card bin ranges so that there are no supported cards.
-  std::vector<std::pair<int, int>> supported_card_bin_ranges{
-      std::make_pair(34, 34), std::make_pair(300, 305)};
-  payments_client_->SetSupportedBINRanges(supported_card_bin_ranges);
-
-  // Edit the data, and submit.
-  EditCreditCardFrom(credit_card_form, "Flo Master", "4111111111111111", "11",
-                     test::NextYear().c_str(), "123");
-  FormSubmitted(credit_card_form);
-  EXPECT_TRUE(local_card_migration_manager_->IntermediatePromptWasShown());
-}
-
 // Use one unsupported local card with more supported local cards will not
 // show intermediate prompt.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_MigrationAbortWhenUseUnsupportedLocalCard) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillDoNotMigrateUnsupportedLocalCards);
-
   // Set the billing_customer_number to designate existence of a Payments
   // account.
   personal_data_.SetPaymentsCustomerData(
@@ -1025,9 +957,6 @@ TEST_F(LocalCardMigrationManagerTest,
 // will show intermediate prompt with the only supported local card.
 TEST_F(LocalCardMigrationManagerTest,
        MigrateCreditCard_MigrateWhenHasSupportedLocalCard) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillDoNotMigrateUnsupportedLocalCards);
-
   // Set the billing_customer_number to designate existence of a Payments
   // account.
   personal_data_.SetPaymentsCustomerData(
@@ -1072,8 +1001,6 @@ TEST_F(LocalCardMigrationManagerTest,
 TEST_F(
     LocalCardMigrationManagerTest,
     MigrateCreditCard_MigrateWhenUseUnsupportedServerCardWithSupportedLocalCard) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillDoNotMigrateUnsupportedLocalCards);
   // Set the billing_customer_number to designate existence of a Payments
   // account.
   personal_data_.SetPaymentsCustomerData(
@@ -1114,8 +1041,6 @@ TEST_F(
 TEST_F(
     LocalCardMigrationManagerTest,
     MigrateCreditCard_MigrateAbortWhenUseSupportedServerCardWithUnsupportedLocalCard) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillDoNotMigrateUnsupportedLocalCards);
   // Set the billing_customer_number to designate existence of a Payments
   // account.
   personal_data_.SetPaymentsCustomerData(
@@ -1366,9 +1291,6 @@ TEST_F(LocalCardMigrationManagerTest,
 // use unsupported local card.
 TEST_F(LocalCardMigrationManagerTest,
        LogMigrationDecisionMetric_UseUnsupportedLocalCard) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillDoNotMigrateUnsupportedLocalCards);
-
   // Set the billing_customer_number to designate existence of a Payments
   // account.
   personal_data_.SetPaymentsCustomerData(
@@ -1409,9 +1331,6 @@ TEST_F(LocalCardMigrationManagerTest,
 // supported cards.
 TEST_F(LocalCardMigrationManagerTest,
        LogMigrationDecisionMetric_NoSupportedCardsForSupportedServerCard) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillDoNotMigrateUnsupportedLocalCards);
-
   // Set the billing_customer_number to designate existence of a Payments
   // account.
   personal_data_.SetPaymentsCustomerData(
@@ -1455,9 +1374,6 @@ TEST_F(LocalCardMigrationManagerTest,
 // no supported cards.
 TEST_F(LocalCardMigrationManagerTest,
        LogMigrationDecisionMetric_NoSupportedCardsForUnsupportedServerCard) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillDoNotMigrateUnsupportedLocalCards);
-
   // Set the billing_customer_number to designate existence of a Payments
   // account.
   personal_data_.SetPaymentsCustomerData(

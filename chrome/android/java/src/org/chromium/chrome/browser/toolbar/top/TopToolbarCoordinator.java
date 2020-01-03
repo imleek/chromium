@@ -19,6 +19,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.compositor.Invalidator;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.findinpage.FindToolbar;
 import org.chromium.chrome.browser.fullscreen.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.omnibox.LocationBar;
@@ -36,8 +37,6 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuButtonHelper;
  * A coordinator for the top toolbar component.
  */
 public class TopToolbarCoordinator implements Toolbar {
-    static final int TAB_SWITCHER_MODE_NORMAL_ANIMATION_DURATION_MS = 200;
-    static final int TAB_SWITCHER_MODE_GTS_ANIMATION_DURATION_MS = 150;
 
     /**
      * Observes toolbar URL expansion percentage change.
@@ -117,12 +116,15 @@ public class TopToolbarCoordinator implements Toolbar {
      * @param newTabClickHandler The click handler for the new tab button.
      * @param bookmarkClickHandler The click handler for the bookmarks button.
      * @param customTabsBackClickHandler The click handler for the custom tabs back button.
+     * @param overviewModeBehavior The {@link OverviewModeBehavior} to observe overview mode
+     *         changes.
      */
     public void initializeWithNative(TabModelSelector tabModelSelector,
             BrowserStateBrowserControlsVisibilityDelegate controlsVisibilityDelegate,
             LayoutManager layoutManager, OnClickListener tabSwitcherClickHandler,
             OnLongClickListener tabSwitcherLongClickHandler, OnClickListener newTabClickHandler,
-            OnClickListener bookmarkClickHandler, OnClickListener customTabsBackClickHandler) {
+            OnClickListener bookmarkClickHandler, OnClickListener customTabsBackClickHandler,
+            OverviewModeBehavior overviewModeBehavior) {
         if (mTabSwitcherModeCoordinatorPhone != null) {
             mTabSwitcherModeCoordinatorPhone.setOnTabSwitcherClickHandler(tabSwitcherClickHandler);
             mTabSwitcherModeCoordinatorPhone.setOnNewTabClickHandler(newTabClickHandler);
@@ -138,6 +140,7 @@ public class TopToolbarCoordinator implements Toolbar {
         mToolbarLayout.setBookmarkClickHandler(bookmarkClickHandler);
         mToolbarLayout.setCustomTabCloseClickHandler(customTabsBackClickHandler);
         mToolbarLayout.setLayoutUpdateHost(layoutManager);
+        mToolbarLayout.setOverviewModeBehavior(overviewModeBehavior);
 
         mToolbarLayout.onNativeLibraryReady();
     }
@@ -605,6 +608,9 @@ public class TopToolbarCoordinator implements Toolbar {
      */
     public void onBottomToolbarVisibilityChanged(boolean isVisible) {
         mToolbarLayout.onBottomToolbarVisibilityChanged(isVisible);
+        if (mTabSwitcherModeCoordinatorPhone != null) {
+            mTabSwitcherModeCoordinatorPhone.onBottomToolbarVisibilityChanged(isVisible);
+        }
     }
 
     /**

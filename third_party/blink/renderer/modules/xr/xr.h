@@ -38,11 +38,6 @@ class XR final : public EventTargetWithInlineData,
 
  public:
   // TODO(crbug.com/976796): Fix lint errors.
-  static XR* Create(LocalFrame& frame, int64_t source_id) {
-    return MakeGarbageCollected<XR>(frame, source_id);
-  }
-
-  // TODO(crbug.com/976796): Fix lint errors.
   XR(LocalFrame& frame, int64_t ukm_source_id);
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(devicechange, kDevicechange)
@@ -128,7 +123,7 @@ class XR final : public EventTargetWithInlineData,
    public:
     PendingRequestSessionQuery(int64_t ukm_source_id,
                                ScriptPromiseResolver* resolver,
-                               XRSession::SessionMode mode,
+                               device::mojom::blink::XRSessionMode mode,
                                RequestedXRSessionFeatureSet required_features,
                                RequestedXRSessionFeatureSet optional_features);
     virtual ~PendingRequestSessionQuery() = default;
@@ -162,7 +157,7 @@ class XR final : public EventTargetWithInlineData,
     void RejectWithTypeError(const String& message,
                              ExceptionState* exception_state);
 
-    XRSession::SessionMode mode() const;
+    device::mojom::blink::XRSessionMode mode() const;
     const XRSessionFeatureSet& RequiredFeatures() const;
     const XRSessionFeatureSet& OptionalFeatures() const;
     bool InvalidRequiredFeatures() const;
@@ -189,7 +184,7 @@ class XR final : public EventTargetWithInlineData,
             metrics_recorder = mojo::NullRemote());
 
     Member<ScriptPromiseResolver> resolver_;
-    const XRSession::SessionMode mode_;
+    const device::mojom::blink::XRSessionMode mode_;
     RequestedXRSessionFeatureSet required_features_;
     RequestedXRSessionFeatureSet optional_features_;
     SensorRequirement sensor_requirement_ = SensorRequirement::kNone;
@@ -209,7 +204,7 @@ class XR final : public EventTargetWithInlineData,
       : public GarbageCollected<PendingSupportsSessionQuery> {
    public:
     PendingSupportsSessionQuery(ScriptPromiseResolver*,
-                                XRSession::SessionMode,
+                                device::mojom::blink::XRSessionMode,
                                 bool throw_on_unsupported);
     virtual ~PendingSupportsSessionQuery() = default;
 
@@ -239,13 +234,13 @@ class XR final : public EventTargetWithInlineData,
 
     bool ThrowOnUnsupported() const { return throw_on_unsupported_; }
 
-    XRSession::SessionMode mode() const;
+    device::mojom::blink::XRSessionMode mode() const;
 
     virtual void Trace(blink::Visitor*);
 
    private:
     Member<ScriptPromiseResolver> resolver_;
-    const XRSession::SessionMode mode_;
+    const device::mojom::blink::XRSessionMode mode_;
 
     // Only set when calling the deprecated supportsSession method.
     const bool throw_on_unsupported_ = false;
@@ -265,7 +260,7 @@ class XR final : public EventTargetWithInlineData,
   RequestedXRSessionFeatureSet ParseRequestedFeatures(
       Document* doc,
       const HeapVector<ScriptValue>& features,
-      const XRSession::SessionMode& session_mode,
+      const device::mojom::blink::XRSessionMode& session_mode,
       mojom::ConsoleMessageLevel error_level);
 
   void RequestImmersiveSession(LocalFrame* frame,
@@ -290,7 +285,7 @@ class XR final : public EventTargetWithInlineData,
                           RegisteredEventListener&) override;
 
   XRSession* CreateSession(
-      XRSession::SessionMode mode,
+      device::mojom::blink::XRSessionMode mode,
       XRSession::EnvironmentBlendMode blend_mode,
       mojo::PendingReceiver<device::mojom::blink::XRSessionClient>
           client_receiver,

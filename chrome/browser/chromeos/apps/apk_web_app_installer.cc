@@ -61,7 +61,7 @@ void ApkWebAppInstaller::Start(arc::mojom::WebAppInfoPtr web_app_info,
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!weak_owner_.get()) {
     CompleteInstallation(web_app::AppId(),
-                         web_app::InstallResultCode::kFailedUnknownReason);
+                         web_app::InstallResultCode::kApkWebAppInstallFailed);
     return;
   }
 
@@ -70,7 +70,7 @@ void ApkWebAppInstaller::Start(arc::mojom::WebAppInfoPtr web_app_info,
   if (web_app_info.is_null() || icon_png_data.empty()) {
     LOG(ERROR) << "Insufficient data to install a web app";
     CompleteInstallation(web_app::AppId(),
-                         web_app::InstallResultCode::kFailedUnknownReason);
+                         web_app::InstallResultCode::kApkWebAppInstallFailed);
     return;
   }
 
@@ -135,12 +135,8 @@ void ApkWebAppInstaller::OnWebAppCreated(const GURL& app_url,
 void ApkWebAppInstaller::OnImageDecoded(const SkBitmap& decoded_image) {
   DCHECK(web_app_info_);
 
-  WebApplicationIconInfo icon_info;
-  icon_info.data = decoded_image;
-  icon_info.width = decoded_image.width();
-  icon_info.height = decoded_image.height();
-
-  web_app_info_->icons.push_back(icon_info);
+  if (decoded_image.width() == decoded_image.height())
+    web_app_info_->icon_bitmaps[decoded_image.width()] = decoded_image;
 
   if (!weak_owner_.get()) {
     // Assume |profile_| is no longer valid - destroy this object and

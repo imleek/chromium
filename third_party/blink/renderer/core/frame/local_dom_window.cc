@@ -55,7 +55,6 @@
 #include "third_party/blink/renderer/core/dom/frame_request_callback_collection.h"
 #include "third_party/blink/renderer/core/dom/scripted_idle_task_controller.h"
 #include "third_party/blink/renderer/core/dom/sink_document.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/events/hash_change_event.h"
@@ -81,6 +80,7 @@
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/html/custom/custom_element_registry.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
+#include "third_party/blink/renderer/core/html/plugin_document.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
@@ -117,11 +117,13 @@ static constexpr base::TimeDelta kUnusedPreloadTimeout =
 static void UpdateSuddenTerminationStatus(
     LocalDOMWindow* dom_window,
     bool added_listener,
-    SuddenTerminationDisablerType disabler_type) {
+    blink::mojom::SuddenTerminationDisablerType disabler_type) {
   Platform::Current()->SuddenTerminationChanged(!added_listener);
-  if (dom_window->GetFrame() && dom_window->GetFrame()->Client())
-    dom_window->GetFrame()->Client()->SuddenTerminationDisablerChanged(
-        added_listener, disabler_type);
+  if (dom_window->GetFrame()) {
+    dom_window->GetFrame()
+        ->GetLocalFrameHostRemote()
+        .SuddenTerminationDisablerChanged(added_listener, disabler_type);
+  }
 }
 
 using DOMWindowSet = HeapHashCountedSet<WeakMember<LocalDOMWindow>>;
@@ -144,7 +146,9 @@ static void TrackUnloadEventListener(LocalDOMWindow* dom_window) {
   DOMWindowSet& set = WindowsWithUnloadEventListeners();
   if (set.insert(dom_window).is_new_entry) {
     // The first unload handler was added.
-    UpdateSuddenTerminationStatus(dom_window, true, kUnloadHandler);
+    UpdateSuddenTerminationStatus(
+        dom_window, true,
+        blink::mojom::SuddenTerminationDisablerType::kUnloadHandler);
   }
 }
 
@@ -155,7 +159,9 @@ static void UntrackUnloadEventListener(LocalDOMWindow* dom_window) {
     return;
   if (set.erase(it)) {
     // The last unload handler was removed.
-    UpdateSuddenTerminationStatus(dom_window, false, kUnloadHandler);
+    UpdateSuddenTerminationStatus(
+        dom_window, false,
+        blink::mojom::SuddenTerminationDisablerType::kUnloadHandler);
   }
 }
 
@@ -165,14 +171,18 @@ static void UntrackAllUnloadEventListeners(LocalDOMWindow* dom_window) {
   if (it == set.end())
     return;
   set.RemoveAll(it);
-  UpdateSuddenTerminationStatus(dom_window, false, kUnloadHandler);
+  UpdateSuddenTerminationStatus(
+      dom_window, false,
+      blink::mojom::SuddenTerminationDisablerType::kUnloadHandler);
 }
 
 static void TrackBeforeUnloadEventListener(LocalDOMWindow* dom_window) {
   DOMWindowSet& set = WindowsWithBeforeUnloadEventListeners();
   if (set.insert(dom_window).is_new_entry) {
     // The first beforeunload handler was added.
-    UpdateSuddenTerminationStatus(dom_window, true, kBeforeUnloadHandler);
+    UpdateSuddenTerminationStatus(
+        dom_window, true,
+        blink::mojom::SuddenTerminationDisablerType::kBeforeUnloadHandler);
   }
 }
 
@@ -183,7 +193,9 @@ static void UntrackBeforeUnloadEventListener(LocalDOMWindow* dom_window) {
     return;
   if (set.erase(it)) {
     // The last beforeunload handler was removed.
-    UpdateSuddenTerminationStatus(dom_window, false, kBeforeUnloadHandler);
+    UpdateSuddenTerminationStatus(
+        dom_window, false,
+        blink::mojom::SuddenTerminationDisablerType::kBeforeUnloadHandler);
   }
 }
 
@@ -193,7 +205,9 @@ static void UntrackAllBeforeUnloadEventListeners(LocalDOMWindow* dom_window) {
   if (it == set.end())
     return;
   set.RemoveAll(it);
-  UpdateSuddenTerminationStatus(dom_window, false, kBeforeUnloadHandler);
+  UpdateSuddenTerminationStatus(
+      dom_window, false,
+      blink::mojom::SuddenTerminationDisablerType::kBeforeUnloadHandler);
 }
 
 LocalDOMWindow::LocalDOMWindow(LocalFrame& frame)
@@ -242,7 +256,7 @@ Document* LocalDOMWindow::CreateDocument(const String& mime_type,
     document = DOMImplementation::createDocument(
         mime_type, init,
         init.GetFrame() ? init.GetFrame()->InViewSourceMode() : false);
-    if (document->IsPluginDocument() &&
+    if (IsA<PluginDocument>(document) &&
         document->IsSandboxed(WebSandboxFlags::kPlugins)) {
       // document->Shutdown();
       document = MakeGarbageCollected<SinkDocument>(init);
@@ -561,17 +575,19 @@ void LocalDOMWindow::SchedulePostMessage(
   // surfaces often as a problem (see crbug.com/587012).
   std::unique_ptr<SourceLocation> location = SourceLocation::Capture(source);
   document_->GetTaskRunner(TaskType::kPostedMessage)
-      ->PostTask(FROM_HERE,
-                 WTF::Bind(&LocalDOMWindow::DispatchPostMessage,
-                           WrapPersistent(this), WrapPersistent(event),
-                           std::move(target), std::move(location)));
+      ->PostTask(
+          FROM_HERE,
+          WTF::Bind(&LocalDOMWindow::DispatchPostMessage, WrapPersistent(this),
+                    WrapPersistent(event), std::move(target),
+                    std::move(location), source->GetAgentClusterID()));
   probe::AsyncTaskScheduled(document(), "postMessage", event->async_task_id());
 }
 
 void LocalDOMWindow::DispatchPostMessage(
     MessageEvent* event,
     scoped_refptr<const SecurityOrigin> intended_target_origin,
-    std::unique_ptr<SourceLocation> location) {
+    std::unique_ptr<SourceLocation> location,
+    const base::UnguessableToken& source_agent_cluster_id) {
   probe::AsyncTask async_task(document(), event->async_task_id());
   if (!IsCurrentlyDisplayedInFrame())
     return;
@@ -579,19 +595,21 @@ void LocalDOMWindow::DispatchPostMessage(
   event->EntangleMessagePorts(document());
 
   DispatchMessageEventWithOriginCheck(intended_target_origin.get(), event,
-                                      std::move(location));
+                                      std::move(location),
+                                      source_agent_cluster_id);
 }
 
 void LocalDOMWindow::DispatchMessageEventWithOriginCheck(
     const SecurityOrigin* intended_target_origin,
     MessageEvent* event,
-    std::unique_ptr<SourceLocation> location) {
+    std::unique_ptr<SourceLocation> location,
+    const base::UnguessableToken& source_agent_cluster_id) {
   if (intended_target_origin) {
     // Check target origin now since the target document may have changed since
     // the timer was scheduled.
     const SecurityOrigin* security_origin = document()->GetSecurityOrigin();
     bool valid_target =
-        intended_target_origin->IsSameSchemeHostPort(security_origin);
+        intended_target_origin->IsSameOriginWith(security_origin);
 
     if (!valid_target) {
       String message = ExceptionMessages::FailedToExecute(
@@ -622,8 +640,29 @@ void LocalDOMWindow::DispatchMessageEventWithOriginCheck(
     const SecurityOrigin* target_security_origin =
         document()->GetSecurityOrigin();
 
-    if (!sender_security_origin->IsSameSchemeHostPort(target_security_origin)) {
+    if (!sender_security_origin->IsSameOriginWith(target_security_origin)) {
       event = MessageEvent::CreateError(event->origin(), event->source());
+    }
+  }
+  if (event->IsLockedToAgentCluster()) {
+    if (!document()->IsSameAgentCluster(source_agent_cluster_id)) {
+      UseCounter::Count(
+          document(),
+          WebFeature::kMessageEventSharedArrayBufferDifferentAgentCluster);
+      // TODO(dtapuska): Make sure this generates an error. See
+      // https://crbug.com/1028736
+      // event = MessageEvent::CreateError(event->origin(), event->source());
+    } else {
+      scoped_refptr<SecurityOrigin> sender_origin =
+          SecurityOrigin::Create(sender);
+      if (!sender_origin->IsSameOriginWith(document()->GetSecurityOrigin())) {
+        UseCounter::Count(
+            document(),
+            WebFeature::kMessageEventSharedArrayBufferSameAgentCluster);
+      } else {
+        UseCounter::Count(document(),
+                          WebFeature::kMessageEventSharedArrayBufferSameOrigin);
+      }
     }
   }
   DispatchEvent(*event);
@@ -1052,7 +1091,8 @@ void LocalDOMWindow::scrollBy(const ScrollToOptions* scroll_to_options) const {
 
   std::unique_ptr<cc::SnapSelectionStrategy> strategy =
       cc::SnapSelectionStrategy::CreateForEndAndDirection(
-          gfx::ScrollOffset(current_position), gfx::ScrollOffset(scaled_delta));
+          gfx::ScrollOffset(current_position), gfx::ScrollOffset(scaled_delta),
+          RuntimeEnabledFeatures::FractionalScrollOffsetsEnabled());
   new_scaled_position =
       viewport->GetSnapPositionAndSetTarget(*strategy).value_or(
           new_scaled_position);
@@ -1511,16 +1551,13 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
   // an embedder-initiated navigation.  FrameLoader assumes no responsibility
   // for generating an embedder-initiated navigation's referrer, so we need to
   // ensure the proper referrer is set now.
-  // TODO(domfarolino): Stop setting ResourceRequest's HTTP Referrer and store
-  // this is a separate member. See https://crbug.com/850813.
-  const SecurityOrigin* origin =
-      active_document ? active_document->GetSecurityOrigin()
-                      : SecurityOrigin::Create(completed_url).get();
-  frame_request.GetResourceRequest().SetHttpReferrer(
-      SecurityPolicy::GenerateReferrer(
-          active_document->GetReferrerPolicy(), origin, completed_url,
-          window_features.noreferrer ? Referrer::NoReferrer()
-                                     : active_document->OutgoingReferrer()));
+  Referrer referrer = SecurityPolicy::GenerateReferrer(
+      active_document->GetReferrerPolicy(), completed_url,
+      window_features.noreferrer ? Referrer::NoReferrer()
+                                 : active_document->OutgoingReferrer());
+  frame_request.GetResourceRequest().SetReferrerString(referrer.referrer);
+  frame_request.GetResourceRequest().SetReferrerPolicy(
+      referrer.referrer_policy);
 
   frame_request.GetResourceRequest().SetHasUserGesture(
       LocalFrame::HasTransientUserActivation(GetFrame()));

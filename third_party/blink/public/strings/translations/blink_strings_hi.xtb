@@ -82,7 +82,6 @@
 <translation id="3822383571486410024">कृपया इस लेख को <ph name="MIN_CHARACTERS" /> वर्णों या ज़्यादा तक बढ़ाएं (वर्तमान में आप <ph name="CURRENT_LENGTH" /> वर्णों का उपयोग कर रहे हैं).</translation>
 <translation id="383465348367842624">'<ph name="ATSIGN" />' के बाद आने वाले भाग में '<ph name="INVALIDCHARACTER" />' प्रतीक शामिल नहीं होना चाहिए.</translation>
 <translation id="3846214748874656680">पूर्णस्क्रीन से बाहर निकलें</translation>
-<translation id="3889183436948184105">बदलाव</translation>
 <translation id="3920932319529768807">निष्कर्ष</translation>
 <translation id="3924558731517983934">ऐप्लिकेशन</translation>
 <translation id="3944740393230681990">प्रस्तावना</translation>
@@ -114,9 +113,12 @@
 <translation id="479989351350248267">search</translation>
 <translation id="4812940957355064477">कृपया कोई संख्या डालें.</translation>
 <translation id="4912536737030637138">संदर्भ सूची प्रविष्टि</translation>
+<translation id="492244087561876220">टिप्पणी</translation>
+<translation id="4971739861736909480"><ph name="ACCNAME" /> चुना गया</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> चुने गए</translation>
 <translation id="4992066212339426712">अनम्यूट करें</translation>
 <translation id="49969490063480558">कृपया '<ph name="ATSIGN" />' के बाद आने वाला भाग डालें. '<ph name="INVALIDADDRESS" />' अधूरा है.</translation>
+<translation id="5022314756875057021">लाइन ग्रुप</translation>
 <translation id="5034860022980953847">प्रगति संकेतक</translation>
 <translation id="5090250355906949916">वीडियो टाइम स्क्रबर</translation>
 <translation id="5093189678851173835">इपिग्राफ़</translation>
@@ -217,6 +219,7 @@
 <translation id="7888071071722539607">कृपया ईमेल पते में '<ph name="ATSIGN" />' शामिल करें. '<ph name="INVALIDADDRESS" />' में '<ph name="ATSIGN" />' नहीं है.</translation>
 <translation id="7891486169920085145">विभाजक</translation>
 <translation id="795667975304826397">कोई फाइल नहीं चुनी गई</translation>
+<translation id="7962328325860248200"><ph name="ACCNAME" /> नहीं चुना गया</translation>
 <translation id="8034303206267677282">मज़बूत</translation>
 <translation id="8053789581856978548">लेख फ़ील्ड खोजें</translation>
 <translation id="8057695513531652401">सूचना</translation>

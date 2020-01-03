@@ -20,16 +20,16 @@ void LogUserMediaRequestResult(mojom::blink::MediaStreamRequestResult result) {
       mojom::blink::MediaStreamRequestResult::NUM_MEDIA_REQUEST_RESULTS);
 }
 
-void UpdateWebRTCMethodCount(WebRTCAPIName api_name) {
+void UpdateWebRTCMethodCount(RTCAPIName api_name) {
   DVLOG(3) << "Incrementing WebRTC.webkitApiCount for "
            << static_cast<int>(api_name);
   UMA_HISTOGRAM_ENUMERATION("WebRTC.webkitApiCount", api_name,
-                            WebRTCAPIName::kInvalidName);
+                            RTCAPIName::kInvalidName);
   PerSessionWebRTCAPIMetrics::GetInstance()->LogUsageOnlyOnce(api_name);
 }
 
 PerSessionWebRTCAPIMetrics::~PerSessionWebRTCAPIMetrics() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 }
 
 // static
@@ -38,12 +38,12 @@ PerSessionWebRTCAPIMetrics* PerSessionWebRTCAPIMetrics::GetInstance() {
 }
 
 void PerSessionWebRTCAPIMetrics::IncrementStreamCounter() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   ++num_streams_;
 }
 
 void PerSessionWebRTCAPIMetrics::DecrementStreamCounter() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (--num_streams_ == 0) {
     ResetUsage();
   }
@@ -53,15 +53,15 @@ PerSessionWebRTCAPIMetrics::PerSessionWebRTCAPIMetrics() : num_streams_(0) {
   ResetUsage();
 }
 
-void PerSessionWebRTCAPIMetrics::LogUsage(WebRTCAPIName api_name) {
+void PerSessionWebRTCAPIMetrics::LogUsage(RTCAPIName api_name) {
   DVLOG(3) << "Incrementing WebRTC.webkitApiCountPerSession for "
            << static_cast<int>(api_name);
   UMA_HISTOGRAM_ENUMERATION("WebRTC.webkitApiCountPerSession", api_name,
-                            WebRTCAPIName::kInvalidName);
+                            RTCAPIName::kInvalidName);
 }
 
-void PerSessionWebRTCAPIMetrics::LogUsageOnlyOnce(WebRTCAPIName api_name) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+void PerSessionWebRTCAPIMetrics::LogUsageOnlyOnce(RTCAPIName api_name) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!has_used_api_[static_cast<int>(api_name)]) {
     has_used_api_[static_cast<int>(api_name)] = true;
     LogUsage(api_name);

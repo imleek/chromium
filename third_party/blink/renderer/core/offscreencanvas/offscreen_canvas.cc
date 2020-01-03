@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/image-encoders/image_encoder_utils.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -196,7 +197,8 @@ scoped_refptr<Image> OffscreenCanvas::GetSourceImageForCanvas(
     *status = kInvalidSourceImageStatus;
     sk_sp<SkSurface> surface =
         SkSurface::MakeRasterN32Premul(size_.Width(), size_.Height());
-    return surface ? StaticBitmapImage::Create(surface->makeImageSnapshot())
+    return surface ? UnacceleratedStaticBitmapImage::Create(
+                         surface->makeImageSnapshot())
                    : nullptr;
   }
   if (!size.Width() || !size.Height()) {
@@ -322,14 +324,6 @@ CanvasResourceDispatcher* OffscreenCanvas::GetOrCreateResourceDispatcher() {
       frame_dispatcher_->SetPlaceholderCanvasDispatcher(placeholder_canvas_id_);
   }
   return frame_dispatcher_.get();
-}
-
-void OffscreenCanvas::DiscardResourceProvider() {
-  CanvasResourceHost::DiscardResourceProvider();
-  // If deferral is enabled the recorder will play back the transform, so
-  // we should not do it here or else it will be applied twice
-  if (!context_->IsDeferralEnabled())
-    needs_matrix_clip_restore_ = true;
 }
 
 CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {

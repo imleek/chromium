@@ -59,7 +59,8 @@ ShelfConfig::ShelfConfig()
       shelf_tooltip_preview_max_ratio_(1.5),    // = 3/2
       shelf_tooltip_preview_min_ratio_(0.666),  // = 2/3
       shelf_blur_radius_(30),
-      mousewheel_scroll_offset_threshold_(20) {
+      mousewheel_scroll_offset_threshold_(20),
+      in_app_control_button_height_inset_(4) {
   UpdateIsDense();
 }
 
@@ -121,6 +122,14 @@ void ShelfConfig::OnAppListVisibilityWillChange(bool shown,
   OnShelfConfigUpdated();
 }
 
+void ShelfConfig::SetAssistantVisible(bool visible) {
+  if (is_assistant_visible_ == visible)
+    return;
+
+  is_assistant_visible_ = visible;
+  OnShelfConfigUpdated();
+}
+
 int ShelfConfig::shelf_size() const {
   return GetShelfSize(false /*ignore_in_app_state*/);
 }
@@ -169,7 +178,7 @@ int ShelfConfig::control_size() const {
 int ShelfConfig::control_border_radius() const {
   return (chromeos::switches::ShouldShowShelfHotseat() && is_in_app() &&
           IsTabletMode())
-             ? 0
+             ? control_size() / 2 - in_app_control_button_height_inset_
              : control_size() / 2;
 }
 
@@ -182,7 +191,15 @@ int ShelfConfig::home_button_edge_spacing() const {
 }
 
 base::TimeDelta ShelfConfig::hotseat_background_animation_duration() const {
-  return base::TimeDelta::FromMilliseconds(350);
+  // This matches the duration of the maximize/minimize animation.
+  return base::TimeDelta::FromMilliseconds(300);
+}
+
+base::TimeDelta ShelfConfig::shelf_animation_duration() const {
+  if (chromeos::switches::ShouldShowShelfHotseat())
+    return hotseat_background_animation_duration();
+
+  return base::TimeDelta::FromMilliseconds(200);
 }
 
 int ShelfConfig::status_area_hit_region_padding() const {
@@ -195,8 +212,9 @@ bool ShelfConfig::is_in_app() const {
   const auto* session = shell->session_controller();
   if (!session)
     return false;
+
   return session->GetSessionState() == session_manager::SessionState::ACTIVE &&
-         !is_app_list_visible_;
+         (!is_app_list_visible_ || is_assistant_visible_);
 }
 
 void ShelfConfig::UpdateIsDense() {
@@ -253,13 +271,15 @@ SkColor ShelfConfig::GetMaximizedShelfColor() const {
 SkColor ShelfConfig::GetDefaultShelfColor() const {
   if (!features::IsBackgroundBlurEnabled()) {
     return AshColorProvider::Get()->GetBaseLayerColor(
-        AshColorProvider::BaseLayerType::kTransparentWithoutBlur,
+        AshColorProvider::BaseLayerType::kTransparent90,
         AshColorProvider::AshColorMode::kDark);
   }
 
   SkColor final_color = AshColorProvider::Get()->GetBaseLayerColor(
-      AshColorProvider::BaseLayerType::kTransparentWithBlur,
+      IsTabletMode() ? AshColorProvider::BaseLayerType::kTransparent60
+                     : AshColorProvider::BaseLayerType::kTransparent74,
       AshColorProvider::AshColorMode::kDark);
+  int final_alpha = SkColorGetA(final_color);
 
   if (!Shell::Get()->wallpaper_controller())
     return final_color;
@@ -276,7 +296,7 @@ SkColor ShelfConfig::GetDefaultShelfColor() const {
   final_color = color_utils::GetResultingPaintColor(
       SkColorSetA(SK_ColorBLACK, 127), dark_muted_color);
 
-  return SkColorSetA(final_color, 189);  // 74% opacity
+  return SkColorSetA(final_color, final_alpha);
 }
 
 int ShelfConfig::GetShelfControlButtonBlurRadius() const {

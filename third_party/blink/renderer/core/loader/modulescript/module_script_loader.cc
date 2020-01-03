@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/loader/modulescript/module_script_loader.h"
 
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/dom/dom_implementation.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -116,17 +117,16 @@ void ModuleScriptLoader::FetchInternal(
 #endif
 
   // <spec step="5">... destination is destination, ...</spec>
-  resource_request.SetRequestContext(module_request.Destination());
+  resource_request.SetRequestContext(module_request.ContextType());
+  resource_request.SetRequestDestination(module_request.Destination());
 
   ResourceLoaderOptions options;
 
-  // TODO(domfarolino): Probably insert step 6 here, which sets the credentials
-  // mode of "worker"- and "sharedworker"-destined requests to "same-origin",
-  // ensuring cross-origin module workers result in a network error, once
-  // https://github.com/whatwg/html/pull/3656 is merged. Cross-origin
-  // workers are not supported anyways due to URL checks in
-  // AbstractWorker::ResolveURL, but it might be good to try and follow the spec
-  // here, and let this resolve in a network error as Fetch dictates?
+  // <spec step="6">If destination is "worker" or "sharedworker" and the
+  // top-level module fetch flag is set, then set request's mode to
+  // "same-origin".</spec>
+  // Cross-origin workers are not supported due to security checks in
+  // AbstractWorker::ResolveURL, so no action needs to be taken here.
 
   // <spec step="7">Set up the module script request given request and
   // options.</spec>
@@ -250,9 +250,14 @@ void ModuleScriptLoader::NotifyFetchFinished(
   // url, and options.</spec>
   switch (params->GetModuleType()) {
     case ModuleScriptCreationParams::ModuleType::kJSONModule:
-      DCHECK(RuntimeEnabledFeatures::JSONModulesEnabled());
+      DCHECK(base::FeatureList::IsEnabled(blink::features::kJSONModules));
       module_script_ = ValueWrapperSyntheticModuleScript::
           CreateJSONWrapperSyntheticModuleScript(params, modulator_);
+      break;
+    case ModuleScriptCreationParams::ModuleType::kCSSModule:
+      DCHECK(RuntimeEnabledFeatures::CSSModulesEnabled());
+      module_script_ = ValueWrapperSyntheticModuleScript::
+          CreateCSSWrapperSyntheticModuleScript(params, modulator_);
       break;
     case ModuleScriptCreationParams::ModuleType::kJavaScriptModule:
       // Step 9. "Let source text be the result of UTF-8 decoding response's

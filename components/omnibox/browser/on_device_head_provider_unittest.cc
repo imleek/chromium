@@ -13,7 +13,7 @@
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
 #include "components/omnibox/browser/fake_autocomplete_provider_client.h"
-#include "components/omnibox/browser/on_device_head_serving.h"
+#include "components/omnibox/browser/on_device_head_model.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -29,6 +29,7 @@ class OnDeviceHeadProviderTest : public testing::Test,
     client_.reset(new FakeAutocompleteProviderClient());
     SetTestOnDeviceHeadModel();
     provider_ = OnDeviceHeadProvider::Create(client_.get(), this);
+    provider_->AddModelUpdateCallback();
     task_environment_.RunUntilIdle();
   }
 
@@ -46,7 +47,7 @@ class OnDeviceHeadProviderTest : public testing::Test,
   void SetTestOnDeviceHeadModel() {
     base::FilePath file_path;
     base::PathService::Get(base::DIR_SOURCE_ROOT, &file_path);
-    // The same test model also used in ./on_device_head_serving_unittest.cc.
+    // The same test model also used in ./on_device_head_model_unittest.cc.
     file_path = file_path.AppendASCII("components/test/data/omnibox");
     ASSERT_TRUE(base::PathExists(file_path));
     auto* update_listener = OnDeviceModelUpdateListener::GetInstance();
@@ -55,10 +56,9 @@ class OnDeviceHeadProviderTest : public testing::Test,
     task_environment_.RunUntilIdle();
   }
 
-  void ResetServingInstance() {
+  void ResetModelInstance() {
     if (provider_) {
-      provider_->serving_.reset();
-      provider_->current_model_filename_.clear();
+      provider_->model_filename_.clear();
     }
   }
 
@@ -73,12 +73,12 @@ class OnDeviceHeadProviderTest : public testing::Test,
   scoped_refptr<OnDeviceHeadProvider> provider_;
 };
 
-TEST_F(OnDeviceHeadProviderTest, ServingInstanceNotCreated) {
+TEST_F(OnDeviceHeadProviderTest, ModelInstanceNotCreated) {
   AutocompleteInput input(base::UTF8ToUTF16("M"),
                           metrics::OmniboxEventProto::OTHER,
                           TestSchemeClassifier());
   input.set_want_asynchronous_matches(true);
-  ResetServingInstance();
+  ResetModelInstance();
 
   EXPECT_CALL(*client_.get(), IsOffTheRecord()).WillRepeatedly(Return(false));
   EXPECT_CALL(*client_.get(), SearchSuggestEnabled())
@@ -87,8 +87,7 @@ TEST_F(OnDeviceHeadProviderTest, ServingInstanceNotCreated) {
   ASSERT_TRUE(IsOnDeviceHeadProviderAllowed(input, ""));
 
   provider_->Start(input, false);
-  if (!provider_->done())
-    task_environment_.RunUntilIdle();
+  task_environment_.RunUntilIdle();
 
   EXPECT_TRUE(provider_->matches().empty());
   EXPECT_TRUE(provider_->done());
@@ -149,8 +148,7 @@ TEST_F(OnDeviceHeadProviderTest, NoMatches) {
   ASSERT_TRUE(IsOnDeviceHeadProviderAllowed(input, ""));
 
   provider_->Start(input, false);
-  if (!provider_->done())
-    task_environment_.RunUntilIdle();
+  task_environment_.RunUntilIdle();
 
   EXPECT_TRUE(provider_->matches().empty());
   EXPECT_TRUE(provider_->done());
@@ -169,8 +167,7 @@ TEST_F(OnDeviceHeadProviderTest, HasMatches) {
   ASSERT_TRUE(IsOnDeviceHeadProviderAllowed(input, ""));
 
   provider_->Start(input, false);
-  if (!provider_->done())
-    task_environment_.RunUntilIdle();
+  task_environment_.RunUntilIdle();
 
   EXPECT_TRUE(provider_->done());
   ASSERT_EQ(3U, provider_->matches().size());
@@ -197,11 +194,8 @@ TEST_F(OnDeviceHeadProviderTest, CancelInProgressRequest) {
   ASSERT_TRUE(IsOnDeviceHeadProviderAllowed(input2, ""));
 
   provider_->Start(input1, false);
-  EXPECT_FALSE(provider_->done());
   provider_->Start(input2, false);
-
-  if (!provider_->done())
-    task_environment_.RunUntilIdle();
+  task_environment_.RunUntilIdle();
 
   EXPECT_TRUE(provider_->done());
   ASSERT_EQ(3U, provider_->matches().size());

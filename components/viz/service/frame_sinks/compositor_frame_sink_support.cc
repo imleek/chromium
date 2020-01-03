@@ -51,15 +51,13 @@ CompositorFrameSinkSupport::CompositorFrameSinkSupport(
     mojom::CompositorFrameSinkClient* client,
     FrameSinkManagerImpl* frame_sink_manager,
     const FrameSinkId& frame_sink_id,
-    bool is_root,
-    bool needs_sync_tokens)
+    bool is_root)
     : client_(client),
       frame_sink_manager_(frame_sink_manager),
       surface_manager_(frame_sink_manager->surface_manager()),
       frame_sink_id_(frame_sink_id),
       surface_resource_holder_(this),
       is_root_(is_root),
-      needs_sync_tokens_(needs_sync_tokens),
       allow_copy_output_requests_(is_root) {
   // This may result in SetBeginFrameSource() being called.
   frame_sink_manager_->RegisterCompositorFrameSinkSupport(frame_sink_id_, this);
@@ -226,10 +224,6 @@ void CompositorFrameSinkSupport::OnSurfacePresented(
                             feedback);
 }
 
-bool CompositorFrameSinkSupport::NeedsSyncTokens() const {
-  return needs_sync_tokens_;
-}
-
 void CompositorFrameSinkSupport::RefResources(
     const std::vector<TransferableResource>& resources) {
   surface_resource_holder_.RefResources(resources);
@@ -312,10 +306,6 @@ void CompositorFrameSinkSupport::EvictLastActiveSurface() {
 }
 
 void CompositorFrameSinkSupport::SetNeedsBeginFrame(bool needs_begin_frame) {
-  // Reset outstanding begin frames. This isn't a response to the begin frame
-  // directly but at least we know the client is responsive.
-  outstanding_begin_frames_ = 0;
-
   client_needs_begin_frame_ = needs_begin_frame;
   UpdateNeedsBeginFramesInternal();
 }
@@ -334,11 +324,11 @@ bool CompositorFrameSinkSupport::IsRoot() const {
 
 void CompositorFrameSinkSupport::DidNotProduceFrame(const BeginFrameAck& ack) {
   TRACE_EVENT2("viz", "CompositorFrameSinkSupport::DidNotProduceFrame",
-               "ack.source_id", ack.source_id, "ack.sequence_number",
-               ack.sequence_number);
-  DCHECK_GE(ack.sequence_number, BeginFrameArgs::kStartingFrameNumber);
+               "ack.source_id", ack.frame_id.source_id, "ack.sequence_number",
+               ack.frame_id.sequence_number);
+  DCHECK(ack.frame_id.IsSequenceValid());
 
-  outstanding_begin_frames_ = 0;
+  begin_frame_tracker_.ReceivedAck(ack);
 
   // Override the has_damage flag (ignoring invalid data from clients).
   BeginFrameAck modified_ack(ack);
@@ -432,8 +422,7 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrameInternal(
 
   // Override the has_damage flag (ignoring invalid data from clients).
   frame.metadata.begin_frame_ack.has_damage = true;
-  DCHECK_LE(BeginFrameArgs::kStartingFrameNumber,
-            frame.metadata.begin_frame_ack.sequence_number);
+  DCHECK(frame.metadata.begin_frame_ack.frame_id.IsSequenceValid());
 
   if (!ui::LatencyInfo::Verify(frame.metadata.latency_info,
                                "RenderWidgetHostImpl::OnSwapCompositorFrame")) {
@@ -672,7 +661,7 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
                            "IssueBeginFrame");
     last_frame_time_ = args.frame_time;
     client_->OnBeginFrame(copy_args, std::move(frame_timing_details_));
-    ++outstanding_begin_frames_;
+    begin_frame_tracker_.SentBeginFrame(args);
     frame_sink_manager_->DidBeginFrame(frame_sink_id_, args);
     frame_timing_details_.clear();
     UpdateNeedsBeginFramesInternal();
@@ -716,7 +705,7 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrame(
     base::Optional<HitTestRegionList> hit_test_region_list,
     uint64_t submit_time,
     mojom::CompositorFrameSink::SubmitCompositorFrameSyncCallback callback) {
-  outstanding_begin_frames_ = 0;
+  begin_frame_tracker_.ReceivedAck(frame.metadata.begin_frame_ack);
 
   SubmitResult result = MaybeSubmitCompositorFrameInternal(
       local_surface_id, std::move(frame), std::move(hit_test_region_list),
@@ -828,7 +817,7 @@ bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
   }
 
   // Stop sending BeginFrames to clients that are totally unresponsive.
-  if (outstanding_begin_frames_ >= kOutstandingFramesStop) {
+  if (begin_frame_tracker_.ShouldStopBeginFrame()) {
     RecordShouldSendBeginFrame(SendBeginFrameResult::kStopUnresponsiveClient);
     return false;
   }
@@ -839,7 +828,7 @@ bool CompositorFrameSinkSupport::ShouldSendBeginFrame(
       (frame_time - last_frame_time_) < base::TimeDelta::FromSeconds(1);
 
   // Throttle clients that are unresponsive.
-  if (can_throttle && outstanding_begin_frames_ >= kOutstandingFramesThrottle) {
+  if (can_throttle && begin_frame_tracker_.ShouldThrottleBeginFrame()) {
     RecordShouldSendBeginFrame(
         SendBeginFrameResult::kThrottleUnresponsiveClient);
     return false;

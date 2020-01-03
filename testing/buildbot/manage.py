@@ -99,6 +99,7 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
   'ios_chrome_ui_egtests',
   'ios_chrome_unittests',
   'ios_chrome_web_egtests',
+  'ios_chrome_bookmarks_eg2tests_module',
   'ios_chrome_integration_eg2tests_module',
   'ios_chrome_settings_eg2tests_module',
   'ios_chrome_smoke_eg2tests_module',
@@ -167,11 +168,6 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
   'voice_engine_unittests',
   'webrtc_nonparallel_tests',
   'xmllite_xmpp_unittests',
-
-  # isolate is currently too slow for this target.
-  # http://crbug.com/524758
-  'webkit_layout_tests',
-  'webkit_layout_tests_exparchive',
 
   # These are only run on V8 CI.
   'pdfium_test',

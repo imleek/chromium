@@ -15,6 +15,7 @@
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
+#include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/util.h"
 #include "components/signin/public/base/signin_metrics.h"
@@ -58,6 +59,7 @@
 #import "ios/chrome/browser/ui/settings/password/passwords_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/privacy_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/search_engine_table_view_controller.h"
+#import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_util.h"
 #import "ios/chrome/browser/ui/settings/table_cell_catalog_view_controller.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
@@ -84,12 +86,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-NSString* const kSettingsTableViewId = @"kSettingsTableViewId";
-NSString* const kSettingsSignInCellId = @"kSettingsSignInCellId";
-NSString* const kSettingsAccountCellId = @"kSettingsAccountCellId";
-NSString* const kSettingsSearchEngineCellId = @"Search Engine";
-NSString* const kSettingsVoiceSearchCellId = @"Voice Search Settings";
 
 namespace {
 
@@ -226,8 +222,9 @@ NSString* kDevViewSourceKey = @"DevViewSource";
   BOOL _settingsHasBeenDismissed;
 }
 
-@property(nonatomic, readonly, weak) id<ApplicationCommands, BrowserCommands>
-    dispatcher;
+@property(nonatomic, readonly, weak)
+    id<ApplicationCommands, BrowserCommands, BrowsingDataCommands>
+        dispatcher;
 
 // The SigninInteractionCoordinator that presents Sign In UI for the
 // Settings page.
@@ -247,9 +244,11 @@ NSString* kDevViewSourceKey = @"DevViewSource";
 
 #pragma mark Initialization
 
-- (instancetype)initWithBrowser:(Browser*)browser
-                     dispatcher:
-                         (id<ApplicationCommands, BrowserCommands>)dispatcher {
+- (instancetype)
+    initWithBrowser:(Browser*)browser
+         dispatcher:
+             (id<ApplicationCommands, BrowserCommands, BrowsingDataCommands>)
+                 dispatcher {
   DCHECK(browser);
   DCHECK(!browser->GetBrowserState()->IsOffTheRecord());
   UITableViewStyle style = base::FeatureList::IsEnabled(kSettingsRefresh)
@@ -415,10 +414,8 @@ NSString* kDevViewSourceKey = @"DevViewSource";
   _articlesForYouItem = [self articlesForYouSwitchItem];
   [model addItem:_articlesForYouItem
       toSectionWithIdentifier:SectionIdentifierAdvanced];
-  if (base::FeatureList::IsEnabled(kLanguageSettings)) {
-    [model addItem:[self languageSettingsDetailItem]
-        toSectionWithIdentifier:SectionIdentifierAdvanced];
-  }
+  [model addItem:[self languageSettingsDetailItem]
+      toSectionWithIdentifier:SectionIdentifierAdvanced];
   [model addItem:[self contentSettingsDetailItem]
       toSectionWithIdentifier:SectionIdentifierAdvanced];
   [model addItem:[self bandwidthManagementDetailItem]
@@ -536,7 +533,7 @@ NSString* kDevViewSourceKey = @"DevViewSource";
 
 - (TableViewItem*)AutoFillCreditCardDetailItem {
   BOOL autofillCreditCardEnabled =
-      autofill::prefs::IsCreditCardAutofillEnabled(_browserState->GetPrefs());
+      autofill::prefs::IsAutofillCreditCardEnabled(_browserState->GetPrefs());
   NSString* detailText = autofillCreditCardEnabled
                              ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                              : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
@@ -551,7 +548,7 @@ NSString* kDevViewSourceKey = @"DevViewSource";
 
 - (TableViewItem*)autoFillProfileDetailItem {
   BOOL autofillProfileEnabled =
-      autofill::prefs::IsProfileAutofillEnabled(_browserState->GetPrefs());
+      autofill::prefs::IsAutofillProfileEnabled(_browserState->GetPrefs());
   NSString* detailText = autofillProfileEnabled
                              ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                              : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
@@ -1000,8 +997,8 @@ NSString* kDevViewSourceKey = @"DevViewSource";
     googleServicesItem.detailText = nil;
     googleServicesItem.image =
         [UIImage imageNamed:kSyncAndGoogleServicesImageName];
-  } else if (syncService->GetDisableReasons() &
-             syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY) {
+  } else if (syncService->GetDisableReasons().Has(
+                 syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY)) {
     googleServicesItem.detailText = l10n_util::GetNSString(
         IDS_IOS_GOOGLE_SERVICES_SETTINGS_SYNC_DISABLBED_BY_ADMINISTRATOR_STATUS);
     googleServicesItem.image =
@@ -1209,7 +1206,7 @@ NSString* kDevViewSourceKey = @"DevViewSource";
 
   if (preferenceName == autofill::prefs::kAutofillProfileEnabled) {
     BOOL autofillProfileEnabled =
-        autofill::prefs::IsProfileAutofillEnabled(_browserState->GetPrefs());
+        autofill::prefs::IsAutofillProfileEnabled(_browserState->GetPrefs());
     NSString* detailText = autofillProfileEnabled
                                ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                                : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
@@ -1219,7 +1216,7 @@ NSString* kDevViewSourceKey = @"DevViewSource";
 
   if (preferenceName == autofill::prefs::kAutofillCreditCardEnabled) {
     BOOL autofillCreditCardEnabled =
-        autofill::prefs::IsCreditCardAutofillEnabled(_browserState->GetPrefs());
+        autofill::prefs::IsAutofillCreditCardEnabled(_browserState->GetPrefs());
     NSString* detailText = autofillCreditCardEnabled
                                ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                                : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);

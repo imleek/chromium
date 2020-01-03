@@ -200,8 +200,8 @@ bool BrowserAccessibilityAndroid::IsClickable() const {
   if (IsIframe() || (GetRole() == ax::mojom::Role::kRootWebArea))
     return false;
 
-  // Otherwise it's clickable if it's focusable.
-  return IsFocusable();
+  // Otherwise it's clickable if it's a control.
+  return ui::IsControlOnAndroid(GetRole(), IsFocusable());
 }
 
 bool BrowserAccessibilityAndroid::IsCollapsed() const {
@@ -627,9 +627,6 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ax::mojom::Role::kComment:
       message_id = IDS_AX_ROLE_COMMENT;
       break;
-    case ax::mojom::Role::kCommentSection:
-      message_id = IDS_AX_ROLE_COMMENT_SECTION;
-      break;
     case ax::mojom::Role::kComplementary:
       message_id = IDS_AX_ROLE_COMPLEMENTARY;
       break;
@@ -983,17 +980,17 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ax::mojom::Role::kRegion:
       message_id = IDS_AX_ROLE_REGION;
       break;
-    case ax::mojom::Role::kRevision:
-      message_id = IDS_AX_ROLE_REVISION;
-      break;
     case ax::mojom::Role::kRootWebArea:
+      // No role description.
+      break;
+    case ax::mojom::Role::kRow:
+      // No role description.
+      break;
+    case ax::mojom::Role::kRowGroup:
       // No role description.
       break;
     case ax::mojom::Role::kRowHeader:
       message_id = IDS_AX_ROLE_ROW_HEADER;
-      break;
-    case ax::mojom::Role::kRow:
-      // No role description.
       break;
     case ax::mojom::Role::kRuby:
       // No role description.

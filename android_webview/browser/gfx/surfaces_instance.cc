@@ -69,10 +69,8 @@ SurfacesInstance::SurfacesInstance()
       std::make_unique<viz::ParentLocalSurfaceIdAllocator>();
 
   constexpr bool is_root = true;
-  constexpr bool needs_sync_points = true;
   support_ = std::make_unique<viz::CompositorFrameSinkSupport>(
-      this, frame_sink_manager_.get(), frame_sink_id_, is_root,
-      needs_sync_points);
+      this, frame_sink_manager_.get(), frame_sink_id_, is_root);
 
   std::unique_ptr<viz::OutputSurface> output_surface =
       output_surface_provider_.CreateOutputSurface();
@@ -153,8 +151,7 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
   surface_quad->SetNew(quad_state, gfx::Rect(quad_state->quad_layer_rect),
                        gfx::Rect(quad_state->quad_layer_rect),
                        viz::SurfaceRange(base::nullopt, child_id),
-                       SK_ColorWHITE, /*stretch_content_to_fill_bounds=*/false,
-                       /*ignores_input_event=*/false);
+                       SK_ColorWHITE, /*stretch_content_to_fill_bounds=*/false);
   surface_quad->allow_merge = !BackdropFiltersPreventMerge(child_id);
 
   viz::CompositorFrame frame;
@@ -186,7 +183,7 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
   }
   output_surface_provider_.gl_surface()->SetSize(viewport);
   display_->Resize(viewport);
-  display_->DrawAndSwap();
+  display_->DrawAndSwap(base::TimeTicks::Now());
   // SkiaRenderer generates DidReceiveSwapBuffersAck calls.
   if (!features::IsUsingSkiaRenderer()) {
     // Metrics tracking in CompositorFrameReporter expects that every frame

@@ -6,16 +6,19 @@
 
 #include <memory>
 
+#include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/shelf/shelf.h"
+#include "ash/strings/grit/ash_strings.h"
+#include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/default_color_constants.h"
 #include "ash/system/message_center/unified_message_center_view.h"
-#include "ash/system/tray/tray_bubble_view.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_event_filter.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/system/unified/unified_system_tray_view.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/views/focus/focus_search.h"
 #include "ui/views/widget/widget.h"
@@ -66,7 +69,7 @@ class UnifiedMessageCenterBubble::Border : public ui::LayerDelegate {
 UnifiedMessageCenterBubble::UnifiedMessageCenterBubble(UnifiedSystemTray* tray)
     : tray_(tray), border_(std::make_unique<Border>()) {
   TrayBubbleView::InitParams init_params;
-  init_params.delegate = tray;
+  init_params.delegate = this;
   // Anchor within the overlay container.
   init_params.parent_window = tray->GetBubbleWindowContainer();
   init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
@@ -116,6 +119,7 @@ UnifiedMessageCenterBubble::~UnifiedMessageCenterBubble() {
     CHECK(message_center_view_);
     message_center_view_->RemoveObserver(this);
 
+    bubble_view_->ResetDelegate();
     bubble_widget_->RemoveObserver(this);
     bubble_widget_->CloseNow();
   }
@@ -128,10 +132,16 @@ int UnifiedMessageCenterBubble::CalculateAvailableHeight() {
 }
 
 void UnifiedMessageCenterBubble::CollapseMessageCenter() {
+  if (message_center_view_->collapsed())
+    return;
+
   message_center_view_->SetCollapsed(true /*animate*/);
 }
 
 void UnifiedMessageCenterBubble::ExpandMessageCenter() {
+  if (!message_center_view_->collapsed())
+    return;
+
   message_center_view_->SetExpanded();
   UpdatePosition();
   tray_->EnsureQuickSettingsCollapsed();
@@ -150,7 +160,7 @@ void UnifiedMessageCenterBubble::UpdatePosition() {
   gfx::Rect anchor_rect = tray_->shelf()->GetSystemTrayAnchorRect();
 
   int left_offset =
-      tray_->shelf()->alignment() == SHELF_ALIGNMENT_LEFT
+      tray_->shelf()->alignment() == ShelfAlignment::kLeft
           ? kUnifiedMenuPadding
           : -(kUnifiedMenuPadding - (base::i18n::IsRTL() ? 0 : 1));
   anchor_rect.set_x(anchor_rect.x() + left_offset);
@@ -171,7 +181,9 @@ bool UnifiedMessageCenterBubble::FocusOut(bool reverse) {
 }
 
 void UnifiedMessageCenterBubble::FocusFirstNotification() {
-  message_center_view_->GetFocusManager()->AdvanceFocus(false /*reverse*/);
+  // Move focus to first notification from notification bar if it is visible.
+  if (message_center_view_->IsNotificationBarVisible())
+    message_center_view_->GetFocusManager()->AdvanceFocus(false /*reverse*/);
 }
 
 bool UnifiedMessageCenterBubble::IsMessageCenterVisible() {
@@ -190,6 +202,14 @@ views::Widget* UnifiedMessageCenterBubble::GetBubbleWidget() const {
   return bubble_widget_;
 }
 
+base::string16 UnifiedMessageCenterBubble::GetAccessibleNameForBubble() {
+  return l10n_util::GetStringUTF16(IDS_ASH_MESSAGE_CENTER_ACCESSIBLE_NAME);
+}
+
+bool UnifiedMessageCenterBubble::ShouldEnableExtraKeyboardAccessibility() {
+  return Shell::Get()->accessibility_controller()->spoken_feedback_enabled();
+}
+
 void UnifiedMessageCenterBubble::OnViewPreferredSizeChanged(
     views::View* observed_view) {
   UpdatePosition();
@@ -200,8 +220,14 @@ void UnifiedMessageCenterBubble::OnWidgetDestroying(views::Widget* widget) {
   CHECK_EQ(bubble_widget_, widget);
   tray_->tray_event_filter()->RemoveBubble(this);
   tray_->bubble()->unified_view()->RemoveObserver(this);
+  message_center_view_->RemoveObserver(this);
   bubble_widget_->RemoveObserver(this);
   bubble_widget_ = nullptr;
+  bubble_view_->ResetDelegate();
+
+  // Close the quick settings bubble as well, which may not automatically happen
+  // when dismissing the message center bubble by pressing ESC.
+  tray_->CloseBubble();
 }
 
 }  // namespace ash

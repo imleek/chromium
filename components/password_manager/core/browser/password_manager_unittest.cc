@@ -25,6 +25,7 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "components/password_manager/core/browser/field_info_manager.h"
 #include "components/password_manager/core/browser/form_fetcher_impl.h"
 #include "components/password_manager/core/browser/leak_detection/leak_detection_check.h"
 #include "components/password_manager/core/browser/leak_detection/leak_detection_check_factory.h"
@@ -46,6 +47,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "net/cert/cert_status_flags.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -59,6 +61,7 @@ using autofill::FormFieldData;
 using autofill::FormStructure;
 using autofill::PasswordForm;
 using autofill::PasswordFormFillData;
+using autofill::ServerFieldType;
 using autofill::mojom::PasswordFormFieldPredictionType;
 using base::ASCIIToUTF16;
 using base::Feature;
@@ -160,6 +163,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   MOCK_METHOD0(GetMetricsRecorder, PasswordManagerMetricsRecorder*());
   MOCK_CONST_METHOD0(IsNewTabPage, bool());
   MOCK_CONST_METHOD0(GetPasswordSyncState, SyncState());
+  MOCK_CONST_METHOD0(GetFieldInfoManager, FieldInfoManager*());
 
   // Workaround for std::unique_ptr<> lacking a copy constructor.
   bool PromptUserToSaveOrUpdatePassword(
@@ -286,6 +290,12 @@ void SetUniqueIdIfNeeded(FormData* form) {
 #endif
 }
 
+class MockFieldInfoManager : public FieldInfoManager {
+ public:
+  MOCK_METHOD3(AddFieldType, void(uint64_t, uint32_t, ServerFieldType));
+  MOCK_CONST_METHOD2(GetFieldType, ServerFieldType(uint64_t, uint32_t));
+};
+
 }  // namespace
 
 class PasswordManagerTest : public testing::Test {
@@ -334,6 +344,10 @@ class PasswordManagerTest : public testing::Test {
         prefs::kWasOnboardingFeatureCheckedBefore, false);
     prefs_->registry()->RegisterBooleanPref(
         prefs::kPasswordLeakDetectionEnabled, true);
+#if !defined(OS_IOS)
+    prefs_->registry()->RegisterBooleanPref(::prefs::kSafeBrowsingEnabled,
+                                            true);
+#endif
     ON_CALL(client_, GetPrefs()).WillByDefault(Return(prefs_.get()));
 
     // When waiting for predictions is on, it makes tests more complicated.
@@ -1228,10 +1242,11 @@ TEST_F(PasswordManagerTest, SyncCredentialsNotSaved) {
       .WillByDefault(Return(true));
   ON_CALL(*client_.GetStoreResultFilter(), IsSyncAccountEmail(_))
       .WillByDefault(Return(true));
-  EXPECT_CALL(*store_,
-              SaveGaiaPasswordHash(
-                  "googleuser", form.password_value,
-                  metrics_util::GaiaPasswordHashChange::SAVED_IN_CONTENT_AREA));
+  EXPECT_CALL(
+      *store_,
+      SaveGaiaPasswordHash(
+          "googleuser", form.password_value, /*is_primary_account=*/true,
+          metrics_util::GaiaPasswordHashChange::SAVED_IN_CONTENT_AREA));
 #endif
   EXPECT_CALL(client_, IsSavingAndFillingEnabled(form.origin))
       .WillRepeatedly(Return(true));
@@ -1276,7 +1291,7 @@ TEST_F(PasswordManagerTest, HashSavedOnGaiaFormWithSkipSavePassword) {
     EXPECT_CALL(
         *store_,
         SaveGaiaPasswordHash(
-            "googleuser", form.password_value,
+            "googleuser", form.password_value, /*is_primary_account=*/true,
             metrics_util::GaiaPasswordHashChange::SAVED_IN_CONTENT_AREA));
 
     OnPasswordFormSubmitted(form);
@@ -1310,7 +1325,7 @@ TEST_F(PasswordManagerTest,
     EXPECT_CALL(
         *store_,
         SaveGaiaPasswordHash(
-            "googleuser", form.password_value,
+            "googleuser", form.password_value, /*is_primary_account=*/true,
             metrics_util::GaiaPasswordHashChange::SAVED_IN_CONTENT_AREA));
 
     EXPECT_CALL(client_, IsNewTabPage()).WillRepeatedly(Return(true));
@@ -1352,7 +1367,6 @@ TEST_F(PasswordManagerTest, ReportFormLoginSuccessAndShouldSaveCalled) {
   EXPECT_CALL(*client_.GetStoreResultFilter(), ReportFormLoginSuccess(_));
 
   PasswordForm submitted_form = observed_form;
-  submitted_form.preferred = true;
   submitted_form.date_last_used = base::Time::Now();
   EXPECT_CALL(*client_.GetStoreResultFilter(),
               ShouldSave(FormMatches(submitted_form)));
@@ -1386,10 +1400,11 @@ TEST_F(PasswordManagerTest, SyncCredentialsNotDroppedIfUpToDate) {
       .WillByDefault(Return(true));
   ON_CALL(*client_.GetStoreResultFilter(), IsSyncAccountEmail(_))
       .WillByDefault(Return(true));
-  EXPECT_CALL(*store_,
-              SaveGaiaPasswordHash(
-                  "googleuser", form.password_value,
-                  metrics_util::GaiaPasswordHashChange::SAVED_IN_CONTENT_AREA));
+  EXPECT_CALL(
+      *store_,
+      SaveGaiaPasswordHash(
+          "googleuser", form.password_value, /*is_primary_account=*/true,
+          metrics_util::GaiaPasswordHashChange::SAVED_IN_CONTENT_AREA));
 #endif
   manager()->OnPasswordFormSubmitted(&driver_, form);
 
@@ -2272,7 +2287,7 @@ TEST_F(PasswordManagerTest, NotSavingSyncPasswordHash_NoUsername) {
   client_.FilterAllResultsForSaving();
 
   // Check that no Gaia credential password hash is saved.
-  EXPECT_CALL(*store_, SaveGaiaPasswordHash(_, _, _)).Times(0);
+  EXPECT_CALL(*store_, SaveGaiaPasswordHash).Times(0);
   OnPasswordFormSubmitted(form);
   observed.clear();
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
@@ -2293,7 +2308,7 @@ TEST_F(PasswordManagerTest, NotSavingSyncPasswordHash_NotSyncCredentials) {
 
   // Check that no Gaia credential password hash is saved since these
   // credentials are eligible for saving.
-  EXPECT_CALL(*store_, SaveGaiaPasswordHash(_, _, _)).Times(0);
+  EXPECT_CALL(*store_, SaveGaiaPasswordHash).Times(0);
 
   std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
@@ -2452,7 +2467,7 @@ TEST_F(PasswordManagerTest, SaveSyncPasswordHashOnChangePasswordPage) {
   EXPECT_CALL(
       *store_,
       SaveGaiaPasswordHash(
-          "googleuser", form.new_password_value,
+          "googleuser", form.new_password_value, /*is_primary_account=*/true,
           metrics_util::GaiaPasswordHashChange::CHANGED_IN_CONTENT_AREA));
 #endif
   client_.FilterAllResultsForSaving();
@@ -2484,13 +2499,44 @@ TEST_F(PasswordManagerTest, SaveOtherGaiaPasswordHash) {
   EXPECT_CALL(
       *store_,
       SaveGaiaPasswordHash(
-          "googleuser", form.password_value,
+          "googleuser", form.password_value, /*is_primary_account=*/false,
+          metrics_util::GaiaPasswordHashChange::SAVED_IN_CONTENT_AREA));
+
+  client_.FilterAllResultsForSaving();
+  OnPasswordFormSubmitted(form);
+
+  observed.clear();
+  manager()->OnPasswordFormsRendered(&driver_, observed, true);
+}
+
+// Non-Sync Gaia password hash should be saved upon submission of change
+// password page.
+TEST_F(PasswordManagerTest, SaveOtherGaiaPasswordHashOnChangePasswordPage) {
+  PasswordForm form(MakeGAIAChangePasswordForm());
+  EXPECT_CALL(*store_, GetLogins(_, _))
+      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+
+  std::vector<PasswordForm> observed;
+  observed.push_back(form);
+  manager()->OnPasswordFormsParsed(&driver_, observed);
+  manager()->OnPasswordFormsRendered(&driver_, observed, true);
+  // Submit form and finish navigation.
+  EXPECT_CALL(client_, IsSavingAndFillingEnabled(form.origin))
+      .WillRepeatedly(Return(true));
+
+  ON_CALL(*client_.GetStoreResultFilter(), ShouldSaveGaiaPasswordHash(_))
+      .WillByDefault(Return(true));
+  EXPECT_CALL(
+      *store_,
+      SaveGaiaPasswordHash(
+          "googleuser", form.new_password_value, /*is_primary_account=*/false,
           metrics_util::GaiaPasswordHashChange::NOT_SYNC_PASSWORD_CHANGE));
 
   client_.FilterAllResultsForSaving();
   OnPasswordFormSubmitted(form);
 
   observed.clear();
+  manager()->OnPasswordFormsParsed(&driver_, observed);
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
 }
 
@@ -3132,7 +3178,7 @@ TEST_F(PasswordManagerTest, FillingAndSavingFallbacksOnNonPasswordForm) {
   EXPECT_EQ(saved_match.username_value, form_data.username_field.value);
   EXPECT_EQ(saved_match.password_value, form_data.password_field.value);
   // Check that no automatic filling available.
-  uint32_t renderer_id_not_set = FormFieldData::kNotSetFormControlRendererId;
+  uint32_t renderer_id_not_set = FormData::kNotSetRendererId;
   EXPECT_EQ(renderer_id_not_set, form_data.username_field.unique_renderer_id);
   EXPECT_EQ(renderer_id_not_set, form_data.password_field.unique_renderer_id);
 
@@ -3188,6 +3234,8 @@ TEST_F(PasswordManagerTest, StartLeakDetection) {
 
 // Check that a non-password form with SINGLE_USERNAME prediction is filled.
 TEST_F(PasswordManagerTest, FillSingleUsername) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kUsernameFirstFlow);
   PasswordFormManager::set_wait_for_server_predictions_for_filling(true);
   EXPECT_CALL(client_, IsSavingAndFillingEnabled(_))
       .WillRepeatedly(Return(true));
@@ -3301,7 +3349,7 @@ TEST_F(PasswordManagerTest, UsernameFirstFlow) {
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_))
       .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
 
-  // Simlates successful submission.
+  // Simulates successful submission.
   manager()->OnPasswordFormsRendered(&driver_, {} /* observed */, true);
 
   // Simulate saving the form, as if the info bar was accepted.
@@ -3312,6 +3360,37 @@ TEST_F(PasswordManagerTest, UsernameFirstFlow) {
 
   EXPECT_EQ(username, saved_form.username_value);
   EXPECT_EQ(password, saved_form.password_value);
+}
+
+//  Checks that username is saved on username first flow.
+TEST_F(PasswordManagerTest, UsernameFirstFlowFillingLocalPredictions) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kUsernameFirstFlow);
+  EXPECT_CALL(*store_, GetLogins(_, _))
+      .WillRepeatedly(WithArg<1>(InvokeConsumer(MakeSavedForm())));
+
+  manager()->OnPasswordFormsParsed(&driver_, {} /* observed */);
+
+  EXPECT_CALL(client_, IsSavingAndFillingEnabled).WillRepeatedly(Return(true));
+
+  constexpr uint32_t kFieldRendererId = 1;
+
+  FormData non_password_form;
+  FormFieldData field;
+  field.form_control_type = "text";
+  field.unique_renderer_id = kFieldRendererId;
+  non_password_form.fields.push_back(field);
+
+  FormStructure form_structure(non_password_form);
+
+  MockFieldInfoManager mock_field_manager;
+  ON_CALL(client_, GetFieldInfoManager())
+      .WillByDefault(Return(&mock_field_manager));
+  EXPECT_CALL(mock_field_manager, GetFieldType(_, _))
+      .WillOnce(Return(autofill::SINGLE_USERNAME));
+
+  EXPECT_CALL(driver_, FillPasswordForm(_));
+  manager()->ProcessAutofillPredictions(&driver_, {&form_structure});
 }
 
 TEST_F(PasswordManagerTest, FormSubmittedOnMainFrame) {

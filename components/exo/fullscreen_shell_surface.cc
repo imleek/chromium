@@ -231,7 +231,7 @@ void FullscreenShellSurface::CreateFullscreenShellSurfaceWidget(
   params.ownership = views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET;
   params.delegate = this;
   params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.show_state = show_state;
   params.activatable = views::Widget::InitParams::ACTIVATABLE_YES;
   params.parent = WMHelper::GetInstance()->GetRootWindowForNewWindows();
@@ -247,6 +247,7 @@ void FullscreenShellSurface::CreateFullscreenShellSurfaceWidget(
   SetShellApplicationId(window, application_id_);
   SetShellStartupId(window, startup_id_);
   SetShellMainSurface(window, root_surface());
+  SetArcAppType(window);
 
   window->AddObserver(this);
 }

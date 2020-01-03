@@ -41,9 +41,9 @@
 #include "cc/trees/layer_tree_host.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
 #include "third_party/blink/public/platform/web_intrinsic_sizing_info.h"
 #include "third_party/blink/public/platform/web_point.h"
 #include "third_party/blink/public/platform/web_rect.h"
@@ -64,18 +64,17 @@ class PaintImage;
 
 namespace gfx {
 class Point;
+class PointF;
 class Vector2d;
 }
 
 namespace blink {
 class WebDragData;
 class WebGestureEvent;
+struct WebFloatRect;
 class WebString;
 class WebWidget;
 struct WebCursorInfo;
-struct WebFloatPoint;
-struct WebFloatRect;
-struct WebFloatSize;
 class WebLocalFrame;
 
 class WebWidgetClient {
@@ -127,8 +126,8 @@ class WebWidgetClient {
   // Called when the cursor for the widget changes.
   virtual void DidChangeCursor(const WebCursorInfo&) {}
 
-  virtual void AutoscrollStart(const WebFloatPoint&) {}
-  virtual void AutoscrollFling(const WebFloatSize& velocity) {}
+  virtual void AutoscrollStart(const gfx::PointF&) {}
+  virtual void AutoscrollFling(const gfx::Vector2dF& velocity) {}
   virtual void AutoscrollEnd() {}
 
   // Called to show the widget according to the given policy.
@@ -175,10 +174,10 @@ class WebWidgetClient {
 
   // Called when overscrolled on main thread. All parameters are in
   // viewport-space.
-  virtual void DidOverscroll(const WebFloatSize& overscroll_delta,
-                             const WebFloatSize& accumulated_overscroll,
-                             const WebFloatPoint& position_in_viewport,
-                             const WebFloatSize& velocity_in_viewport) {}
+  virtual void DidOverscroll(const gfx::Vector2dF& overscroll_delta,
+                             const gfx::Vector2dF& accumulated_overscroll,
+                             const gfx::PointF& position_in_viewport,
+                             const gfx::Vector2dF& velocity_in_viewport) {}
 
   // Requests that a gesture of |injected_type| be reissued at a later point in
   // time. |injected_type| is required to be one of
@@ -187,7 +186,7 @@ class WebWidgetClient {
   // delta + granularity.
   virtual void InjectGestureScrollEvent(
       WebGestureDevice device,
-      const WebFloatSize& delta,
+      const gfx::Vector2dF& delta,
       ui::input_types::ScrollGranularity granularity,
       cc::ElementId scrollable_area_element_id,
       WebInputEvent::Type injected_type) {}
@@ -359,14 +358,17 @@ class WebWidgetClient {
   virtual void SetBrowserControlsShownRatio(float top_ratio,
                                             float bottom_ratio) {}
 
-  // Set browser controls height. If |shrink_viewport| is set to true, then
-  // Blink shrunk the viewport clip layers by the top and bottom browser
-  // controls height. Top controls will translate the web page down and do not
-  // immediately scroll when hiding. The bottom controls scroll immediately and
-  // never translate the content (only clip it).
-  virtual void SetBrowserControlsHeight(float top_height,
-                                        float bottom_height,
-                                        bool shrink_viewport) {}
+  // Set browser controls params. These params consist of top and bottom
+  // heights, min-heights, browser_controls_shrink_blink_size, and
+  // animate_browser_controls_height_changes. If
+  // animate_browser_controls_height_changes is set to true, changes to the
+  // browser controls height will be animated. If
+  // browser_controls_shrink_blink_size is set to true, then Blink shrunk the
+  // viewport clip layers by the top and bottom browser controls height. Top
+  // controls will translate the web page down and do not immediately scroll
+  // when hiding. The bottom controls scroll immediately and never translate the
+  // content (only clip it).
+  virtual void SetBrowserControlsParams(cc::BrowserControlsParams params) {}
 
   virtual viz::FrameSinkId GetFrameSinkId() {
     NOTREACHED();

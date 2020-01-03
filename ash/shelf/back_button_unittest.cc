@@ -67,7 +67,7 @@ class BackButtonTest : public AshTestBase,
 };
 
 // The parameter indicates whether the kShelfHotseat feature is enabled.
-INSTANTIATE_TEST_SUITE_P(, BackButtonTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, BackButtonTest, testing::Bool());
 
 // Verify that the back button is visible in tablet mode.
 TEST_P(BackButtonTest, Visibility) {
@@ -94,7 +94,7 @@ TEST_P(BackButtonTest, Visibility) {
 // Verify that the back button is visible in tablet mode, if the initial shelf
 // alignment is on the left or right.
 TEST_P(BackButtonTest, VisibilityWithVerticalShelf) {
-  test_api()->shelf_view()->shelf()->SetAlignment(SHELF_ALIGNMENT_LEFT);
+  test_api()->shelf_view()->shelf()->SetAlignment(ShelfAlignment::kLeft);
   ASSERT_TRUE(back_button()->layer());
   EXPECT_EQ(0.f, back_button()->layer()->opacity());
 
@@ -117,13 +117,6 @@ TEST_P(BackButtonTest, BackKeySequenceGenerated) {
   // When hotseat is enabled, the back button is only usable in in-app shelf.
   if (GetParam())
     std::unique_ptr<views::Widget> widget = CreateTestWidget();
-
-  // Wait for the navigation widget's animation.
-  test_api()->RunMessageLoopUntilAnimationsDone(
-      GetPrimaryShelf()
-          ->shelf_widget()
-          ->navigation_widget()
-          ->get_bounds_animator_for_testing());
 
   AcceleratorControllerImpl* controller =
       Shell::Get()->accelerator_controller();
@@ -173,13 +166,6 @@ TEST_P(BackButtonTest, NoContextMenuOnBackButton) {
   // When hotseat is enabled, the back button is only usable in in-app shelf.
   if (GetParam())
     std::unique_ptr<views::Widget> widget = CreateTestWidget();
-
-  // We need to wait for the navigation widget's animation to be done.
-  test_api_->RunMessageLoopUntilAnimationsDone(
-      GetPrimaryShelf()
-          ->shelf_widget()
-          ->navigation_widget()
-          ->get_bounds_animator_for_testing());
 
   generator->MoveMouseTo(back_button()->GetBoundsInScreen().CenterPoint());
   generator->PressRightButton();

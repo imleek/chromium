@@ -17,6 +17,15 @@ group("capture") {
   ]
 }
 
+component("capture_switches") {
+  defines = [ "CAPTURE_IMPLEMENTATION" ]
+  sources = [
+    "capture_export.h",
+    "capture_switches.cc",
+    "capture_switches.h",
+  ]
+}
+
 # Things needed by //media/capture/mojom/video_capture_types.mojom.
 jumbo_component("capture_base") {
   defines = [ "CAPTURE_IMPLEMENTATION" ]
@@ -333,23 +342,6 @@ source_set("test_support") {
   testonly = true
 }
 
-if (is_chromeos) {
-  source_set("chromeos_test_utils") {
-    sources = [
-      "video/chromeos/local_gpu_memory_buffer_manager.cc",
-    ]
-
-    deps = [
-      "//base",
-      "//build/config/linux/libdrm",
-      "//gpu/command_buffer/client",
-      "//third_party/minigbm",
-      "//ui/gfx:memory_buffer",
-      "//ui/gfx/geometry",
-    ]
-  }
-}
-
 test("capture_unittests") {
   sources = [
     "content/animated_content_sampler_unittest.cc",
@@ -419,6 +411,10 @@ test("capture_unittests") {
   }
 
   if (is_chromeos) {
+    deps += [ "//media/gpu/test:local_gpu_memory_buffer_manager" ]
+  }
+
+  if (is_chromeos) {
     sources += [
       "video/chromeos/camera_3a_controller_unittest.cc",
       "video/chromeos/camera_device_delegate_unittest.cc",
@@ -433,7 +429,6 @@ test("capture_unittests") {
       "video/chromeos/request_manager_unittest.cc",
     ]
     deps += [
-      ":chromeos_test_utils",
       "//build/config/linux/libdrm",
       "//chromeos/dbus/power",
       "//media/capture/video/chromeos/mojom:cros_camera",

@@ -82,9 +82,17 @@ enum class CookieAccessSemantics {
   LEGACY,
 };
 
+// What scheme was used in the setting of a cookie.
+// Do not renumber.
+enum class CookieSourceScheme {
+  kUnset = 0,
+  kNonSecure = 1,
+  kSecure = 2,
+
+  kMaxValue = kSecure  // Keep as the last value.
+};
+
 // Returns the Set-Cookie header priority token corresponding to |priority|.
-//
-// TODO(mkwst): Remove this once its callsites are refactored.
 NET_EXPORT std::string CookiePriorityToString(CookiePriority priority);
 
 // Converts the Set-Cookie header priority token |priority| to a CookiePriority.

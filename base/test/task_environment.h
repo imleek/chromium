@@ -10,6 +10,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/observer_list.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task/lazy_task_runner.h"
@@ -114,6 +115,10 @@ class TaskEnvironment {
     DEFAULT = SYSTEM_TIME
   };
 
+  // This type will determine what types of messages will get pumped by the main
+  // thread.
+  // Note: If your test needs to use a custom MessagePump you should
+  // consider using a SingleThreadTaskExecutor instead.
   enum class MainThreadType {
     // The main thread doesn't pump system messages.
     DEFAULT,
@@ -269,6 +274,23 @@ class TaskEnvironment {
   // For debugging purposes: Dumps information about pending tasks on the main
   // thread.
   void DescribePendingMainThreadTasks() const;
+
+  class DestructionObserver : public CheckedObserver {
+   public:
+    DestructionObserver() = default;
+    ~DestructionObserver() override = default;
+
+    DestructionObserver(const DestructionObserver&) = delete;
+    DestructionObserver& operator=(const DestructionObserver&) = delete;
+
+    virtual void WillDestroyCurrentTaskEnvironment() = 0;
+  };
+
+  // Adds/removes a DestructionObserver to any TaskEnvironment. Observers are
+  // notified when any TaskEnvironment goes out of scope (other than with a move
+  // operation). Must be called on the main thread.
+  static void AddDestructionObserver(DestructionObserver* observer);
+  static void RemoveDestructionObserver(DestructionObserver* observer);
 
  protected:
   explicit TaskEnvironment(TaskEnvironment&& other);

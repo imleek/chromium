@@ -39,7 +39,7 @@
 #include "chrome/browser/download/save_package_file_picker.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/download_protection/binary_upload_service.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -48,6 +48,7 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/net/safe_search_util.h"
 #include "chrome/common/pdf_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/safe_browsing/file_type_policies.h"
@@ -270,7 +271,7 @@ void ConnectToQuarantineService(
         std::move(receiver),
         content::ServiceProcessHost::Options()
             .WithDisplayName("Quarantine Service")
-            .WithSandboxType(service_manager::SANDBOX_TYPE_NO_SANDBOX)
+            .WithSandboxType(service_manager::SandboxType::kNoSandbox)
             .Pass());
     return;
   }
@@ -290,14 +291,15 @@ bool IsDangerTypeBlocked(download::DownloadDangerType danger_type) {
 
 void OnCheckExistingDownloadPathDone(
     std::unique_ptr<DownloadTargetInfo> target_info,
-    const content::DownloadTargetCallback& callback,
+    content::DownloadTargetCallback callback,
     bool file_exists) {
   if (file_exists)
     target_info->result = download::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED;
 
-  callback.Run(target_info->target_path, target_info->target_disposition,
-               target_info->danger_type, target_info->intermediate_path,
-               target_info->result);
+  std::move(callback).Run(target_info->target_path,
+                          target_info->target_disposition,
+                          target_info->danger_type,
+                          target_info->intermediate_path, target_info->result);
 }
 
 }  // namespace
@@ -307,10 +309,6 @@ ChromeDownloadManagerDelegate::ChromeDownloadManagerDelegate(Profile* profile)
       next_download_id_(download::DownloadItem::kInvalidId),
       next_id_retrieved_(false),
       download_prefs_(new DownloadPrefs(profile)),
-      disk_access_task_runner_(base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock(),
-           base::TaskPriority::BEST_EFFORT,
-           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})),
       is_file_picker_showing_(false) {
 #if defined(OS_ANDROID)
   location_dialog_bridge_.reset(new DownloadLocationDialogBridgeImpl);
@@ -359,8 +357,8 @@ void ChromeDownloadManagerDelegate::Shutdown() {
 
 content::DownloadIdCallback
 ChromeDownloadManagerDelegate::GetDownloadIdReceiverCallback() {
-  return base::Bind(&ChromeDownloadManagerDelegate::SetNextId,
-                    weak_ptr_factory_.GetWeakPtr());
+  return base::BindOnce(&ChromeDownloadManagerDelegate::SetNextId,
+                        weak_ptr_factory_.GetWeakPtr());
 }
 
 void ChromeDownloadManagerDelegate::SetNextId(uint32_t next_id) {
@@ -377,50 +375,47 @@ void ChromeDownloadManagerDelegate::SetNextId(uint32_t next_id) {
 
   IdCallbackVector callbacks;
   id_callbacks_.swap(callbacks);
-  for (IdCallbackVector::const_iterator it = callbacks.begin();
-       it != callbacks.end(); ++it) {
-    ReturnNextId(*it);
-  }
+  for (auto& callback : callbacks)
+    ReturnNextId(std::move(callback));
 }
 
 void ChromeDownloadManagerDelegate::GetNextId(
-    const content::DownloadIdCallback& callback) {
+    content::DownloadIdCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (profile_->IsOffTheRecord()) {
     content::BrowserContext::GetDownloadManager(profile_->GetOriginalProfile())
-        ->GetNextId(callback);
+        ->GetNextId(std::move(callback));
     return;
   }
   if (!next_id_retrieved_) {
-    id_callbacks_.push_back(callback);
+    id_callbacks_.push_back(std::move(callback));
     return;
   }
-  ReturnNextId(callback);
+  ReturnNextId(std::move(callback));
 }
 
 void ChromeDownloadManagerDelegate::ReturnNextId(
-    const content::DownloadIdCallback& callback) {
+    content::DownloadIdCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!profile_->IsOffTheRecord());
   // kInvalidId is returned to indicate the error.
-  callback.Run(next_download_id_);
+  std::move(callback).Run(next_download_id_);
   if (next_download_id_ != download::DownloadItem::kInvalidId)
     ++next_download_id_;
 }
 
 bool ChromeDownloadManagerDelegate::DetermineDownloadTarget(
     DownloadItem* download,
-    const content::DownloadTargetCallback& callback) {
+    content::DownloadTargetCallback* callback) {
   if (download->GetTargetFilePath().empty() &&
       download->GetMimeType() == kPDFMimeType && !download->HasUserGesture()) {
     ReportPDFLoadStatus(PDFLoadStatus::kTriggeredNoGestureDriveByDownload);
   }
 
   DownloadTargetDeterminer::CompletionCallback target_determined_callback =
-      base::Bind(&ChromeDownloadManagerDelegate::OnDownloadTargetDetermined,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 download->GetId(),
-                 callback);
+      base::BindOnce(&ChromeDownloadManagerDelegate::OnDownloadTargetDetermined,
+                     weak_ptr_factory_.GetWeakPtr(), download->GetId(),
+                     std::move(*callback));
   base::FilePath download_path =
       GetPlatformDownloadPath(profile_, download, PLATFORM_TARGET_PATH);
   DownloadPathReservationTracker::FilenameConflictAction action =
@@ -431,7 +426,7 @@ bool ChromeDownloadManagerDelegate::DetermineDownloadTarget(
 #endif
   DownloadTargetDeterminer::Start(download, download_path, action,
                                   download_prefs_.get(), this,
-                                  target_determined_callback);
+                                  std::move(target_determined_callback));
   return true;
 }
 
@@ -560,7 +555,8 @@ bool ChromeDownloadManagerDelegate::ShouldCompleteDownload(
 }
 
 bool ChromeDownloadManagerDelegate::ShouldOpenDownload(
-    DownloadItem* item, const content::DownloadOpenDelayedCallback& callback) {
+    DownloadItem* item,
+    content::DownloadOpenDelayedCallback callback) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (download_crx_util::IsExtensionDownload(*item) &&
       !extensions::WebstoreInstaller::GetAssociatedApproval(*item)) {
@@ -574,7 +570,7 @@ bool ChromeDownloadManagerDelegate::ShouldOpenDownload(
         extensions::NOTIFICATION_CRX_INSTALLER_DONE,
         content::Source<extensions::CrxInstaller>(crx_installer.get()));
 
-    crx_installers_[crx_installer.get()] = callback;
+    crx_installers_[crx_installer.get()] = std::move(callback);
     // The status text and percent complete indicator will change now
     // that we are installing a CRX.  Update observers so that they pick
     // up the change.
@@ -627,15 +623,11 @@ void ChromeDownloadManagerDelegate::ChooseSavePath(
     const base::FilePath& suggested_path,
     const base::FilePath::StringType& default_extension,
     bool can_save_as_complete,
-    const content::SavePackagePathPickedCallback& callback) {
+    content::SavePackagePathPickedCallback callback) {
   // Deletes itself.
-  new SavePackageFilePicker(
-      web_contents,
-      suggested_path,
-      default_extension,
-      can_save_as_complete,
-      download_prefs_.get(),
-      callback);
+  new SavePackageFilePicker(web_contents, suggested_path, default_extension,
+                            can_save_as_complete, download_prefs_.get(),
+                            std::move(callback));
 }
 
 void ChromeDownloadManagerDelegate::SanitizeSavePackageResourceName(
@@ -650,6 +642,16 @@ void ChromeDownloadManagerDelegate::SanitizeSavePackageResourceName(
   base::FilePath default_filename = base::FilePath::FromUTF8Unsafe(
       l10n_util::GetStringUTF8(IDS_DEFAULT_DOWNLOAD_FILENAME));
   *filename = filename->AddExtension(default_filename.BaseName().value());
+}
+
+void ChromeDownloadManagerDelegate::SanitizeDownloadParameters(
+    download::DownloadUrlParameters* params) {
+  if (profile_->GetPrefs()->GetBoolean(prefs::kForceGoogleSafeSearch)) {
+    GURL safe_url;
+    safe_search_util::ForceGoogleSafeSearch(params->url(), &safe_url);
+    if (!safe_url.is_empty())
+      params->set_url(std::move(safe_url));
+  }
 }
 
 void ChromeDownloadManagerDelegate::OpenDownloadUsingPlatformHandler(
@@ -754,20 +756,6 @@ void ChromeDownloadManagerDelegate::ShowDownloadInShell(
   platform_util::ShowItemInFolder(profile_, platform_path);
 }
 
-void ContinueCheckingForFileExistence(
-    content::CheckForFileExistenceCallback callback) {
-  std::move(callback).Run(false);
-}
-
-void ChromeDownloadManagerDelegate::CheckForFileExistence(
-    DownloadItem* download,
-    content::CheckForFileExistenceCallback callback) {
-  base::PostTaskAndReplyWithResult(
-      disk_access_task_runner_.get(), FROM_HERE,
-      base::BindOnce(&base::PathExists, download->GetTargetFilePath()),
-      std::move(callback));
-}
-
 std::string
 ChromeDownloadManagerDelegate::ApplicationClientIdForFileScanning() {
   return std::string(chrome::kApplicationClientIDStringForAVScanning);
@@ -824,7 +812,7 @@ void ChromeDownloadManagerDelegate::ReserveVirtualPath(
     const base::FilePath& virtual_path,
     bool create_directory,
     DownloadPathReservationTracker::FilenameConflictAction conflict_action,
-    const DownloadTargetDeterminerDelegate::ReservedPathCallback& callback) {
+    DownloadTargetDeterminerDelegate::ReservedPathCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!virtual_path.empty());
 
@@ -832,7 +820,7 @@ void ChromeDownloadManagerDelegate::ReserveVirtualPath(
   base::PathService::Get(chrome::DIR_USER_DOCUMENTS, &document_dir);
   DownloadPathReservationTracker::GetReservedPath(
       download, virtual_path, download_prefs_->DownloadPath(), document_dir,
-      create_directory, conflict_action, callback);
+      create_directory, conflict_action, std::move(callback));
 }
 
 void ChromeDownloadManagerDelegate::RequestConfirmation(
@@ -1227,15 +1215,15 @@ void ChromeDownloadManagerDelegate::Observe(
   scoped_refptr<extensions::CrxInstaller> installer =
       content::Source<extensions::CrxInstaller>(source).ptr();
   content::DownloadOpenDelayedCallback callback =
-      crx_installers_[installer.get()];
+      std::move(crx_installers_[installer.get()]);
   crx_installers_.erase(installer.get());
-  callback.Run(installer->did_handle_successfully());
+  std::move(callback).Run(installer->did_handle_successfully());
 #endif
 }
 
 void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
     uint32_t download_id,
-    const content::DownloadTargetCallback& callback,
+    content::DownloadTargetCallback callback,
     std::unique_ptr<DownloadTargetInfo> target_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DownloadItem* item = download_manager_->GetDownload(download_id);
@@ -1264,7 +1252,7 @@ void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
   DownloadPathReservationTracker::CheckDownloadPathForExistingDownload(
       target_path, item,
       base::BindOnce(&OnCheckExistingDownloadPathDone, std::move(target_info),
-                     callback));
+                     std::move(callback)));
 }
 
 bool ChromeDownloadManagerDelegate::IsOpenInBrowserPreferreredForFile(

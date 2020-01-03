@@ -77,7 +77,7 @@ class VideoAutoFullscreen : public testing::Test,
         web_view_helper_.GetWebView()->MainFrameImpl(), "about:blank");
     GetDocument()->write("<body><video></video></body>");
 
-    video_ = ToHTMLVideoElement(*GetDocument()->QuerySelector("video"));
+    video_ = To<HTMLVideoElement>(*GetDocument()->QuerySelector("video"));
 
     frame_host_.set_frame_widget(GetWebView()->MainFrameWidget());
   }
@@ -102,8 +102,7 @@ class VideoAutoFullscreen : public testing::Test,
 TEST_F(VideoAutoFullscreen, PlayTriggersFullscreenWithoutPlaysInline) {
   Video()->SetSrc("http://example.com/foo.mp4");
 
-  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
-      LocalFrame::NotifyUserActivation(GetFrame());
+  LocalFrame::NotifyUserActivation(GetFrame());
   Video()->Play();
 
   MakeGarbageCollected<WaitForEvent>(Video(), event_type_names::kPlay);
@@ -116,8 +115,7 @@ TEST_F(VideoAutoFullscreen, PlayDoesNotTriggerFullscreenWithPlaysInline) {
   Video()->SetBooleanAttribute(html_names::kPlaysinlineAttr, true);
   Video()->SetSrc("http://example.com/foo.mp4");
 
-  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
-      LocalFrame::NotifyUserActivation(GetFrame());
+  LocalFrame::NotifyUserActivation(GetFrame());
   Video()->Play();
 
   MakeGarbageCollected<WaitForEvent>(Video(), event_type_names::kPlay);
@@ -129,8 +127,7 @@ TEST_F(VideoAutoFullscreen, PlayDoesNotTriggerFullscreenWithPlaysInline) {
 TEST_F(VideoAutoFullscreen, ExitFullscreenPausesWithoutPlaysInline) {
   Video()->SetSrc("http://example.com/foo.mp4");
 
-  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
-      LocalFrame::NotifyUserActivation(GetFrame());
+  LocalFrame::NotifyUserActivation(GetFrame());
   Video()->Play();
 
   MakeGarbageCollected<WaitForEvent>(Video(), event_type_names::kPlay);
@@ -149,8 +146,7 @@ TEST_F(VideoAutoFullscreen, ExitFullscreenDoesNotPauseWithPlaysInline) {
   Video()->SetBooleanAttribute(html_names::kPlaysinlineAttr, true);
   Video()->SetSrc("http://example.com/foo.mp4");
 
-  std::unique_ptr<UserGestureIndicator> user_gesture_scope =
-      LocalFrame::NotifyUserActivation(GetFrame());
+  LocalFrame::NotifyUserActivation(GetFrame());
   Video()->Play();
 
   MakeGarbageCollected<WaitForEvent>(Video(), event_type_names::kPlay);
@@ -168,11 +164,9 @@ TEST_F(VideoAutoFullscreen, ExitFullscreenDoesNotPauseWithPlaysInline) {
 
 TEST_F(VideoAutoFullscreen, OnPlayTriggersFullscreenWithoutGesture) {
   Video()->SetSrc("http://example.com/foo.mp4");
-  {
-    std::unique_ptr<UserGestureIndicator> user_gesture_scope =
-        LocalFrame::NotifyUserActivation(GetFrame());
-    Video()->Play();
-  }
+
+  LocalFrame::NotifyUserActivation(GetFrame());
+  Video()->Play();
   MakeGarbageCollected<WaitForEvent>(Video(), event_type_names::kPlay);
   test::RunPendingTasks();
 

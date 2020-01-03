@@ -47,6 +47,7 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/forms/radio_node_list.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_tag_collection.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
@@ -1025,8 +1026,10 @@ void ContainerNode::ChildrenChanged(const ChildrenChange& change) {
     return;
   }
   Node* inserted_node = change.sibling_changed;
-  if (inserted_node->IsContainerNode() || inserted_node->IsTextNode())
+  if (inserted_node->IsContainerNode() || inserted_node->IsTextNode()) {
+    inserted_node->ClearFlatTreeNodeDataIfHostChanged(*this);
     inserted_node->SetStyleChangeOnInsertion();
+  }
 }
 
 void ContainerNode::CloneChildNodesFrom(const ContainerNode& node) {
@@ -1225,12 +1228,7 @@ Element* ContainerNode::QuerySelector(const AtomicString& selectors,
       selectors, GetDocument(), exception_state);
   if (!selector_query)
     return nullptr;
-  Element* element = selector_query->QueryFirst(*this);
-  if (element && element->GetDocument().InDOMNodeRemovedHandler()) {
-    if (NodeChildRemovalTracker::IsBeingRemoved(*element))
-      GetDocument().CountDetachingNodeAccessInDOMNodeRemovedHandler();
-  }
-  return element;
+  return selector_query->QueryFirst(*this);
 }
 
 Element* ContainerNode::QuerySelector(const AtomicString& selectors) {
@@ -1298,43 +1296,20 @@ static void DispatchChildRemovalEvents(Node& child) {
   // Dispatch pre-removal mutation events.
   if (c->parentNode() &&
       document.HasListenerType(Document::kDOMNodeRemovedListener)) {
-    bool original_node_flag = c->InDOMNodeRemovedHandler();
-    auto original_document_state = document.GetInDOMNodeRemovedHandlerState();
-    if (ScopedEventQueue::Instance()->ShouldQueueEvents()) {
-      UseCounter::Count(document, WebFeature::kDOMNodeRemovedEventDelayed);
-    } else {
-      c->SetInDOMNodeRemovedHandler(true);
-      document.SetInDOMNodeRemovedHandlerState(
-          Document::InDOMNodeRemovedHandlerState::kDOMNodeRemoved);
-    }
     NodeChildRemovalTracker scope(child);
     c->DispatchScopedEvent(
         *MutationEvent::Create(event_type_names::kDOMNodeRemoved,
                                Event::Bubbles::kYes, c->parentNode()));
-    document.SetInDOMNodeRemovedHandlerState(original_document_state);
-    c->SetInDOMNodeRemovedHandler(original_node_flag);
   }
 
   // Dispatch the DOMNodeRemovedFromDocument event to all descendants.
   if (c->isConnected() &&
       document.HasListenerType(Document::kDOMNodeRemovedFromDocumentListener)) {
-    bool original_node_flag = c->InDOMNodeRemovedHandler();
-    auto original_document_state = document.GetInDOMNodeRemovedHandlerState();
-    if (ScopedEventQueue::Instance()->ShouldQueueEvents()) {
-      UseCounter::Count(document,
-                        WebFeature::kDOMNodeRemovedFromDocumentEventDelayed);
-    } else {
-      c->SetInDOMNodeRemovedHandler(true);
-      document.SetInDOMNodeRemovedHandlerState(
-          Document::InDOMNodeRemovedHandlerState::kDOMNodeRemovedFromDocument);
-    }
     NodeChildRemovalTracker scope(child);
     for (; c; c = NodeTraversal::Next(*c, &child)) {
       c->DispatchScopedEvent(*MutationEvent::Create(
           event_type_names::kDOMNodeRemovedFromDocument, Event::Bubbles::kNo));
     }
-    document.SetInDOMNodeRemovedHandlerState(original_document_state);
-    child.SetInDOMNodeRemovedHandler(original_node_flag);
   }
 }
 
@@ -1519,7 +1494,7 @@ HTMLCollection* ContainerNode::getElementsByTagName(
     const AtomicString& qualified_name) {
   DCHECK(!qualified_name.IsNull());
 
-  if (GetDocument().IsHTMLDocument()) {
+  if (IsA<HTMLDocument>(GetDocument())) {
     return EnsureCachedCollection<HTMLTagCollection>(kHTMLTagCollectionType,
                                                      qualified_name);
   }

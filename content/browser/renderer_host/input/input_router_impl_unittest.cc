@@ -406,7 +406,7 @@ class InputRouterImplTestBase : public testing::Test {
     // InputRouterImpl::SetTouchActionFromMain calls
     // InputRouterImpl::UpdateTouchAckTimeoutEnabled and that will cancel the
     // touch timeout when the touch action is None.
-    input_router_->SetTouchActionFromMain(cc::kTouchActionNone);
+    input_router_->SetTouchActionFromMain(cc::TouchAction::kNone);
   }
 
   void OnSetWhiteListedTouchAction(cc::TouchAction white_listed_touch_action,
@@ -434,7 +434,7 @@ class InputRouterImplTestBase : public testing::Test {
   void PressAndSetTouchActionAuto() {
     PressTouchPoint(1, 1);
     SendTouchEvent();
-    input_router_->OnSetTouchAction(cc::kTouchActionAuto);
+    input_router_->OnSetTouchAction(cc::TouchAction::kAuto);
     GetAndResetDispatchedMessages();
     disposition_handler_->GetAndResetAckCount();
   }
@@ -460,7 +460,7 @@ class InputRouterImplTestBase : public testing::Test {
     ResetTouchAction();
     PressTouchPoint(1, 1);
     base::Optional<ui::DidOverscrollParams> overscroll;
-    base::Optional<cc::TouchAction> touch_action = cc::kTouchActionPan;
+    base::Optional<cc::TouchAction> touch_action = cc::TouchAction::kPan;
     input_router_->SendTouchEvent(TouchEventWithLatencyInfo(touch_event_));
     EXPECT_TRUE(input_router_->touch_event_queue_.IsTimeoutRunningForTesting());
     input_router_->TouchEventHandled(
@@ -472,7 +472,7 @@ class InputRouterImplTestBase : public testing::Test {
     if (compositor_touch_action_enabled) {
       EXPECT_TRUE(
           input_router_->touch_event_queue_.IsTimeoutRunningForTesting());
-      input_router_->SetTouchActionFromMain(cc::kTouchActionPan);
+      input_router_->SetTouchActionFromMain(cc::TouchAction::kPan);
       EXPECT_FALSE(
           input_router_->touch_event_queue_.IsTimeoutRunningForTesting());
     } else {
@@ -537,7 +537,7 @@ class InputRouterImplTest : public InputRouterImplTestBase,
   base::test::ScopedFeatureList touch_action_feature_list_;
 };
 
-INSTANTIATE_TEST_SUITE_P(, InputRouterImplTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, InputRouterImplTest, ::testing::Bool());
 
 TEST_P(InputRouterImplTest, HandledInputEvent) {
   client_->set_filter_state(INPUT_EVENT_ACK_STATE_CONSUMED);
@@ -713,13 +713,13 @@ TEST_P(InputRouterImplTest,
 // Test that the active touch sequence count increment when the touch start is
 // ACKed from the main thread.
 TEST_P(InputRouterImplTest, ActiveTouchSequenceCountWithTouchAction) {
-  base::Optional<cc::TouchAction> touch_action(cc::kTouchActionPanY);
+  base::Optional<cc::TouchAction> touch_action(cc::TouchAction::kPanY);
   ActiveTouchSequenceCountTest(touch_action,
                                INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING);
 }
 
 TEST_P(InputRouterImplTest, ActiveTouchSequenceCountWithTouchActionNoConsumer) {
-  base::Optional<cc::TouchAction> touch_action(cc::kTouchActionPanY);
+  base::Optional<cc::TouchAction> touch_action(cc::TouchAction::kPanY);
   ActiveTouchSequenceCountTest(touch_action,
                                INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
 }
@@ -730,9 +730,9 @@ TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateConsumed) {
                                    : InputEventAckSource::MAIN_THREAD;
   base::Optional<cc::TouchAction> expected_touch_action;
   if (!compositor_touch_action_enabled_)
-    expected_touch_action = cc::kTouchActionAuto;
+    expected_touch_action = cc::TouchAction::kAuto;
   OnTouchEventAckWithAckState(source, INPUT_EVENT_ACK_STATE_CONSUMED,
-                              expected_touch_action, cc::kTouchActionAuto);
+                              expected_touch_action, cc::TouchAction::kAuto);
 }
 
 TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateNotConsumed) {
@@ -741,9 +741,9 @@ TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateNotConsumed) {
                                    : InputEventAckSource::MAIN_THREAD;
   base::Optional<cc::TouchAction> expected_touch_action;
   if (!compositor_touch_action_enabled_)
-    expected_touch_action = cc::kTouchActionAuto;
+    expected_touch_action = cc::TouchAction::kAuto;
   OnTouchEventAckWithAckState(source, INPUT_EVENT_ACK_STATE_NOT_CONSUMED,
-                              expected_touch_action, cc::kTouchActionAuto);
+                              expected_touch_action, cc::TouchAction::kAuto);
 }
 
 TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateConsumedShouldBubble) {
@@ -752,10 +752,10 @@ TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateConsumedShouldBubble) {
                                    : InputEventAckSource::MAIN_THREAD;
   base::Optional<cc::TouchAction> expected_touch_action;
   if (!compositor_touch_action_enabled_)
-    expected_touch_action = cc::kTouchActionAuto;
+    expected_touch_action = cc::TouchAction::kAuto;
   OnTouchEventAckWithAckState(source,
                               INPUT_EVENT_ACK_STATE_CONSUMED_SHOULD_BUBBLE,
-                              expected_touch_action, cc::kTouchActionAuto);
+                              expected_touch_action, cc::TouchAction::kAuto);
 }
 
 TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateNoConsumerExists) {
@@ -764,9 +764,9 @@ TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateNoConsumerExists) {
                                    : InputEventAckSource::MAIN_THREAD;
   base::Optional<cc::TouchAction> expected_touch_action;
   if (!compositor_touch_action_enabled_)
-    expected_touch_action = cc::kTouchActionAuto;
+    expected_touch_action = cc::TouchAction::kAuto;
   OnTouchEventAckWithAckState(source, INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS,
-                              expected_touch_action, cc::kTouchActionAuto);
+                              expected_touch_action, cc::TouchAction::kAuto);
 }
 
 TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateIgnored) {
@@ -775,9 +775,9 @@ TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateIgnored) {
                                    : InputEventAckSource::MAIN_THREAD;
   base::Optional<cc::TouchAction> expected_touch_action;
   if (!compositor_touch_action_enabled_)
-    expected_touch_action = cc::kTouchActionAuto;
+    expected_touch_action = cc::TouchAction::kAuto;
   OnTouchEventAckWithAckState(source, INPUT_EVENT_ACK_STATE_IGNORED,
-                              expected_touch_action, cc::kTouchActionAuto);
+                              expected_touch_action, cc::TouchAction::kAuto);
 }
 
 TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateNonBlocking) {
@@ -786,9 +786,9 @@ TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateNonBlocking) {
                                    : InputEventAckSource::MAIN_THREAD;
   base::Optional<cc::TouchAction> expected_touch_action;
   if (!compositor_touch_action_enabled_)
-    expected_touch_action = cc::kTouchActionAuto;
+    expected_touch_action = cc::TouchAction::kAuto;
   OnTouchEventAckWithAckState(source, INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING,
-                              expected_touch_action, cc::kTouchActionAuto);
+                              expected_touch_action, cc::TouchAction::kAuto);
 }
 
 TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateNonBlockingDueToFling) {
@@ -797,10 +797,10 @@ TEST_P(InputRouterImplTest, TouchActionAutoWithAckStateNonBlockingDueToFling) {
                                    : InputEventAckSource::MAIN_THREAD;
   base::Optional<cc::TouchAction> expected_touch_action;
   if (!compositor_touch_action_enabled_)
-    expected_touch_action = cc::kTouchActionAuto;
+    expected_touch_action = cc::TouchAction::kAuto;
   OnTouchEventAckWithAckState(
       source, INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING_DUE_TO_FLING,
-      expected_touch_action, cc::kTouchActionAuto);
+      expected_touch_action, cc::TouchAction::kAuto);
 }
 
 // Tests that touch-events are sent properly.
@@ -809,7 +809,7 @@ TEST_P(InputRouterImplTest, TouchEventQueue) {
 
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  input_router_->OnSetTouchAction(cc::kTouchActionAuto);
+  input_router_->OnSetTouchAction(cc::TouchAction::kAuto);
   EXPECT_TRUE(client_->GetAndResetFilterEventCalled());
   DispatchedMessages touch_start_event = GetAndResetDispatchedMessages();
   ASSERT_EQ(1U, touch_start_event.size());
@@ -951,7 +951,7 @@ TEST_P(InputRouterImplTest, TouchTypesIgnoringAck) {
   // Precede the TouchCancel with an appropriate TouchStart;
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  input_router_->OnSetTouchAction(cc::kTouchActionAuto);
+  input_router_->OnSetTouchAction(cc::TouchAction::kAuto);
   DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
   ASSERT_EQ(1U, dispatched_messages.size());
   ASSERT_TRUE(dispatched_messages[0]->ToEvent());
@@ -1313,7 +1313,7 @@ TEST_P(InputRouterImplTest, TouchAckTimeoutConfigured) {
   input_router()->NotifySiteIsMobileOptimized(false);
   EXPECT_TRUE(TouchEventTimeoutEnabled());
 
-  // kTouchActionNone (and no other touch-action) should disable the timeout.
+  // TouchAction::kNone (and no other touch-action) should disable the timeout.
   OnHasTouchEventHandlers(true);
   PressTouchPoint(1, 1);
   SendTouchEvent();
@@ -1332,7 +1332,7 @@ TEST_P(InputRouterImplTest, TouchAckTimeoutConfigured) {
 
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  input_router_->OnSetTouchAction(cc::kTouchActionNone);
+  input_router_->OnSetTouchAction(cc::TouchAction::kNone);
   DispatchedMessages touch_press_event3 = GetAndResetDispatchedMessages();
   ASSERT_EQ(1u, touch_press_event3.size());
   ASSERT_TRUE(touch_press_event3[0]->ToEvent());
@@ -1353,11 +1353,11 @@ TEST_P(InputRouterImplTest, TouchAckTimeoutConfigured) {
   PressTouchPoint(1, 1);
   SendTouchEvent();
   ResetTouchAction();
-  input_router_->OnSetTouchAction(cc::kTouchActionAuto);
+  input_router_->OnSetTouchAction(cc::TouchAction::kAuto);
   EXPECT_TRUE(TouchEventTimeoutEnabled());
 }
 
-// Test that a touch sequenced preceded by kTouchActionNone is not affected by
+// Test that a touch sequenced preceded by TouchAction::kNone is not affected by
 // the touch timeout.
 TEST_P(InputRouterImplTest,
        TouchAckTimeoutDisabledForTouchSequenceAfterTouchActionNone) {
@@ -1374,11 +1374,11 @@ TEST_P(InputRouterImplTest,
   ASSERT_EQ(1U, dispatched_messages.size());
   ASSERT_TRUE(dispatched_messages[0]->ToEvent());
 
-  // kTouchActionNone should disable the timeout.
+  // TouchAction::kNone should disable the timeout.
   CancelTouchTimeout();
   dispatched_messages[0]->ToEvent()->CallCallback(
       InputEventAckSource::MAIN_THREAD, ui::LatencyInfo(),
-      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::kTouchActionNone);
+      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::TouchAction::kNone);
   EXPECT_EQ(1U, disposition_handler_->GetAndResetAckCount());
   EXPECT_FALSE(TouchEventTimeoutEnabled());
 
@@ -1399,7 +1399,7 @@ TEST_P(InputRouterImplTest,
   // End the touch sequence.
   ReleaseTouchPoint(0);
   SendTouchEvent();
-  input_router_->SetTouchActionFromMain(cc::kTouchActionAuto);
+  input_router_->SetTouchActionFromMain(cc::TouchAction::kAuto);
   dispatched_messages = GetAndResetDispatchedMessages();
   EXPECT_EQ(1U, dispatched_messages.size());
   dispatched_messages[0]->ToEvent()->CallCallback(
@@ -1462,7 +1462,7 @@ TEST_P(InputRouterImplTest, TouchActionResetBeforeEventReachesRenderer) {
 
   touch_press_event1[0]->ToEvent()->CallCallback(
       InputEventAckSource::MAIN_THREAD, ui::LatencyInfo(),
-      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::kTouchActionNone);
+      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::TouchAction::kNone);
   touch_move_event1[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
 
   // Ensure touch action is still none, as the next touch start hasn't been
@@ -1485,7 +1485,7 @@ TEST_P(InputRouterImplTest, TouchActionResetBeforeEventReachesRenderer) {
   // started.
   touch_press_event2[0]->ToEvent()->CallCallback(
       InputEventAckSource::COMPOSITOR_THREAD, ui::LatencyInfo(),
-      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::kTouchActionAuto);
+      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::TouchAction::kAuto);
   touch_press_event2[0]->ToEvent()->CallCallback(
       INPUT_EVENT_ACK_STATE_CONSUMED);
   touch_move_event2[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
@@ -1522,7 +1522,7 @@ TEST_P(InputRouterImplTest, TouchActionResetWhenTouchHasNoConsumer) {
   CancelTouchTimeout();
   touch_press_event1[0]->ToEvent()->CallCallback(
       InputEventAckSource::MAIN_THREAD, ui::LatencyInfo(),
-      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::kTouchActionNone);
+      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::TouchAction::kNone);
   touch_move_event1[0]->ToEvent()->CallCallback(INPUT_EVENT_ACK_STATE_CONSUMED);
 
   ReleaseTouchPoint(0);
@@ -1596,7 +1596,7 @@ TEST_P(InputRouterImplTest, TouchActionResetWhenTouchHandlerRemoved) {
   // Ensure we have touch-action:none, suppressing scroll events.
   dispatched_messages[0]->ToEvent()->CallCallback(
       InputEventAckSource::MAIN_THREAD, ui::LatencyInfo(),
-      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::kTouchActionNone);
+      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::TouchAction::kNone);
   EXPECT_EQ(0U, GetAndResetDispatchedMessages().size());
   dispatched_messages[1]->ToEvent()->CallCallback(
       INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
@@ -1638,7 +1638,7 @@ TEST_P(InputRouterImplTest, AsyncTouchMoveAckedImmediately) {
 
   PressTouchPoint(1, 1);
   SendTouchEvent();
-  input_router_->OnSetTouchAction(cc::kTouchActionAuto);
+  input_router_->OnSetTouchAction(cc::TouchAction::kAuto);
   EXPECT_TRUE(client_->GetAndResetFilterEventCalled());
   DispatchedMessages dispatched_messages = GetAndResetDispatchedMessages();
   ASSERT_EQ(1U, dispatched_messages.size());
@@ -1683,7 +1683,7 @@ TEST_P(InputRouterImplTest, DoubleTapGestureDependsOnFirstTap) {
   ASSERT_TRUE(dispatched_messages[0]->ToEvent());
   dispatched_messages[0]->ToEvent()->CallCallback(
       InputEventAckSource::MAIN_THREAD, ui::LatencyInfo(),
-      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::kTouchActionNone);
+      INPUT_EVENT_ACK_STATE_CONSUMED, base::nullopt, cc::TouchAction::kNone);
   ReleaseTouchPoint(0);
   SendTouchEvent();
 
@@ -1770,7 +1770,9 @@ class TouchpadPinchInputRouterImplTest
   DISALLOW_COPY_AND_ASSIGN(TouchpadPinchInputRouterImplTest);
 };
 
-INSTANTIATE_TEST_SUITE_P(, TouchpadPinchInputRouterImplTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All,
+                         TouchpadPinchInputRouterImplTest,
+                         ::testing::Bool());
 
 // Test that GesturePinchUpdate is handled specially for trackpad
 TEST_P(TouchpadPinchInputRouterImplTest, TouchpadPinchUpdate) {
@@ -1796,10 +1798,10 @@ TEST_P(TouchpadPinchInputRouterImplTest, TouchpadPinchUpdate) {
   ASSERT_EQ(WebInputEvent::kMouseWheel, input_event->GetType());
   const WebMouseWheelEvent* synthetic_wheel =
       static_cast<const WebMouseWheelEvent*>(input_event);
-  EXPECT_EQ(20, synthetic_wheel->PositionInWidget().x);
-  EXPECT_EQ(25, synthetic_wheel->PositionInWidget().y);
-  EXPECT_EQ(20, synthetic_wheel->PositionInScreen().x);
-  EXPECT_EQ(25, synthetic_wheel->PositionInScreen().y);
+  EXPECT_EQ(20, synthetic_wheel->PositionInWidget().x());
+  EXPECT_EQ(25, synthetic_wheel->PositionInWidget().y());
+  EXPECT_EQ(20, synthetic_wheel->PositionInScreen().x());
+  EXPECT_EQ(25, synthetic_wheel->PositionInScreen().y());
   EXPECT_TRUE(synthetic_wheel->GetModifiers() &
               blink::WebInputEvent::kControlKey);
   EXPECT_EQ(blink::WebMouseWheelEvent::kPhaseBegan, synthetic_wheel->phase);
@@ -2064,7 +2066,7 @@ TEST_P(InputRouterImplTest, OnSetWhiteListedTouchAction) {
   // The white listed touch action is bundled in the ack.
   if (compositor_touch_action_enabled_)
     return;
-  cc::TouchAction touch_action = cc::kTouchActionPanY;
+  cc::TouchAction touch_action = cc::TouchAction::kPanY;
   OnSetWhiteListedTouchAction(touch_action, 0,
                               INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   cc::TouchAction white_listed_touch_action =
@@ -2120,7 +2122,7 @@ TEST_P(InputRouterImplTest, TouchActionInCallback) {
   ASSERT_EQ(1U, dispatched_messages.size());
   ASSERT_TRUE(dispatched_messages[0]->ToEvent());
   InputEventAckSource source = InputEventAckSource::MAIN_THREAD;
-  base::Optional<cc::TouchAction> expected_touch_action = cc::kTouchActionPan;
+  base::Optional<cc::TouchAction> expected_touch_action = cc::TouchAction::kPan;
   if (compositor_touch_action_enabled_)
     source = InputEventAckSource::COMPOSITOR_THREAD;
   dispatched_messages[0]->ToEvent()->CallCallback(
@@ -2192,12 +2194,12 @@ class InputRouterImplScaleMouseEventTest
     SimulateMouseEvent(type, 10, 10);
     UpdateDispatchedMessages();
     const WebMouseEvent* sent_event = GetSentWebInputEvent<WebMouseEvent>();
-    EXPECT_EQ(20, sent_event->PositionInWidget().x);
-    EXPECT_EQ(20, sent_event->PositionInWidget().y);
+    EXPECT_EQ(20, sent_event->PositionInWidget().x());
+    EXPECT_EQ(20, sent_event->PositionInWidget().y());
 
     const WebMouseEvent* filter_event = GetFilterWebInputEvent<WebMouseEvent>();
-    EXPECT_EQ(10, filter_event->PositionInWidget().x);
-    EXPECT_EQ(10, filter_event->PositionInWidget().y);
+    EXPECT_EQ(10, filter_event->PositionInWidget().x());
+    EXPECT_EQ(10, filter_event->PositionInWidget().y());
   }
 
  private:
@@ -2219,8 +2221,8 @@ TEST_F(InputRouterImplScaleEventTest, ScaleMouseWheelEventTest) {
 
   const WebMouseWheelEvent* sent_event =
       GetSentWebInputEvent<WebMouseWheelEvent>();
-  EXPECT_EQ(10, sent_event->PositionInWidget().x);
-  EXPECT_EQ(10, sent_event->PositionInWidget().y);
+  EXPECT_EQ(10, sent_event->PositionInWidget().x());
+  EXPECT_EQ(10, sent_event->PositionInWidget().y());
   EXPECT_EQ(20, sent_event->delta_x);
   EXPECT_EQ(20, sent_event->delta_y);
   EXPECT_EQ(2, sent_event->wheel_ticks_x);
@@ -2228,8 +2230,8 @@ TEST_F(InputRouterImplScaleEventTest, ScaleMouseWheelEventTest) {
 
   const WebMouseWheelEvent* filter_event =
       GetFilterWebInputEvent<WebMouseWheelEvent>();
-  EXPECT_EQ(5, filter_event->PositionInWidget().x);
-  EXPECT_EQ(5, filter_event->PositionInWidget().y);
+  EXPECT_EQ(5, filter_event->PositionInWidget().x());
+  EXPECT_EQ(5, filter_event->PositionInWidget().y());
   EXPECT_EQ(10, filter_event->delta_x);
   EXPECT_EQ(10, filter_event->delta_y);
   EXPECT_EQ(1, filter_event->wheel_ticks_x);
@@ -2256,33 +2258,33 @@ class InputRouterImplScaleTouchEventTest
     const WebTouchEvent* sent_event = GetSentWebInputEvent<WebTouchEvent>();
     ASSERT_EQ(2u, sent_event->touches_length);
     EXPECT_EQ(state, sent_event->touches[0].state);
-    EXPECT_EQ(20, sent_event->touches[0].PositionInWidget().x);
-    EXPECT_EQ(40, sent_event->touches[0].PositionInWidget().y);
-    EXPECT_EQ(10, sent_event->touches[0].PositionInScreen().x);
-    EXPECT_EQ(20, sent_event->touches[0].PositionInScreen().y);
+    EXPECT_EQ(20, sent_event->touches[0].PositionInWidget().x());
+    EXPECT_EQ(40, sent_event->touches[0].PositionInWidget().y());
+    EXPECT_EQ(10, sent_event->touches[0].PositionInScreen().x());
+    EXPECT_EQ(20, sent_event->touches[0].PositionInScreen().y());
     EXPECT_EQ(2 * radius_x_, sent_event->touches[0].radius_x);
     EXPECT_EQ(2 * radius_x_, sent_event->touches[0].radius_y);
 
-    EXPECT_EQ(200, sent_event->touches[1].PositionInWidget().x);
-    EXPECT_EQ(400, sent_event->touches[1].PositionInWidget().y);
-    EXPECT_EQ(100, sent_event->touches[1].PositionInScreen().x);
-    EXPECT_EQ(200, sent_event->touches[1].PositionInScreen().y);
+    EXPECT_EQ(200, sent_event->touches[1].PositionInWidget().x());
+    EXPECT_EQ(400, sent_event->touches[1].PositionInWidget().y());
+    EXPECT_EQ(100, sent_event->touches[1].PositionInScreen().x());
+    EXPECT_EQ(200, sent_event->touches[1].PositionInScreen().y());
     EXPECT_EQ(2 * radius_x_, sent_event->touches[1].radius_x);
     EXPECT_EQ(2 * radius_x_, sent_event->touches[1].radius_y);
 
     const WebTouchEvent* filter_event = GetFilterWebInputEvent<WebTouchEvent>();
     ASSERT_EQ(2u, filter_event->touches_length);
-    EXPECT_EQ(10, filter_event->touches[0].PositionInWidget().x);
-    EXPECT_EQ(20, filter_event->touches[0].PositionInWidget().y);
-    EXPECT_EQ(10, filter_event->touches[0].PositionInScreen().x);
-    EXPECT_EQ(20, filter_event->touches[0].PositionInScreen().y);
+    EXPECT_EQ(10, filter_event->touches[0].PositionInWidget().x());
+    EXPECT_EQ(20, filter_event->touches[0].PositionInWidget().y());
+    EXPECT_EQ(10, filter_event->touches[0].PositionInScreen().x());
+    EXPECT_EQ(20, filter_event->touches[0].PositionInScreen().y());
     EXPECT_EQ(radius_x_, filter_event->touches[0].radius_x);
     EXPECT_EQ(radius_x_, filter_event->touches[0].radius_y);
 
-    EXPECT_EQ(100, filter_event->touches[1].PositionInWidget().x);
-    EXPECT_EQ(200, filter_event->touches[1].PositionInWidget().y);
-    EXPECT_EQ(100, filter_event->touches[1].PositionInScreen().x);
-    EXPECT_EQ(200, filter_event->touches[1].PositionInScreen().y);
+    EXPECT_EQ(100, filter_event->touches[1].PositionInWidget().x());
+    EXPECT_EQ(200, filter_event->touches[1].PositionInWidget().y());
+    EXPECT_EQ(100, filter_event->touches[1].PositionInScreen().x());
+    EXPECT_EQ(200, filter_event->touches[1].PositionInScreen().y());
     EXPECT_EQ(radius_x_, filter_event->touches[1].radius_x);
     EXPECT_EQ(radius_x_, filter_event->touches[1].radius_y);
   }
@@ -2470,10 +2472,10 @@ class InputRouterImplScaleGestureEventTest
       const gfx::PointF& orig,
       const gfx::PointF& scaled,
       const base::Optional<gfx::SizeF>& contact_size_scaled) {
-    EXPECT_FLOAT_EQ(scaled.x(), sent_event->PositionInWidget().x);
-    EXPECT_FLOAT_EQ(scaled.y(), sent_event->PositionInWidget().y);
-    EXPECT_FLOAT_EQ(orig.x(), sent_event->PositionInScreen().x);
-    EXPECT_FLOAT_EQ(orig.y(), sent_event->PositionInScreen().y);
+    EXPECT_FLOAT_EQ(scaled.x(), sent_event->PositionInWidget().x());
+    EXPECT_FLOAT_EQ(scaled.y(), sent_event->PositionInWidget().y());
+    EXPECT_FLOAT_EQ(orig.x(), sent_event->PositionInScreen().x());
+    EXPECT_FLOAT_EQ(orig.y(), sent_event->PositionInScreen().y());
 
     base::Optional<gfx::SizeF> event_contact_size = GetContactSize(*sent_event);
     if (event_contact_size && contact_size_scaled) {
@@ -2488,10 +2490,10 @@ class InputRouterImplScaleGestureEventTest
       const WebGestureEvent* filter_event,
       const gfx::PointF& orig,
       const base::Optional<gfx::SizeF>& contact_size) {
-    EXPECT_FLOAT_EQ(orig.x(), filter_event->PositionInWidget().x);
-    EXPECT_FLOAT_EQ(orig.y(), filter_event->PositionInWidget().y);
-    EXPECT_FLOAT_EQ(orig.x(), filter_event->PositionInScreen().x);
-    EXPECT_FLOAT_EQ(orig.y(), filter_event->PositionInScreen().y);
+    EXPECT_FLOAT_EQ(orig.x(), filter_event->PositionInWidget().x());
+    EXPECT_FLOAT_EQ(orig.y(), filter_event->PositionInWidget().y());
+    EXPECT_FLOAT_EQ(orig.x(), filter_event->PositionInScreen().x());
+    EXPECT_FLOAT_EQ(orig.y(), filter_event->PositionInScreen().y());
 
     base::Optional<gfx::SizeF> event_contact_size =
         GetContactSize(*filter_event);

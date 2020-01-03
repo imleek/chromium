@@ -6,14 +6,12 @@
 
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_directory_handle.mojom-blink.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_error.mojom-blink.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_file_handle.mojom-blink.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_manager.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/forms/html_button_element.h"
@@ -26,26 +24,26 @@ namespace blink {
 class MockNativeFileSystemManager
     : public mojom::blink::NativeFileSystemManager {
  public:
-  MockNativeFileSystemManager(service_manager::InterfaceProvider* provider,
+  MockNativeFileSystemManager(BrowserInterfaceBrokerProxy& broker,
                               base::OnceClosure reached_callback)
-      : reached_callback_(std::move(reached_callback)), provider_(provider) {
-    service_manager::InterfaceProvider::TestApi(provider_).SetBinderForName(
+      : reached_callback_(std::move(reached_callback)), broker_(broker) {
+    broker_.SetBinderForTesting(
         mojom::blink::NativeFileSystemManager::Name_,
         WTF::BindRepeating(
             &MockNativeFileSystemManager::BindNativeFileSystemManager,
             WTF::Unretained(this)));
   }
-  MockNativeFileSystemManager(service_manager::InterfaceProvider* provider)
-      : provider_(provider) {
-    service_manager::InterfaceProvider::TestApi(provider_).SetBinderForName(
+  MockNativeFileSystemManager(BrowserInterfaceBrokerProxy& broker)
+      : broker_(broker) {
+    broker_.SetBinderForTesting(
         mojom::blink::NativeFileSystemManager::Name_,
         WTF::BindRepeating(
             &MockNativeFileSystemManager::BindNativeFileSystemManager,
             WTF::Unretained(this)));
   }
   ~MockNativeFileSystemManager() override {
-    service_manager::InterfaceProvider::TestApi(provider_).SetBinderForName(
-        mojom::blink::NativeFileSystemManager::Name_, {});
+    broker_.SetBinderForTesting(mojom::blink::NativeFileSystemManager::Name_,
+                                {});
   }
 
   using ChooseEntriesResponseCallback =
@@ -96,7 +94,7 @@ class MockNativeFileSystemManager
   base::OnceClosure reached_callback_;
   ChooseEntriesResponseCallback choose_entries_response_callback_;
   mojo::ReceiverSet<mojom::blink::NativeFileSystemManager> receivers_;
-  service_manager::InterfaceProvider* provider_;
+  BrowserInterfaceBrokerProxy& broker_;
 };
 
 class WindowNativeFileSystemTest : public PageTestBase {
@@ -120,9 +118,9 @@ class WindowNativeFileSystemTest : public PageTestBase {
 
 TEST_F(WindowNativeFileSystemTest, UserActivationRequiredOtherwiseDenied) {
   LocalFrame* frame = &GetFrame();
-  EXPECT_FALSE(frame->HasBeenActivated());
+  EXPECT_FALSE(frame->HasStickyUserActivation());
 
-  MockNativeFileSystemManager manager(&frame->GetInterfaceProvider());
+  MockNativeFileSystemManager manager(frame->GetBrowserInterfaceBroker());
   manager.SetChooseEntriesResponse(WTF::Bind(
       [](MockNativeFileSystemManager::ChooseEntriesCallback callback) {
         FAIL();
@@ -130,18 +128,18 @@ TEST_F(WindowNativeFileSystemTest, UserActivationRequiredOtherwiseDenied) {
   GetFrame().GetScriptController().ExecuteScriptInMainWorld(
       "window.chooseFileSystemEntries({type: 'openFile'});");
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(frame->HasBeenActivated());
+  EXPECT_FALSE(frame->HasStickyUserActivation());
 }
 
 TEST_F(WindowNativeFileSystemTest, UserActivationChooseEntriesSuccessful) {
   LocalFrame* frame = &GetFrame();
-  EXPECT_FALSE(frame->HasBeenActivated());
+  EXPECT_FALSE(frame->HasStickyUserActivation());
 
   LocalFrame::NotifyUserActivation(frame);
-  EXPECT_TRUE(frame->HasBeenActivated());
+  EXPECT_TRUE(frame->HasStickyUserActivation());
 
   base::RunLoop manager_run_loop;
-  MockNativeFileSystemManager manager(&frame->GetInterfaceProvider(),
+  MockNativeFileSystemManager manager(frame->GetBrowserInterfaceBroker(),
                                       manager_run_loop.QuitClosure());
   manager.SetChooseEntriesResponse(WTF::Bind(
       [](MockNativeFileSystemManager::ChooseEntriesCallback callback) {
@@ -167,18 +165,18 @@ TEST_F(WindowNativeFileSystemTest, UserActivationChooseEntriesSuccessful) {
 
   // Mock Manager finished sending data over the mojo pipe.
   // Clearing the user activation.
-  frame->ClearActivation();
-  EXPECT_FALSE(frame->HasBeenActivated());
+  frame->ClearUserActivation();
+  EXPECT_FALSE(frame->HasStickyUserActivation());
 
   // Let blink-side receiver process the response and set the user activation
   // again.
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(frame->HasBeenActivated());
+  EXPECT_TRUE(frame->HasStickyUserActivation());
 }
 
 TEST_F(WindowNativeFileSystemTest, UserActivationChooseEntriesErrors) {
   LocalFrame* frame = &GetFrame();
-  EXPECT_FALSE(frame->HasBeenActivated());
+  EXPECT_FALSE(frame->HasStickyUserActivation());
 
   using mojom::blink::NativeFileSystemStatus;
 
@@ -190,11 +188,11 @@ TEST_F(WindowNativeFileSystemTest, UserActivationChooseEntriesErrors) {
       // kOperationAborted is when the user cancels the file selection.
       NativeFileSystemStatus::kOperationAborted,
   };
-  MockNativeFileSystemManager manager(&frame->GetInterfaceProvider());
+  MockNativeFileSystemManager manager(frame->GetBrowserInterfaceBroker());
 
   for (const NativeFileSystemStatus& status : statuses) {
     LocalFrame::NotifyUserActivation(frame);
-    EXPECT_TRUE(frame->HasBeenActivated());
+    EXPECT_TRUE(frame->HasStickyUserActivation());
 
     base::RunLoop manager_run_loop;
     manager.SetQuitClosure(manager_run_loop.QuitClosure());
@@ -215,11 +213,11 @@ TEST_F(WindowNativeFileSystemTest, UserActivationChooseEntriesErrors) {
 
     // Mock Manager finished sending data over the mojo pipe.
     // Clearing the user activation.
-    frame->ClearActivation();
-    EXPECT_FALSE(frame->HasBeenActivated());
+    frame->ClearUserActivation();
+    EXPECT_FALSE(frame->HasStickyUserActivation());
 
     base::RunLoop().RunUntilIdle();
-    EXPECT_FALSE(frame->HasBeenActivated());
+    EXPECT_FALSE(frame->HasStickyUserActivation());
   }
 }
 

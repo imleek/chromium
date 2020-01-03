@@ -52,6 +52,7 @@ class TestNotifierSettingsController;
 class TestPrefServiceProvider;
 class TestShellDelegate;
 class TestSystemTrayClient;
+class TestPhotoController;
 
 // A helper class that does common initialization required for Ash. Creates a
 // root window and an ash::Shell instance with a test delegate.
@@ -76,8 +77,7 @@ class AshTestHelper {
   struct InitParams {
     // True if the user should log in.
     bool start_session = true;
-    // True to inject local-state PrefService into the Shell.
-    bool provide_local_state = true;
+    PrefService* local_state = nullptr;
     ConfigType config_type = kUnitTest;
   };
 
@@ -138,8 +138,8 @@ class AshTestHelper {
 
  private:
   // Called when running in ash to create Shell.
-  void CreateShell(bool provide_local_state,
-                   base::Optional<ShellInitParams> init_params);
+  void CreateShell(base::Optional<ShellInitParams> init_params,
+                   PrefService* local_state);
 
   std::unique_ptr<chromeos::system::ScopedFakeStatisticsProvider>
       statistics_provider_;
@@ -160,6 +160,7 @@ class AshTestHelper {
   std::unique_ptr<TestPrefServiceProvider> prefs_provider_;
   std::unique_ptr<TestAssistantService> assistant_service_;
   std::unique_ptr<ui::TestContextFactories> context_factories_;
+  std::unique_ptr<TestPhotoController> photo_controller_;
 
   std::unique_ptr<base::test::ScopedCommandLine> command_line_;
 
@@ -169,8 +170,6 @@ class AshTestHelper {
 
   std::unique_ptr<TestKeyboardControllerObserver>
       test_keyboard_controller_observer_;
-
-  std::unique_ptr<PrefService> local_state_;
 
   DISALLOW_COPY_AND_ASSIGN(AshTestHelper);
 };

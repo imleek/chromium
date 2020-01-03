@@ -9,24 +9,28 @@
 #include <string>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
-#include "chrome/browser/policy/browser_dm_token_storage.h"
-#include "chrome/browser/policy/chrome_browser_cloud_management_controller.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_dialog_views.h"
+#include "chrome/browser/safe_browsing/dm_token_utils.h"
 #include "chrome/browser/safe_browsing/download_protection/check_client_download_request.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/policy/core/browser/url_blacklist_manager.h"
 #include "components/policy/core/browser/url_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/features.h"
+#include "components/safe_browsing/proto/webprotect.pb.h"
 #include "components/url_matcher/url_matcher.h"
 #include "content/public/browser/web_contents.h"
 #include "crypto/sha2.h"
@@ -36,20 +40,11 @@
 
 namespace safe_browsing {
 
-const base::Feature kDeepScanningOfUploads{"SafeBrowsingDeepScanningOfUploads",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
-
 // TODO(rogerta): keeping this disabled by default until UX is finalized.
 const base::Feature kDeepScanningOfUploadsUI{
     "SafeBrowsingDeepScanningOfUploadsUI", base::FEATURE_DISABLED_BY_DEFAULT};
 
 namespace {
-
-policy::DMToken* GetDMTokenForTestingStorage() {
-  static policy::DMToken dm_token_storage =
-      policy::DMToken::CreateEmptyTokenForTesting();
-  return &dm_token_storage;
-}
 
 // Global pointer of factory function (RepeatingCallback) used to create
 // instances of DeepScanningDialogDelegate in tests.  !is_null() only in tests.
@@ -142,6 +137,11 @@ void StringSourceRequest::GetRequestData(DataCallback callback) {
 
 bool DlpTriggeredRulesOK(
     const ::safe_browsing::DlpDeepScanningVerdict& verdict) {
+  // No status returns true since this function is called even when the server
+  // doesn't return a DLP scan verdict.
+  if (!verdict.has_status())
+    return true;
+
   if (verdict.status() != DlpDeepScanningVerdict::SUCCESS)
     return false;
 
@@ -152,6 +152,14 @@ bool DlpTriggeredRulesOK(
     }
   }
   return true;
+}
+
+std::string GetFileMimeType(base::FilePath path) {
+  // TODO(crbug.com/1013252): Obtain a more accurate MimeType by parsing the
+  // file content.
+  std::string mime_type;
+  net::GetMimeTypeFromFile(path, &mime_type);
+  return mime_type;
 }
 
 // File types supported for DLP scanning.
@@ -244,21 +252,15 @@ DeepScanningDialogDelegate::FileInfo::~FileInfo() = default;
 
 DeepScanningDialogDelegate::~DeepScanningDialogDelegate() = default;
 
-base::string16 DeepScanningDialogDelegate::GetTitle() {
-  return l10n_util::GetStringUTF16(IDS_DEEP_SCANNING_DIALOG_TITLE);
-}
-
-base::string16 DeepScanningDialogDelegate::GetDialogMessage() {
-  return l10n_util::GetStringUTF16(IDS_DEEP_SCANNING_DIALOG_MESSAGE);
-}
-
-int DeepScanningDialogDelegate::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_CANCEL;
-}
-
-void DeepScanningDialogDelegate::OnCanceled() {
+void DeepScanningDialogDelegate::Cancel() {
   if (callback_.is_null())
     return;
+
+  if (access_point_.has_value()) {
+    RecordDeepScanMetrics(access_point_.value(),
+                          base::TimeTicks::Now() - upload_start_time_, 0,
+                          "CancelledByUser", false);
+  }
 
   // Make sure to reject everything.
   FillAllResultsWith(false);
@@ -292,23 +294,20 @@ bool DeepScanningDialogDelegate::FileTypeSupported(const bool for_malware_scan,
 bool DeepScanningDialogDelegate::IsEnabled(Profile* profile,
                                            GURL url,
                                            Data* data) {
-  if (!base::FeatureList::IsEnabled(kDeepScanningOfUploads))
-    return false;
-
   // If this is an incognitio profile, don't perform scans.
   if (profile->IsOffTheRecord())
     return false;
 
   // If there's no valid DM token, the upload will fail.
-  if (!GetDMToken().is_valid())
+  if (!GetDMToken(profile).is_valid())
     return false;
 
   // See if content compliance checks are needed.
-
   int state = g_browser_process->local_state()->GetInteger(
       prefs::kCheckContentCompliance);
   data->do_dlp_scan =
-      state == CHECK_UPLOADS || state == CHECK_UPLOADS_AND_DOWNLOADS;
+      base::FeatureList::IsEnabled(kContentComplianceEnabled) &&
+      (state == CHECK_UPLOADS || state == CHECK_UPLOADS_AND_DOWNLOADS);
 
   if (data->do_dlp_scan &&
       g_browser_process->local_state()->HasPrefPath(
@@ -325,7 +324,8 @@ bool DeepScanningDialogDelegate::IsEnabled(Profile* profile,
   state = profile->GetPrefs()->GetInteger(
       prefs::kSafeBrowsingSendFilesForMalwareCheck);
   data->do_malware_scan =
-      state == SEND_UPLOADS || state == SEND_UPLOADS_AND_DOWNLOADS;
+      base::FeatureList::IsEnabled(kMalwareScanEnabled) &&
+      (state == SEND_UPLOADS || state == SEND_UPLOADS_AND_DOWNLOADS);
 
   if (data->do_malware_scan) {
     if (g_browser_process->local_state()->HasPrefPath(
@@ -348,18 +348,19 @@ bool DeepScanningDialogDelegate::IsEnabled(Profile* profile,
 void DeepScanningDialogDelegate::ShowForWebContents(
     content::WebContents* web_contents,
     Data data,
-    CompletionCallback callback) {
+    CompletionCallback callback,
+    base::Optional<DeepScanAccessPoint> access_point) {
   Factory* testing_factory = GetFactoryStorage();
   bool wait_for_verdict = WaitForVerdict();
 
   // Using new instead of std::make_unique<> to access non public constructor.
-  auto delegate =
-      testing_factory->is_null()
-          ? std::unique_ptr<DeepScanningDialogDelegate>(
-                new DeepScanningDialogDelegate(web_contents, std::move(data),
-                                               std::move(callback)))
-          : testing_factory->Run(web_contents, std::move(data),
-                                 std::move(callback));
+  auto delegate = testing_factory->is_null()
+                      ? std::unique_ptr<DeepScanningDialogDelegate>(
+                            new DeepScanningDialogDelegate(
+                                web_contents, std::move(data),
+                                std::move(callback), access_point))
+                      : testing_factory->Run(web_contents, std::move(data),
+                                             std::move(callback));
 
   bool work_being_done = delegate->UploadData();
 
@@ -372,7 +373,7 @@ void DeepScanningDialogDelegate::ShowForWebContents(
   if (show_ui) {
     DeepScanningDialogDelegate* delegate_ptr = delegate.get();
     delegate_ptr->dialog_ =
-        TabModalConfirmDialog::Create(std::move(delegate), web_contents);
+        new DeepScanningDialogViews(std::move(delegate), web_contents);
     return;
   }
 
@@ -397,20 +398,15 @@ void DeepScanningDialogDelegate::SetFactoryForTesting(Factory factory) {
   *GetFactoryStorage() = factory;
 }
 
-// static
-void DeepScanningDialogDelegate::SetDMTokenForTesting(
-    const policy::DMToken& dm_token) {
-  *GetDMTokenForTestingStorage() = dm_token;
-}
-
 DeepScanningDialogDelegate::DeepScanningDialogDelegate(
     content::WebContents* web_contents,
     Data data,
-    CompletionCallback callback)
-    : TabModalConfirmDialogDelegate(web_contents),
-      web_contents_(web_contents),
+    CompletionCallback callback,
+    base::Optional<DeepScanAccessPoint> access_point)
+    : web_contents_(web_contents),
       data_(std::move(data)),
-      callback_(std::move(callback)) {
+      callback_(std::move(callback)),
+      access_point_(access_point) {
   DCHECK(web_contents_);
   result_.text_results.resize(data_.text.size(), false);
   result_.paths_results.resize(data_.paths.size(), false);
@@ -420,22 +416,61 @@ DeepScanningDialogDelegate::DeepScanningDialogDelegate(
 void DeepScanningDialogDelegate::StringRequestCallback(
     BinaryUploadService::Result result,
     DeepScanningClientResponse response) {
+  int64_t content_size = 0;
+  for (const base::string16& entry : data_.text)
+    content_size += (entry.size() * sizeof(base::char16));
+  if (access_point_.has_value()) {
+    RecordDeepScanMetrics(access_point_.value(),
+                          base::TimeTicks::Now() - upload_start_time_,
+                          content_size, result, response);
+  }
+
   MaybeReportDeepScanningVerdict(
       Profile::FromBrowserContext(web_contents_->GetBrowserContext()),
       web_contents_->GetLastCommittedURL(), "Text data", std::string(),
       "text/plain",
       extensions::SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
-      std::accumulate(data_.text.begin(), data_.text.end(), 0,
-                      [](int64_t acc, const base::string16& s) {
-                        return acc + s.size() * sizeof(base::char16);
-                      }),
-      result, response);
+      content_size, result, response);
 
   text_request_complete_ = true;
   bool text_complies = (result == BinaryUploadService::Result::SUCCESS &&
                         DlpTriggeredRulesOK(response.dlp_scan_verdict()));
   std::fill(result_.text_results.begin(), result_.text_results.end(),
             text_complies);
+  MaybeCompleteScanRequest();
+}
+
+void DeepScanningDialogDelegate::CompleteFileRequestCallback(
+    size_t index,
+    base::FilePath path,
+    BinaryUploadService::Result result,
+    DeepScanningClientResponse response,
+    std::string mime_type) {
+  MaybeReportDeepScanningVerdict(
+      Profile::FromBrowserContext(web_contents_->GetBrowserContext()),
+      web_contents_->GetLastCommittedURL(), path.AsUTF8Unsafe(),
+      base::HexEncode(file_info_[index].sha256.data(),
+                      file_info_[index].sha256.size()),
+      mime_type, extensions::SafeBrowsingPrivateEventRouter::kTriggerFileUpload,
+      file_info_[index].size, result, response);
+
+  bool dlp_ok = DlpTriggeredRulesOK(response.dlp_scan_verdict());
+  bool malware_ok = true;
+  if (response.has_malware_scan_verdict()) {
+    malware_ok = response.malware_scan_verdict().status() ==
+                     MalwareDeepScanningVerdict::SUCCESS &&
+                 response.malware_scan_verdict().verdict() !=
+                     MalwareDeepScanningVerdict::UWS &&
+                 response.malware_scan_verdict().verdict() !=
+                     MalwareDeepScanningVerdict::MALWARE;
+  }
+
+  bool file_complies = (result == BinaryUploadService::Result::SUCCESS ||
+                        result == BinaryUploadService::Result::UNAUTHORIZED) &&
+                       dlp_ok && malware_ok;
+  result_.paths_results[index] = file_complies;
+
+  ++file_result_count_;
   MaybeCompleteScanRequest();
 }
 
@@ -448,52 +483,23 @@ void DeepScanningDialogDelegate::FileRequestCallback(
   DCHECK(it != data_.paths.end());
   size_t index = std::distance(data_.paths.begin(), it);
 
-  // TODO(crbug.com/1013252): Obtain a more accurate MimeType by parsing the
-  // file content.
-  std::string mime_type;
-  net::GetMimeTypeFromFile(path, &mime_type);
-
-  MaybeReportDeepScanningVerdict(
-      Profile::FromBrowserContext(web_contents_->GetBrowserContext()),
-      web_contents_->GetLastCommittedURL(), path.AsUTF8Unsafe(),
-      file_info_[index].sha256, mime_type,
-      extensions::SafeBrowsingPrivateEventRouter::kTriggerFileUpload,
-      file_info_[index].size, result, response);
-
-  bool dlp_ok = DlpTriggeredRulesOK(response.dlp_scan_verdict());
-  bool malware_ok = response.malware_scan_verdict().verdict() !=
-                        MalwareDeepScanningVerdict::UWS &&
-                    response.malware_scan_verdict().verdict() !=
-                        MalwareDeepScanningVerdict::MALWARE;
-  bool file_complies =
-      (result == BinaryUploadService::Result::SUCCESS) && dlp_ok && malware_ok;
-
-  result_.paths_results[index] = file_complies;
-
-  ++file_result_count_;
-  MaybeCompleteScanRequest();
-}
-
-// static
-policy::DMToken DeepScanningDialogDelegate::GetDMToken() {
-  policy::DMToken dm_token = *GetDMTokenForTestingStorage();
-
-#if !defined(OS_CHROMEOS)
-  // This is not compiled on chromeos because
-  // ChromeBrowserCloudManagementController does not exist.  Also,
-  // policy::BrowserDMTokenStorage::Get()->RetrieveDMToken() does not return a
-  // valid token either.  Once these are fixed the #if !defined can be removed.
-
-  if (dm_token.is_empty() &&
-      policy::ChromeBrowserCloudManagementController::IsEnabled()) {
-    dm_token = policy::BrowserDMTokenStorage::Get()->RetrieveBrowserDMToken();
+  if (access_point_.has_value()) {
+    RecordDeepScanMetrics(access_point_.value(),
+                          base::TimeTicks::Now() - upload_start_time_,
+                          file_info_[index].size, result, response);
   }
-#endif
 
-  return dm_token;
+  base::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+      base::BindOnce(&GetFileMimeType, path),
+      base::BindOnce(&DeepScanningDialogDelegate::CompleteFileRequestCallback,
+                     weak_ptr_factory_.GetWeakPtr(), index, path, result,
+                     response));
 }
 
 bool DeepScanningDialogDelegate::UploadData() {
+  upload_start_time_ = base::TimeTicks::Now();
   if (data_.do_dlp_scan) {
     // Create a string data source based on all the text.
     std::string full_text;
@@ -552,7 +558,9 @@ void DeepScanningDialogDelegate::PrepareRequest(
     request->set_request_malware_scan(std::move(malware_request));
   }
 
-  request->set_dm_token(GetDMToken().value());
+  request->set_dm_token(GetDMToken(Profile::FromBrowserContext(
+                                       web_contents_->GetBrowserContext()))
+                            .value());
 }
 
 void DeepScanningDialogDelegate::FillAllResultsWith(bool status) {
@@ -589,7 +597,7 @@ bool DeepScanningDialogDelegate::CloseTabModalDialog() {
   if (!dialog_)
     return false;
 
-  dialog_->CancelTabModalDialog();
+  dialog_->CancelDialogIfShowing();
   return true;
 }
 

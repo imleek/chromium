@@ -142,23 +142,6 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   // The root layer of the tree managed by this object.
   cc::Layer* RootLayer() const { return root_layer_.get(); }
 
-  // Returns extra information recorded during unit tests.
-  // While not part of the normal output of this class, this provides a simple
-  // way of locating the layers of interest, since there are still a slew of
-  // placeholder layers required.
-  struct PLATFORM_EXPORT ExtraDataForTesting {
-    cc::Layer* ScrollHitTestWebLayerAt(unsigned index);
-
-    Vector<scoped_refptr<cc::Layer>> content_layers;
-    Vector<scoped_refptr<cc::Layer>> synthesized_clip_layers;
-    Vector<scoped_refptr<cc::Layer>> scroll_hit_test_layers;
-    Vector<scoped_refptr<cc::Layer>> scrollbar_layers;
-  };
-  void EnableExtraDataForTesting();
-  ExtraDataForTesting* GetExtraDataForTesting() const {
-    return extra_data_for_testing_.get();
-  }
-
   void SetTracksRasterInvalidations(bool);
 
   // Called when the local frame view that owns this compositor is
@@ -210,6 +193,8 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
                                    CompositingReasons,
                                    RasterInvalidationTracking*);
 
+  Vector<cc::Layer*> SynthesizedClipLayersForTesting() const;
+
  private:
   // A pending layer is a collection of paint chunks that will end up in
   // the same cc::Layer.
@@ -217,15 +202,21 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
     PendingLayer(const PaintChunk& first_paint_chunk,
                  wtf_size_t first_chunk_index,
                  bool requires_own_layer);
-    // Merge another pending layer after this one, appending all its paint
+
+    // Merge another pending layer into this one, appending all its paint
     // chunks after chunks in this layer, with appropriate space conversion
-    // applied. The merged layer must have a property tree state that's deeper
-    // than this layer, i.e. can "upcast" to this layer's state.
-    void Merge(const PendingLayer& guest);
-    // |guest_state| is for cases that we want to check if we can merge |guest|
-    // if it has |guest_state| (which may be different from its current state).
-    bool CanMerge(const PendingLayer& guest,
-                  const PropertyTreeState& guest_state) const;
+    // applied to both this layer and the guest layer from their original
+    // property tree state to |merged_state|.
+    void Merge(const PendingLayer& guest,
+               const PropertyTreeState& merged_state);
+    // If the guest layer can be merged into this layer, returns the property
+    // tree state of the merged layer. |guest_state| is for cases that we want
+    // to check if we can merge |guest| if it has |guest_state| in the future
+    // (which may be different from its current state).
+    base::Optional<PropertyTreeState> CanMerge(
+        const PendingLayer& guest,
+        const PropertyTreeState& guest_state) const;
+
     // Mutate this layer's property tree state to a more general (shallower)
     // state, thus the name "upcast". The concrete effect of this is to
     // "decomposite" some of the properties, so that fewer properties will be
@@ -241,7 +232,12 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
     Vector<wtf_size_t> paint_chunk_indices;
     PropertyTreeState property_tree_state;
     FloatPoint offset_of_decomposited_transforms;
-    bool requires_own_layer;
+
+    enum {
+      kRequiresOwnLayer,
+      kOverlap,
+      kOther,
+    } compositing_type;
   };
 
   void DecompositeTransforms(const PaintArtifact&);
@@ -330,6 +326,10 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
 
   cc::PropertyTrees* GetPropertyTreesForDirectUpdate();
 
+  CompositingReasons GetCompositingReasons(const PendingLayer& layer,
+                                           const PendingLayer* previous_layer,
+                                           const PaintArtifact&) const;
+
   // For notifying blink of composited scrolling.
   base::WeakPtr<CompositorScrollCallbacks> scroll_callbacks_;
 
@@ -350,9 +350,6 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   Vector<scoped_refptr<cc::Layer>> scrollbar_layers_;
 
   Vector<PendingLayer, 0> pending_layers_;
-
-  bool extra_data_for_testing_enabled_ = false;
-  std::unique_ptr<ExtraDataForTesting> extra_data_for_testing_;
 
   friend class StubChromeClientForCAP;
   friend class PaintArtifactCompositorTest;

@@ -9,13 +9,9 @@ import android.view.ContextMenu;
 
 import org.chromium.chrome.browser.findinpage.FindMatchRectsDetails;
 import org.chromium.chrome.browser.findinpage.FindNotificationDetails;
-import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.common.BrowserControlsState;
 import org.chromium.net.NetError;
 
 /**
@@ -98,12 +94,6 @@ public class EmptyTabObserver implements TabObserver {
     public void onUpdateUrl(Tab tab, String url) { }
 
     @Override
-    public void onEnterFullscreenMode(Tab tab, FullscreenOptions options) {}
-
-    @Override
-    public void onExitFullscreenMode(Tab tab) {}
-
-    @Override
     public void onDidFailLoad(
             Tab tab, boolean isMainFrame, int errorCode, String description, String failingUrl) {}
 
@@ -140,17 +130,13 @@ public class EmptyTabObserver implements TabObserver {
     public void onActivityAttachmentChanged(Tab tab, boolean isAttached) {}
 
     @Override
-    public void onInteractabilityChanged(boolean isInteractable) {}
+    public void onInteractabilityChanged(Tab tab, boolean isInteractable) {}
 
     @Override
     public void onRendererResponsiveStateChanged(Tab tab, boolean isResponsive) {}
 
     @Override
     public void onNavigationEntriesDeleted(Tab tab) {}
-
-    @Override
-    public void onBrowserControlsConstraintsUpdated(
-            Tab tab, @BrowserControlsState int constraints) {}
 
     @Override
     public void onFindResultAvailable(FindNotificationDetails result) {}

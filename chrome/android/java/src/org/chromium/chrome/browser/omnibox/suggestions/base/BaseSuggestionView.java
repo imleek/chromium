@@ -11,7 +11,6 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.View.MeasureSpec;
 import android.widget.ImageView;
 
 import androidx.annotation.DrawableRes;
@@ -28,7 +27,7 @@ import org.chromium.chrome.browser.util.KeyNavigationUtil;
  */
 public class BaseSuggestionView extends SimpleHorizontalLayoutView {
     protected final ImageView mActionView;
-    protected final DecoratedSuggestionView mContentView;
+    protected final DecoratedSuggestionView mDecoratedView;
 
     private SuggestionViewDelegate mDelegate;
 
@@ -45,14 +44,14 @@ public class BaseSuggestionView extends SimpleHorizontalLayoutView {
         @DrawableRes
         int selectableBackgroundRes = themeRes.resourceId;
 
-        mContentView = new DecoratedSuggestionView(getContext(), selectableBackgroundRes);
-        mContentView.setOnClickListener(v -> mDelegate.onSelection());
-        mContentView.setOnLongClickListener(v -> {
+        mDecoratedView = new DecoratedSuggestionView(getContext(), selectableBackgroundRes);
+        mDecoratedView.setOnClickListener(v -> mDelegate.onSelection());
+        mDecoratedView.setOnLongClickListener(v -> {
             mDelegate.onLongPress();
             return true;
         });
-        mContentView.setLayoutParams(LayoutParams.forDynamicView());
-        addView(mContentView);
+        mDecoratedView.setLayoutParams(LayoutParams.forDynamicView());
+        addView(mDecoratedView);
 
         // Action icons. Currently we only support the Refine button.
         mActionView = new ImageView(getContext());
@@ -69,7 +68,6 @@ public class BaseSuggestionView extends SimpleHorizontalLayoutView {
                 getResources().getDimensionPixelSize(R.dimen.omnibox_suggestion_refine_width),
                 LayoutParams.MATCH_PARENT));
         addView(mActionView);
-
         setContentView(view);
     }
 
@@ -81,17 +79,6 @@ public class BaseSuggestionView extends SimpleHorizontalLayoutView {
      */
     public BaseSuggestionView(Context context, @LayoutRes int layoutId) {
         this(LayoutInflater.from(context).inflate(layoutId, null));
-    }
-
-    @Override
-    protected void onMeasure(int widthSpec, int heightSpec) {
-        int contentViewWidth = MeasureSpec.getSize(widthSpec);
-        // TODO(ender): Drop this end padding, and expand the icon size by 8dp to ensure it remains
-        // centered with the omnibox "Clear" button.
-        contentViewWidth -= getResources().getDimensionPixelSize(
-                R.dimen.omnibox_suggestion_refine_view_modern_end_padding);
-        super.onMeasure(
-                MeasureSpec.makeMeasureSpec(contentViewWidth, MeasureSpec.EXACTLY), heightSpec);
     }
 
     @Override
@@ -119,7 +106,7 @@ public class BaseSuggestionView extends SimpleHorizontalLayoutView {
 
     @Override
     public void setSelected(boolean selected) {
-        mContentView.setSelected(selected);
+        mDecoratedView.setSelected(selected);
         mDelegate.onSetUrlToSuggestion();
     }
 
@@ -129,20 +116,34 @@ public class BaseSuggestionView extends SimpleHorizontalLayoutView {
      * @param view View to be displayed as suggestion content.
      */
     void setContentView(View view) {
-        mContentView.setContentView(view);
+        mDecoratedView.setContentView(view);
     }
 
-    /** Sets the delegate for the actions on the suggestion view. */
+    /** @return Embedded suggestion content view. */
+    public View getContentView() {
+        return mDecoratedView.getContentView();
+    }
+
+    /** @return Decorated suggestion view. */
+    DecoratedSuggestionView getDecoratedSuggestionView() {
+        return mDecoratedView;
+    }
+
+    /**
+     * Set the delegate for the actions on the suggestion view.
+     *
+     * @param delegate Delegate receiving user events.
+     */
     void setDelegate(SuggestionViewDelegate delegate) {
         mDelegate = delegate;
     }
 
-    /** Return widget holding suggestion decoration icon. */
+    /** @return Widget holding suggestion decoration icon. */
     RoundedCornerImageView getSuggestionImageView() {
-        return mContentView.getImageView();
+        return mDecoratedView.getImageView();
     }
 
-    /** Return widget holding action icon. */
+    /** @return Widget holding action icon. */
     ImageView getActionImageView() {
         return mActionView;
     }
@@ -157,6 +158,6 @@ public class BaseSuggestionView extends SimpleHorizontalLayoutView {
      * @return View with the specified ID or null, if view could not be found.
      */
     public <T extends View> T findContentView(@IdRes int id) {
-        return mContentView.findContentView(id);
+        return mDecoratedView.findContentView(id);
     }
 }

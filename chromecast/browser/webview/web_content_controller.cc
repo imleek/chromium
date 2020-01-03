@@ -8,7 +8,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chromecast/base/version.h"
 #include "chromecast/browser/webview/proto/webview.pb.h"
-#include "chromecast/browser/webview/webview_layout_manager.h"
 #include "chromecast/browser/webview/webview_navigation_throttle.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_remover.h"
@@ -139,8 +138,10 @@ void WebContentController::ProcessRequest(
 void WebContentController::AttachTo(aura::Window* window, int window_id) {
   content::WebContents* contents = GetWebContents();
   auto* contents_window = contents->GetNativeView();
-  window->SetLayoutManager(new WebviewLayoutManager(window));
   contents_window->set_id(window_id);
+  contents_window->SetBounds(gfx::Rect(window->bounds().size()));
+  // Set the initial webview size as we depend on the client to do further
+  // sizing.
   contents_window->SetBounds(gfx::Rect(window->bounds().size()));
   // The aura window is hidden to avoid being shown via the usual layer method,
   // instead it is shows via a SurfaceDrawQuad by exo.
@@ -157,10 +158,21 @@ void WebContentController::AttachTo(aura::Window* window, int window_id) {
   // Unretained is safe because we unset this in the destructor.
   surface_->SetEmbeddedSurfaceId(
       base::Bind(&WebContentController::GetSurfaceId, base::Unretained(this)));
+
+  current_rfh_ = GetWebContents()->GetMainFrame();
+  if (current_rfh_) {
+    auto size = current_rfh_->GetFrameSize();
+    if (size.has_value())
+      surface_->SetEmbeddedSurfaceSize(*size);
+  }
 }
 
 void WebContentController::ProcessInputEvent(const webview::InputEvent& ev) {
   content::WebContents* contents = GetWebContents();
+  DCHECK(contents);
+  DCHECK(contents->GetNativeView());
+  if (!contents->GetNativeView()->CanFocus())
+    return;
   // Ensure this web contents has focus before sending it input.
   if (!contents->GetNativeView()->HasFocus())
     contents->GetNativeView()->Focus();
@@ -201,6 +213,7 @@ void WebContentController::ProcessInputEvent(const webview::InputEvent& ev) {
                 &root_relative_event, contents->GetNativeView())) {
           return;
         }
+        evt.set_may_cause_scrolling(root_relative_event.may_cause_scrolling());
 
         handler->OnTouchEvent(&evt);
 
@@ -234,6 +247,10 @@ void WebContentController::ProcessInputEvent(const webview::InputEvent& ev) {
             base::TimeTicks() +
                 base::TimeDelta::FromMicroseconds(ev.timestamp()),
             ev.flags(), mouse.changed_button_flags());
+        if (contents->GetAccessibilityMode().has_mode(
+                ui::AXMode::kWebContents)) {
+          evt.set_flags(evt.flags() | ui::EF_TOUCH_ACCESSIBILITY);
+        }
         handler->OnMouseEvent(&evt);
       } else {
         client_->OnError("mouse() not supplied for mouse event");
@@ -251,7 +268,11 @@ void WebContentController::JavascriptCallback(int64_t id, base::Value result) {
       std::make_unique<webview::WebviewResponse>();
   response->set_id(id);
   response->mutable_evaluate_javascript()->set_json(json);
-  client_->EnqueueSend(std::move(response));
+
+  // Async response may come after Destroy() was called but before the web page
+  // closed.
+  if (client_)
+    client_->EnqueueSend(std::move(response));
 }
 
 void WebContentController::HandleEvaluateJavascript(
@@ -386,6 +407,13 @@ void WebContentController::OnSurfaceDestroying(exo::Surface* surface) {
   surface_ = nullptr;
 }
 
+void WebContentController::FrameSizeChanged(
+    content::RenderFrameHost* render_frame_host,
+    const gfx::Size& frame_size) {
+  if (render_frame_host == current_rfh_ && surface_)
+    surface_->SetEmbeddedSurfaceSize(frame_size);
+}
+
 void WebContentController::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
   current_render_frame_set_.insert(render_frame_host);
@@ -401,6 +429,8 @@ void WebContentController::RenderFrameCreated(
 void WebContentController::RenderFrameDeleted(
     content::RenderFrameHost* render_frame_host) {
   current_render_frame_set_.erase(render_frame_host);
+  if (render_frame_host == current_rfh_)
+    current_rfh_ = nullptr;
 }
 
 void WebContentController::RenderFrameHostChanged(
@@ -408,8 +438,15 @@ void WebContentController::RenderFrameHostChanged(
     content::RenderFrameHost* new_host) {
   // The surface ID may have changed, so trigger a new commit to re-issue the
   // draw quad.
-  if (surface_)
+  current_rfh_ = new_host;
+  if (surface_) {
+    if (new_host) {
+      auto size = new_host->GetFrameSize();
+      if (size.has_value())
+        surface_->SetEmbeddedSurfaceSize(*size);
+    }
     surface_->Commit();
+  }
 }
 
 void WebContentController::OnJsClientInstanceRegistered(
@@ -447,6 +484,10 @@ JsChannelCallback WebContentController::GetJsChannelCallback() {
 }
 
 void WebContentController::SendInitialChannelSet(JsClientInstance* instance) {
+  // Calls may come after Destroy() was called but before the web page closed.
+  if (!js_channels_)
+    return;
+
   JsChannelCallback callback = GetJsChannelCallback();
   for (auto& channel : current_javascript_channel_set_)
     instance->AddChannel(channel, callback);

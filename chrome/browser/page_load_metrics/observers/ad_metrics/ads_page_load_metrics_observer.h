@@ -30,7 +30,7 @@ class AdsPageLoadMetricsObserver
     : public page_load_metrics::PageLoadMetricsObserver,
       public subresource_filter::SubresourceFilterObserver {
  public:
-  // Returns a new AdsPageLoadMetricObserver. If the feature is disabled it
+  // Returns a new AdsPageLoadMetricsObserver. If the feature is disabled it
   // returns nullptr.
   static std::unique_ptr<AdsPageLoadMetricsObserver> CreateIfNeeded(
       content::WebContents* web_contents);
@@ -185,7 +185,6 @@ class AdsPageLoadMetricsObserver
 
   bool IsBlocklisted();
   HeavyAdBlocklist* GetHeavyAdBlocklist();
-  void RecordHeavyAdInterventionDisallowedByBlocklist(bool disallowed);
 
   // Stores the size data of each ad frame. Pointed to by ad_frames_ so use a
   // data structure that won't move the data around. This only stores ad frames
@@ -246,6 +245,10 @@ class AdsPageLoadMetricsObserver
 
   // The tick clock used to get the current time.  Can be replaced by tests.
   const base::TickClock* clock_;
+
+  // Whether the page load currently being observed is a reload of a previous
+  // page.
+  bool page_load_is_reload_ = false;
 
   // Stores whether the heavy ad intervention is blocklisted or not for the user
   // on the URL of this page. Incognito Profiles will cause this to be set to

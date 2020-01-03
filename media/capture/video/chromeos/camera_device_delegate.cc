@@ -5,6 +5,7 @@
 #include "media/capture/video/chromeos/camera_device_delegate.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <utility>
@@ -30,6 +31,41 @@
 namespace media {
 
 namespace {
+
+std::pair<int32_t, int32_t> GetTargetFrameRateRange(
+    const cros::mojom::CameraMetadataPtr& static_metadata,
+    int target_frame_rate,
+    bool prefer_constant_frame_rate) {
+  int32_t result_min = 0;
+  int32_t result_max = 0;
+  auto available_frame_rates = GetMetadataEntryAsSpan<int32_t>(
+      static_metadata, cros::mojom::CameraMetadataTag::
+                           ANDROID_CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+  for (size_t idx = 0; idx < available_frame_rates.size(); idx += 2) {
+    int32_t min = available_frame_rates[idx];
+    int32_t max = available_frame_rates[idx + 1];
+    if (max != target_frame_rate) {
+      continue;
+    }
+
+    if (result_min != 0) {
+      if (prefer_constant_frame_rate && min <= result_min) {
+        // If we prefer constant frame rate, we prefer a smaller range.
+        continue;
+      } else if (!prefer_constant_frame_rate && min >= result_min) {
+        // Othwewise, we prefer a larger range.
+        continue;
+      }
+    }
+    result_min = min;
+    result_max = max;
+
+    if (prefer_constant_frame_rate && min == max) {
+      break;
+    }
+  }
+  return std::make_pair(result_min, result_max);
+}
 
 // The result of max_width and max_height could be zero if the stream
 // is not in the pre-defined configuration.
@@ -84,6 +120,28 @@ void TakePhotoCallbackBundle(VideoCaptureDevice::TakePhotoCallback callback,
                              mojom::BlobPtr blob) {
   std::move(callback).Run(std::move(blob));
   std::move(on_photo_taken_callback).Run();
+}
+
+void SetFpsRangeInMetadata(cros::mojom::CameraMetadataPtr* settings,
+                           int32_t min_frame_rate,
+                           int32_t max_frame_rate) {
+  const int32_t entry_length = 2;
+
+  // CameraMetadata is represented as an uint8 array. According to the
+  // definition of the FPS metadata tag, its data type is int32, so we
+  // reinterpret_cast here.
+  std::vector<uint8_t> fps_range(sizeof(int32_t) * entry_length);
+  auto* fps_ptr = reinterpret_cast<int32_t*>(fps_range.data());
+  fps_ptr[0] = min_frame_rate;
+  fps_ptr[1] = max_frame_rate;
+  cros::mojom::CameraMetadataEntryPtr e =
+      cros::mojom::CameraMetadataEntry::New();
+  e->tag = cros::mojom::CameraMetadataTag::ANDROID_CONTROL_AE_TARGET_FPS_RANGE;
+  e->type = cros::mojom::EntryType::TYPE_INT32;
+  e->count = entry_length;
+  e->data = std::move(fps_range);
+
+  AddOrUpdateMetadataEntry(settings, std::move(e));
 }
 
 }  // namespace
@@ -847,24 +905,26 @@ void CameraDeviceDelegate::OnGotFpsRange(
   device_context_->SetState(CameraDeviceContext::State::kCapturing);
   camera_3a_controller_->SetAutoFocusModeForStillCapture();
   if (specified_fps_range.has_value()) {
-    const int32_t entry_length = 2;
+    SetFpsRangeInMetadata(&settings, specified_fps_range->GetMin(),
+                          specified_fps_range->GetMax());
+  } else {
+    int32_t requested_frame_rate =
+        std::round(chrome_capture_params_.requested_format.frame_rate);
+    bool prefer_constant_frame_rate =
+        camera_app_device_ && camera_app_device_->GetCaptureIntent() ==
+                                  cros::mojom::CaptureIntent::VIDEO_RECORD;
+    int32_t target_min, target_max;
+    std::tie(target_min, target_max) = GetTargetFrameRateRange(
+        static_metadata_, requested_frame_rate, prefer_constant_frame_rate);
+    if (target_min == 0 || target_max == 0) {
+      device_context_->SetErrorState(
+          media::VideoCaptureError::
+              kCrosHalV3DeviceDelegateFailedToGetDefaultRequestSettings,
+          FROM_HERE, "Failed to get valid frame rate range");
+      return;
+    }
 
-    // CameraMetadata is represented as an uint8 array. According to the
-    // definition of the FPS metadata tag, its data type is int32, so we
-    // reinterpret_cast here.
-    std::vector<uint8_t> fps_range(sizeof(int32_t) * entry_length);
-    auto* fps_ptr = reinterpret_cast<int32_t*>(fps_range.data());
-    fps_ptr[0] = specified_fps_range->GetMin();
-    fps_ptr[1] = specified_fps_range->GetMax();
-    cros::mojom::CameraMetadataEntryPtr e =
-        cros::mojom::CameraMetadataEntry::New();
-    e->tag =
-        cros::mojom::CameraMetadataTag::ANDROID_CONTROL_AE_TARGET_FPS_RANGE;
-    e->type = cros::mojom::EntryType::TYPE_INT32;
-    e->count = entry_length;
-    e->data = std::move(fps_range);
-
-    AddOrUpdateMetadataEntry(&settings, std::move(e));
+    SetFpsRangeInMetadata(&settings, target_min, target_max);
   }
   request_manager_->StartPreview(std::move(settings));
 

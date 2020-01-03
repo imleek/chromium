@@ -29,6 +29,7 @@ import org.chromium.device.mojom.NdefMessage;
 import org.chromium.device.mojom.NdefPushOptions;
 import org.chromium.device.mojom.NdefPushTarget;
 import org.chromium.device.mojom.NdefRecord;
+import org.chromium.device.mojom.NdefRecordTypeCategory;
 import org.chromium.device.mojom.NdefScanOptions;
 import org.chromium.device.mojom.Nfc;
 import org.chromium.device.mojom.NfcClient;
@@ -37,8 +38,6 @@ import org.chromium.mojo.system.MojoException;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -130,7 +129,7 @@ public class NfcImpl implements Nfc {
 
         mDelegate.trackActivityForHost(mHostId, onActivityUpdatedCallback);
 
-        if (!mHasPermission || Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
+        if (!mHasPermission) {
             Log.w(TAG, "NFC operations are not permitted.");
             mNfcAdapter = null;
             mNfcManager = null;
@@ -422,8 +421,6 @@ public class NfcImpl implements Nfc {
      * @see android.nfc.NfcAdapter#enableReaderMode
      */
     private void enableReaderModeIfNeeded() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) return;
-
         if (mReaderCallbackHandler != null || mActivity == null || mNfcAdapter == null) return;
 
         // Do not enable reader mode, if there are no active push / watch operations.
@@ -443,8 +440,6 @@ public class NfcImpl implements Nfc {
      */
     @TargetApi(Build.VERSION_CODES.KITKAT)
     private void disableReaderMode() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) return;
-
         // There is no API that could query whether reader mode is enabled for adapter.
         // If mReaderCallbackHandler is null, reader mode is not enabled.
         if (mReaderCallbackHandler == null) return;
@@ -550,10 +545,22 @@ public class NfcImpl implements Nfc {
             notifyMatchingWatchers(webNdefMessage);
         } catch (UnsupportedEncodingException e) {
             Log.w(TAG, "Cannot read data from NFC tag. Cannot convert to NdefMessage.");
+            notifyErrorToAllWatchers(NdefErrorType.INVALID_MESSAGE);
         } catch (TagLostException e) {
             Log.w(TAG, "Cannot read data from NFC tag. Tag is lost.");
+            notifyErrorToAllWatchers(NdefErrorType.IO_ERROR);
         } catch (FormatException | IllegalStateException | IOException e) {
             Log.w(TAG, "Cannot read data from NFC tag. IO_ERROR.");
+            notifyErrorToAllWatchers(NdefErrorType.IO_ERROR);
+        }
+    }
+
+    /**
+     * Notify all active watchers that an error happened when trying to read the tag coming nearby.
+     */
+    private void notifyErrorToAllWatchers(int error) {
+        for (int i = 0; i < mWatchers.size(); i++) {
+            mClient.onError(error);
         }
     }
 
@@ -581,67 +588,40 @@ public class NfcImpl implements Nfc {
 
     /**
      * Implements matching algorithm.
+     * https://w3c.github.io/web-nfc/#dispatching-nfc-content
      */
     private boolean matchesWatchOptions(NdefMessage message, NdefScanOptions options) {
-        // Filter by WebNfc watch Id.
-        if (!matchesWebNfcId(message.url, options.url)) return false;
+        // A message with no records is to notify that the tag is already formatted to support NDEF
+        // but does not contain a message yet. We always dispatch it for all options.
+        if (message.data.length == 0) return true;
 
-        // Matches any record / media type.
-        if ((options.mediaType == null || options.mediaType.isEmpty())
-                && options.recordType == null) {
+        for (int i = 0; i < message.data.length; i++) {
+            if (options.id != null && !options.id.equals(message.data[i].id)) {
+                continue;
+            }
+            if (options.recordType != null) {
+                if (message.data[i].category == NdefRecordTypeCategory.EXTERNAL) {
+                    // The spec https://w3c.github.io/web-nfc/#the-record-type-string says "Two
+                    // external types MUST be compared character by character, in case-insensitive
+                    // manner".
+                    if (options.recordType.compareToIgnoreCase(message.data[i].recordType) != 0) {
+                        continue;
+                    }
+                    // All other types should be compared in case-sensitive manner.
+                } else if (!options.recordType.equals(message.data[i].recordType)) {
+                    continue;
+                }
+            }
+            if (!options.mediaType.isEmpty()
+                    && !options.mediaType.equals(message.data[i].mediaType)) {
+                continue;
+            }
+
+            // Found one record matches, means the message matches.
             return true;
         }
 
-        // Filter by mediaType and recordType
-        for (int i = 0; i < message.data.length; i++) {
-            boolean matchedMediaType;
-            boolean matchedRecordType;
-
-            if (options.mediaType == null || options.mediaType.isEmpty()) {
-                // If media type for the watch options is empty, match all media types.
-                matchedMediaType = true;
-            } else {
-                matchedMediaType = options.mediaType.equals(message.data[i].mediaType);
-            }
-
-            if (options.recordType == null) {
-                // If record type for the watch options is null, match all record types.
-                matchedRecordType = true;
-            } else {
-                matchedRecordType = options.recordType.equals(message.data[i].recordType);
-            }
-
-            if (matchedMediaType && matchedRecordType) return true;
-        }
-
         return false;
-    }
-
-    /**
-     * WebNfc Id match algorithm.
-     * https://w3c.github.io/web-nfc/#url-pattern-match-algorithm
-     */
-    private boolean matchesWebNfcId(String id, String pattern) {
-        if (id != null && !id.isEmpty() && pattern != null && !pattern.isEmpty()) {
-            try {
-                URL id_url = new URL(id);
-                URL pattern_url = new URL(pattern);
-
-                if (!id_url.getProtocol().equals(pattern_url.getProtocol())) return false;
-                if (!id_url.getHost().endsWith("." + pattern_url.getHost())
-                        && !id_url.getHost().equals(pattern_url.getHost())) {
-                    return false;
-                }
-                if (pattern_url.getPath().equals(ANY_PATH)) return true;
-                if (id_url.getPath().startsWith(pattern_url.getPath())) return true;
-                return false;
-
-            } catch (MalformedURLException e) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /**
@@ -657,6 +637,15 @@ public class NfcImpl implements Nfc {
      */
     protected void processPendingOperations(NfcTagHandler tagHandler) {
         mTagHandler = tagHandler;
+
+        // This tag is not NDEF compatible.
+        if (mTagHandler == null) {
+            Log.w(TAG, "This tag is not NDEF compatible.");
+            notifyErrorToAllWatchers(NdefErrorType.NOT_SUPPORTED);
+            pendingPushOperationCompleted(createError(NdefErrorType.NOT_SUPPORTED));
+            return;
+        }
+
         processPendingWatchOperations();
         processPendingPushOperation();
         if (mTagHandler != null && mTagHandler.isConnected()) {

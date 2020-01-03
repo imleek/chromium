@@ -317,13 +317,9 @@ void ProcessDiceHeader(
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   DCHECK(!profile->IsOffTheRecord());
 
-  AccountConsistencyMethod account_consistency =
-      AccountConsistencyModeManager::GetMethodForProfile(profile);
-  if (account_consistency == AccountConsistencyMethod::kMirror ||
-      account_consistency == AccountConsistencyMethod::kDisabled) {
-    // Ignore Dice response headers if Dice is not enabled at all.
+  // Ignore Dice response headers if Dice is not enabled.
+  if (!AccountConsistencyModeManager::IsDiceEnabledForProfile(profile))
     return;
-  }
 
   signin_metrics::AccessPoint access_point =
       signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN;
@@ -349,8 +345,8 @@ void ProcessDiceHeader(
   dice_response_handler->ProcessDiceHeader(
       dice_params,
       std::make_unique<ProcessDiceHeaderDelegateImpl>(
-          web_contents, account_consistency,
-          IdentityManagerFactory::GetForProfile(profile), is_sync_signin_tab,
+          web_contents, IdentityManagerFactory::GetForProfile(profile),
+          is_sync_signin_tab,
           base::BindOnce(&CreateDiceTurnOnSyncHelper, base::Unretained(profile),
                          access_point, promo_action, reason),
           base::BindOnce(&ShowDiceSigninError, base::Unretained(profile)),

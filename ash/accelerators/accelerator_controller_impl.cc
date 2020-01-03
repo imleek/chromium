@@ -24,7 +24,7 @@
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/focus_cycler.h"
 #include "ash/home_screen/home_screen_controller.h"
-#include "ash/ime/ime_controller.h"
+#include "ash/ime/ime_controller_impl.h"
 #include "ash/ime/ime_switch_type.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/magnifier/docked_magnifier_controller_impl.h"
@@ -76,6 +76,7 @@
 #include "ash/wm/wm_event.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -518,7 +519,8 @@ void HandleSwitchToLastUsedIme(const ui::Accelerator& accelerator) {
   // Else: consume the Ctrl+Space ET_KEY_RELEASED event but do not do anything.
 }
 
-display::Display::Rotation GetNextRotation(display::Display::Rotation current) {
+display::Display::Rotation GetNextRotationInClamshell(
+    display::Display::Rotation current) {
   switch (current) {
     case display::Display::ROTATE_0:
       return display::Display::ROTATE_90;
@@ -533,15 +535,95 @@ display::Display::Rotation GetNextRotation(display::Display::Rotation current) {
   return display::Display::ROTATE_0;
 }
 
+display::Display::Rotation GetNextRotationInTabletMode(
+    int64_t display_id,
+    display::Display::Rotation current) {
+  Shell* shell = Shell::Get();
+  DCHECK(shell->tablet_mode_controller()->InTabletMode());
+
+  if (!display::Display::HasInternalDisplay() ||
+      display_id != display::Display::InternalDisplayId()) {
+    return GetNextRotationInClamshell(current);
+  }
+
+  const OrientationLockType app_requested_lock =
+      shell->screen_orientation_controller()
+          ->GetCurrentAppRequestedOrientationLock();
+
+  bool add_180_degrees = false;
+  switch (app_requested_lock) {
+    case OrientationLockType::kCurrent:
+    case OrientationLockType::kLandscapePrimary:
+    case OrientationLockType::kLandscapeSecondary:
+    case OrientationLockType::kPortraitPrimary:
+    case OrientationLockType::kPortraitSecondary:
+    case OrientationLockType::kNatural:
+      // Do not change the current orientation.
+      return current;
+
+    case OrientationLockType::kLandscape:
+    case OrientationLockType::kPortrait:
+      // App allows both primary and secondary orientations in either landscape
+      // or portrait, therefore switch to the next one by adding 180 degrees.
+      add_180_degrees = true;
+      break;
+
+    default:
+      break;
+  }
+
+  switch (current) {
+    case display::Display::ROTATE_0:
+      return add_180_degrees ? display::Display::ROTATE_180
+                             : display::Display::ROTATE_90;
+    case display::Display::ROTATE_90:
+      return add_180_degrees ? display::Display::ROTATE_270
+                             : display::Display::ROTATE_180;
+    case display::Display::ROTATE_180:
+      return add_180_degrees ? display::Display::ROTATE_0
+                             : display::Display::ROTATE_270;
+    case display::Display::ROTATE_270:
+      return add_180_degrees ? display::Display::ROTATE_90
+                             : display::Display::ROTATE_0;
+  }
+  NOTREACHED() << "Unknown rotation:" << current;
+  return display::Display::ROTATE_0;
+}
+
+bool ShouldLockRotation(int64_t display_id) {
+  return display::Display::HasInternalDisplay() &&
+         display_id == display::Display::InternalDisplayId() &&
+         Shell::Get()->tablet_mode_controller()->is_in_tablet_physical_state();
+}
+
+int64_t GetDisplayIdForRotation() {
+  const gfx::Point point = display::Screen::GetScreen()->GetCursorScreenPoint();
+  return display::Screen::GetScreen()->GetDisplayNearestPoint(point).id();
+}
+
 void RotateScreen() {
-  gfx::Point point = display::Screen::GetScreen()->GetCursorScreenPoint();
-  display::Display display =
-      display::Screen::GetScreen()->GetDisplayNearestPoint(point);
+  auto* shell = Shell::Get();
+  const bool in_tablet_mode =
+      Shell::Get()->tablet_mode_controller()->InTabletMode();
+  const int64_t display_id = GetDisplayIdForRotation();
   const display::ManagedDisplayInfo& display_info =
-      Shell::Get()->display_manager()->GetDisplayInfo(display.id());
-  Shell::Get()->display_configuration_controller()->SetDisplayRotation(
-      display.id(), GetNextRotation(display_info.GetActiveRotation()),
-      display::Display::RotationSource::USER);
+      shell->display_manager()->GetDisplayInfo(display_id);
+  const auto active_rotation = display_info.GetActiveRotation();
+  const auto next_rotation =
+      in_tablet_mode ? GetNextRotationInTabletMode(display_id, active_rotation)
+                     : GetNextRotationInClamshell(active_rotation);
+  if (active_rotation == next_rotation)
+    return;
+
+  // When the device is in a physical tablet state, display rotation requests of
+  // the internal display are treated as requests to lock the user rotation.
+  if (ShouldLockRotation(display_id)) {
+    shell->screen_orientation_controller()->SetLockToRotation(next_rotation);
+    return;
+  }
+
+  shell->display_configuration_controller()->SetDisplayRotation(
+      display_id, next_rotation, display::Display::RotationSource::USER);
 }
 
 void OnRotationDialogAccepted() {
@@ -990,7 +1072,7 @@ bool CanHandleToggleCapsLock(
 
 void HandleToggleCapsLock() {
   base::RecordAction(UserMetricsAction("Accel_Toggle_Caps_Lock"));
-  ImeController* ime_controller = Shell::Get()->ime_controller();
+  ImeControllerImpl* ime_controller = Shell::Get()->ime_controller();
   ime_controller->SetCapsLockEnabled(!ime_controller->IsCapsLockEnabled());
 }
 

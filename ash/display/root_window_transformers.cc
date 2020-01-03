@@ -12,7 +12,6 @@
 #include "ash/shell.h"
 #include "ash/utility/transformer_util.h"
 #include "base/command_line.h"
-#include "components/viz/common/features.h"
 #include "ui/compositor/dip_util.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_layout_store.h"
@@ -190,7 +189,9 @@ class MirrorRootWindowTransformer : public RootWindowTransformer {
   MirrorRootWindowTransformer(
       const display::ManagedDisplayInfo& source_display_info,
       const display::ManagedDisplayInfo& mirror_display_info) {
-    root_bounds_ = gfx::Rect(source_display_info.bounds_in_native().size());
+    root_bounds_ =
+        gfx::Rect(source_display_info.GetSizeInPixelWithPanelOrientation());
+    active_root_rotation_ = source_display_info.GetActiveRotation();
 
     // The rotation of the source display (internal display) should be undone in
     // the destination display (external display) if mirror mode is enabled in
@@ -202,13 +203,15 @@ class MirrorRootWindowTransformer : public RootWindowTransformer {
     gfx::Transform rotation_transform;
     if (should_undo_rotation) {
       // Calculate the transform to undo the rotation and apply it to the
-      // source display.
+      // source display. Use GetActiveRotation() because |source_bounds_|
+      // includes panel rotation and we only need to revert active rotation.
       rotation_transform = CreateRotationTransform(
-          source_display_info.GetLogicalActiveRotation(),
-          display::Display::ROTATE_0, gfx::SizeF(root_bounds_.size()));
+          source_display_info.GetActiveRotation(), display::Display::ROTATE_0,
+          gfx::SizeF(root_bounds_.size()));
       gfx::RectF rotated_bounds(root_bounds_);
       rotation_transform.TransformRect(&rotated_bounds);
       root_bounds_ = gfx::ToNearestRect(rotated_bounds);
+      active_root_rotation_ = display::Display::ROTATE_0;
     }
 
     gfx::Rect mirror_display_rect =
@@ -241,13 +244,6 @@ class MirrorRootWindowTransformer : public RootWindowTransformer {
       transform_.Translate(margin, 0);
       transform_.Scale(inverted_scale, inverted_scale);
     }
-
-    // Apply rotation only when reflector is used for mirroring (non viz display
-    // compositor).
-    if (!features::IsVizDisplayCompositorEnabled()) {
-      // Make sure the rotation transform is applied in the beginning.
-      transform_.PreconcatTransform(rotation_transform);
-    }
   }
 
   // aura::RootWindowTransformer overrides:
@@ -258,7 +254,12 @@ class MirrorRootWindowTransformer : public RootWindowTransformer {
     return invert;
   }
   gfx::Rect GetRootWindowBounds(const gfx::Size& host_size) const override {
-    return root_bounds_;
+    gfx::Rect adjusted_root = root_bounds_;
+    if (active_root_rotation_ == display::Display::ROTATE_90 ||
+        active_root_rotation_ == display::Display::ROTATE_270) {
+      adjusted_root.Transpose();
+    }
+    return adjusted_root;
   }
   gfx::Insets GetHostInsets() const override { return insets_; }
   gfx::Transform GetInsetsAndScaleTransform() const override {
@@ -271,6 +272,12 @@ class MirrorRootWindowTransformer : public RootWindowTransformer {
   gfx::Transform transform_;
   gfx::Rect root_bounds_;
   gfx::Insets insets_;
+
+  // |root_bounds_| contains physical bounds with panel orientation but not
+  // active rotation of the source. |active_root_rotation_| contains the active
+  // rotation to be combined with |root_bounds_| to calculate a root window
+  // bounds.
+  display::Display::Rotation active_root_rotation_;
 
   DISALLOW_COPY_AND_ASSIGN(MirrorRootWindowTransformer);
 };

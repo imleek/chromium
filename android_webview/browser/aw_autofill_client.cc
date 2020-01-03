@@ -77,6 +77,10 @@ autofill::FormDataImporter* AwAutofillClient::GetFormDataImporter() {
   return nullptr;
 }
 
+autofill::SmsClient* AwAutofillClient::GetSmsClient() {
+  return nullptr;
+}
+
 autofill::payments::PaymentsClient* AwAutofillClient::GetPaymentsClient() {
   return nullptr;
 }
@@ -141,11 +145,6 @@ void AwAutofillClient::ShowLocalCardMigrationResults(
   NOTIMPLEMENTED();
 }
 
-void AwAutofillClient::ShowWebauthnOfferDialog(
-    WebauthnOfferDialogCallback callback) {
-  NOTIMPLEMENTED();
-}
-
 void AwAutofillClient::ConfirmSaveAutofillProfile(
     const autofill::AutofillProfile& profile,
     base::OnceClosure callback) {
@@ -195,7 +194,7 @@ bool AwAutofillClient::HasCreditCardScanFeature() {
   return false;
 }
 
-void AwAutofillClient::ScanCreditCard(const CreditCardScanCallback& callback) {
+void AwAutofillClient::ScanCreditCard(CreditCardScanCallback callback) {
   NOTIMPLEMENTED();
 }
 

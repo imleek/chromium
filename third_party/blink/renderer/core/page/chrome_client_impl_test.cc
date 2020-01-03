@@ -29,11 +29,12 @@
  */
 
 #include "third_party/blink/renderer/core/page/chrome_client_impl.h"
+#include "base/run_loop.h"
 #include "cc/trees/layer_tree_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/choosers/color_chooser.mojom-blink.h"
-#include "third_party/blink/public/platform/web_input_event.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_view.h"

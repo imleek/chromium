@@ -14,7 +14,9 @@
 #include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
+#include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/app_shortcut_manager.h"
+#include "chrome/browser/web_applications/components/file_handler_manager.h"
 #include "chrome/browser/web_applications/components/install_bounce_metric.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
@@ -51,6 +53,8 @@ const char kPlayIntentPrefix[] =
     "https://play.google.com/store/apps/details?id=";
 const char kPlayStorePackage[] = "com.android.vending";
 
+constexpr bool kAddAppsToQuickLaunchBarByDefault = false;
+
 std::string ExtractQueryValueForName(const GURL& url, const std::string& name) {
   for (net::QueryIterator it(url); !it.IsAtEnd(); it.Advance()) {
     if (it.GetKey() == name)
@@ -58,17 +62,23 @@ std::string ExtractQueryValueForName(const GURL& url, const std::string& name) {
   }
   return std::string();
 }
+#else
+constexpr bool kAddAppsToQuickLaunchBarByDefault = true;
 #endif  // defined(OS_CHROMEOS)
 
 }  // namespace
 
 WebAppInstallTask::WebAppInstallTask(
     Profile* profile,
+    AppRegistrar* registrar,
     AppShortcutManager* shortcut_manager,
+    FileHandlerManager* file_handler_manager,
     InstallFinalizer* install_finalizer,
     std::unique_ptr<WebAppDataRetriever> data_retriever)
     : data_retriever_(std::move(data_retriever)),
+      registrar_(registrar),
       shortcut_manager_(shortcut_manager),
+      file_handler_manager_(file_handler_manager),
       install_finalizer_(install_finalizer),
       profile_(profile) {}
 
@@ -359,6 +369,11 @@ void WebAppInstallTask::OnWebAppUrlLoadedGetWebApplicationInfo(
     return;
   }
 
+  if (result == WebAppUrlLoader::Result::kFailedPageTookTooLong) {
+    CallInstallCallback(AppId(), InstallResultCode::kInstallURLLoadTimeOut);
+    return;
+  }
+
   if (result != WebAppUrlLoader::Result::kUrlLoaded) {
     CallInstallCallback(AppId(), InstallResultCode::kInstallURLLoadFailed);
     return;
@@ -380,6 +395,12 @@ void WebAppInstallTask::OnWebAppUrlLoadedCheckInstallabilityAndRetrieveManifest(
     CallInstallCallback(AppId(), InstallResultCode::kInstallURLRedirected);
     return;
   }
+
+  if (result == WebAppUrlLoader::Result::kFailedPageTookTooLong) {
+    CallInstallCallback(AppId(), InstallResultCode::kInstallURLLoadTimeOut);
+    return;
+  }
+
   if (result != WebAppUrlLoader::Result::kUrlLoaded) {
     CallInstallCallback(AppId(), InstallResultCode::kInstallURLLoadFailed);
     return;
@@ -401,12 +422,10 @@ void WebAppInstallTask::OnWebAppInstallabilityChecked(
 
   if (is_installable) {
     DCHECK(manifest);
-    // TODO(loyso): Consider generalizing this class slightly to avoid abusing
-    // kSuccessNewInstall and kFailedUnknownReason to indicate installability.
     CallInstallCallback(GenerateAppIdFromURL(manifest->start_url),
                         InstallResultCode::kSuccessNewInstall);
   } else {
-    CallInstallCallback(AppId(), InstallResultCode::kFailedUnknownReason);
+    CallInstallCallback(AppId(), InstallResultCode::kNotInstallable);
   }
 }
 
@@ -442,13 +461,14 @@ void WebAppInstallTask::OnGetWebApplicationInfo(
 void WebAppInstallTask::OnDidPerformInstallableCheck(
     std::unique_ptr<WebApplicationInfo> web_app_info,
     bool force_shortcut_app,
-    base::Optional<blink::Manifest> opt_manifest,
+    base::Optional<blink::Manifest> manifest,
     bool valid_manifest_for_web_app,
     bool is_installable) {
   if (ShouldStopInstall())
     return;
 
   DCHECK(web_app_info);
+  DCHECK(!manifest || !manifest->IsEmpty());
 
   if (install_params_ && install_params_->require_manifest &&
       !valid_manifest_for_web_app) {
@@ -462,9 +482,8 @@ void WebAppInstallTask::OnDidPerformInstallableCheck(
                                         ? ForInstallableSite::kYes
                                         : ForInstallableSite::kNo;
 
-  const blink::Manifest manifest = opt_manifest.value_or(blink::Manifest{});
-  UpdateWebAppInfoFromManifest(manifest, web_app_info.get(),
-                               for_installable_site);
+  if (manifest)
+    UpdateWebAppInfoFromManifest(*manifest, web_app_info.get());
 
   AppId app_id = GenerateAppIdFromURL(web_app_info->app_url);
 
@@ -479,11 +498,12 @@ void WebAppInstallTask::OnDidPerformInstallableCheck(
 
   // A system app should always have a manifest icon.
   if (install_source_ == WebappInstallSource::SYSTEM_DEFAULT) {
-    DCHECK(!manifest.icons.empty());
+    DCHECK(manifest);
+    DCHECK(!manifest->icons.empty());
   }
 
   // If the manifest specified icons, don't use the page icons.
-  const bool skip_page_favicons = !manifest.icons.empty();
+  const bool skip_page_favicons = manifest && !manifest->icons.empty();
 
   CheckForPlayStoreIntentOrGetIcons(manifest, std::move(web_app_info),
                                     std::move(icon_urls), for_installable_site,
@@ -491,7 +511,7 @@ void WebAppInstallTask::OnDidPerformInstallableCheck(
 }
 
 void WebAppInstallTask::CheckForPlayStoreIntentOrGetIcons(
-    const blink::Manifest& manifest,
+    base::Optional<blink::Manifest> manifest,
     std::unique_ptr<WebApplicationInfo> web_app_info,
     std::vector<GURL> icon_urls,
     ForInstallableSite for_installable_site,
@@ -501,8 +521,8 @@ void WebAppInstallTask::CheckForPlayStoreIntentOrGetIcons(
   // be sent to the store.
   if (base::FeatureList::IsEnabled(features::kApkWebAppInstalls) &&
       for_installable_site == ForInstallableSite::kYes &&
-      !background_installation_) {
-    for (const auto& application : manifest.related_applications) {
+      !background_installation_ && manifest) {
+    for (const auto& application : manifest->related_applications) {
       std::string id = base::UTF16ToUTF8(application.id.string());
       if (!base::EqualsASCII(application.platform.string(),
                              kChromeOsPlayPlatform)) {
@@ -747,7 +767,7 @@ void WebAppInstallTask::OnShortcutsCreated(
   if (ShouldStopInstall())
     return;
 
-  bool add_to_quick_launch_bar = true;
+  bool add_to_quick_launch_bar = kAddAppsToQuickLaunchBarByDefault;
   if (install_params_)
     add_to_quick_launch_bar = install_params_->add_to_quick_launch_bar;
 
@@ -767,6 +787,10 @@ void WebAppInstallTask::OnShortcutsCreated(
     if (can_reparent_tab && install_finalizer_->CanRevealAppShim())
       install_finalizer_->RevealAppShim(app_id);
   }
+
+  // Enable file handlers, if the app is locally installed.
+  if (registrar_->IsLocallyInstalled(app_id))
+    file_handler_manager_->EnableAndRegisterOsFileHandlers(app_id);
 
   CallInstallCallback(app_id, InstallResultCode::kSuccessNewInstall);
 }

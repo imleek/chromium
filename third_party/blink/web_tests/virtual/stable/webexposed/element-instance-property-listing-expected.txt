@@ -266,6 +266,7 @@ html element a
     property host
     property hostname
     property href
+    property hrefTranslate
     property hreflang
     property name
     property origin
@@ -1070,6 +1071,7 @@ html element video
     property duration
     property ended
     property error
+    property getVideoPlaybackQuality
     property height
     property load
     property loop
@@ -1442,7 +1444,6 @@ svg element defs
     property systemLanguage
     property transform
 svg element desc
-svg element discard
 svg element ellipse
     property cx
     property cy

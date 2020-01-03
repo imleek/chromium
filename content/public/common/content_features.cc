@@ -28,7 +28,7 @@ const base::Feature kAllowContentInitiatedDataUrlNavigations{
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Allows popups during page unloading.
-// TODO(https://crbug.com/937569): Remove this entirely in Chrome 82.
+// TODO(https://crbug.com/937569): Remove this entirely in Chrome 88.
 const base::Feature kAllowPopupsDuringPageUnload{
     "AllowPopupsDuringPageUnload", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -63,6 +63,16 @@ const base::Feature kBackgroundFetch{"BackgroundFetch",
 const base::Feature kBackForwardCache{"BackForwardCache",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
+// BackForwardCache is disabled on low memory devices. The threshold is defined
+// via a field trial param: "memory_threshold_for_back_forward_cache_in_mb"
+// It is compared against base::SysInfo::AmountOfPhysicalMemoryMB().
+
+// "BackForwardCacheMemoryControls" is checked before "BackForwardCache". It
+// means the low memory devices will activate neither the control group nor the
+// experimental group of the BackForwardCache field trial.
+const base::Feature kBackForwardCacheMemoryControl{
+    "BackForwardCacheMemoryControls", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Allows swipe left/right from touchpad change browser navigation. Currently
 // only enabled by default on CrOS.
 const base::Feature kTouchpadOverscrollHistoryNavigation {
@@ -79,9 +89,13 @@ const base::Feature kTouchpadOverscrollHistoryNavigation {
 const base::Feature kBlockCredentialedSubresources{
     "BlockCredentialedSubresources", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Verify user activation notification by the browser side state.
-const base::Feature kBrowserVerifiedUserActivation{
-    "BrowserVerifiedUserActivation", base::FEATURE_DISABLED_BY_DEFAULT};
+// When enabled, keyboard user activation will be verified by the browser side.
+const base::Feature kBrowserVerifiedUserActivationKeyboard{
+    "BrowserVerifiedUserActivationKeyboard", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, mouse user activation will be verified by the browser side.
+const base::Feature kBrowserVerifiedUserActivationMouse{
+    "BrowserVerifiedUserActivationMouse", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables code caching for inline scripts.
 const base::Feature kCacheInlineScriptCode{"CacheInlineScriptCode",
@@ -191,12 +205,6 @@ const base::Feature kFtpProtocol{"FtpProtocol",
 const base::Feature kNetworkQualityEstimatorWebHoldback{
     "NetworkQualityEstimatorWebHoldback", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Causes the implementations of guests (inner WebContents) to use
-// out-of-process iframes.
-// TODO(533069): Remove once BrowserPlugin is removed.
-const base::Feature kGuestViewCrossProcessFrames{
-    "GuestViewCrossProcessFrames", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // If a page does a client side redirect or adds to the history without a user
 // gesture, then skip it on back/forward UI.
 const base::Feature kHistoryManipulationIntervention{
@@ -287,11 +295,6 @@ const base::Feature kMediaDevicesSystemMonitorCache {
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
-
-// Instead of BrowserPlugin or GuestViews, MimeHandlerView will use a cross
-// process frame to render its handler.
-const base::Feature kMimeHandlerViewInCrossProcessFrame{
-    "MimeHandlerViewInCrossProcessFrame", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables/disables the video capture service.
 const base::Feature kMojoVideoCapture{"MojoVideoCapture",
@@ -712,25 +715,13 @@ const base::Feature kWebXr{"WebXR", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kWebXrArModule{"WebXRARModule",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables access to anchors via WebXR API.
-const base::Feature kWebXrAnchors{"WebXRAnchors",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables access to the WebXR Device API gamepad module.
-const base::Feature kWebXrGamepadModule{"WebXrGamepadModule",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Enables access to raycasting against estimated XR scene geometry.
 const base::Feature kWebXrHitTest{"WebXRHitTest",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables access to planes detected in the user's environment.
-const base::Feature kWebXrPlaneDetection{"WebXRPlaneDetection",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables access to planes detected in the user's environment.
-const base::Feature kWebXrArDOMOverlay{"WebXRARDOMOverlay",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables access to experimental WebXR features.
+const base::Feature kWebXrIncubations{"WebXRIncubations",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Start streaming scripts on script preload.
 const base::Feature kScriptStreamingOnPreload{"ScriptStreamingOnPreload",
@@ -743,6 +734,10 @@ const base::Feature kTrustedDOMTypes{"TrustedDOMTypes",
 // Controls whether Client Hints are guarded by FeaturePolicy.
 const base::Feature kFeaturePolicyForClientHints{
     "FeaturePolicyForClientHints", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether the <video>.getVideoPlaybackQuality() API is enabled.
+const base::Feature kVideoPlaybackQuality{"VideoPlaybackQuality",
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Use ThreadPriority::DISPLAY for browser UI and IO threads.
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)

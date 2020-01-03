@@ -126,10 +126,6 @@ class CORE_EXPORT FrameSelection final
   USING_GARBAGE_COLLECTED_MIXIN(FrameSelection);
 
  public:
-  static FrameSelection* Create(LocalFrame& frame) {
-    return MakeGarbageCollected<FrameSelection>(frame);
-  }
-
   explicit FrameSelection(LocalFrame&);
   ~FrameSelection();
 
@@ -275,6 +271,10 @@ class CORE_EXPORT FrameSelection final
   void CacheRangeOfDocument(Range*);
   Range* DocumentCachedRange() const;
   void ClearDocumentCachedRange();
+
+  // Invalidates the cached visual selection information, like
+  // |VisibleSelection| and selection bounds.
+  void MarkCacheDirty();
 
   FrameCaret& FrameCaretForTesting() const { return *frame_caret_; }
 

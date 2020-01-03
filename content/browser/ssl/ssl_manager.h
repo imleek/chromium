@@ -51,19 +51,7 @@ class CONTENT_EXPORT SSLManager {
       const base::WeakPtr<SSLErrorHandler::Delegate>& delegate,
       bool is_main_frame_request,
       const GURL& url,
-      const base::Callback<WebContents*(void)>& web_contents_getter,
-      int net_error,
-      const net::SSLInfo& ssl_info,
-      bool fatal);
-
-  // Same as the above, and only works for subresources. Prefer using
-  // OnSSLCertificateError whenever possible (ie when you have access to the
-  // WebContents).
-  static void OnSSLCertificateSubresourceError(
-      const base::WeakPtr<SSLErrorHandler::Delegate>& delegate,
-      const GURL& url,
-      int render_process_id,
-      int render_frame_id,
+      WebContents* web_contents,
       int net_error,
       const net::SSLInfo& ssl_info,
       bool fatal);

@@ -43,6 +43,9 @@ AXNode* g_node_from_last_show_context_menu;
 // default action was called from.
 AXNode* g_node_from_last_default_action;
 
+// A global indicating that AXPlatformNodeDelegate objects are web content.
+bool g_is_web_content = false;
+
 // A simple implementation of AXTreeObserver to catch when AXNodes are
 // deleted so we can delete their wrappers.
 class TestAXTreeObserver : public AXTreeObserver {
@@ -95,6 +98,10 @@ const AXNode* TestAXNodeWrapper::GetNodeFromLastDefaultAction() {
 std::unique_ptr<base::AutoReset<float>> TestAXNodeWrapper::SetScaleFactor(
     float value) {
   return std::make_unique<base::AutoReset<float>>(&g_scale_factor, value);
+}
+
+void TestAXNodeWrapper::SetGlobalIsWebContent(bool is_web_content) {
+  g_is_web_content = is_web_content;
 }
 
 TestAXNodeWrapper::~TestAXNodeWrapper() {
@@ -272,6 +279,10 @@ gfx::NativeViewAccessible TestAXNodeWrapper::GetFocus() {
 
 bool TestAXNodeWrapper::IsMinimized() const {
   return minimized_;
+}
+
+bool TestAXNodeWrapper::IsWebContent() const {
+  return g_is_web_content;
 }
 
 // Walk the AXTree and ensure that all wrappers are created
@@ -551,7 +562,7 @@ bool TestAXNodeWrapper::AccessibilityPerformAction(
       return true;
 
     case ax::mojom::Action::kSetValue:
-      if (IsRangeValueSupported(GetData())) {
+      if (GetData().IsRangeValueSupported()) {
         ReplaceFloatAttribute(ax::mojom::FloatAttribute::kValueForRange,
                               std::stof(data.value));
       } else if (GetData().role == ax::mojom::Role::kTextField) {
@@ -761,9 +772,8 @@ bool TestAXNodeWrapper::HasVisibleCaretOrSelection() const {
 
   // Selection or caret will be visible in a focused editable area.
   if (GetData().HasState(ax::mojom::State::kEditable)) {
-    return ui::IsPlainTextField(GetData())
-               ? focus_object == node_
-               : focus_object->IsDescendantOf(node_);
+    return GetData().IsPlainTextField() ? focus_object == node_
+                                        : focus_object->IsDescendantOf(node_);
   }
 
   // The selection will be visible in non-editable content only if it is not

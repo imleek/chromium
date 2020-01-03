@@ -82,7 +82,7 @@ class FakeClient : public Client {
 // Same as non-mock, but provides default mock callbacks.
 struct MockCollectUserDataOptions : public CollectUserDataOptions {
   MockCollectUserDataOptions() {
-    base::MockOnceCallback<void(std::unique_ptr<UserData>)>
+    base::MockOnceCallback<void(UserData*, const UserModel*)>
         mock_confirm_callback;
     confirm_callback = mock_confirm_callback.Get();
     base::MockOnceCallback<void(int)> mock_actions_callback;
@@ -1453,8 +1453,7 @@ TEST_F(ControllerTest, UserDataFormEmpty) {
   EXPECT_CALL(mock_observer_,
               OnUserDataChanged(Not(nullptr), UserData::FieldChange::ALL))
       .Times(1);
-  controller_->SetCollectUserDataOptions(std::move(options),
-                                         std::move(user_data));
+  controller_->SetCollectUserDataOptions(options.get());
 }
 
 TEST_F(ControllerTest, UserDataFormContactInfo) {
@@ -1469,8 +1468,7 @@ TEST_F(ControllerTest, UserDataFormContactInfo) {
   EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
                                   Property(&UserAction::enabled, Eq(false)))))
       .Times(1);
-  controller_->SetCollectUserDataOptions(std::move(options),
-                                         std::move(user_data));
+  controller_->SetCollectUserDataOptions(options.get());
 
   EXPECT_CALL(
       mock_observer_,
@@ -1503,8 +1501,7 @@ TEST_F(ControllerTest, UserDataFormCreditCard) {
   EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
                                   Property(&UserAction::enabled, Eq(false)))))
       .Times(1);
-  controller_->SetCollectUserDataOptions(std::move(options),
-                                         std::move(user_data));
+  controller_->SetCollectUserDataOptions(options.get());
 
   // Credit card without billing address is invalid.
   auto credit_card = std::make_unique<autofill::CreditCard>(
@@ -1562,8 +1559,7 @@ TEST_F(ControllerTest, SetTermsAndConditions) {
   EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
                                   Property(&UserAction::enabled, Eq(false)))))
       .Times(1);
-  controller_->SetCollectUserDataOptions(std::move(options),
-                                         std::move(user_data));
+  controller_->SetCollectUserDataOptions(options.get());
 
   EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
                                   Property(&UserAction::enabled, Eq(true)))))
@@ -1586,8 +1582,7 @@ TEST_F(ControllerTest, SetLoginOption) {
   EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
                                   Property(&UserAction::enabled, Eq(false)))))
       .Times(1);
-  controller_->SetCollectUserDataOptions(std::move(options),
-                                         std::move(user_data));
+  controller_->SetCollectUserDataOptions(options.get());
 
   EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
                                   Property(&UserAction::enabled, Eq(true)))))
@@ -1609,8 +1604,7 @@ TEST_F(ControllerTest, SetShippingAddress) {
   EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
                                   Property(&UserAction::enabled, Eq(false)))))
       .Times(1);
-  controller_->SetCollectUserDataOptions(std::move(options),
-                                         std::move(user_data));
+  controller_->SetCollectUserDataOptions(options.get());
 
   auto shipping_address = std::make_unique<autofill::AutofillProfile>(
       base::GenerateGUID(), "https://www.example.com");
@@ -1635,18 +1629,22 @@ TEST_F(ControllerTest, SetShippingAddress) {
 
 TEST_F(ControllerTest, SetAdditionalValues) {
   auto options = std::make_unique<MockCollectUserDataOptions>();
-  auto user_data = std::make_unique<UserData>();
 
-  user_data->additional_values_to_store["key1"] = "123456789";
-  user_data->additional_values_to_store["key2"] = "";
-  user_data->additional_values_to_store["key3"] = "";
+  base::OnceCallback<void(UserData*, UserData::FieldChange*)> callback =
+      base::BindOnce([](UserData* user_data, UserData::FieldChange* change) {
+        user_data->additional_values_to_store["key1"] = "123456789";
+        user_data->additional_values_to_store["key2"] = "";
+        user_data->additional_values_to_store["key3"] = "";
+        *change = UserData::FieldChange::ADDITIONAL_VALUES;
+      });
+
+  controller_->WriteUserData(std::move(callback));
 
   testing::InSequence seq;
   EXPECT_CALL(mock_observer_, OnUserActionsChanged(UnorderedElementsAre(
                                   Property(&UserAction::enabled, Eq(true)))))
       .Times(1);
-  controller_->SetCollectUserDataOptions(std::move(options),
-                                         std::move(user_data));
+  controller_->SetCollectUserDataOptions(options.get());
 
   EXPECT_CALL(
       mock_observer_,
@@ -1682,8 +1680,7 @@ TEST_F(ControllerTest, SetOverlayColors) {
 TEST_F(ControllerTest, SetDateTimeRange) {
   auto options = std::make_unique<MockCollectUserDataOptions>();
   auto user_data = std::make_unique<UserData>();
-  controller_->SetCollectUserDataOptions(std::move(options),
-                                         std::move(user_data));
+  controller_->SetCollectUserDataOptions(options.get());
 
   EXPECT_CALL(mock_observer_,
               OnUserDataChanged(Not(nullptr),
@@ -1714,22 +1711,18 @@ TEST_F(ControllerTest, ChangeClientSettings) {
 TEST_F(ControllerTest, WriteUserData) {
   auto options = std::make_unique<MockCollectUserDataOptions>();
   auto user_data = std::make_unique<UserData>();
-  controller_->SetCollectUserDataOptions(std::move(options),
-                                         std::move(user_data));
+  controller_->SetCollectUserDataOptions(options.get());
 
   EXPECT_CALL(mock_observer_,
               OnUserDataChanged(Not(nullptr),
                                 UserData::FieldChange::TERMS_AND_CONDITIONS))
       .Times(1);
 
-  base::OnceCallback<void(const CollectUserDataOptions*, UserData*,
-                          UserData::FieldChange*)>
-      callback =
-          base::BindOnce([](const CollectUserDataOptions* options,
-                            UserData* data, UserData::FieldChange* change) {
-            data->terms_and_conditions = TermsAndConditionsState::ACCEPTED;
-            *change = UserData::FieldChange::TERMS_AND_CONDITIONS;
-          });
+  base::OnceCallback<void(UserData*, UserData::FieldChange*)> callback =
+      base::BindOnce([](UserData* data, UserData::FieldChange* change) {
+        data->terms_and_conditions = TermsAndConditionsState::ACCEPTED;
+        *change = UserData::FieldChange::TERMS_AND_CONDITIONS;
+      });
 
   controller_->WriteUserData(std::move(callback));
   EXPECT_EQ(controller_->GetUserData()->terms_and_conditions,

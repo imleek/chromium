@@ -91,8 +91,9 @@ class NavigationSimulatorImpl : public NavigationSimulator,
   void SetWasFetchedViaCache(bool was_fetched_via_cache) override;
   void SetIsSignedExchangeInnerResponse(
       bool is_signed_exchange_inner_response) override;
-  void SetInterfaceProviderRequest(
-      service_manager::mojom::InterfaceProviderRequest request) override;
+  void SetInterfaceProviderReceiver(
+      mojo::PendingReceiver<service_manager::mojom::InterfaceProvider> receiver)
+      override;
   void SetContentsMimeType(const std::string& contents_mime_type) override;
   void SetAutoAdvance(bool auto_advance) override;
   void SetSSLInfo(const net::SSLInfo& ssl_info) override;
@@ -213,7 +214,7 @@ class NavigationSimulatorImpl : public NavigationSimulator,
   // Sets |last_throttle_check_result_| and calls both the
   // |wait_closure_| and the |throttle_checks_complete_closure_|, if they are
   // set.
-  void OnThrottleChecksComplete(NavigationThrottle::ThrottleCheckResult result);
+  bool OnThrottleChecksComplete(NavigationThrottle::ThrottleCheckResult result);
 
   // Helper method to set the OnThrottleChecksComplete callback on the
   // NavigationRequest.
@@ -236,6 +237,11 @@ class NavigationSimulatorImpl : public NavigationSimulator,
   std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params>
   BuildDidCommitProvisionalLoadParams(bool same_document,
                                       bool failed_navigation);
+
+  // Simulate the UnloadACK in the old RenderFrameHost if it was swapped out at
+  // the commit time.
+  void SimulateSwapOutACKForPreviousFrameIfNeeded(
+      RenderFrameHostImpl* previous_frame);
 
   enum State {
     INITIALIZATION,
@@ -282,7 +288,8 @@ class NavigationSimulatorImpl : public NavigationSimulator,
   ReloadType reload_type_ = ReloadType::NONE;
   int session_history_offset_ = 0;
   bool has_user_gesture_ = true;
-  service_manager::mojom::InterfaceProviderRequest interface_provider_request_;
+  mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
+      interface_provider_receiver_;
   mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
       browser_interface_broker_receiver_;
   std::string contents_mime_type_;

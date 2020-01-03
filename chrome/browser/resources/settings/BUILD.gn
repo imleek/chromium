@@ -106,16 +106,9 @@ group("closure_compile") {
 
   if (is_chromeos) {
     deps += [
-      "android_apps_page:closure_compile",
-      "bluetooth_page:closure_compile",
       "chromeos:closure_compile",
-      "crostini_page:closure_compile",
-      "date_time_page:closure_compile",
-      "device_page:closure_compile",
-      "internet_page:closure_compile",
       "multidevice_page:closure_compile",
       "parental_controls_page:closure_compile",
-      "plugin_vm_page:closure_compile",
     ]
   }
 }
@@ -128,6 +121,7 @@ js_type_check("settings_resources") {
     ":open_window_proxy",
     ":page_visibility",
     ":route",
+    ":route_origin_behavior",
     ":search_settings",
   ]
 }
@@ -160,6 +154,13 @@ js_library("open_window_proxy") {
   ]
 }
 
+js_library("route_origin_behavior") {
+  deps = [
+    ":route",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
 js_library("route") {
   deps = [
     ":page_visibility",
@@ -178,8 +179,10 @@ js_library("page_visibility") {
 
 js_library("search_settings") {
   deps = [
+    "//ui/webui/resources/js:assert",
     "//ui/webui/resources/js:cr",
     "//ui/webui/resources/js:search_highlight_utils",
+    "//ui/webui/resources/js:util",
   ]
   externs_list = [ "$externs_path/pending_polymer.js" ]
 }

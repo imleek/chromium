@@ -53,6 +53,10 @@ const char kDisableES3GLContext[]           = "disable-es3-gl-context";
 const char kDisableES3GLContextForTesting[] =
     "disable-es3-gl-context-for-testing";
 
+// Disable workarounds for various GPU driver bugs.
+const char kDisableGpuDriverBugWorkarounds[] =
+    "disable-gpu-driver-bug-workarounds";
+
 // Stop the GPU from synchronizing presentation with vblank.
 const char kDisableGpuVsync[]               = "disable-gpu-vsync";
 
@@ -139,6 +143,7 @@ const char kDisableDirectCompositionVideoOverlays[] =
 // GpuProcessHost to the GPU Process. Add your switch to this list if you need
 // to read it in the GPU process, else don't add it.
 const char* const kGLSwitchesCopiedFromGpuProcessHost[] = {
+    kDisableGpuDriverBugWorkarounds,
     kDisableGpuVsync,
     kDisableD3D11,
     kDisableES3GLContext,
@@ -169,7 +174,7 @@ const base::Feature kDirectCompositionComplexOverlays{
 
 // Use IDXGIOutput::WaitForVBlank() to drive begin frames.
 const base::Feature kDirectCompositionGpuVSync{
-    "DirectCompositionGpuVSync", base::FEATURE_DISABLED_BY_DEFAULT};
+    "DirectCompositionGpuVSync", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Use presentation feedback event queries (must be enabled) to limit latency.
 const base::Feature kDirectCompositionLowLatencyPresentation{
@@ -187,7 +192,7 @@ const base::Feature kDirectCompositionPreferNV12Overlays{
 // Use per-present event queries to issue presentation feedback to clients.
 // Also needs DirectCompositionGpuVSync.
 const base::Feature kDirectCompositionPresentationFeedback{
-    "DirectCompositionPresentationFeedback", base::FEATURE_DISABLED_BY_DEFAULT};
+    "DirectCompositionPresentationFeedback", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Use decode swap chain created from compatible video decoder buffers.
 const base::Feature kDirectCompositionUseNV12DecodeSwapChain{

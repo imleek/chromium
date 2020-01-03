@@ -19,6 +19,7 @@ js2gtest("interactive_ui_tests_js_webui") {
     "cr_focus_row_behavior_v3_interactive_test.js",
     "extensions/cr_extensions_interactive_ui_tests.js",
     "history/history_focus_test.js",
+    "new_tab_page/new_tab_page_interactive_test.js",
     "print_preview/print_preview_interactive_ui_tests.js",
     "settings/cr_settings_interactive_ui_tests.js",
     "settings/settings_ui_browsertest.js",
@@ -155,10 +156,6 @@ js2gtest("browser_tests_js_webui") {
     ]
   }
 
-  if (!is_chrome_branded) {
-    # crbug.com/230471
-    sources += [ "accessibility_audit_browsertest.js" ]
-  }
   if (enable_extensions) {
     sources += [
       "extensions/a11y/extensions_a11y_test.js",
@@ -205,6 +202,9 @@ js2gtest("browser_tests_js_webui") {
     "$root_gen_dir/chrome/test/data/webui/test_store.m.js",
     "$root_gen_dir/chrome/test/data/webui/test_util.m.js",
   ]
+  if (is_chromeos) {
+    data += [ "$root_gen_dir/chrome/test/data/webui/cr_elements/cr_searchable_drop_down_tests.m.js" ]
+  }
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 
   # https://crbug.com/1013656
@@ -222,6 +222,7 @@ js2gtest("browser_tests_js_mojo_lite_webui") {
     "engagement/site_engagement_browsertest.js",
     "interventions_internals_browsertest.js",
     "media/media_engagement_browsertest.js",
+    "new_tab_page/new_tab_page_browsertest.js",
     "usb_internals_browsertest.js",
   ]
 
@@ -262,25 +263,25 @@ js2gtest("unit_tests_js") {
   ]
   if (is_chromeos) {
     sources += [
-      "../../../browser/resources/chromeos/braille_ime/braille_ime_unittest.gtestjs",
-      "../../../browser/resources/chromeos/machine_learning/machine_learning_internals_utils_unittest.gtestjs",
-      "../../../browser/resources/chromeos/select_to_speak/node_utils_unittest.gtestjs",
-      "../../../browser/resources/chromeos/select_to_speak/paragraph_utils_unittest.gtestjs",
-      "../../../browser/resources/chromeos/select_to_speak/rect_utils_unittest.gtestjs",
-      "../../../browser/resources/chromeos/select_to_speak/select_to_speak_unittest.gtestjs",
-      "../../../browser/resources/chromeos/select_to_speak/word_utils_unittest.gtestjs",
-      "../../../browser/resources/chromeos/switch_access/rect_helper_unittest.gtestjs",
+      "../../../browser/resources/chromeos/accessibility/braille_ime/braille_ime_unittest.js",
+      "../../../browser/resources/chromeos/accessibility/select_to_speak/node_utils_unittest.js",
+      "../../../browser/resources/chromeos/accessibility/select_to_speak/paragraph_utils_unittest.js",
+      "../../../browser/resources/chromeos/accessibility/select_to_speak/rect_utils_unittest.js",
+      "../../../browser/resources/chromeos/accessibility/select_to_speak/select_to_speak_unittest.js",
+      "../../../browser/resources/chromeos/accessibility/select_to_speak/word_utils_unittest.js",
+      "../../../browser/resources/chromeos/accessibility/switch_access/rect_helper_unittest.js",
+      "../../../browser/resources/chromeos/machine_learning/machine_learning_internals_utils_unittest.js",
     ]
     extra_js_files += [
-      "../../../browser/resources/chromeos/braille_ime/braille_ime.js",
+      "../../../browser/resources/chromeos/accessibility/braille_ime/braille_ime.js",
+      "../../../browser/resources/chromeos/accessibility/select_to_speak/paragraph_utils.js",
+      "../../../browser/resources/chromeos/accessibility/select_to_speak/rect_utils.js",
+      "../../../browser/resources/chromeos/accessibility/select_to_speak/select_to_speak.js",
+      "../../../browser/resources/chromeos/accessibility/select_to_speak/test_support.js",
+      "../../../browser/resources/chromeos/accessibility/select_to_speak/word_utils.js",
+      "../../../browser/resources/chromeos/accessibility/select_to_speak/node_utils.js",
+      "../../../browser/resources/chromeos/accessibility/switch_access/rect_helper.js",
       "../../../browser/resources/chromeos/machine_learning/machine_learning_internals_utils.js",
-      "../../../browser/resources/chromeos/select_to_speak/paragraph_utils.js",
-      "../../../browser/resources/chromeos/select_to_speak/rect_utils.js",
-      "../../../browser/resources/chromeos/select_to_speak/select_to_speak.js",
-      "../../../browser/resources/chromeos/select_to_speak/test_support.js",
-      "../../../browser/resources/chromeos/select_to_speak/word_utils.js",
-      "../../../browser/resources/chromeos/select_to_speak/node_utils.js",
-      "../../../browser/resources/chromeos/switch_access/rect_helper.js",
     ]
   }
 }

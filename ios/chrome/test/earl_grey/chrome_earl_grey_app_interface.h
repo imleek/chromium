@@ -28,6 +28,9 @@
 // the operation failed.
 + (NSError*)removeBrowsingCache;
 
+// Opens |URL| using the application delegate.
++ (void)applicationOpenURL:(NSString*)spec;
+
 // Loads the URL |spec| in the current WebState with transition type
 // ui::PAGE_TRANSITION_TYPED and returns without waiting for the page to load.
 + (void)startLoadingURL:(NSString*)spec;
@@ -46,6 +49,12 @@
 // Returns the NamedGuide with the given |name|, if one is attached to |view|
 // or one of |view|'s ancestors.  If no guide is found, returns nil.
 + (NamedGuide*)guideWithName:(NSString*)name view:(UIView*)view;
+
+// Loads |URL| as if it was opened from an external application.
++ (void)openURLFromExternalApp:(NSString*)URL;
+
+// Programmatically dismisses settings screen.
++ (void)dismissSettings;
 
 #pragma mark - Tab Utilities (EG2)
 
@@ -93,6 +102,9 @@
 // Opens a new tab, and does not wait for animations to complete.
 + (void)openNewTab;
 
+// Simulates opening http://www.example.com/ from another application.
++ (void)simulateExternalAppURLOpening;
+
 // Closes current tab.
 + (void)closeCurrentTab;
 
@@ -134,6 +146,9 @@
 
 // Returns a unique identifier for the next Tab.
 + (NSString*)nextTabID;
+
+// Returns the index of active tab in normal mode.
++ (NSUInteger)indexOfActiveNormalTab;
 
 #pragma mark - WebState Utilities (EG2)
 
@@ -183,6 +198,9 @@
 
 // Returns the current WebState's VisibleURL.
 + (NSString*)webStateVisibleURL;
+
+// Returns the current WebState's last committed URL.
++ (NSString*)webStateLastCommittedURL;
 
 // Purges cached web view pages in the current web state, so the next time back
 // navigation will not use a cached page. Browsers don't have to use a fresh
@@ -309,6 +327,9 @@
 // otherwise returns object representing execution result.
 + (id)executeJavaScript:(NSString*)javaScript error:(NSError**)error;
 
+// Returns the user agent that should be used for the mobile version.
++ (NSString*)mobileUserAgentString;
+
 #pragma mark - Accessibility Utilities (EG2)
 
 // Verifies that all interactive elements on screen (or at least one of their
@@ -320,9 +341,6 @@
 // Helpers for checking feature state. These can't use FeatureList directly when
 // invoked from test code, as the EG test code runs in a separate process and
 // must query Chrome for the state.
-
-// Returns YES if SlimNavigationManager feature is enabled.
-+ (BOOL)isSlimNavigationManagerEnabled WARN_UNUSED_RESULT;
 
 // Returns YES if BlockNewTabPagePendingLoad feature is enabled.
 + (BOOL)isBlockNewTabPagePendingLoadEnabled WARN_UNUSED_RESULT;
@@ -365,6 +383,15 @@
 // Sets the popup content setting preference to the given value for the original
 // browser state.
 + (void)setPopupPrefValue:(ContentSetting)value;
+
+#pragma mark - Pref Utilities (EG2)
+
+// Sets the value of a boolean user pref in the original browser state.
++ (void)setBoolValue:(BOOL)value forUserPref:(NSString*)prefName;
+
+// Resets the BrowsingDataPrefs, which defines if its selected or not when
+// clearing Browsing data.
++ (void)resetBrowsingDataPrefs;
 
 #pragma mark - Keyboard Command utilities
 

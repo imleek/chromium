@@ -31,7 +31,6 @@ js_type_check("closure_compile_module") {
     ":files_toast",
     ":files_toggle_ripple",
     ":files_tooltip",
-    ":xf_activity_complete",
     ":xf_button",
     ":xf_circular_progress",
     ":xf_display_panel",
@@ -72,6 +71,7 @@ js_unittest("files_message_unittest") {
 }
 
 js_library("files_metadata_box") {
+  externs_list = [ "$externs_path/pending_polymer.js" ]
 }
 
 js_library("files_metadata_entry") {
@@ -84,6 +84,7 @@ js_library("files_quick_view") {
   externs_list = [
     "$externs_path/chrome_extensions.js",
     "$externs_path/webview_tag.js",
+    "$externs_path/pending_polymer.js",
   ]
 }
 
@@ -147,9 +148,6 @@ js_test_gen_html("js_test_gen_html") {
   html_import = true
 }
 
-js_library("xf_activity_complete") {
-}
-
 js_library("xf_button") {
   deps = [
     "//ui/webui/resources/cr_elements/cr_button:cr_button",
@@ -169,7 +167,6 @@ js_library("xf_display_panel") {
 
 js_library("xf_panel_item") {
   deps = [
-    ":xf_activity_complete",
     ":xf_button",
     ":xf_circular_progress",
   ]

@@ -29,10 +29,9 @@ CSVPasswordIterator::CSVPasswordIterator() = default;
 
 CSVPasswordIterator::CSVPasswordIterator(const CSVPassword::ColumnMap& map,
                                          base::StringPiece csv)
-    : map_(&map),
-      csv_rest_(csv),
-      csv_row_(ExtractFirstRow(&csv_rest_)),
-      password_(base::in_place, map, csv_row_) {}
+    : map_(&map), csv_rest_(csv) {
+  SeekToNextValidRow();
+}
 
 CSVPasswordIterator::CSVPasswordIterator(const CSVPasswordIterator& other) {
   *this = other;
@@ -53,9 +52,7 @@ CSVPasswordIterator& CSVPasswordIterator::operator=(
 CSVPasswordIterator::~CSVPasswordIterator() = default;
 
 CSVPasswordIterator& CSVPasswordIterator::operator++() {
-  DCHECK(map_);
-  csv_row_ = ExtractFirstRow(&csv_rest_);
-  password_.emplace(*map_, csv_row_);
+  SeekToNextValidRow();
   return *this;
 }
 
@@ -68,18 +65,25 @@ CSVPasswordIterator CSVPasswordIterator::operator++(int) {
 bool CSVPasswordIterator::operator==(const CSVPasswordIterator& other) const {
   // There is no need to compare |password_|, because it is determined by |map_|
   // and |csv_row_|.
-  return
-      // Checking StringPiece::data() equality instead of just StringPiece has
-      // two reasons: (1) flagging the case when, e.g., two identical lines in
-      // one CSV blob would otherwise cause the corresponding iterators look the
-      // same, and (2) efficiency. StringPiece::size() is not checked on the
-      // assumption that always the whole row is contained in |csv_row_|.
-      csv_row_.data() == other.csv_row_.data() &&
-      // The column map should reference the same map if the iterators come from
-      // the same sequence, and iterators from different sequences are not
-      // considered equal. Therefore the maps' addresses are checked instead of
-      // their contents.
-      map_ == other.map_;
+
+  return csv_row_ == other.csv_row_ && csv_rest_ == other.csv_rest_ &&
+         // The column map should reference the same map if the iterators come
+         // from the same sequence, and iterators from different sequences are
+         // not considered equal. Therefore the maps' addresses are checked
+         // instead of their contents.
+         map_ == other.map_;
+}
+
+void CSVPasswordIterator::SeekToNextValidRow() {
+  DCHECK(map_);
+  do {
+    csv_row_ = ExtractFirstRow(&csv_rest_);
+    password_.emplace(*map_, csv_row_);
+  } while (
+      // Skip over empty lines, and
+      (csv_row_.empty() && !csv_rest_.empty()) ||
+      // lines which are not correctly encoded passwords.
+      (!csv_row_.empty() && password_->TryParse() != CSVPassword::Status::kOK));
 }
 
 base::StringPiece ConsumeCSVLine(base::StringPiece* input) {

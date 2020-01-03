@@ -10,6 +10,7 @@
 #include "base/i18n/icu_util.h"
 #include "net/http/http_response_headers.h"
 #include "testing/libfuzzer/libfuzzer_exports.h"
+#include "url/gurl.h"
 
 namespace {
 
@@ -33,6 +34,7 @@ int LLVMFuzzerInitialize(int* argc, char*** argv) {
 int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   ContentSecurityPolicy policy;
   policy.Parse(GURL("https://example.com/"),
+               network::mojom::ContentSecurityPolicyType::kEnforce,
                std::string(reinterpret_cast<const char*>(data), size));
 
   return 0;

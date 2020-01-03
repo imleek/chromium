@@ -41,9 +41,6 @@ const ACMatchClassificationStyle = {
   DIM: 1 << 2,
 };
 
-/** @type {string} */
-let lastInput;
-
 /** @typedef {{inline: string, text: string}} */
 let RealboxOutput;
 
@@ -140,6 +137,7 @@ const IDS = {
   OGB: 'one-google',
   PROMO: 'promo',
   REALBOX: 'realbox',
+  REALBOX_ICON: 'realbox-icon',
   REALBOX_INPUT_WRAPPER: 'realbox-input-wrapper',
   REALBOX_MATCHES: 'realbox-matches',
   REALBOX_MICROPHONE: 'realbox-microphone',
@@ -239,8 +237,8 @@ const REALBOX_KEYDOWN_HANDLED_KEYS = [
 
 // Local statics.
 
-/** @type {!Array<!AutocompleteMatch>} */
-let autocompleteMatches = [];
+/** @type {?AutocompleteResult} */
+let autocompleteResult = null;
 
 /**
  * The currently visible notification element. Null if no notification is
@@ -255,6 +253,13 @@ let currNotification = null;
  * @type {?Object}
  */
 let delayedHideNotification = null;
+
+/**
+ * Whether 'Enter' was pressed but did not navigate to a match due to matches
+ * being stale.
+ * @type {boolean}
+ */
+let enterWasPressed = false;
 
 /**
  * True if dark mode is enabled.
@@ -276,11 +281,27 @@ let isDeletingInput = false;
 let lastBlacklistedTile = null;
 
 /**
+ * The 'Enter' event that was ignored due to matches being stale. Will be used
+ * to navigate to the default match once up-to-date matches arrive.
+ * @type {?Event}
+ */
+let lastEnterEvent = null;
+
+/**
+ * The last queried input.
+ * @type {string|undefined}
+ */
+let lastQueriedInput;
+
+/**
  * Last text/inline autocompletion shown in the realbox (either by user input or
  * outputting autocomplete matches).
  * @type {!RealboxOutput}
  */
 let lastOutput = {text: '', inline: ''};
+
+/** @type {?number} */
+let lastRealboxFocusTime = null;
 
 /**
  * The browser embeddedSearch.newTabPage object.
@@ -288,11 +309,48 @@ let lastOutput = {text: '', inline: ''};
  */
 let ntpApiHandle;
 
+/**
+ * True if user just pasted into the realbox.
+ * @type {boolean}
+ */
+let pastedInRealbox = false;
+
 // Helper methods.
 
 /** @return {boolean} */
 function areRealboxMatchesVisible() {
   return $(IDS.REALBOX_INPUT_WRAPPER).classList.contains(CLASSES.SHOW_MATCHES);
+}
+
+/** @param {!AutocompleteResult} result */
+function autocompleteResultChanged(result) {
+  if (lastQueriedInput === undefined ||
+      result.input !== lastQueriedInput.trimLeft()) {
+    return;  // Stale result; ignore.
+  }
+
+  renderAutocompleteMatches(result.matches);
+  autocompleteResult = result;
+
+  $(IDS.REALBOX).focus();
+
+  updateRealboxOutput({
+    inline: '',
+    text: lastQueriedInput || '',
+  });
+
+  const first = result.matches[0];
+  if (first && first.allowedToBeDefaultMatch) {
+    selectMatchEl(assert($(IDS.REALBOX_MATCHES).firstElementChild));
+    updateRealboxOutput({inline: first.inlineAutocompletion});
+
+    if (enterWasPressed) {
+      assert(lastEnterEvent);
+      navigateToMatch(first, lastEnterEvent);
+    }
+  } else {
+    setRealboxIcon(undefined);
+  }
 }
 
 /**
@@ -313,6 +371,16 @@ function classificationStyleToClasses(style) {
   return classes;
 }
 
+function clearAutocompleteMatches() {
+  autocompleteResult = null;
+  window.chrome.embeddedSearch.searchBox.stopAutocomplete(
+      /*clearResult=*/ true);
+  // Autocomplete sends updates once it is stopped. Invalidate those results
+  // by setting the last queried input to its uninitialized value.
+  lastQueriedInput = undefined;
+  setRealboxIcon(undefined);
+}
+
 /**
  * Converts an Array of color components into RGBA format "rgba(R,G,B,A)".
  * @param {Array<number>} color Array of rgba color components.
@@ -321,6 +389,15 @@ function classificationStyleToClasses(style) {
 function convertToRGBAColor(color) {
   return 'rgba(' + color[0] + ',' + color[1] + ',' + color[2] + ',' +
       color[3] / 255 + ')';
+}
+
+/**
+ * Converts an Array of color components into 8-digit Hex format "#RRGGBBAA".
+ * @param {Array<number>} color Array of rgba color components.
+ * @return {string} CSS color in 8-digit Hex format.
+ */
+function convertToHexColor(color) {
+  return '#' + assert(color).map(c => c.toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -585,6 +662,25 @@ function floatUpNotification(notification, notificationContainer) {
 }
 
 /**
+ * @param {string} url
+ * @return {string} The chrome-search://ntpicon/ corresponding to |url|.
+ */
+function getIconUrl(url) {
+  // TODO(crbug.com/997229): use chrome://favicon/<url> when perms allow.
+  const iconUrl = new URL('chrome-search://ntpicon/');
+  iconUrl.searchParams.set('show_fallback_monogram', 'false');
+  iconUrl.searchParams.set('size', '24@' + window.devicePixelRatio + 'x');
+  // The fallback color must match that of .clock-icon and .search-icon
+  iconUrl.searchParams.set(
+      'color',
+      convertToHexColor(
+          configData.realboxMatchOmniboxTheme ? getNtpTheme().searchBox.icon :
+                                                [117, 117, 117, 255]));
+  iconUrl.searchParams.set('url', url);
+  return iconUrl.toString();
+}
+
+/**
  * Returns theme background info, first checking for history.state.notheme. If
  * the page has notheme set, returns a fallback light-colored theme (or dark-
  * colored theme if dark mode is enabled). This is used when the doodle is
@@ -599,6 +695,7 @@ function getNtpTheme() {
           (isDarkModeEnabled ? NTP_DESIGN.darkBackgroundColor :
                                NTP_DESIGN.backgroundColor),
       customBackgroundConfigured: false,
+      customBackgroundDisabledByPolicy: false,
       iconBackgroundColor:
           (isDarkModeEnabled ? NTP_DESIGN.iconDarkBackgroundColor :
                                NTP_DESIGN.iconBackgroundColor),
@@ -767,12 +864,18 @@ function init() {
     if (configData.realboxEnabled) {
       const realboxEl = $(IDS.REALBOX);
       realboxEl.placeholder = configData.translatedStrings.searchboxPlaceholder;
+      // Using .onclick instead of addEventListener('click') to support tests.
+      realboxEl.onclick = onRealboxClick;
       realboxEl.addEventListener('copy', onRealboxCutCopy);
       realboxEl.addEventListener('cut', onRealboxCutCopy);
+      realboxEl.addEventListener('focus', onRealboxFocus);
       realboxEl.addEventListener('input', onRealboxInput);
+      realboxEl.addEventListener('keyup', onRealboxKeyup);
+      realboxEl.addEventListener('paste', onRealboxPaste);
 
-      setRealboxWrapperListenForFocusIn(true);
-      setRealboxWrapperListenForFocusOut(true);
+      const realboxWrapper = $(IDS.REALBOX_INPUT_WRAPPER);
+      realboxWrapper.addEventListener('focusout', onRealboxWrapperFocusOut);
+      realboxWrapper.addEventListener('keydown', onRealboxWrapperKeydown);
 
       searchboxApiHandle.autocompleteresultchanged = autocompleteResultChanged;
 
@@ -929,7 +1032,13 @@ function injectPromo(promo) {
 
   const link = promoContainer.querySelector('a');
   if (link) {
-    link.onclick = function() {
+    link.onclick = e => {
+      const url = new URL(link.href);
+      if (promo.canOpenExtensionsPage && url.origin == 'chrome://extensions') {
+        ntpApiHandle.openExtensionsPage(
+            e.button, e.altKey, e.ctrlKey, e.metaKey, e.shiftKey);
+        e.preventDefault();
+      }
       ntpApiHandle.logEvent(LOG_TYPE.NTP_MIDDLE_SLOT_PROMO_LINK_CLICKED);
     };
   }
@@ -1072,16 +1181,13 @@ function listen() {
  * @param {!Event} e
  */
 function navigateToMatch(match, e) {
-  const line = autocompleteMatches.indexOf(match);
+  const line = autocompleteResult.matches.indexOf(match);
   assert(line >= 0);
-  if (match.canDisplay) {
-    const matchEl = $(IDS.REALBOX_MATCHES).children[line];
-    matchEl.dispatchEvent(new MouseEvent('click', e));
-  } else {
-    window.chrome.embeddedSearch.searchBox.openAutocompleteMatch(
-        line, match.destinationUrl, e.button || 0, e.altKey, e.ctrlKey,
-        e.metaKey, e.shiftKey);
-  }
+  assert(lastRealboxFocusTime);
+  window.chrome.embeddedSearch.searchBox.openAutocompleteMatch(
+      line, match.destinationUrl, areRealboxMatchesVisible(),
+      Date.now() - lastRealboxFocusTime, e.button || 0, e.altKey, e.ctrlKey,
+      e.metaKey, e.shiftKey);
   e.preventDefault();
 }
 
@@ -1143,25 +1249,15 @@ function onMostVisitedChange() {
   reloadTiles();
 }
 
-/** @param {!AutocompleteResult} result */
-function autocompleteResultChanged(result) {
-  if (result.input !== lastInput) {
-    return;  // Stale result; ignore.
+/** @param {Event} e */
+function onRealboxClick(e) {
+  if (!e.isTrusted || e.button !== 0) {
+    // Only handle main (generally left) button presses generated by a user
+    // action.
+    return;
   }
-
-  populateAutocompleteMatches(result.matches);
-
-  $(IDS.REALBOX).focus();
-
-  updateRealboxOutput({
-    inline: '',
-    text: lastInput || '',
-  });
-
-  const first = result.matches[0];
-  if (first && first.allowedToBeDefaultMatch) {
-    selectMatchEl(assert($(IDS.REALBOX_MATCHES).firstElementChild));
-    updateRealboxOutput({inline: first.inlineAutocompletion});
+  if (!$(IDS.REALBOX).value) {
+    queryAutocomplete('');
   }
 }
 
@@ -1170,7 +1266,7 @@ function onRealboxCutCopy(e) {
   const realboxEl = $(IDS.REALBOX);
   if (!realboxEl.value || realboxEl.selectionStart !== 0 ||
       realboxEl.selectionEnd !== realboxEl.value.length ||
-      autocompleteMatches.length === 0) {
+      !autocompleteResult || autocompleteResult.matches.length === 0) {
     // Only handle cut/copy when realbox has content and it's all selected.
     return;
   }
@@ -1180,7 +1276,7 @@ function onRealboxCutCopy(e) {
     return matchEl.classList.contains(CLASSES.SELECTED);
   });
 
-  const selectedMatch = autocompleteMatches[selected];
+  const selectedMatch = autocompleteResult.matches[selected];
   if (selectedMatch && !selectedMatch.isSearchType) {
     e.clipboardData.setData('text/plain', selectedMatch.destinationUrl);
     e.preventDefault();
@@ -1188,6 +1284,10 @@ function onRealboxCutCopy(e) {
       realboxEl.value = '';
     }
   }
+}
+
+function onRealboxFocus() {
+  lastRealboxFocusTime = Date.now();
 }
 
 function onRealboxInput() {
@@ -1199,28 +1299,36 @@ function onRealboxInput() {
     queryAutocomplete(realboxValue);
   } else {
     setRealboxMatchesVisible(false);
-    setRealboxWrapperListenForKeydown(false);
     clearAutocompleteMatches();
+  }
+
+  pastedInRealbox = false;
+}
+
+/** @param {!Event} e */
+function onRealboxKeyup(e) {
+  if (e.key === 'Tab' && !$(IDS.REALBOX).value) {
+    queryAutocomplete('');
   }
 }
 
-/** @param {Event} e */
-function onRealboxWrapperFocusIn(e) {
-  if (e.target.matches(`#${IDS.REALBOX}`) && !$(IDS.REALBOX).value) {
-    queryAutocomplete('');
-  } else if (e.target.matches(`#${IDS.REALBOX_MATCHES} *`)) {
-    const target = /** @type {Element} */ (e.target);
-    const link = findAncestor(target, el => el.nodeName === 'A');
-    if (!link) {
-      return;
-    }
-    const selectedIndex = selectMatchEl(link);
-    // It doesn't really make sense to use fillFromMatch() here as the focus
-    // change drops the selection (and is probably just noisy to
-    // screenreaders).
-    const newFill = autocompleteMatches[selectedIndex].fillIntoEdit;
-    updateRealboxOutput({moveCursorToEnd: true, inline: '', text: newFill});
+function onRealboxPaste() {
+  pastedInRealbox = true;
+}
+
+/** @param {!Event} e */
+function onRealboxMatchesFocusIn(e) {
+  const target = /** @type {Element} */ (e.target);
+  const link = findAncestor(target, el => el.nodeName === 'A');
+  if (!link) {
+    return;
   }
+  const selectedIndex = selectMatchEl(link);
+  // It doesn't really make sense to use fillFromMatch() here as the focus
+  // change drops the selection (and is probably just noisy to
+  // screenreaders).
+  const newFill = autocompleteResult.matches[selectedIndex].fillIntoEdit;
+  updateRealboxOutput({moveCursorToEnd: true, inline: '', text: newFill});
 }
 
 /** @param {Event} e */
@@ -1231,7 +1339,7 @@ function onRealboxWrapperFocusOut(e) {
   const realboxWrapper = $(IDS.REALBOX_INPUT_WRAPPER);
   if (!realboxWrapper.contains(relatedTarget)) {
     // Clear the input if it was empty when displaying the matches.
-    if (lastInput === '') {
+    if (lastQueriedInput === '') {
       updateRealboxOutput({inline: '', text: ''});
     }
     setRealboxMatchesVisible(false);
@@ -1240,9 +1348,7 @@ function onRealboxWrapperFocusOut(e) {
     // listening for key presses. These stale results should never be shown, but
     // correspond to the potentially stale suggestion left in the realbox when
     // blurred. That stale result may be navigated to by focusing and pressing
-    // Enter, and that match may be privileged, so we need to keep the data
-    // around in order to ascertain this. If matches are reshown, fresh
-    // autocomplete data will be fetched.
+    // Enter.
     window.chrome.embeddedSearch.searchBox.stopAutocomplete(
         /*clearResult=*/ false);
   }
@@ -1278,6 +1384,21 @@ function onRealboxWrapperKeydown(e) {
     return;
   }
 
+  if (!areRealboxMatchesVisible()) {
+    if (key === 'ArrowUp' || key === 'ArrowDown') {
+      const realboxValue = $(IDS.REALBOX).value;
+      if (realboxValue.trim() || !realboxValue) {
+        queryAutocomplete(realboxValue);
+      }
+      e.preventDefault();
+      return;
+    }
+  }
+
+  if (!autocompleteResult || autocompleteResult.matches.length === 0) {
+    return;
+  }
+
   const realboxMatchesEl = $(IDS.REALBOX_MATCHES);
   const matchEls = Array.from(realboxMatchesEl.children);
   assert(matchEls.length > 0);
@@ -1285,29 +1406,29 @@ function onRealboxWrapperKeydown(e) {
     return matchEl.classList.contains(CLASSES.SELECTED);
   });
 
-  assert(autocompleteMatches.length === matchEls.length);
+  assert(autocompleteResult.matches.length === matchEls.length);
 
   if (key === 'Enter') {
-    if (matchEls[selected] && matchEls.concat(realboxEl).includes(e.target)) {
-      navigateToMatch(autocompleteMatches[selected], e);
-    }
-    return;
-  }
-
-  if (!areRealboxMatchesVisible()) {
-    if (key === 'ArrowUp' || key === 'ArrowDown') {
-      const realboxValue = $(IDS.REALBOX).value;
-      if (realboxValue.trim()) {
-        queryAutocomplete(realboxValue);
+    if (matchEls.concat(realboxEl).includes(e.target)) {
+      if (lastQueriedInput === autocompleteResult.input) {
+        if (autocompleteResult.matches[selected]) {
+          navigateToMatch(autocompleteResult.matches[selected], e);
+        }
+      } else {
+        // User typed and pressed 'Enter' too quickly. Ignore this for now
+        // because the matches are stale. Navigate to the default match (if one
+        // exists) once the up-to-date results arrive.
+        enterWasPressed = true;
+        lastEnterEvent = e;
+        e.preventDefault();
       }
-      e.preventDefault();
     }
     return;
   }
 
   if (key === 'Delete') {
     if (e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
-      const selectedMatch = autocompleteMatches[selected];
+      const selectedMatch = autocompleteResult.matches[selected];
       if (selectedMatch && selectedMatch.supportsDeletion) {
         window.chrome.embeddedSearch.searchBox.deleteAutocompleteMatch(
             selected);
@@ -1324,7 +1445,6 @@ function onRealboxWrapperKeydown(e) {
   if (key === 'Escape' && selected === 0) {
     updateRealboxOutput({inline: '', text: ''});
     setRealboxMatchesVisible(false);
-    setRealboxWrapperListenForKeydown(false);
     clearAutocompleteMatches();
     e.preventDefault();
     return;
@@ -1348,7 +1468,7 @@ function onRealboxWrapperKeydown(e) {
     matchEls[newSelected].focus();
   }
 
-  const newMatch = autocompleteMatches[newSelected];
+  const newMatch = autocompleteResult.matches[newSelected];
   const newFill = newMatch.fillIntoEdit;
   let newInline = '';
   if (newMatch.allowedToBeDefaultMatch) {
@@ -1428,9 +1548,65 @@ function overrideExecutableTimeoutForTesting(timeout) {
 }
 
 /**
+ * @param {string} input
+ */
+function queryAutocomplete(input) {
+  lastQueriedInput = input;
+  const preventInlineAutocomplete = isDeletingInput || pastedInRealbox ||
+      $(IDS.REALBOX).selectionStart !== input.length;  // Caret not at the end.
+  window.chrome.embeddedSearch.searchBox.queryAutocomplete(
+      input, preventInlineAutocomplete);
+}
+
+/**
+ * @param {!Element} element
+ * @param {!Array<string>} keys
+ * @param {!function(Event)} handler
+ */
+function registerKeyHandler(element, keys, handler) {
+  element.addEventListener('keydown', e => {
+    if (keys.includes(e.key)) {
+      handler(e);
+    }
+  });
+}
+
+/**
+ * Fetches new data (RIDs) from the embeddedSearch.newTabPage API and passes
+ * them to the iframe.
+ */
+function reloadTiles() {
+  // Don't attempt to load tiles if the MV data isn't available yet - this can
+  // happen occasionally, see https://crbug.com/794942. In that case, we should
+  // get an onMostVisitedChange call once they are available.
+  // Note that MV data being available is different from having > 0 tiles. There
+  // can legitimately be 0 tiles, e.g. if the user blacklisted them all.
+  if (!ntpApiHandle.mostVisitedAvailable) {
+    return;
+  }
+
+  const pages = ntpApiHandle.mostVisited;
+  const cmds = [];
+  const maxNumTiles = customLinksEnabled() ? MAX_NUM_TILES_CUSTOM_LINKS :
+                                             MAX_NUM_TILES_MOST_VISITED;
+  for (let i = 0; i < Math.min(maxNumTiles, pages.length); ++i) {
+    cmds.push({cmd: 'tile', rid: pages[i].rid});
+  }
+  cmds.push({cmd: 'show'});
+
+  $(IDS.MOST_VISITED).hidden =
+      !chrome.embeddedSearch.newTabPage.areShortcutsVisible;
+
+  const iframe = $(IDS.TILES_IFRAME);
+  if (iframe) {
+    iframe.contentWindow.postMessage(cmds, '*');
+  }
+}
+
+/**
  * @param {!Array<!AutocompleteMatch>} matches
  */
-function populateAutocompleteMatches(matches) {
+function renderAutocompleteMatches(matches) {
   const realboxMatchesEl = document.createElement('div');
   realboxMatchesEl.setAttribute('role', 'listbox');
 
@@ -1461,12 +1637,8 @@ function populateAutocompleteMatches(matches) {
           isSearchHistory ? CLASSES.CLOCK_ICON : CLASSES.SEARCH_ICON);
       matchEl.appendChild(icon);
     } else {
-      // TODO(crbug.com/997229): use chrome://favicon/<url> when perms allow.
-      const iconUrl = new URL('chrome-search://ntpicon/');
-      iconUrl.searchParams.set('show_fallback_monogram', 'false');
-      iconUrl.searchParams.set('size', '24@' + window.devicePixelRatio + 'x');
-      iconUrl.searchParams.set('url', match.destinationUrl);
-      matchEl.style.backgroundImage = 'url(' + iconUrl.toString() + ')';
+      const iconUrl = getIconUrl(match.destinationUrl);
+      matchEl.style.backgroundImage = `url(${iconUrl})`;
     }
 
     const contentsEls =
@@ -1528,73 +1700,19 @@ function populateAutocompleteMatches(matches) {
   // focused element is being deleted from the DOM. Stop listening to 'focusout'
   // event and retore it immediately after since we don't want to stop
   // autocomplete in those cases.
-  setRealboxWrapperListenForFocusOut(false);
+  const realboxWrapper = $(IDS.REALBOX_INPUT_WRAPPER);
+  realboxWrapper.removeEventListener('focusout', onRealboxWrapperFocusOut);
 
   $(IDS.REALBOX_MATCHES).remove();
   realboxMatchesEl.id = IDS.REALBOX_MATCHES;
+  realboxMatchesEl.addEventListener('focusin', onRealboxMatchesFocusIn);
 
-  $(IDS.REALBOX_INPUT_WRAPPER).appendChild(realboxMatchesEl);
+  realboxWrapper.appendChild(realboxMatchesEl);
 
-  setRealboxWrapperListenForFocusOut(true);
+  realboxWrapper.addEventListener('focusout', onRealboxWrapperFocusOut);
 
   const hasMatches = matches.length > 0;
   setRealboxMatchesVisible(hasMatches);
-  setRealboxWrapperListenForKeydown(hasMatches);
-  autocompleteMatches = matches;
-}
-
-/**
- * @param {string} input
- */
-function queryAutocomplete(input) {
-  lastInput = input;
-  window.chrome.embeddedSearch.searchBox.queryAutocomplete(
-      input, isDeletingInput);
-}
-
-/**
- * @param {!Element} element
- * @param {!Array<string>} keys
- * @param {!function(Event)} handler
- */
-function registerKeyHandler(element, keys, handler) {
-  element.addEventListener('keydown', e => {
-    if (keys.includes(e.key)) {
-      handler(e);
-    }
-  });
-}
-
-/**
- * Fetches new data (RIDs) from the embeddedSearch.newTabPage API and passes
- * them to the iframe.
- */
-function reloadTiles() {
-  // Don't attempt to load tiles if the MV data isn't available yet - this can
-  // happen occasionally, see https://crbug.com/794942. In that case, we should
-  // get an onMostVisitedChange call once they are available.
-  // Note that MV data being available is different from having > 0 tiles. There
-  // can legitimately be 0 tiles, e.g. if the user blacklisted them all.
-  if (!ntpApiHandle.mostVisitedAvailable) {
-    return;
-  }
-
-  const pages = ntpApiHandle.mostVisited;
-  const cmds = [];
-  const maxNumTiles = customLinksEnabled() ? MAX_NUM_TILES_CUSTOM_LINKS :
-                                             MAX_NUM_TILES_MOST_VISITED;
-  for (let i = 0; i < Math.min(maxNumTiles, pages.length); ++i) {
-    cmds.push({cmd: 'tile', rid: pages[i].rid});
-  }
-  cmds.push({cmd: 'show'});
-
-  $(IDS.MOST_VISITED).hidden =
-      !chrome.embeddedSearch.newTabPage.areShortcutsVisible;
-
-  const iframe = $(IDS.TILES_IFRAME);
-  if (iframe) {
-    iframe.contentWindow.postMessage(cmds, '*');
-  }
 }
 
 /**
@@ -1808,6 +1926,10 @@ function selectMatchEl(elToSelect) {
       selectedIndex = i;
     }
   });
+
+  const matches = autocompleteResult ? autocompleteResult.matches : [];
+  setRealboxIcon(matches[selectedIndex]);
+
   return selectedIndex;
 }
 
@@ -1845,16 +1967,6 @@ function sendNtpThemeToMostVisitedIframe() {
  */
 function setAttributionVisibility(show) {
   $(IDS.ATTRIBUTION).style.display = show ? '' : 'none';
-}
-
-/** @suppress {checkTypes} */
-function clearAutocompleteMatches() {
-  autocompleteMatches = [];
-  window.chrome.embeddedSearch.searchBox.stopAutocomplete(
-      /*clearResult=*/ true);
-  // Autocomplete sends updates once it is stopped. Invalidate those results
-  // by setting the last queried input to its uninitialized value.
-  lastInput = undefined;
 }
 
 /**
@@ -1896,39 +2008,20 @@ function setFakeboxVisibility(show) {
   document.body.classList.toggle(CLASSES.HIDE_FAKEBOX, !show);
 }
 
+/** @param {!AutocompleteMatch|undefined} match */
+function setRealboxIcon(match) {
+  const showIcon = match && !match.isSearchType;
+
+  const realboxIcon = $(IDS.REALBOX_ICON);
+  realboxIcon.style.webkitMask = showIcon ? 'none' : '';
+  realboxIcon.style.backgroundColor = showIcon ? 'transparent' : '';
+  realboxIcon.style.backgroundImage =
+      showIcon ? `url(${getIconUrl(match.destinationUrl)})` : '';
+}
+
 /** @param {boolean} visible */
 function setRealboxMatchesVisible(visible) {
   $(IDS.REALBOX_INPUT_WRAPPER).classList.toggle(CLASSES.SHOW_MATCHES, visible);
-}
-
-/** @param {boolean} listen */
-function setRealboxWrapperListenForFocusIn(listen) {
-  const realboxWrapper = $(IDS.REALBOX_INPUT_WRAPPER);
-  if (listen) {
-    realboxWrapper.addEventListener('focusin', onRealboxWrapperFocusIn);
-  } else {
-    realboxWrapper.removeEventListener('focusin', onRealboxWrapperFocusIn);
-  }
-}
-
-/** @param {boolean} listen */
-function setRealboxWrapperListenForFocusOut(listen) {
-  const realboxWrapper = $(IDS.REALBOX_INPUT_WRAPPER);
-  if (listen) {
-    realboxWrapper.addEventListener('focusout', onRealboxWrapperFocusOut);
-  } else {
-    realboxWrapper.removeEventListener('focusout', onRealboxWrapperFocusOut);
-  }
-}
-
-/** @param {boolean} listen */
-function setRealboxWrapperListenForKeydown(listen) {
-  const realboxWrapper = $(IDS.REALBOX_INPUT_WRAPPER);
-  if (listen) {
-    realboxWrapper.addEventListener('keydown', onRealboxWrapperKeydown);
-  } else {
-    realboxWrapper.removeEventListener('keydown', onRealboxWrapperKeydown);
-  }
 }
 
 /**

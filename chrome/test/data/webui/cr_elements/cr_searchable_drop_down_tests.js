@@ -2,8 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import 'chrome://resources/cr_elements/cr_searchable_drop_down/cr_searchable_drop_down.m.js';
+// #import {Polymer, html, flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
+// clang-format on
+
 suite('cr-searchable-drop-down', function() {
+  /** @type {CrSearchableDropDownElement} */
   let dropDown;
+
+  /** @type {HTMLElement} */
+  let outsideElement;
+
+  /** @type {CrInputElement} */
+  let searchInput;
 
   /**
    * @param {!Array<string>} items The list of items to be populated in the
@@ -211,6 +224,26 @@ suite('cr-searchable-drop-down', function() {
     enter();
     assertEquals('mouse', dropDown.value);
     assertFalse(dropDown.$$('iron-dropdown').opened);
+  });
+
+  test('enter re-opens dropdown after selection', function() {
+    setItems(['dog', 'cat', 'mouse']);
+
+    dropDown.$.search.focus();
+    assertTrue(dropDown.$$('iron-dropdown').opened);
+
+    assertEquals(null, getSelectedElement());
+
+    down();
+    assertEquals('dog', getSelectedElement().textContent.trim());
+
+    enter();
+    assertEquals('dog', dropDown.value);
+    assertFalse(dropDown.$$('iron-dropdown').opened);
+
+    enter();
+    assertTrue(dropDown.$$('iron-dropdown').opened);
+    assertEquals(null, getSelectedElement());
   });
 
   test('focus and up selects last item', function() {

@@ -114,20 +114,26 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   // NGOutOfFlowLayoutPart(container_style, builder).Run();
   //
   // See layout part for builder interaction.
-  //
-  // @param direction: default candidate direction is builder's direction.
-  // Pass in direction if candidates direction does not match.
-  void AddOutOfFlowChildCandidate(
+  void AddOutOfFlowChildCandidate(NGBlockNode,
+                                  const LogicalOffset& child_offset,
+                                  NGLogicalStaticPosition::InlineEdge =
+                                      NGLogicalStaticPosition::kInlineStart,
+                                  NGLogicalStaticPosition::BlockEdge =
+                                      NGLogicalStaticPosition::kBlockStart);
+
+  // This should only be used for inline-level OOF-positioned nodes.
+  // |inline_container_direction| is the current text direction for determining
+  // the correct static-position.
+  void AddOutOfFlowInlineChildCandidate(
       NGBlockNode,
       const LogicalOffset& child_offset,
-      base::Optional<TextDirection> container_direction = base::nullopt);
+      TextDirection inline_container_direction);
 
   void AddOutOfFlowDescendant(
       const NGLogicalOutOfFlowPositionedNode& descendant);
 
   void SwapOutOfFlowPositionedCandidates(
-      Vector<NGLogicalOutOfFlowPositionedNode>* candidates,
-      const LayoutObject* current_container);
+      Vector<NGLogicalOutOfFlowPositionedNode>* candidates);
 
   bool HasOutOfFlowPositionedCandidates() const {
     return !oof_positioned_candidates_.IsEmpty();
@@ -140,9 +146,7 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   // position OOF candidates yet, (as a containing box may be split over
   // multiple lines), instead we bubble all the descendants up to the parent
   // block layout algorithm, to perform the final OOF layout and positioning.
-  void MoveOutOfFlowDescendantCandidatesToDescendants() {
-    SwapOutOfFlowPositionedCandidates(&oof_positioned_descendants_, nullptr);
-  }
+  void MoveOutOfFlowDescendantCandidatesToDescendants();
 
   void SetIsSelfCollapsing() { is_self_collapsing_ = true; }
 
@@ -236,6 +240,8 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   bool has_block_fragmentation_ = false;
   bool is_fragmentation_context_root_ = false;
   bool may_have_descendant_above_block_start_ = false;
+
+  bool has_oof_candidate_that_needs_block_offset_adjustment_ = false;
 };
 
 }  // namespace blink

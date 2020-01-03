@@ -25,14 +25,14 @@ SerialPortUnderlyingSink::SerialPortUnderlyingSink(
 
 ScriptPromise SerialPortUnderlyingSink::start(
     ScriptState* script_state,
-    WritableStreamDefaultControllerInterface* controller) {
+    WritableStreamDefaultController* controller) {
   return ScriptPromise::CastUndefined(script_state);
 }
 
 ScriptPromise SerialPortUnderlyingSink::write(
     ScriptState* script_state,
     ScriptValue chunk,
-    WritableStreamDefaultControllerInterface* controller) {
+    WritableStreamDefaultController* controller) {
   // There can only be one call to write() in progress at a time.
   DCHECK(buffer_source_.IsNull());
   DCHECK_EQ(0u, offset_);
@@ -135,15 +135,23 @@ void SerialPortUnderlyingSink::WriteData() {
 
   const uint8_t* data = nullptr;
   uint32_t length = 0;
+  size_t byte_size = 0;
   if (buffer_source_.IsArrayBuffer()) {
     DOMArrayBuffer* array = buffer_source_.GetAsArrayBuffer();
+    byte_size = array->ByteLengthAsSizeT();
     data = static_cast<const uint8_t*>(array->Data());
-    length = array->DeprecatedByteLengthAsUnsigned();
   } else {
     DOMArrayBufferView* view = buffer_source_.GetAsArrayBufferView().View();
+    byte_size = view->byteLengthAsSizeT();
     data = static_cast<const uint8_t*>(view->BaseAddress());
-    length = view->byteLength();
   }
+  if (byte_size > std::numeric_limits<uint32_t>::max()) {
+    pending_exception_ = DOMException::Create(
+        "Buffer size exceeds maximum heap object size.", "DataError");
+    PipeClosed();
+    return;
+  }
+  length = static_cast<uint32_t>(byte_size);
 
   DCHECK_LT(offset_, length);
   data += offset_;

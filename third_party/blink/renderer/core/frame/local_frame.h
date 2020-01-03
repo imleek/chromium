@@ -48,7 +48,6 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/viewport_intersection_state.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/dom/weak_identifier_map.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
@@ -108,6 +107,7 @@ class SpellChecker;
 class TextSuggestionController;
 class WebContentSettingsClient;
 class WebPluginContainerImpl;
+class WebPrescientNetworking;
 class WebURLLoaderFactory;
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<LocalFrame>;
@@ -138,7 +138,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void Trace(blink::Visitor*) override;
   void Navigate(const FrameLoadRequest&, WebFrameLoadType) override;
   bool ShouldClose() override;
-  SecurityContext* GetSecurityContext() const override;
+  const SecurityContext* GetSecurityContext() const override;
   void PrintNavigationErrorMessage(const Frame&, const char* reason);
   void PrintNavigationWarning(const String&);
   bool DetachDocument() override;
@@ -205,11 +205,9 @@ class CORE_EXPORT LocalFrame final : public Frame,
   bool IsCaretBrowsingEnabled() const;
 
   // Activates the user activation states of the |LocalFrame| (provided it's
-  // non-null) and all its ancestors.  Also creates a |UserGestureIndicator|
-  // that contains a |UserGestureToken| with the given status.
-  static std::unique_ptr<UserGestureIndicator> NotifyUserActivation(
-      LocalFrame*,
-      bool need_browser_verification = false);
+  // non-null) and all its ancestors.
+  static void NotifyUserActivation(LocalFrame*,
+                                   bool need_browser_verification = false);
 
   // Returns the transient user activation state of the |LocalFrame|, provided
   // it is non-null.  Otherwise returns |false|.
@@ -349,6 +347,9 @@ class CORE_EXPORT LocalFrame final : public Frame,
   IntRect RemoteViewportIntersection() const {
     return intersection_state_.viewport_intersection;
   }
+  IntRect RemoteMainFrameDocumentIntersection() const {
+    return intersection_state_.main_frame_document_intersection;
+  }
   FrameOcclusionState GetOcclusionState() const;
   bool NeedsOcclusionTracking() const;
 
@@ -452,6 +453,10 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   void DidChangeVisibleToHitTesting() override;
 
+  WebPrescientNetworking* PrescientNetworking();
+  void SetPrescientNetworkingForTesting(
+      std::unique_ptr<WebPrescientNetworking> prescient_networking);
+
   // blink::mojom::LocalFrame overrides:
   void GetTextSurroundingSelection(
       uint32_t max_length,
@@ -461,6 +466,10 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void AddMessageToConsole(mojom::blink::ConsoleMessageLevel level,
                            const WTF::String& message,
                            bool discard_duplicates) final;
+  void Collapse(bool collapsed) final;
+  void EnableViewSourceMode() final;
+  void Focus() final;
+  void ClearFocusedElement() final;
 
  private:
   friend class FrameNavigationDisabler;
@@ -498,9 +507,6 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   // Activates the user activation states of this frame and all its ancestors.
   void NotifyUserActivation(bool need_browser_verification);
-
-  // Returns the transient user activation state of this frame
-  bool HasTransientUserActivation();
 
   // Consumes and returns the transient user activation state this frame, after
   // updating all other frames in the frame tree.
@@ -600,6 +606,8 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   mojom::FrameLifecycleState lifecycle_state_;
   base::Optional<mojom::FrameLifecycleState> pending_lifecycle_state_;
+
+  std::unique_ptr<WebPrescientNetworking> prescient_networking_;
 
   mojo::AssociatedRemote<mojom::blink::LocalFrameHost> local_frame_host_remote_;
   mojo::AssociatedReceiver<mojom::blink::LocalFrame> receiver_{this};

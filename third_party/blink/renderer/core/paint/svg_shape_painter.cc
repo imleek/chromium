@@ -34,8 +34,8 @@ static bool SetupNonScalingStrokeContext(
   return true;
 }
 
-static SkPath::FillType FillRuleFromStyle(const PaintInfo& paint_info,
-                                          const SVGComputedStyle& svg_style) {
+static SkPathFillType FillRuleFromStyle(const PaintInfo& paint_info,
+                                        const SVGComputedStyle& svg_style) {
   return WebCoreWindRuleToSkFillType(paint_info.IsRenderingClipPathAsMaskImage()
                                          ? svg_style.ClipRule()
                                          : svg_style.FillRule());
@@ -145,7 +145,7 @@ void SVGShapePainter::Paint(const PaintInfo& paint_info) {
 
 class PathWithTemporaryWindingRule {
  public:
-  PathWithTemporaryWindingRule(Path& path, SkPath::FillType fill_type)
+  PathWithTemporaryWindingRule(Path& path, SkPathFillType fill_type)
       : path_(const_cast<SkPath&>(path.GetSkPath())) {
     saved_fill_type_ = path_.getFillType();
     path_.setFillType(fill_type);
@@ -156,12 +156,12 @@ class PathWithTemporaryWindingRule {
 
  private:
   SkPath& path_;
-  SkPath::FillType saved_fill_type_;
+  SkPathFillType saved_fill_type_;
 };
 
 void SVGShapePainter::FillShape(GraphicsContext& context,
                                 const PaintFlags& flags,
-                                SkPath::FillType fill_type) {
+                                SkPathFillType fill_type) {
   switch (layout_svg_shape_.GeometryCodePath()) {
     case kRectGeometryFastPath:
       context.DrawRect(layout_svg_shape_.ObjectBoundingBox(), flags,
@@ -222,11 +222,11 @@ void SVGShapePainter::PaintMarkers(const PaintInfo& paint_info,
   if (!marker_start && !marker_mid && !marker_end)
     return;
 
-  float stroke_width = layout_svg_shape_.StrokeWidth();
+  const float stroke_width = layout_svg_shape_.StrokeWidthForMarkerUnits();
 
   for (const MarkerPosition& marker_position : *marker_positions) {
-    if (LayoutSVGResourceMarker* marker = SVGMarkerData::MarkerForType(
-            marker_position.type, marker_start, marker_mid, marker_end)) {
+    if (LayoutSVGResourceMarker* marker = marker_position.SelectMarker(
+            marker_start, marker_mid, marker_end)) {
       PaintMarker(paint_info, *marker, marker_position, stroke_width);
     }
   }
@@ -241,8 +241,8 @@ void SVGShapePainter::PaintMarker(const PaintInfo& paint_info,
   if (!marker.ShouldPaint())
     return;
 
-  AffineTransform transform = marker.MarkerTransformation(
-      position.origin, position.angle, stroke_width);
+  AffineTransform transform =
+      marker.MarkerTransformation(position, stroke_width);
 
   cc::PaintCanvas* canvas = paint_info.context.Canvas();
 

@@ -36,17 +36,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
     : public mojom::URLLoaderFactory {
  public:
   // |origin_access_list| should always outlive this factory instance.
-  // Used by network::NetworkContext. |network_loader_factory_for_testing|
-  // should be nullptr unless you need to overwrite the default factory for
-  // testing.
+  // Used by network::NetworkContext.
   CorsURLLoaderFactory(
       NetworkContext* context,
       mojom::URLLoaderFactoryParamsPtr params,
       scoped_refptr<ResourceSchedulerClient> resource_scheduler_client,
       mojo::PendingReceiver<mojom::URLLoaderFactory> receiver,
-      const OriginAccessList* origin_access_list,
-      std::unique_ptr<mojom::URLLoaderFactory>
-          network_loader_factory_for_testing);
+      const OriginAccessList* origin_access_list);
   ~CorsURLLoaderFactory() override;
 
   void OnLoaderCreated(std::unique_ptr<mojom::URLLoader> loader);
@@ -56,7 +52,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
   // URLLoaders.
   void ClearBindings();
 
-  uint32_t process_id() const { return process_id_; }
+  int32_t process_id() const { return process_id_; }
 
   // Set whether the factory allows CORS preflights. See IsSane.
   static void SetAllowExternalPreflightsForTesting(bool allow) {
@@ -64,6 +60,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
   }
 
  private:
+  class FactoryOverride;
+
   // Implements mojom::URLLoaderFactory.
   void CreateLoaderAndStart(mojo::PendingReceiver<mojom::URLLoader> receiver,
                             int32_t routing_id,
@@ -93,13 +91,17 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
 
   // Retained from URLLoaderFactoryParams:
   const bool disable_web_security_;
-  const uint32_t process_id_ = mojom::kInvalidProcessId;
+  const int32_t process_id_ = mojom::kInvalidProcessId;
   const base::Optional<url::Origin> request_initiator_site_lock_;
 
   // Relative order of |network_loader_factory_| and |loaders_| matters -
   // URLLoaderFactory needs to live longer than URLLoaders created using the
   // factory.  See also https://crbug.com/906305.
   std::unique_ptr<mojom::URLLoaderFactory> network_loader_factory_;
+
+  // Used when the network loader factory is overridden.
+  std::unique_ptr<FactoryOverride> factory_override_;
+
   std::set<std::unique_ptr<mojom::URLLoader>, base::UniquePtrComparator>
       loaders_;
 

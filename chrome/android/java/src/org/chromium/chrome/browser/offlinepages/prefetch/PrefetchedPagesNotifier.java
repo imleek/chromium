@@ -26,8 +26,8 @@ import org.chromium.chrome.browser.notifications.NotificationMetadata;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.PendingIntentProvider;
 import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
-import org.chromium.chrome.browser.preferences.NotificationsPreferences;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.notifications.NotificationsSettings;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.BrowserStartupController.StartupCallback;
 
@@ -83,8 +83,8 @@ public class PrefetchedPagesNotifier {
         @Override
         public void onReceive(final Context context, Intent intent) {
             recordNotificationActionWhenChromeLoadsNative(NOTIFICATION_ACTION_SETTINGS_CLICKED);
-            Intent settingsIntent = PreferencesLauncher.createIntentForSettingsPage(
-                    context, NotificationsPreferences.class.getName());
+            Intent settingsIntent = SettingsLauncher.createIntentForSettingsPage(
+                    context, NotificationsSettings.class.getName());
             settingsIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
             context.startActivity(settingsIntent);
         }
@@ -135,7 +135,7 @@ public class PrefetchedPagesNotifier {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             PendingIntentProvider settingsIntent =
                     getPendingBroadcastFor(context, SettingsReceiver.class);
-            builder.addAction(R.drawable.settings_cog, context.getString(R.string.preferences),
+            builder.addAction(R.drawable.settings_cog, context.getString(R.string.settings),
                     settingsIntent,
                     NotificationUmaTracker.ActionType.OFFLINE_CONTENT_SUGGESTION_SETTINGS);
         }

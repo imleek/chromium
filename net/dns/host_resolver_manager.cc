@@ -81,6 +81,7 @@
 #include "net/dns/host_resolver_proc.h"
 #include "net/dns/mdns_client.h"
 #include "net/dns/public/dns_protocol.h"
+#include "net/dns/public/resolve_error_info.h"
 #include "net/dns/record_parsed.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_capture_mode.h"
@@ -576,6 +577,11 @@ class HostResolverManager::RequestImpl
     return results_ ? results_.value().esni_data() : *nullopt_result;
   }
 
+  net::ResolveErrorInfo GetResolveErrorInfo() const override {
+    DCHECK(complete_);
+    return error_info_;
+  }
+
   const base::Optional<HostCache::EntryStaleness>& GetStaleInfo()
       const override {
     DCHECK(complete_);
@@ -592,6 +598,10 @@ class HostResolverManager::RequestImpl
     DCHECK(!parameters_.is_speculative);
 
     results_ = std::move(results);
+  }
+
+  void set_error_info(int error, bool is_secure_network_error) {
+    error_info_ = ResolveErrorInfo(error, is_secure_network_error);
   }
 
   void set_stale_info(HostCache::EntryStaleness stale_info) {
@@ -626,8 +636,11 @@ class HostResolverManager::RequestImpl
   }
 
   // Cleans up Job assignment, marks request completed, and calls the completion
-  // callback.
-  void OnJobCompleted(Job* job, int error) {
+  // callback. |is_secure_network_error| indicates whether |error| came from a
+  // secure DNS lookup.
+  void OnJobCompleted(Job* job, int error, bool is_secure_network_error) {
+    set_error_info(error, is_secure_network_error);
+
     DCHECK_EQ(job_, job);
     job_ = nullptr;
 
@@ -726,6 +739,7 @@ class HostResolverManager::RequestImpl
   bool complete_;
   base::Optional<HostCache::Entry> results_;
   base::Optional<HostCache::EntryStaleness> stale_info_;
+  ResolveErrorInfo error_info_;
 
   base::TimeTicks request_time_;
 
@@ -2580,7 +2594,9 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
         req->set_results(
             results.CopyWithDefaultPort(req->request_host().port()));
       }
-      req->OnJobCompleted(this, results.error());
+      req->OnJobCompleted(
+          this, results.error(),
+          secure && results.error() != OK /* is_secure_network_error */);
 
       // Check if the resolver was destroyed as a result of running the
       // callback. If it was, we could continue, but we choose to bail.
@@ -2974,6 +2990,8 @@ int HostResolverManager::Resolve(RequestImpl* request) {
       request->set_stale_info(std::move(stale_info).value());
     RecordTotalTime(request->parameters().is_speculative, true /* from_cache */,
                     effective_secure_dns_mode, base::TimeDelta());
+    request->set_error_info(results.error(),
+                            false /* is_secure_network_error */);
     return results.error();
   }
 

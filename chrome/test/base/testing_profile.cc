@@ -368,7 +368,7 @@ void TestingProfile::CreateTempProfileDir() {
 
     base::FilePath fallback_dir(
         system_tmp_dir.AppendASCII("TestingProfilePath"));
-    base::DeleteFile(fallback_dir, true);
+    base::DeleteFileRecursively(fallback_dir);
     base::CreateDirectory(fallback_dir);
     if (!temp_dir_.Set(fallback_dir)) {
       // That shouldn't happen, but if it does, try to recover.
@@ -875,7 +875,7 @@ void TestingProfile::CreateIncognitoPrefService() {
   // Simplified version of ProfileImpl::GetOffTheRecordPrefs(). Note this
   // leaves testing_prefs_ unset.
   prefs_ = CreateIncognitoPrefServiceSyncable(original_profile_->prefs_.get(),
-                                              nullptr, nullptr);
+                                              nullptr);
   user_prefs::UserPrefs::Set(this, prefs_.get());
 }
 

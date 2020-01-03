@@ -236,6 +236,9 @@ Polymer({
       case InstallerState.kStartContainer:
         messageId = 'startContainerMessage';
         break;
+      case InstallerState.kConfigureContainer:
+        messageId = 'configureContainerMessage';
+        break;
       case InstallerState.kFetchSshKeys:
         messageId = 'fetchSshKeysMessage';
         break;
@@ -272,6 +275,9 @@ Polymer({
       case InstallerError.kErrorStartingContainer:
         messageId = 'startContainerError';
         break;
+      case InstallerError.kErrorConfiguringContainer:
+        messageId = 'configureContainerError';
+        break;
       case InstallerError.kErrorOffline:
         messageId = 'offlineError';
         break;
@@ -286,6 +292,12 @@ Polymer({
         break;
       case InstallerError.kErrorInsufficientDiskSpace:
         messageId = 'insufficientDiskError';
+        break;
+      case InstallerError.kErrorCreateContainer:
+        messageId = 'setupContainerError';
+        break;
+      case InstallerError.kErrorUnknown:
+        messageId = 'unknownError';
         break;
       default:
         assertNotReached();

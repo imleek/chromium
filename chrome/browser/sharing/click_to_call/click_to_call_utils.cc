@@ -11,9 +11,9 @@
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sharing/click_to_call/click_to_call_metrics.h"
 #include "chrome/browser/sharing/click_to_call/feature.h"
 #include "chrome/browser/sharing/click_to_call/phone_number_regex.h"
-#include "chrome/browser/sharing/sharing_metrics.h"
 #include "chrome/browser/sharing/sharing_service.h"
 #include "chrome/browser/sharing/sharing_service_factory.h"
 #include "chrome/common/pref_names.h"
@@ -41,20 +41,6 @@ bool IsClickToCallEnabled(content::BrowserContext* browser_context) {
   return sharing_service && base::FeatureList::IsEnabled(kClickToCallUI);
 }
 
-base::Optional<std::string> ExtractPhoneNumber(
-    const std::string& text,
-    PhoneNumberRegexVariant regex_variant) {
-  ScopedUmaHistogramMicrosecondsTimer scoped_uma_timer(regex_variant);
-  std::string parsed_number;
-
-  const re2::RE2& regex = GetPhoneNumberRegex(regex_variant);
-  if (!re2::RE2::PartialMatch(text, regex, &parsed_number))
-    return base::nullopt;
-
-  return base::UTF16ToUTF8(
-      base::TrimWhitespace(base::UTF8ToUTF16(parsed_number), base::TRIM_ALL));
-}
-
 }  // namespace
 
 bool ShouldOfferClickToCallForURL(content::BrowserContext* browser_context,
@@ -71,12 +57,31 @@ base::Optional<std::string> ExtractPhoneNumberForClickToCall(
   if (selection_text.size() > kSelectionTextMaxLength)
     return base::nullopt;
 
-  if (!base::FeatureList::IsEnabled(kClickToCallContextMenuForSelectedText) ||
-      !IsClickToCallEnabled(browser_context)) {
+  if (!IsClickToCallEnabled(browser_context))
     return base::nullopt;
+
+  LogPhoneNumberDetectionMetrics(selection_text, /*sent_to_device=*/false);
+
+  if (base::FeatureList::IsEnabled(kClickToCallDetectionV2)) {
+    return ExtractPhoneNumber(selection_text,
+                              PhoneNumberRegexVariant::kLowConfidenceModified);
   }
 
   return ExtractPhoneNumber(selection_text, PhoneNumberRegexVariant::kSimple);
+}
+
+base::Optional<std::string> ExtractPhoneNumber(
+    const std::string& selection_text,
+    PhoneNumberRegexVariant regex_variant) {
+  ScopedUmaHistogramMicrosecondsTimer scoped_uma_timer(regex_variant);
+  std::string parsed_number;
+
+  const re2::RE2& regex = GetPhoneNumberRegex(regex_variant);
+  if (!re2::RE2::PartialMatch(selection_text, regex, &parsed_number))
+    return base::nullopt;
+
+  return base::UTF16ToUTF8(
+      base::TrimWhitespace(base::UTF8ToUTF16(parsed_number), base::TRIM_ALL));
 }
 
 std::string GetUnescapedURLContent(const GURL& url) {

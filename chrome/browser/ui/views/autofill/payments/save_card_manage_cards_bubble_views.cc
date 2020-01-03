@@ -18,7 +18,7 @@
 #include "ui/views/layout/box_layout.h"
 
 #if !defined(OS_CHROMEOS)
-#include "chrome/browser/ui/views/sync/bubble_sync_promo_view_util.h"
+#include "chrome/browser/ui/views/sync/dice_bubble_sync_promo_view.h"
 #endif
 
 namespace {
@@ -42,44 +42,8 @@ SaveCardManageCardsBubbleViews::SaveCardManageCardsBubbleViews(
     : SaveCardBubbleViews(anchor_view, web_contents, controller) {
   DialogDelegate::set_buttons(ui::DIALOG_BUTTON_OK);
   DialogDelegate::SetExtraView(CreateManageCardsButton(this));
+  DialogDelegate::SetFootnoteView(CreateSigninPromoView());
 }
-
-std::unique_ptr<views::View>
-SaveCardManageCardsBubbleViews::CreateFootnoteView() {
-#if defined(OS_CHROMEOS)
-  // ChromeOS does not show the signin promo.
-  return nullptr;
-#else
-  if (!controller()->ShouldShowSignInPromo())
-    return nullptr;
-
-  sync_promo_delegate_ =
-      std::make_unique<SaveCardManageCardsBubbleViews::SyncPromoDelegate>(
-          controller(),
-          signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE);
-
-  BubbleSyncPromoViewParams params;
-  params.link_text_resource_id = IDS_AUTOFILL_SIGNIN_PROMO_LINK_DICE_DISABLED;
-  params.message_text_resource_id =
-      IDS_AUTOFILL_SIGNIN_PROMO_MESSAGE_DICE_DISABLED;
-  params.dice_no_accounts_promo_message_resource_id =
-      IDS_AUTOFILL_SIGNIN_PROMO_MESSAGE;
-  params.dice_accounts_promo_message_resource_id =
-      IDS_AUTOFILL_SYNC_PROMO_MESSAGE;
-  params.dice_signin_button_prominent = false;
-  params.dice_text_style = views::style::STYLE_SECONDARY;
-
-  auto promo_view = CreateBubbleSyncPromoView(
-      controller()->GetProfile(), sync_promo_delegate_.get(),
-      signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE, params);
-
-  DCHECK(promo_view);
-  InitFootnoteView(promo_view.get());
-  return promo_view;
-#endif
-}
-
-SaveCardManageCardsBubbleViews::~SaveCardManageCardsBubbleViews() {}
 
 std::unique_ptr<views::View>
 SaveCardManageCardsBubbleViews::CreateMainContentView() {
@@ -89,6 +53,31 @@ SaveCardManageCardsBubbleViews::CreateMainContentView() {
   return view;
 }
 
+std::unique_ptr<views::View>
+SaveCardManageCardsBubbleViews::CreateSigninPromoView() {
+#if defined(OS_CHROMEOS)
+  // ChromeOS does not show the signin promo.
+  return nullptr;
+#else
+  if (!controller()->ShouldShowSignInPromo())
+    return nullptr;
+  sync_promo_delegate_ =
+      std::make_unique<SaveCardManageCardsBubbleViews::SyncPromoDelegate>(
+          controller(),
+          signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE);
+  std::unique_ptr<views::View> promo_view =
+      std::make_unique<DiceBubbleSyncPromoView>(
+          controller()->GetProfile(), sync_promo_delegate_.get(),
+          signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE,
+          IDS_AUTOFILL_SYNC_PROMO_MESSAGE,
+          /*dice_signin_button_prominent=*/false,
+          views::style::STYLE_SECONDARY);
+  DCHECK(promo_view);
+  InitFootnoteView(promo_view.get());
+  return promo_view;
+#endif
+}
+
 void SaveCardManageCardsBubbleViews::ButtonPressed(views::Button* sender,
                                                    const ui::Event& event) {
   if (sender->GetViewByID(DialogViewId::MANAGE_CARDS_BUTTON)) {
@@ -96,5 +85,7 @@ void SaveCardManageCardsBubbleViews::ButtonPressed(views::Button* sender,
     CloseBubble();
   }
 }
+
+SaveCardManageCardsBubbleViews::~SaveCardManageCardsBubbleViews() = default;
 
 }  // namespace autofill

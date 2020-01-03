@@ -11,7 +11,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.weblayer.shell.InstrumentationActivity;
 
@@ -20,7 +19,7 @@ import java.util.concurrent.CountDownLatch;
 /**
  * Tests that embedding support works as expected.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
+@RunWith(WebLayerJUnit4ClassRunner.class)
 public class RenderingTest {
     @Rule
     public InstrumentationActivityTestRule mActivityTestRule =
@@ -35,9 +34,9 @@ public class RenderingTest {
         String url = "data:text,foo";
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            activity.getBrowser().setSupportsEmbedding(true).addCallback((Boolean result) -> {
+            activity.getBrowser().setSupportsEmbedding(true, (Boolean result) -> {
                 Assert.assertTrue(result);
-                activity.getBrowser().setSupportsEmbedding(false).addCallback((Boolean result2) -> {
+                activity.getBrowser().setSupportsEmbedding(false, (Boolean result2) -> {
                     Assert.assertTrue(result2);
                     latch.countDown();
                 });
@@ -58,13 +57,12 @@ public class RenderingTest {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl("about:blank");
 
         CountDownLatch latch = new CountDownLatch(2);
-        String url = "data:text,foo";
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            activity.getBrowser().setSupportsEmbedding(true).addCallback((Boolean result) -> {
+            activity.getBrowser().setSupportsEmbedding(true, (Boolean result) -> {
                 Assert.assertTrue(result);
                 latch.countDown();
             });
-            activity.getBrowser().setSupportsEmbedding(true).addCallback((Boolean result) -> {
+            activity.getBrowser().setSupportsEmbedding(true, (Boolean result) -> {
                 Assert.assertTrue(result);
                 latch.countDown();
             });

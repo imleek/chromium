@@ -243,6 +243,9 @@
 // screen.
 + (id<GREYMatcher>)googleServicesSettingsButton;
 
+// Returns matcher for the Google Services Settings view.
++ (id<GREYMatcher>)googleServicesSettingsView;
+
 // Returns matcher for the back button on a settings menu.
 + (id<GREYMatcher>)settingsMenuBackButton;
 
@@ -280,6 +283,10 @@
 // Returns matcher for the clear saved passwords cell on the clear browsing data
 // panel.
 + (id<GREYMatcher>)clearSavedPasswordsButton;
+
+// Returns matcher for the clear saved passwords cell on the clear browsing data
+// panel.
++ (id<GREYMatcher>)clearAutofillButton;
 
 // Returns matcher for the collection view of content suggestion.
 + (id<GREYMatcher>)contentSuggestionCollectionView;
@@ -394,6 +401,19 @@
 
 // Returns a matcher for an autofill suggestion view.
 + (id<GREYMatcher>)autofillSuggestionViewMatcher;
+
+// Returns a matcher to test whether the element is a scroll view with a content
+// smaller than the scroll view bounds.
++ (id<GREYMatcher>)contentViewSmallerThanScrollView;
+
+// Returns a matcher for the infobar asking to save a credit card locally.
++ (id<GREYMatcher>)autofillSaveCardLocallyInfobar;
+
+// Returns a matcher for the infobar asking to upload a credit card.
++ (id<GREYMatcher>)autofillUploadCardInfobar;
+
+// Returns a matcher for a history entry with |url| and |title|.
++ (id<GREYMatcher>)historyEntryForURL:(NSString*)URL title:(NSString*)title;
 
 #pragma mark - Manual Fallback
 

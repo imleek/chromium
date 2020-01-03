@@ -35,6 +35,10 @@ MSVC_TOOLSET_VERSION = {
    '2017' : 'VC141',
 }
 
+def _HostIsWindows():
+  """Returns True if running on a Windows host (including under cygwin)."""
+  return sys.platform in ('win32', 'cygwin')
+
 def SetEnvironmentAndGetRuntimeDllDirs():
   """Sets up os.environ to use the depot_tools VS toolchain with gyp, and
   returns the location of the VC runtime DLLs so they can be copied into
@@ -49,7 +53,7 @@ def SetEnvironmentAndGetRuntimeDllDirs():
       bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1')))
   # When running on a non-Windows host, only do this if the SDK has explicitly
   # been downloaded before (in which case json_data_file will exist).
-  if ((sys.platform in ('win32', 'cygwin') or os.path.exists(json_data_file))
+  if ((_HostIsWindows() or os.path.exists(json_data_file))
       and depot_tools_win_toolchain):
     if ShouldUpdateToolchain():
       if len(sys.argv) > 1 and sys.argv[1] == 'update':
@@ -468,8 +472,7 @@ def Update(force=False, no_download=False):
 
   depot_tools_win_toolchain = \
       bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1')))
-  if ((sys.platform in ('win32', 'cygwin') or force) and
-        depot_tools_win_toolchain):
+  if (_HostIsWindows() or force) and depot_tools_win_toolchain:
     import find_depot_tools
     depot_tools_path = find_depot_tools.add_depot_tools_to_path()
 

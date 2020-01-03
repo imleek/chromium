@@ -29,11 +29,13 @@
 #include "content/public/common/window_container_type.mojom-forward.h"
 #include "media/base/video_codecs.h"
 #include "media/cdm/cdm_proxy.h"
+#include "media/mojo/mojom/media_service.mojom.h"
 #include "media/mojo/mojom/remoting.mojom.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom-forward.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 #include "services/network/public/mojom/websocket.mojom-forward.h"
@@ -67,6 +69,7 @@ using LoginAuthRequiredCallback =
 namespace base {
 class CommandLine;
 class FilePath;
+class SequencedTaskRunner;
 }  // namespace base
 
 namespace blink {
@@ -101,6 +104,7 @@ class TrustedHeaderClient;
 namespace service_manager {
 class Identity;
 struct Manifest;
+enum class SandboxType;
 class Service;
 
 template <typename...>
@@ -121,7 +125,6 @@ class ClientCertIdentity;
 using ClientCertIdentityList = std::vector<std::unique_ptr<ClientCertIdentity>>;
 class ClientCertStore;
 class HttpResponseHeaders;
-class NetworkIsolationKey;
 class SSLCertRequestInfo;
 class SSLInfo;
 class URLRequest;
@@ -154,7 +157,6 @@ class Origin;
 
 namespace storage {
 class FileSystemBackend;
-struct QuotaSettings;
 }  // namespace storage
 
 namespace content {
@@ -229,7 +231,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Note: see related BrowserThread::PostAfterStartupTask.
   virtual void PostAfterStartupTask(
       const base::Location& from_here,
-      const scoped_refptr<base::TaskRunner>& task_runner,
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner,
       base::OnceClosure task);
 
   // Allows the embedder to indicate whether it considers startup to be
@@ -329,11 +331,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool ShouldLockToOrigin(BrowserContext* browser_context,
                                   const GURL& effective_url);
 
-  // Returns the scheme of request initiator that should be ignored by
-  // cross-origin read blocking.  nullptr can be returned to indicate that no
-  // exceptions should be granted based on initiator's scheme.
-  virtual const char* GetInitiatorSchemeBypassingDocumentBlocking();
-
   // Returns true if everything embedded inside a document with given scheme
   // should be treated as first-party content. |scheme| will be in canonical
   // (lowercased) form. |is_embedded_origin_secure| refers to whether the origin
@@ -365,32 +362,24 @@ class CONTENT_EXPORT ContentBrowserClient {
       base::StringPiece scheme,
       bool is_embedded_origin_secure);
 
-  // Called to create a URLLoaderFactory for network requests in the following
-  // cases:
-  // - The default factory to be used by a frame.  In this case
-  //   both |origin| and |main_world_origin| are the origin being
-  //   committed in the frame (or the last origin committed in the frame).
-  // - An isolated-world-specific factory to be used by a frame.  This happens
-  //   for origins covered via
+  // This method allows the //content embedder to override |factory_params| with
+  // |origin|-specific properties (e.g. with relaxed Cross-Origin Read Blocking
+  // enforcement as needed by some extensions, or with extension-specific CORS
+  // exclusions).
+  //
+  // This method may be called in the following cases:
+  // - The default factory to be used by a frame or worker.  In this case both
+  //   the |origin| and |request_initiator_site_lock| are the origin of the
+  //   frame or worker (or the origin that is being committed in the frame).
+  // - An isolated-world-specific factory for origins covered via
   //   RenderFrameHost::MarkIsolatedWorldAsRequiringSeparateURLLoaderFactory.
   //   In this case |origin| is the origin of the isolated world and the
-  //   |main_world_origin| is the origin committed in the frame.
-  //
-  // This method allows the //content embedder to provide a URLLoaderFactory
-  // with |origin|-specific properties (e.g. with relaxed
-  // Cross-Origin Read Blocking enforcement as needed by some extensions).
-  //
-  // If the embedder doesn't want to override the URLLoaderFactory for the given
-  // |origin|, then it should return a mojo::NullRemote().
-  virtual mojo::PendingRemote<network::mojom::URLLoaderFactory>
-  CreateURLLoaderFactoryForNetworkRequests(
-      RenderProcessHost* process,
-      network::mojom::NetworkContext* network_context,
-      mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
-          header_client,
+  //   |request_initiator_site_lock| is the origin committed in the frame.
+  virtual void OverrideURLLoaderFactoryParams(
+      BrowserContext* browser_context,
       const url::Origin& origin,
-      const url::Origin& main_world_origin,
-      const base::Optional<net::NetworkIsolationKey>& network_isolation_key);
+      bool is_for_isolated_world,
+      network::mojom::URLLoaderFactoryParams* factory_params);
 
   // Returns a list additional WebUI schemes, if any.  These additional schemes
   // act as aliases to the chrome: scheme.  The additional schemes may or may
@@ -542,13 +531,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // switches::kProcessType will already be set at this point.
   virtual void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                               int child_process_id) {}
-
-  // Allows the content embedder to adjust the command line arguments for
-  // a utility process started to run a service. This is called on a background
-  // thread.
-  virtual void AdjustUtilityServiceProcessCommandLine(
-      const service_manager::Identity& identity,
-      base::CommandLine* command_line) {}
 
   // Returns a client GUID used for virus scanning.
   virtual std::string GetApplicationClientGUIDForQuarantineCheck();
@@ -768,15 +750,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Create and return a new quota permission context.
   virtual scoped_refptr<QuotaPermissionContext> CreateQuotaPermissionContext();
 
-  // Allows the embedder to provide settings that determine the amount
-  // of disk space that may be used by content facing storage apis like
-  // IndexedDatabase and ServiceWorker::CacheStorage and others.
-  virtual void GetQuotaSettings(
-      content::BrowserContext* context,
-      content::StoragePartition* partition,
-      base::OnceCallback<void(base::Optional<storage::QuotaSettings>)>
-          callback);
-
   // Allows the embedder to provide settings that determine if generated code
   // can be cached and the amount of disk space used for caching generated code.
   virtual GeneratedCodeCacheSettings GetGeneratedCodeCacheSettings(
@@ -793,7 +766,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       const GURL& request_url,
       bool is_main_frame_request,
       bool strict_enforcement,
-      const base::Callback<void(CertificateRequestResultType)>& callback);
+      base::OnceCallback<void(CertificateRequestResultType)> callback);
 
   // Selects a SSL client certificate and returns it to the |delegate|. Note:
   // |delegate| may be called synchronously or asynchronously.
@@ -994,10 +967,19 @@ class CONTENT_EXPORT ContentBrowserClient {
       service_manager::BinderRegistry* registry,
       RenderFrameHost* render_frame_host) {}
 
+  // The Media Service can run in many different types of configurations
+  // (typically in the GPU process or its own isolated process), but some
+  // clients want an additional dedicated instance to use for specific
+  // operations (e.g. for rendering protected content). Clients should override
+  // this to create such an instance, and return a bound Remote to control it.
+  // See MediaInterfaceProxy and MediaInterfaceFactoryHolder for usage.
+  virtual mojo::Remote<media::mojom::MediaService> RunSecondaryMediaService();
+
   // Allows to register browser interfaces exposed through the RenderFrameHost.
   // This mechanism will replace interface registries and binders used for
   // handling InterfaceProvider's GetInterface() calls (see crbug.com/718652).
   virtual void RegisterBrowserInterfaceBindersForFrame(
+      RenderFrameHost* render_frame_host,
       service_manager::BinderMapWithContext<RenderFrameHost*>* map) {}
 
   // Content was unable to bind a request for this interface, so the embedder
@@ -1020,15 +1002,6 @@ class CONTENT_EXPORT ContentBrowserClient {
       RenderFrameHost* render_frame_host,
       const std::string& interface_name,
       mojo::ScopedInterfaceEndpointHandle* handle);
-
-  // Content was unable to bind a request for this interface, so the embedder
-  // should try. This is called for interface requests from dedicated, shared
-  // and service workers.
-  virtual void BindInterfaceRequestFromWorker(
-      RenderProcessHost* render_process_host,
-      const url::Origin& origin,
-      const std::string& interface_name,
-      mojo::ScopedMessagePipeHandle interface_pipe) {}
 
   // Handles an unhandled incoming interface binding request from the GPU
   // process. Called on the IO thread.
@@ -1180,7 +1153,8 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns the AppContainer SID for the specified sandboxed process type, or
   // empty string if this sandboxed process type does not support living inside
   // an AppContainer. Called on PROCESS_LAUNCHER thread.
-  virtual base::string16 GetAppContainerSidForSandboxType(int sandbox_type);
+  virtual base::string16 GetAppContainerSidForSandboxType(
+      service_manager::SandboxType sandbox_type);
 
   // Returns whether renderer code integrity is enabled.
   // This is called on the UI thread.
@@ -1262,13 +1236,47 @@ class CONTENT_EXPORT ContentBrowserClient {
       int render_frame_id,
       NonNetworkURLLoaderFactoryMap* factories);
 
-  // Allows the embedder to intercept URLLoaderFactory interfaces used for
-  // navigation or being brokered on behalf of a renderer fetching subresources.
+  // Describes the purpose of the factory in WillCreateURLLoaderFactory().
+  enum class URLLoaderFactoryType {
+    // For navigations.
+    kNavigation,
+
+    // For downloads.
+    kDownload,
+
+    // For subresource requests from a document.
+    kDocumentSubResource,
+
+    // For the main script request of a dedicated worker or shared worker.
+    kWorkerMainResource,
+
+    // For the subresource requests from a dedicated worker or shared worker,
+    // including importScripts().
+    kWorkerSubResource,
+
+    // For fetching a service worker main script or subresource scripts,
+    // including importScripts().
+    kServiceWorkerScript,
+
+    // For regular fetches from a service worker (e.g., fetch(), XHR), not
+    // including importScripts().
+    kServiceWorkerSubResource,
+  };
+
+  // Allows the embedder to intercept URLLoaderFactory interfaces used by the
+  // content layer to request resources from (usually) the network service.
   //
-  // |frame| is nullptr for kWorkerSubResource, kServiceWorkerSubResource and
-  // kServiceWorkerScript.
-  // For kNavigation type, it's the RenderFrameHost the navigation might commit
-  // in. Else it's the initiating frame.
+  // The parameters for URLLoaderFactory creation, namely |header_client| and
+  // |factory_override|, are used in the network service where the resulting
+  // factory is bound to |factory_receiver|. Note that |factory_receiver| that's
+  // passed to the network service might be different from the original factory
+  // receiver that was given to the embedder if the embedder had replaced it.
+  //
+  // |type| indicates the type of requests the factory will be used for.
+  //
+  // |frame| is nullptr for type kWorkerSubResource, kServiceWorkerSubResource
+  // and kServiceWorkerScript. For kNavigation type, it's the RenderFrameHost
+  // the navigation might commit in. Else it's the initiating frame.
   //
   // |render_process_id| is the id of a render process host in which the
   // URLLoaderFactory will be used.
@@ -1291,10 +1299,13 @@ class CONTENT_EXPORT ContentBrowserClient {
   // TODO(lukasza): https://crbug.com/888079: Ensure that |request_initiator| is
   // always accurate.
   //
-  // |*factory_request| is always valid upon entry and MUST be valid upon
-  // return. The embedder may swap out the value of |*factory_request| for its
+  // |navigation_id| is valid iff |type| is |kNavigation|. It corresponds to the
+  // Navigation ID returned by NavigationHandle::GetNavigationId().
+  //
+  // |*factory_receiver| is always valid upon entry and MUST be valid upon
+  // return. The embedder may swap out the value of |*factory_receiver| for its
   // own, in which case it must return |true| to indicate that it's proxying
-  // requests for the URLLoaderFactory. Otherwise |*factory_request| is left
+  // requests for the URLLoaderFactory. Otherwise |*factory_receiver| is left
   // unmodified and this must return |false|.
   //
   // |header_client| may be bound within this call. This can be used in
@@ -1303,33 +1314,36 @@ class CONTENT_EXPORT ContentBrowserClient {
   // |bypass_redirect_checks| will be set to true when the embedder will be
   // handling redirect security checks.
   //
+  // |factory_override| gives the embedder a chance to replace the network
+  // service's "internal" URLLoaderFactory. See more details in the
+  // documentation for URLLoaderFactoryOverride in network_context.mojom.
+  // The point is to allow the embedder to override network behavior without
+  // losing the security features of the network service. The embedder should
+  // use |factory_override| instead of swapping out |*factory_receiver| if such
+  // security features are desired.
+  //
+  // Prefer |factory_receiver| to this parameter if both work, as it is less
+  // error-prone.
+  //
+  // |factory_override| may be nullptr when this WillCreateURLLoaderFactory()
+  // call is for a factory that will be used for requests where such security
+  // features are no-op (e.g., for navigations). Otherwise, |*factory_override|
+  // is nullptr by default, and the embedder can elect to set
+  // |*factory_override| to a valid override.
+  //
   // Always called on the UI thread.
-  enum class URLLoaderFactoryType {
-    kNavigation,
-    kDownload,
-    kDocumentSubResource,
-
-    // For dedicated workers and shared workers.
-    kWorkerMainResource,
-    kWorkerSubResource,
-
-    // For regular fetches from a service worker (e.g., fetch(), XHR).
-    kServiceWorkerSubResource,
-
-    // For fetching a service worker main script or subresource scripts
-    // (e.g., importScripts()).
-    kServiceWorkerScript,
-  };
   virtual bool WillCreateURLLoaderFactory(
       BrowserContext* browser_context,
       RenderFrameHost* frame,
       int render_process_id,
       URLLoaderFactoryType type,
       const url::Origin& request_initiator,
+      base::Optional<int64_t> navigation_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
-      bool* bypass_redirect_checks);
+      bool* bypass_redirect_checks,
+      network::mojom::URLLoaderFactoryOverridePtr* factory_override);
 
   // Returns true when the embedder wants to intercept a websocket connection.
   virtual bool WillInterceptWebSocket(RenderFrameHost* frame);
@@ -1579,7 +1593,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // decisions about whether to allow an external application to launch.
   virtual bool HandleExternalProtocol(
       const GURL& url,
-      base::Callback<WebContents*(void)> web_contents_getter,
+      base::OnceCallback<WebContents*()> web_contents_getter,
       int child_id,
       NavigationUIData* navigation_data,
       bool is_main_frame,
@@ -1608,7 +1622,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       content::NavigationHandle* navigation_handle);
 
   // Returns true if it is OK to accept untrusted exchanges, such as expired
-  // signed exchanges, and unsigned bundled exchanges.
+  // signed exchanges, and unsigned Web Bundles.
   // The embedder may require --user-data-dir flag and so on to accept it in
   // order to make sure that insecure contents will not persist accidentally.
   virtual bool CanAcceptUntrustedExchangesIfNeeded();

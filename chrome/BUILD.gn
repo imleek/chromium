@@ -226,7 +226,8 @@ if (!is_android && !is_mac) {
         "//chrome/common:constants",
         "//chrome/common:metrics_constants_util_win",
         "//chrome/install_static:secondary_module",
-        "//chrome/installer/util:with_no_strings",
+        "//chrome/installer/util:constants",
+        "//chrome/installer/util:did_run_support",
         "//components/browser_watcher:browser_watcher_client",
         "//components/crash/content/app:run_as_crashpad_handler",
         "//components/crash/core/common",
@@ -447,8 +448,8 @@ if (is_win) {
       deps += [ "//content/public/app:browser" ]
       assert_no_deps = [
         # The browser DLL may not depend on blink or v8.
-        "//third_party/blink/public:blink",
         "//gin",
+        "//third_party/blink/public:blink",
         "//v8",
 
         # Ditto for PDFium.
@@ -502,22 +503,6 @@ if (is_win) {
       ]
 
       configs += [ "//build/config/win:delayloads" ]
-
-      if (is_clang && is_official_build) {
-        orderfile = "build/chrome_child.$target_cpu.orderfile"
-        rebased_orderfile = rebase_path(orderfile, root_build_dir)
-        inputs = [
-          orderfile,
-        ]
-        ldflags = [
-          "/order:@$rebased_orderfile",
-
-          # Ignore warnings about missing functions or functions not in their
-          # own section.
-          "/ignore:4037",
-          "/ignore:4065",
-        ]
-      }
 
       if (symbol_level == 2) {
         # Incremental linking doesn't work on this target in debug mode with
@@ -1306,12 +1291,12 @@ if (is_win) {
     # This list must be updated with the two targets' deps list below, and
     # the list of _dsyms in :chrome_dsym_archive.
     _chrome_symbols_sources = [
-      _framework_binary_path,
-      "$root_out_dir/AlertNotificationService.xpc/Contents/MacOS/AlertNotificationService",
       "$root_out_dir/$chrome_product_full_name.app/Contents/MacOS/$chrome_product_full_name",
+      "$root_out_dir/AlertNotificationService.xpc/Contents/MacOS/AlertNotificationService",
       "$root_out_dir/chrome_crashpad_handler",
       "$root_out_dir/libswiftshader_libEGL.dylib",
       "$root_out_dir/libswiftshader_libGLESv2.dylib",
+      _framework_binary_path,
     ]
 
     foreach(helper_params, content_mac_helpers) {
@@ -1551,10 +1536,6 @@ group("resources") {
 group("extra_resources") {
   # Deps should be same as those in chrome_extra_paks() within chrome_paks.gni.
   public_deps = [
-    "//chrome/browser/resources:invalidations_resources",
-    "//chrome/browser/resources:net_internals_resources",
-    "//chrome/browser/resources:quota_internals_resources",
-    "//chrome/browser/resources:webapks_ui_resources",
     "//components/autofill/core/browser:autofill_address_rewriter_resources",
   ]
 
@@ -1564,6 +1545,7 @@ group("extra_resources") {
       "//chrome/browser/resources:component_extension_resources",
       "//chrome/browser/resources:dev_ui_paks",
       "//chrome/browser/resources:downloads_resources",
+      "//chrome/browser/resources:history_resources",
       "//chrome/browser/resources:local_ntp_resources",
       "//chrome/browser/resources:new_tab_page_resources",
       "//chrome/browser/resources:settings_resources",
@@ -1575,10 +1557,10 @@ group("extra_resources") {
       "//chrome/browser/resources:os_settings_resources",
       "//chrome/browser/resources/chromeos:cellular_setup_resources",
       "//chrome/browser/resources/chromeos:multidevice_setup_resources",
-      "//chrome/browser/resources/chromeos/autoclick:build",
-      "//chrome/browser/resources/chromeos/chromevox",
-      "//chrome/browser/resources/chromeos/select_to_speak:build",
-      "//chrome/browser/resources/chromeos/switch_access:build",
+      "//chrome/browser/resources/chromeos/accessibility/autoclick:build",
+      "//chrome/browser/resources/chromeos/accessibility/chromevox",
+      "//chrome/browser/resources/chromeos/accessibility/select_to_speak:build",
+      "//chrome/browser/resources/chromeos/accessibility/switch_access:build",
       "//third_party/ink:ink_resources",
     ]
   }
@@ -1727,12 +1709,6 @@ if (is_android) {
   java_cpp_enum("payments_journey_logger_enum_javagen") {
     sources = [
       "../components/payments/core/journey_logger.h",
-    ]
-  }
-
-  java_cpp_enum("pref_enum_javagen") {
-    sources = [
-      "browser/android/preferences/prefs.h",
     ]
   }
 

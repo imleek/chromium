@@ -30,6 +30,8 @@ class WebContents;
 
 namespace chromecast {
 
+class QueryableDataHost;
+
 struct RendererFeature {
   const std::string name;
   base::Value value;
@@ -148,6 +150,9 @@ class CastWebContents {
         service_manager::InterfaceProvider* frame_interfaces,
         blink::AssociatedInterfaceProvider* frame_associated_interfaces) {}
 
+    // A navigation has finished in the WebContents' main frame.
+    virtual void MainFrameFinishedNavigation() {}
+
     // These methods are calls forwarded from WebContentsObserver.
     virtual void MainFrameResized(const gfx::Rect& bounds) {}
     virtual void UpdateTitle(const base::string16& title) {}
@@ -188,7 +193,7 @@ class CastWebContents {
     // is destroyed before CastWebContents, the WeakPtr will be invalidated on
     // the main UI thread.
     base::WeakPtr<Delegate> delegate = nullptr;
-    // Enable development mode for this CastWebCastWebContents. Whitelists
+    // Enable development mode for this CastWebContents. Whitelists
     // certain functionality for the WebContents, like remote debugging and
     // debugging interfaces.
     bool enabled_for_dev = false;
@@ -206,6 +211,14 @@ class CastWebContents {
     // Background color for the WebContents view. If not provided, the color
     // will fall back to the platform default.
     BackgroundColor background_color = BackgroundColor::NONE;
+    // Enable WebSQL database for this CastWebContents.
+    bool enable_websql = false;
+    // Enable mixer audio support for this CastWebContents.
+    bool enable_mixer_audio = false;
+    // Whether to provide a QueryableDataHost for this CastWebContents.
+    // Clients can use it to send queryable values to the render frames.
+    // queryable_data_host() will return a nullptr if this is false.
+    bool enable_queryable_data_host = false;
 
     InitParams();
     InitParams(const InitParams& other);
@@ -224,6 +237,10 @@ class CastWebContents {
 
   static std::vector<CastWebContents*>& GetAll();
 
+  // Returns the CastWebContents that wraps the content::WebContents, or nullptr
+  // if the CastWebContents does not exist.
+  static CastWebContents* FromWebContents(content::WebContents* web_contents);
+
   CastWebContents() = default;
   virtual ~CastWebContents() = default;
 
@@ -235,6 +252,13 @@ class CastWebContents {
   // TODO(seantopping): Hide this, clients shouldn't use WebContents directly.
   virtual content::WebContents* web_contents() const = 0;
   virtual PageState page_state() const = 0;
+
+  // Returns QueryableDataHost that is used to push values to the renderer.
+  // Returns nullptr if the new queryable data bindings is enabled.
+  virtual QueryableDataHost* queryable_data_host() const = 0;
+
+  // Returns the PID of the main frame process if valid.
+  virtual base::Optional<pid_t> GetMainFrameRenderProcessPid() const = 0;
 
   // ===========================================================================
   // Initialization and Setup
@@ -333,13 +357,20 @@ class CastWebContents {
   // when it is ready.
   virtual service_manager::BinderRegistry* binder_registry() = 0;
 
-  // Used for owner to pass its |InterfaceProviderPtr|s to CastWebContents.
-  // It is owner's respoinsibility to make sure each |InterfaceProviderPtr| has
-  // distinct mojo interface set.
+  // Used for owner to pass its |InterfaceProvider| pointers to CastWebContents.
+  // It is owner's responsibility to make sure each |InterfaceProvider| pointer
+  // has distinct mojo interface set.
   using InterfaceSet = base::flat_set<std::string>;
   virtual void RegisterInterfaceProvider(
       const InterfaceSet& interface_set,
       service_manager::InterfaceProvider* interface_provider) = 0;
+
+  // Returns true if WebSQL database is configured enabled for this
+  // CastWebContents.
+  virtual bool is_websql_enabled() = 0;
+
+  // Returns true if mixer audio is enabled.
+  virtual bool is_mixer_audio_enabled() = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CastWebContents);

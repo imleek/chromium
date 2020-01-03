@@ -33,7 +33,7 @@ class NaClBrokerSandboxedProcessLauncherDelegate
   NaClBrokerSandboxedProcessLauncherDelegate() {}
 
   service_manager::SandboxType GetSandboxType() override {
-    return service_manager::SANDBOX_TYPE_NO_SANDBOX;
+    return service_manager::SandboxType::kNoSandbox;
   }
 
  private:
@@ -54,7 +54,7 @@ bool NaClBrokerHost::Init() {
   process_ = content::BrowserChildProcessHost::Create(
       static_cast<content::ProcessType>(PROCESS_TYPE_NACL_BROKER), this,
       content::ChildProcessHost::IpcMode::kLegacy);
-
+  process_->SetMetricsName("NaCl Broker");
   process_->GetHost()->CreateChannelMojo();
 
   // Create the path to the nacl broker/loader executable.

@@ -27,6 +27,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_database.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/indexed_db/indexed_db_class_factory.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
@@ -59,6 +60,7 @@
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/database/database_util.h"
 #include "storage/browser/quota/quota_manager.h"
+#include "storage/browser/quota/quota_settings.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -83,12 +85,24 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
   void SetUp() override {
     GetTestClassFactory()->Reset();
     IndexedDBClassFactory::SetIndexedDBClassFactoryGetter(GetIDBClassFactory);
+
+    // Some tests need more space than the default used for browser tests.
+    static storage::QuotaSettings quota_settings =
+        storage::GetHardCodedSettings(100 * 1024 * 1024);
+    StoragePartition::SetDefaultQuotaSettingsForTesting(&quota_settings);
+
     ContentBrowserTest::SetUp();
   }
 
   void TearDown() override {
     IndexedDBClassFactory::SetIndexedDBClassFactoryGetter(nullptr);
     ContentBrowserTest::TearDown();
+  }
+
+  bool UseProductionQuotaSettings() override {
+    // So that the browser test harness doesn't call
+    // SetDefaultQuotaSettingsForTesting and overwrite the settings above.
+    return true;
   }
 
   void FailOperation(FailClass failure_class,
@@ -168,11 +182,11 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
   void DeleteForOrigin(const Origin& origin, Shell* browser = nullptr) {
     base::RunLoop loop;
     IndexedDBContextImpl* context = GetContext();
-    context->TaskRunner()->PostTask(FROM_HERE,
-                                    base::BindLambdaForTesting([&]() {
-                                      context->DeleteForOrigin(kFileOrigin);
-                                      loop.Quit();
-                                    }));
+    context->IDBTaskRunner()->PostTask(FROM_HERE,
+                                       base::BindLambdaForTesting([&]() {
+                                         context->DeleteForOrigin(kFileOrigin);
+                                         loop.Quit();
+                                       }));
     loop.Run();
   }
 
@@ -180,7 +194,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
     base::RunLoop loop;
     int64_t size;
     IndexedDBContextImpl* context = GetContext(browser);
-    context->TaskRunner()->PostTask(
+    context->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
           size = context->GetOriginDiskUsage(origin);
           loop.Quit();
@@ -193,7 +207,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
     base::RunLoop loop;
     int count;
     IndexedDBContextImpl* context = GetContext();
-    context->TaskRunner()->PostTask(
+    context->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
           count = context->GetOriginBlobFileCount(origin);
           loop.Quit();
@@ -206,7 +220,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
     base::RunLoop loop;
     bool downgraded;
     IndexedDBContextImpl* context = GetContext();
-    context->TaskRunner()->PostTask(
+    context->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
           downgraded = context->ForceSchemaDowngrade(origin);
           loop.Quit();
@@ -219,7 +233,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
     base::RunLoop loop;
     V2SchemaCorruptionStatus status;
     IndexedDBContextImpl* context = GetContext();
-    context->TaskRunner()->PostTask(
+    context->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
           status = context->HasV2SchemaCorruption(origin);
           loop.Quit();
@@ -234,7 +248,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
                         std::string key,
                         std::string value) {
     base::RunLoop loop;
-    GetContext()->TaskRunner()->PostTask(
+    GetContext()->IDBTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(&IndexedDBBrowserTest::WriteToIndexedDBOnIDBSequence,
                        base::Unretained(this),
@@ -439,7 +453,7 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed,
 static void CopyLevelDBToProfile(Shell* shell,
                                  scoped_refptr<IndexedDBContextImpl> context,
                                  const std::string& test_directory) {
-  DCHECK(context->TaskRunner()->RunsTasksInCurrentSequence());
+  DCHECK(context->IDBTaskRunner()->RunsTasksInCurrentSequence());
   base::FilePath leveldb_dir(FILE_PATH_LITERAL("file__0.indexeddb.leveldb"));
   base::FilePath test_data_dir =
       GetTestFilePath("indexeddb", test_directory.c_str()).Append(leveldb_dir);
@@ -459,11 +473,11 @@ class IndexedDBBrowserTestWithPreexistingLevelDB : public IndexedDBBrowserTest {
   IndexedDBBrowserTestWithPreexistingLevelDB() {}
   void SetUpOnMainThread() override {
     scoped_refptr<IndexedDBContextImpl> context = GetContext();
-    context->TaskRunner()->PostTask(
+    context->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindOnce(&CopyLevelDBToProfile, shell(), context,
                                   EnclosingLevelDBDir()));
     scoped_refptr<base::ThreadTestHelper> helper(
-        new base::ThreadTestHelper(GetContext()->TaskRunner()));
+        new base::ThreadTestHelper(GetContext()->IDBTaskRunner()));
     ASSERT_TRUE(helper->Run());
   }
 
@@ -612,8 +626,9 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, EmptyBlob) {
 #else
   SimpleTest(GURL(test_url.spec()));
 #endif
-  // Test stores one blob and one file to disk, so expect two files.
-  EXPECT_EQ(2, RequestBlobFileCount(kFileOrigin));
+  // As both of these files are empty, they do not create BlobDataItems.
+  // As they can't be read, the backing files are immediately released.
+  EXPECT_EQ(0, RequestBlobFileCount(kFileOrigin));
 }
 
 // Very flaky on many bots. See crbug.com/459835
@@ -622,7 +637,8 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed, DISABLED_BlobDidAck) {
   // Wait for idle so that the blob ack has time to be received/processed by
   // the browser process.
   scoped_refptr<base::ThreadTestHelper> helper =
-      base::MakeRefCounted<base::ThreadTestHelper>(GetContext()->TaskRunner());
+      base::MakeRefCounted<base::ThreadTestHelper>(
+          GetContext()->IDBTaskRunner());
   ASSERT_TRUE(helper->Run());
   base::RunLoop().RunUntilIdle();
   ASSERT_TRUE(helper->Run());
@@ -669,10 +685,11 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, DeleteForOriginIncognito) {
 
   IndexedDBContextImpl* context = GetContext(browser);
   base::RunLoop loop;
-  context->TaskRunner()->PostTask(FROM_HERE, base::BindLambdaForTesting([&]() {
-                                    context->DeleteForOrigin(origin);
-                                    loop.Quit();
-                                  }));
+  context->IDBTaskRunner()->PostTask(FROM_HERE,
+                                     base::BindLambdaForTesting([&]() {
+                                       context->DeleteForOrigin(origin);
+                                       loop.Quit();
+                                     }));
   loop.Run();
 
   EXPECT_EQ(0, RequestUsage(origin, browser));
@@ -789,7 +806,7 @@ std::unique_ptr<net::test_server::HttpResponse> CorruptDBRequestHandler(
     base::WaitableEvent signal_when_finished(
         base::WaitableEvent::ResetPolicy::AUTOMATIC,
         base::WaitableEvent::InitialState::NOT_SIGNALED);
-    context->TaskRunner()->PostTask(
+    context->IDBTaskRunner()->PostTask(
         FROM_HERE, base::BindOnce(&CorruptIndexedDBDatabase, std::cref(context),
                                   origin, &signal_when_finished));
     signal_when_finished.Wait();
@@ -921,7 +938,7 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, DeleteCompactsBackingStore) {
   {
     // Cycle through the task runner to ensure that all IDB tasks are completed.
     base::RunLoop loop;
-    GetContext()->TaskRunner()->PostTask(FROM_HERE, loop.QuitClosure());
+    GetContext()->IDBTaskRunner()->PostTask(FROM_HERE, loop.QuitClosure());
     loop.Run();
   }
   int64_t after_filling = RequestUsage(kFileOrigin);
@@ -932,7 +949,7 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, DeleteCompactsBackingStore) {
     // Cycle through the task runner to ensure that the cleanup task is
     // executed.
     base::RunLoop loop;
-    GetContext()->TaskRunner()->PostTask(FROM_HERE, loop.QuitClosure());
+    GetContext()->IDBTaskRunner()->PostTask(FROM_HERE, loop.QuitClosure());
     loop.Run();
   }
   int64_t after_deleting = RequestUsage(kFileOrigin);

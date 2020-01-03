@@ -101,12 +101,13 @@ class OptimizationGuideStore {
   // For tests only.
   explicit OptimizationGuideStore(
       std::unique_ptr<StoreEntryProtoDatabase> database);
-  ~OptimizationGuideStore();
+  virtual ~OptimizationGuideStore();
 
   // Initializes the store. If |purge_existing_data| is set to true,
   // then the cache is purged during initialization and starts in a fresh state.
   // When initialization completes, the provided callback is run asynchronously.
-  void Initialize(bool purge_existing_data, base::OnceClosure callback);
+  // Virtualized for testing.
+  virtual void Initialize(bool purge_existing_data, base::OnceClosure callback);
 
   // Creates and returns a StoreUpdateData object for component hints. This
   // object is used to collect hints within a component in a format usable on a
@@ -169,6 +170,11 @@ class OptimizationGuideStore {
   // removed.
   void PurgeExpiredFetchedHints();
 
+  // Removes all host model features that have expired from the store.
+  // |entry_keys_| is updated after the expired host model features are
+  // removed.
+  void PurgeExpiredHostModelFeatures();
+
   // Creates and returns a StoreUpdateData object for Prediction Models. This
   // object is used to collect a batch of prediction models in a format that is
   // usable to update the store on a background thread. This is always created
@@ -177,15 +183,17 @@ class OptimizationGuideStore {
   std::unique_ptr<StoreUpdateData> CreateUpdateDataForPredictionModels() const;
 
   // Updates the prediction models contained in the store. The callback is run
-  // asynchronously after the database stores the prediction models.
-  void UpdatePredictionModels(
+  // asynchronously after the database stores the prediction models. Virtualized
+  // for testing.
+  virtual void UpdatePredictionModels(
       std::unique_ptr<StoreUpdateData> prediction_models_update_data,
       base::OnceClosure callback);
 
   // Finds the entry key for the prediction model if it is known to the store.
   // Returns true if an entry key is found and |out_prediction_model_entry_key|
   // is populated with the matching key.
-  bool FindPredictionModelEntryKey(
+  // Virtualized for testing.
+  virtual bool FindPredictionModelEntryKey(
       proto::OptimizationTarget optimization_target,
       OptimizationGuideStore::EntryKey* out_prediction_model_entry_key);
 
@@ -194,8 +202,9 @@ class OptimizationGuideStore {
   // the case where the prediction model cannot be loaded, the callback is run
   // with a nullptr. Depending on the load result, the callback may be
   // synchronous or asynchronous.
-  void LoadPredictionModel(const EntryKey& prediction_model_entry_key,
-                           PredictionModelLoadedCallback callback);
+  // Virtualized for testing.
+  virtual void LoadPredictionModel(const EntryKey& prediction_model_entry_key,
+                                   PredictionModelLoadedCallback callback);
 
   // Creates and returns a StoreUpdateData object for host model features. This
   // object is used to collect a batch of host model features in a format that
@@ -209,7 +218,8 @@ class OptimizationGuideStore {
 
   // Updates the host model features contained in the store. The callback is run
   // asynchronously after the database stores the host model features.
-  void UpdateHostModelFeatures(
+  // Virtualized for testing.
+  virtual void UpdateHostModelFeatures(
       std::unique_ptr<StoreUpdateData> host_model_features_update_data,
       base::OnceClosure callback);
 
@@ -234,15 +244,21 @@ class OptimizationGuideStore {
   // case where the host model features cannot be loaded, the callback is run
   // with a nullptr. Depending on the load result, the callback may be
   // synchronous or asynchronous.
-  void LoadAllHostModelFeatures(AllHostModelFeaturesLoadedCallback callback);
+  // Virtualized for testing.
+  virtual void LoadAllHostModelFeatures(
+      AllHostModelFeaturesLoadedCallback callback);
 
   // Returns the time that the host model features in the store can be updated.
   // If |this| is not available, base::Time() is returned.
   base::Time GetHostModelFeaturesUpdateTime() const;
 
+  // Clears all host model features from the database and resets the entry keys.
+  void ClearHostModelFeaturesFromDatabase();
+
  private:
   friend class OptimizationGuideStoreTest;
   friend class StoreUpdateData;
+  friend class TestOptimizationGuideStore;
 
   using EntryKeyPrefix = std::string;
   using EntryKeySet = base::flat_set<EntryKey>;
@@ -333,11 +349,10 @@ class OptimizationGuideStore {
       EntryKey* out_entry_key,
       const EntryKeyPrefix& entry_key_prefix) const;
 
-  // Callback that identifies any expired hints from |fetched_entries| and
+  // Callback that identifies any expired |entries| and
   // asynchronously removes them from the store.
-  void OnLoadFetchedHintsToPurgeExpired(
-      bool success,
-      std::unique_ptr<EntryMap> fetched_entries);
+  void OnLoadEntriesToPurgeExpired(bool success,
+                                   std::unique_ptr<EntryMap> entries);
 
   // Callback that runs after the database finishes being initialized. If
   // |purge_existing_data| is true, then unconditionally purges the database;

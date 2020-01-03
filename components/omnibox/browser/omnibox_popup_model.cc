@@ -133,13 +133,10 @@ void OmniboxPopupModel::SetSelectedLine(size_t line,
   const size_t prev_selected_line = selected_line_;
   selected_line_state_ = NORMAL;
   selected_line_ = line;
-  if (prev_selected_line != kNoMatch) {
-    view_->InvalidateLine(prev_selected_line);
-  }
-  if (selected_line_ != kNoMatch) {
-    view_->InvalidateLine(selected_line_);
-    view_->OnLineSelected(selected_line_);
-  }
+  if (prev_selected_line != kNoMatch)
+    view_->OnSelectionStateChanged(prev_selected_line);
+  if (selected_line_ != kNoMatch)
+    view_->OnSelectionStateChanged(selected_line_);
 
   if (line == kNoMatch)
     return;
@@ -165,10 +162,7 @@ void OmniboxPopupModel::SetSelectedLine(size_t line,
 }
 
 void OmniboxPopupModel::ResetToInitialState() {
-  const AutocompleteResult& result = this->result();
-  size_t new_line = kNoMatch;
-  if (result.default_match() != result.end())
-    new_line = result.default_match() - result.begin();
+  size_t new_line = result().default_match() ? 0 : kNoMatch;
   SetSelectedLine(new_line, true, false);
   view_->OnDragCanceled();
 }
@@ -188,12 +182,8 @@ void OmniboxPopupModel::SetSelectedLineState(LineState state) {
   GURL current_destination(match.destination_url);
   DCHECK((state != KEYWORD) || match.associated_keyword.get());
 
-  if (state == BUTTON_FOCUSED) {
-    // TODO(orinj): If in-suggestion Pedals are kept, refactor a bit
-    // so that button presence doesn't always assume tab switching use case.
-    DCHECK(match.has_tab_match || match.pedal);
+  if (state == BUTTON_FOCUSED)
     old_focused_url_ = current_destination;
-  }
 
   selected_line_state_ = state;
   view_->InvalidateLine(selected_line_);
@@ -248,14 +238,8 @@ void OmniboxPopupModel::OnResultChanged() {
   size_t old_selected_line = selected_line_;
   has_selected_match_ = false;
 
-  if (result.default_match() == result.end()) {
-    selected_line_ = kNoMatch;
-    selected_line_state_ = NORMAL;
-  } else {
-    // TODO(tommycli): The default match is always in the first position. After
-    // we cement these semantics, we should just set selected_line_ to 0.
-    selected_line_ =
-        static_cast<size_t>(result.default_match() - result.begin());
+  if (result.default_match()) {
+    selected_line_ = 0;
 
     // If selected line state was |BUTTON_FOCUSED| and nothing has changed,
     // leave it.
@@ -267,6 +251,9 @@ void OmniboxPopupModel::OnResultChanged() {
         result.match_at(selected_line_).destination_url != old_focused_url_;
     if (!has_focused_match || has_changed)
       selected_line_state_ = NORMAL;
+  } else {
+    selected_line_ = kNoMatch;
+    selected_line_state_ = NORMAL;
   }
 
   bool popup_was_open = view_->IsOpen();
@@ -328,11 +315,6 @@ gfx::Image OmniboxPopupModel::GetMatchIcon(const AutocompleteMatch& match,
                                              vector_icon_color);
 }
 #endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
-
-bool OmniboxPopupModel::SelectedLineHasTabMatch() {
-  return selected_line_ != kNoMatch &&
-         result().match_at(selected_line_).ShouldShowTabMatchButton();
-}
 
 bool OmniboxPopupModel::SelectedLineIsTabSwitchSuggestion() {
   return selected_line_ != kNoMatch &&

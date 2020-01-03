@@ -51,6 +51,7 @@
 #include "third_party/skia/include/core/SkString.h"
 #include "third_party/skia/include/effects/SkColorFilterImageFilter.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
+#include "third_party/skia/include/effects/SkImageFilters.h"
 #include "third_party/skia/include/effects/SkOverdrawColorFilter.h"
 #include "third_party/skia/include/effects/SkShaderMaskFilter.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
@@ -581,8 +582,11 @@ SkiaRenderer::ScopedSkImageBuilder::ScopedSkImageBuilder(
     lock_.emplace(resource_provider, resource_id, alpha_type, origin);
     sk_image_ = lock_->sk_image();
   } else {
+    float sdr_scale_factor = skia_renderer->current_frame()->sdr_white_level /
+                             gfx::ColorSpace::kDefaultSDRWhiteLevel;
     auto* image_context =
-        skia_renderer->lock_set_for_external_use_->LockResource(resource_id);
+        skia_renderer->lock_set_for_external_use_->LockResource(
+            resource_id, /*video_plane=*/false, sdr_scale_factor);
     // |ImageContext::image| provides thread safety: (a) this ImageContext is
     // only accessed by GPU thread after |image| is set and (b) the fields of
     // ImageContext that are accessed by both compositor and GPU thread are no
@@ -677,7 +681,7 @@ SkiaRenderer::SkiaRenderer(const RendererSettings* settings,
     case DrawMode::DDL: {
       DCHECK(skia_output_surface_);
       lock_set_for_external_use_.emplace(resource_provider,
-                                         skia_output_surface);
+                                         skia_output_surface_);
       break;
     }
     case DrawMode::SKPRECORD: {
@@ -784,39 +788,21 @@ void SkiaRenderer::FinishDrawingFrame() {
   if (use_swap_with_bounds_)
     swap_content_bounds_ = current_frame()->root_content_bounds;
 
-#if defined(OS_ANDROID)
-  if (!current_frame()->overlay_list.empty()) {
-    DCHECK_EQ(current_frame()->overlay_list.size(), 1u);
-    overlay_resource_locks_.emplace_back(
-        DisplayResourceProvider::ScopedReadLockSharedImage(
-            resource_provider_,
-            current_frame()->overlay_list.front().resource_id));
-    skia_output_surface_->RenderToOverlay(
-        overlay_resource_locks_.back()->sync_token(),
-        overlay_resource_locks_.back()->mailbox(),
-        ToNearestRect(current_frame()->overlay_list.front().display_rect));
-  } else {
-    overlay_resource_locks_.emplace_back(base::nullopt);
-  }
-#endif
-
   // TODO(weiliangc): Remove this once OverlayProcessor schedules overlays.
   if (current_frame()->output_surface_plane) {
     skia_output_surface_->ScheduleOutputSurfaceAsOverlay(
         current_frame()->output_surface_plane.value());
   }
-
-#if defined(OS_WIN)
-  // Schedule overlay planes to be presented before SwapBuffers().
-  ScheduleDCLayers();
-#endif
+  ScheduleOverlays();
 }
 
-void SkiaRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
+void SkiaRenderer::SwapBuffers(SwapFrameData swap_frame_data) {
   DCHECK(visible_);
   TRACE_EVENT0("viz,benchmark", "SkiaRenderer::SwapBuffers");
   OutputSurfaceFrame output_frame;
-  output_frame.latency_info = std::move(latency_info);
+  output_frame.latency_info = std::move(swap_frame_data.latency_info);
+  output_frame.top_controls_visible_height_changed =
+      swap_frame_data.top_controls_visible_height_changed;
   output_frame.size = surface_size_for_swap_buffers();
   if (use_swap_with_bounds_) {
     output_frame.content_bounds = std::move(swap_content_bounds_);
@@ -827,17 +813,9 @@ void SkiaRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
     output_frame.sub_buffer_rect = swap_buffer_rect_;
   }
 
-  // Unlock the overlay resource that was swapped last frame.
-  if (overlay_resource_locks_.size() > 1) {
-    overlay_resource_locks_.pop_front();
-  }
-
   switch (draw_mode_) {
     case DrawMode::DDL: {
-      gpu::SyncToken sync_token = skia_output_surface_->SkiaSwapBuffers(
-          std::move(output_frame), has_locked_overlay_resources_);
-      if (has_locked_overlay_resources_)
-        lock_set_for_external_use_->UnlockResources(sync_token);
+      skia_output_surface_->SkiaSwapBuffers(std::move(output_frame));
       break;
     }
     case DrawMode::SKPRECORD: {
@@ -855,6 +833,12 @@ void SkiaRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
   }
 
   swap_buffer_rect_ = gfx::Rect();
+}
+
+void SkiaRenderer::SwapBuffersComplete() {
+  committed_overlay_locks_.clear();
+  std::swap(committed_overlay_locks_, pending_overlay_locks_.front());
+  pending_overlay_locks_.pop_front();
 }
 
 bool SkiaRenderer::FlippedFramebuffer() const {
@@ -1108,19 +1092,54 @@ void SkiaRenderer::PrepareCanvasForRPDQ(const DrawRPDQParams& rpdq_params,
     layer_paint.setImageFilter(rpdq_params.image_filter);
   }
 
+  // Canocalize the backdrop bounds rrect type; if there's no backdrop filter or
+  // filter bounds, this will be empty. If it's a rect or rrect, we must work
+  // around Skia's background filter auto-expansion. If it's an rrect, we must
+  // also clear out the rounded corners after filtering.
+  gfx::RRectF::Type backdrop_bounds_type = gfx::RRectF::Type::kEmpty;
+  if (rpdq_params.backdrop_filter &&
+      rpdq_params.backdrop_filter_bounds.has_value()) {
+    backdrop_bounds_type = rpdq_params.backdrop_filter_bounds->GetType();
+  }
+
+  // Initially the backdrop filter fills the entire rect; if we draw less than
+  // that we need to clear the excess.
+  bool post_backdrop_filter_clear_needed = params->draw_region.has_value();
+
+  // Explicitly crop the input and the output to the backdrop bounds; this is
+  // required for the backdrop-filter spec.
+  sk_sp<SkImageFilter> backdrop_filter = rpdq_params.backdrop_filter;
+  if (backdrop_bounds_type != gfx::RRectF::Type::kEmpty) {
+    DCHECK(backdrop_filter);
+
+    gfx::Rect crop_rect =
+        gfx::ToEnclosingRect(rpdq_params.backdrop_filter_bounds->rect());
+    SkIRect sk_crop_rect = gfx::RectToSkIRect(crop_rect);
+    // Offsetting (0,0) does nothing to the actual image, but is the most
+    // convenient way to embed the crop rect into the filter DAG.
+    // TODO(michaelludwig) - Remove this once Skia doesn't always auto-expand
+    sk_sp<SkImageFilter> crop =
+        SkImageFilters::Offset(0.0f, 0.0f, nullptr, &sk_crop_rect);
+    backdrop_filter = SkImageFilters::Compose(
+        crop, SkImageFilters::Compose(std::move(backdrop_filter), crop));
+    // Update whether or not a post-filter clear is needed (crop didn't
+    // completely match bounds)
+    post_backdrop_filter_clear_needed |=
+        backdrop_bounds_type != gfx::RRectF::Type::kRect ||
+        gfx::RectF(crop_rect) != rpdq_params.backdrop_filter_bounds->rect();
+  }
+
   SkRect bounds = gfx::RectFToSkRect(rpdq_params.bypass_clip.has_value()
                                          ? *rpdq_params.bypass_clip
                                          : params->visible_rect);
   current_canvas_->saveLayer(SkCanvas::SaveLayerRec(
-      &bounds, &layer_paint, rpdq_params.backdrop_filter.get(),
+      &bounds, &layer_paint, backdrop_filter.get(),
       rpdq_params.mask_image.get(), &rpdq_params.mask_to_quad_matrix, 0));
 
   // If we have backdrop filtered content (and not transparent black like with
   // regular render passes), we have to clear out the parts of the layer that
   // shouldn't show the backdrop
-  if (rpdq_params.backdrop_filter &&
-      (rpdq_params.backdrop_filter_bounds.has_value() ||
-       params->draw_region.has_value())) {
+  if (backdrop_filter && post_backdrop_filter_clear_needed) {
     current_canvas_->save();
     if (rpdq_params.backdrop_filter_bounds.has_value()) {
       current_canvas_->clipRRect(SkRRect(*rpdq_params.backdrop_filter_bounds),
@@ -2060,11 +2079,35 @@ void SkiaRenderer::DrawUnsupportedQuad(const DrawQuad* quad,
 #endif
 }
 
-#if defined(OS_WIN)
-void SkiaRenderer::ScheduleDCLayers() {
+void SkiaRenderer::ScheduleOverlays() {
+  pending_overlay_locks_.emplace_back();
   if (current_frame()->overlay_list.empty())
     return;
 
+#if defined(OS_ANDROID)
+#if DCHECK_IS_ON()
+  if (!output_surface_->capabilities().supports_surfaceless)
+    DCHECK_EQ(current_frame()->overlay_list.size(), 1u);
+#endif
+  auto& locks = pending_overlay_locks_.back();
+  std::vector<gpu::SyncToken> sync_tokens;
+  for (auto& overlay : current_frame()->overlay_list) {
+    // Resources will be unlocked after the next SwapBuffers() is completed.
+    locks.emplace_back(resource_provider_, overlay.resource_id);
+    auto& lock = locks.back();
+
+    // Sync tokens ensure the texture to be overlaid is available before
+    // scheduling it for display.
+    if (lock.sync_token().HasData())
+      sync_tokens.push_back(lock.sync_token());
+
+    overlay.mailbox = lock.mailbox();
+    DCHECK(!overlay.mailbox.IsZero());
+  }
+  skia_output_surface_->ScheduleOverlays(
+      std::move(current_frame()->overlay_list), std::move(sync_tokens));
+#elif defined(OS_WIN)
+  auto& locks = pending_overlay_locks_.back();
   std::vector<gpu::SyncToken> sync_tokens;
   for (auto& dc_layer_overlay : current_frame()->overlay_list) {
     for (size_t i = 0; i < DCLayerOverlay::kNumResources; ++i) {
@@ -2072,25 +2115,29 @@ void SkiaRenderer::ScheduleDCLayers() {
       if (resource_id == kInvalidResourceId)
         break;
 
-      // Resources will be unlocked after the next call to SwapBuffers().
-      auto* image_context =
-          lock_set_for_external_use_->LockResource(resource_id, true);
+      // Resources will be unlocked after the next SwapBuffers() is completed.
+      locks.emplace_back(resource_provider_, resource_id);
+      auto& lock = locks.back();
 
       // Sync tokens ensure the texture to be overlaid is available before
       // scheduling it for display.
-      DCHECK(image_context->mailbox_holder().sync_token.HasData());
-      sync_tokens.push_back(image_context->mailbox_holder().sync_token);
+      if (lock.sync_token().HasData())
+        sync_tokens.push_back(lock.sync_token());
 
-      dc_layer_overlay.mailbox[i] = image_context->mailbox_holder().mailbox;
+      dc_layer_overlay.mailbox[i] = lock.mailbox();
     }
     DCHECK(!dc_layer_overlay.mailbox[0].IsZero());
   }
-
-  has_locked_overlay_resources_ = true;
-  skia_output_surface_->ScheduleDCLayers(
+  skia_output_surface_->ScheduleOverlays(
       std::move(current_frame()->overlay_list), std::move(sync_tokens));
-}
+#elif defined(OS_MACOSX) || defined(USE_OZONE)
+  NOTIMPLEMENTED_LOG_ONCE();
+#else
+  // For platforms doesn't support overlays, the current_frame()->overlay_list
+  // should be empty, and here should not be reached.
+  NOTREACHED();
 #endif
+}
 
 sk_sp<SkColorFilter> SkiaRenderer::GetColorFilter(const gfx::ColorSpace& src,
                                                   const gfx::ColorSpace& dst,
@@ -2110,14 +2157,10 @@ sk_sp<SkColorFilter> SkiaRenderer::GetColorFilter(const gfx::ColorSpace& src,
     std::unique_ptr<gfx::ColorTransform> transform =
         gfx::ColorTransform::NewColorTransform(
             adjusted_src, dst, gfx::ColorTransform::Intent::INTENT_PERCEPTUAL);
-    // TODO(backer): Support lookup table transforms (e.g.
-    // COLOR_CONVERSION_MODE_LUT).
-    if (!transform->CanGetShaderSource())
-      return nullptr;
 
     const char* hdr = R"(
-layout(ctype=float) uniform half offset;
-layout(ctype=float) uniform half multiplier;
+uniform half offset;
+uniform half multiplier;
 
 void main(inout half4 color) {
   // un-premultiply alpha
@@ -2262,19 +2305,26 @@ SkiaRenderer::DrawRPDQParams SkiaRenderer::CalculateRPDQParams(
     const base::Optional<gfx::RRectF> backdrop_filter_bounds =
         BackdropFilterBoundsForPass(quad->render_pass_id);
     if (backdrop_filter_bounds) {
-      rpdq_params.backdrop_filter_bounds = *backdrop_filter_bounds;
-      // Scale by the filter's scale, but don't apply filter origin
-      rpdq_params.backdrop_filter_bounds->Scale(quad->filters_scale.x(),
-                                                quad->filters_scale.y());
+      // The backdrop filters effect will be cropped by these bounds. If the
+      // bounds are empty, discard the backdrop filter now since none of it
+      // would have been visible anyways.
+      if (backdrop_filter_bounds->IsEmpty()) {
+        rpdq_params.backdrop_filter = nullptr;
+      } else {
+        rpdq_params.backdrop_filter_bounds = *backdrop_filter_bounds;
+        // Scale by the filter's scale, but don't apply filter origin
+        rpdq_params.backdrop_filter_bounds->Scale(quad->filters_scale.x(),
+                                                  quad->filters_scale.y());
 
-      // If there are also regular image filters, they apply to the area of
-      // the backdrop_filter_bounds too, so expand the backdrop bounds and join
-      // it with the main filter bounds.
-      if (rpdq_params.image_filter) {
-        gfx::Rect backdrop_rect =
-            gfx::ToEnclosingRect(rpdq_params.backdrop_filter_bounds->rect());
-        rpdq_params.filter_bounds.Union(
-            filters->MapRect(backdrop_rect, local_matrix));
+        // If there are also regular image filters, they apply to the area of
+        // the backdrop_filter_bounds too, so expand the backdrop bounds and
+        // join it with the main filter bounds.
+        if (rpdq_params.image_filter) {
+          gfx::Rect backdrop_rect =
+              gfx::ToEnclosingRect(rpdq_params.backdrop_filter_bounds->rect());
+          rpdq_params.filter_bounds.Union(
+              filters->MapRect(backdrop_rect, local_matrix));
+        }
       }
     }
   }

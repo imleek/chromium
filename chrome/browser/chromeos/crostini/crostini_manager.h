@@ -16,15 +16,17 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/unguessable_token.h"
-#include "chrome/browser/chromeos/crostini/crostini_installer_types.mojom.h"
+#include "chrome/browser/chromeos/crostini/crostini_installer_types.mojom-forward.h"
 #include "chrome/browser/chromeos/crostini/crostini_simple_types.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/vm_starting_observer.h"
 #include "chrome/browser/component_updater/cros_component_installer_chromeos.h"
 #include "chrome/browser/ui/browser.h"
+#include "chromeos/dbus/anomaly_detector/anomaly_detector.pb.h"
+#include "chromeos/dbus/anomaly_detector_client.h"
 #include "chromeos/dbus/cicerone/cicerone_service.pb.h"
 #include "chromeos/dbus/cicerone_client.h"
-#include "chromeos/dbus/concierge/service.pb.h"
+#include "chromeos/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -39,11 +41,13 @@ class LinuxPackageOperationProgressObserver {
   // A successfully started package install will continually fire progress
   // events until it returns a status of SUCCEEDED or FAILED. The
   // |progress_percent| field is given as a percentage of the given step,
-  // DOWNLOADING or INSTALLING.
+  // DOWNLOADING or INSTALLING. If |status| is FAILED, the |error_message|
+  // will contain output of the failing installation command.
   virtual void OnInstallLinuxPackageProgress(
       const ContainerId& container_id,
       InstallLinuxPackageProgressStatus status,
-      int progress_percent) = 0;
+      int progress_percent,
+      const std::string& error_message) = 0;
 
   // A successfully started package uninstall will continually fire progress
   // events until it returns a status of SUCCEEDED or FAILED.
@@ -119,6 +123,7 @@ class VmShutdownObserver : public base::CheckedObserver {
 // possible. The existence of Cicerone is abstracted behind this class and
 // only the Concierge name is exposed outside of here.
 class CrostiniManager : public KeyedService,
+                        public chromeos::AnomalyDetectorClient::Observer,
                         public chromeos::ConciergeClient::VmObserver,
                         public chromeos::ConciergeClient::ContainerObserver,
                         public chromeos::CiceroneClient::Observer,
@@ -137,19 +142,19 @@ class CrostiniManager : public KeyedService,
   class RestartObserver {
    public:
     virtual ~RestartObserver() {}
-    virtual void OnStageStarted(mojom::InstallerState stage) = 0;
-    virtual void OnComponentLoaded(CrostiniResult result) = 0;
-    virtual void OnConciergeStarted(bool success) = 0;
+    virtual void OnStageStarted(mojom::InstallerState stage) {}
+    virtual void OnComponentLoaded(CrostiniResult result) {}
+    virtual void OnConciergeStarted(bool success) {}
     virtual void OnDiskImageCreated(bool success,
                                     vm_tools::concierge::DiskImageStatus status,
-                                    int64_t disk_size_available) = 0;
-    virtual void OnVmStarted(bool success) = 0;
-    virtual void OnContainerDownloading(int32_t download_percent) = 0;
-    virtual void OnContainerCreated(CrostiniResult result) = 0;
-    virtual void OnContainerSetup(bool success) = 0;
-    virtual void OnContainerStarted(CrostiniResult result) = 0;
-    virtual void OnSshKeysFetched(bool success) = 0;
-    virtual void OnContainerMounted(bool success) = 0;
+                                    int64_t disk_size_available) {}
+    virtual void OnVmStarted(bool success) {}
+    virtual void OnContainerDownloading(int32_t download_percent) {}
+    virtual void OnContainerCreated(CrostiniResult result) {}
+    virtual void OnContainerSetup(bool success) {}
+    virtual void OnContainerStarted(CrostiniResult result) {}
+    virtual void OnSshKeysFetched(bool success) {}
+    virtual void OnContainerMounted(bool success) {}
   };
 
   struct RestartOptions {
@@ -232,6 +237,8 @@ class CrostiniManager : public KeyedService,
       std::string name,
       // Path to the disk image on the host.
       const base::FilePath& disk_path,
+      // The number of logical CPU cores that are currently disabled.
+      size_t num_cores_disabled,
       BoolCallback callback);
 
   // Checks the arguments for stopping a Termina VM. Stops the Termina VM via
@@ -397,14 +404,6 @@ class CrostiniManager : public KeyedService,
                        uint8_t guest_port,
                        BoolCallback callback);
 
-  // Lists USB devices attached to a guest VM.
-  // TODO(jopra): Rename to reflect that this now lists the mount points for USB
-  // devices.
-  using ListUsbDevicesCallback = base::OnceCallback<
-      void(bool success, std::vector<std::pair<std::string, uint8_t>> devices)>;
-  void ListUsbDevices(const std::string& vm_name,
-                      ListUsbDevicesCallback callback);
-
   using RestartId = int;
   static const RestartId kUninitializedRestartId = -1;
   // Runs all the steps required to restart the given crostini vm and container.
@@ -475,6 +474,10 @@ class CrostiniManager : public KeyedService,
   // Add/remove vm starting observers.
   void AddVmStartingObserver(chromeos::VmStartingObserver* observer);
   void RemoveVmStartingObserver(chromeos::VmStartingObserver* observer);
+
+  // AnomalyDetectorClient::Observer:
+  void OnGuestFileCorruption(
+      const anomaly_detector::GuestFileCorruptionSignal& signal) override;
 
   // ConciergeClient::VmObserver:
   void OnVmStarted(const vm_tools::concierge::VmStartedSignal& signal) override;
@@ -631,7 +634,7 @@ class CrostiniManager : public KeyedService,
       CrostiniResultCallback callback,
       bool is_update_checked,
       component_updater::CrOSComponentManager::Error error,
-      const base::FilePath& result);
+      const base::FilePath& path);
 
   // Callback for CrostiniClient::StartConcierge. Called after the
   // DebugDaemon service method finishes.
@@ -755,12 +758,6 @@ class CrostiniManager : public KeyedService,
       device::mojom::UsbDeviceInfoPtr device,
       BoolCallback callback,
       base::Optional<vm_tools::concierge::DetachUsbDeviceResponse> response);
-
-  // Callback for CrostiniManager::ListUsbDevices
-  void OnListUsbDevices(
-      const std::string& vm_name,
-      ListUsbDevicesCallback callback,
-      base::Optional<vm_tools::concierge::ListUsbDeviceResponse> response);
 
   // Callback for AnsibleManagementService::ConfigureDefaultContainer
   void OnDefaultContainerConfigured(bool success);

@@ -505,8 +505,20 @@ void FidoCableDiscovery::CableDeviceFound(BluetoothAdapter* adapter,
   active_devices_.insert(device_address);
   active_authenticator_eids_.insert(maybe_result->eid);
 
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+  // Speed up GATT service discovery on ChromeOS/BlueZ.
+  // SetConnectionLatency() is NOTIMPLEMENTED() on other platforms.
+  if (base::FeatureList::IsEnabled(device::kWebAuthCableLowLatency)) {
+    device->SetConnectionLatency(BluetoothDevice::CONNECTION_LATENCY_LOW,
+                                 base::DoNothing(), base::BindRepeating([]() {
+                                   FIDO_LOG(ERROR)
+                                       << "SetConnectionLatency() failed";
+                                 }));
+  }
+#endif  // defined(OS_CHROMEOS) || defined(OS_LINUX)
+
   auto cable_device =
-      std::make_unique<FidoCableDevice>(adapter, device->GetAddress());
+      std::make_unique<FidoCableDevice>(adapter, device_address);
   StopAdvertisements(
       base::BindOnce(&FidoCableDiscovery::ConductEncryptionHandshake,
                      weak_factory_.GetWeakPtr(), std::move(cable_device),

@@ -55,11 +55,6 @@ cr.define('settings_autofill_page', function() {
             type: chrome.settingsPrivate.PrefType.BOOLEAN,
             value: true,
           },
-          {
-            key: 'profile.password_manager_leak_detection',
-            type: chrome.settingsPrivate.PrefType.BOOLEAN,
-            value: true,
-          },
         ]));
 
         CrSettingsPrefs.initialized.then(function() {
@@ -121,8 +116,9 @@ cr.define('settings_autofill_page', function() {
     let paymentsManager;
 
 
-    setup(function() {
+    setup(async function() {
       PolymerTest.clearBody();
+      await settings.forceLazyLoaded();
 
       // Override the PasswordManagerImpl for testing.
       passwordManager = new TestPasswordManagerProxy();

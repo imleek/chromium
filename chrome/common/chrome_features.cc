@@ -63,10 +63,8 @@ const base::Feature kAppNotificationStatusMessaging{
 
 #if !defined(OS_ANDROID)
 // App Service related flags. See chrome/services/app_service/README.md.
-const base::Feature kAppServiceAsh{"AppServiceAsh",
-                                   base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kAppServiceInstanceRegistry{
-    "AppServiceInstanceRegistry", base::FEATURE_DISABLED_BY_DEFAULT};
+    "AppServiceInstanceRegistry", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kAppServiceIntentHandling{
     "AppServiceIntentHandling", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAppServiceShelf{"AppServiceShelf",
@@ -99,7 +97,7 @@ const base::Feature kBlockPromptsIfDismissedOften{
 // Enables or disables whether permission prompts are automatically blocked
 // after the user has ignored them too many times.
 const base::Feature kBlockPromptsIfIgnoredOften{
-    "BlockPromptsIfIgnoredOften", base::FEATURE_DISABLED_BY_DEFAULT};
+    "BlockPromptsIfIgnoredOften", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Once the user declines a notification permission prompt in a WebContents,
 // automatically dismiss subsequent prompts in the same WebContents, from any
@@ -107,11 +105,6 @@ const base::Feature kBlockPromptsIfIgnoredOften{
 const base::Feature kBlockRepeatedNotificationPermissionPrompts{
     "BlockRepeatedNotificationPermissionPrompts",
     base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Fixes for browser hang bugs are deployed in a field trial in order to measure
-// their impact. See crbug.com/478209.
-const base::Feature kBrowserHangFixesExperiment{
-    "BrowserHangFixesExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables or disables redirecting users who get an interstitial when
 // accessing https://support.google.com/chrome/answer/6098869 to local
@@ -147,7 +140,7 @@ const base::Feature kThirdPartyModulesBlocking{
 // This is a MUST-level requirement of TLS 1.3, but may have compatibility
 // issues with some outdated buggy TLS-terminating proxies.
 const base::Feature kTLS13HardeningForLocalAnchors{
-    "TLS13HardeningForLocalAnchors", base::FEATURE_DISABLED_BY_DEFAULT};
+    "TLS13HardeningForLocalAnchors", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_MACOSX)
 // Enables the dual certificate verification trial feature.
@@ -213,10 +206,6 @@ const base::Feature kCrostiniAnsibleSoftwareManagement{
 const base::Feature kCrostiniForceClose{"CrostiniForceClose",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables or disables the UI overhaul for Cups Printers in settings page.
-const base::Feature kCupsPrintersUiOverhaul{"CupsPrintersUiOverhaul",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Enable support for "Plugin VMs" on Chrome OS.
 const base::Feature kPluginVm{"PluginVm", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -236,7 +225,7 @@ const base::Feature kTerminalSystemAppSplits{"TerminalSystemAppSplits",
 
 // Enable uploading of a zip archive of system logs instead of individual files.
 const base::Feature kUploadZippedSystemLogs{"UploadZippedSystemLogs",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Allow a Wilco DTC (diagnostics and telemetry controller) on Chrome OS.
 // More info about the project may be found here:
@@ -249,8 +238,14 @@ const base::Feature kDesktopCaptureTabSharingInfobar{
     "DesktopCaptureTabSharingInfobar", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables new Desktop PWA support for minimal-ui display mode.
-const base::Feature kDesktopMinimalUI{"DesktopMinimalUI",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kDesktopMinimalUI {
+  "DesktopMinimalUI",
+#if defined(OS_MACOSX)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
 
 // Enables or disables new Desktop PWAs implementation that does not use
 // extensions.
@@ -264,14 +259,8 @@ const base::Feature kDesktopPWAsCacheDuringDefaultInstall{
 
 // Enables local PWA installs to update their app manifest data if the site
 // changes its manifest.
-const base::Feature kDesktopPWAsLocalUpdating {
-  "DesktopPWAsLocalUpdating",
-#if defined(OS_CHROMEOS)
-      base::FEATURE_ENABLED_BY_DEFAULT
-#else
-      base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-};
+const base::Feature kDesktopPWAsLocalUpdating{"DesktopPWAsLocalUpdating",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables use of new Desktop PWAs browser controller (that uses the
 // universal web_app::AppRegistrar) by extensions-based bookmark apps. Note that
@@ -291,10 +280,6 @@ const base::Feature kDesktopPWAsUnifiedLaunch{
 // kDesktopPWAsWithoutExtensions to be enabled.
 const base::Feature kDesktopPWAsUSS{"DesktopPWAsUSS",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables or disables the ability to install PWAs from the omnibox.
-const base::Feature kDesktopPWAsOmniboxInstall{
-    "DesktopPWAsOmniboxInstall", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Disables downloads of unsafe file types over HTTP.
 const base::Feature kDisallowUnsafeHttpDownloads{
@@ -323,32 +308,31 @@ const base::Feature kDownloadsLocationChange{"DownloadsLocationChange",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
-// If enabled, Drive will use FCM for its invalidations.
-const base::Feature kDriveFcmInvalidations{"DriveFCMInvalidations",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
-
 // If enabled, policies will use FCM (Firebase Cloud Messaging) for its
 // invalidations.
 const base::Feature kPolicyFcmInvalidations{"PolicyFCMInvalidations",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables ambient authentication in incognito mode.
-// TODO(https://crbug.com/458508): Change to disabled by default after proper
-// notice to use the policy to activate when required, M79-M80.
+// Disables ambient authentication in incognito mode.
 const base::Feature kEnableAmbientAuthenticationInIncognito{
-    "EnableAmbientAuthenticationInIncognito", base::FEATURE_ENABLED_BY_DEFAULT};
+    "EnableAmbientAuthenticationInIncognito",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables ambient authentication in guest sessions.
-// TODO(https://crbug.com/458508): Change to disabled by default after proper
-// notice to use the policy to activate when required, M79-M80.
+// Disables ambient authentication in guest sessions.
 const base::Feature kEnableAmbientAuthenticationInGuestSession{
     "EnableAmbientAuthenticationInGuestSession",
-    base::FEATURE_ENABLED_BY_DEFAULT};
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if !defined(OS_ANDROID)
 // Upload enterprise cloud reporting without the extension.
 const base::Feature kEnterpriseReportingInBrowser{
     "EnterpriseReportingInBrowser", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
+#if defined(OS_CHROMEOS)
+// Upload enterprise cloud reporting from Chrome OS.
+const base::Feature kEnterpriseReportingInChromeOS{
+    "EnterpriseReportingInChromeOS", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -696,8 +680,8 @@ const char kSitePerProcessOnlyForHighMemoryClientsParamName[] =
 const base::Feature kStreamlinedUsbPrinterSetup{
     "StreamlinedUsbPrinterSetup", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables or disables the ability to add a Samba Share to the Files app
-const base::Feature kNativeSmb{"NativeSmb", base::FEATURE_ENABLED_BY_DEFAULT};
+// Enables or disables using smbfs for accessing SMB file shares.
+const base::Feature kSmbFs{"SmbFs", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
 
 // Enables or disables the ability to use the sound content setting to mute a

@@ -60,6 +60,7 @@ class MockAcceleratedVideoDecoder : public AcceleratedVideoDecoder {
   MOCK_METHOD0(Reset, void());
   MOCK_METHOD0(Decode, DecodeResult());
   MOCK_CONST_METHOD0(GetPicSize, gfx::Size());
+  MOCK_CONST_METHOD0(GetProfile, VideoCodecProfile());
   MOCK_CONST_METHOD0(GetVisibleRect, gfx::Rect());
   MOCK_CONST_METHOD0(GetRequiredNumOfPictures, size_t());
   MOCK_CONST_METHOD0(GetNumReferenceFrames, size_t());
@@ -83,7 +84,7 @@ class MockVaapiWrapper : public VaapiWrapper {
 
 class MockVaapiPicture : public VaapiPicture {
  public:
-  MockVaapiPicture(const scoped_refptr<VaapiWrapper>& vaapi_wrapper,
+  MockVaapiPicture(scoped_refptr<VaapiWrapper> vaapi_wrapper,
                    const MakeGLContextCurrentCallback& make_context_current_cb,
                    const BindGLImageCallback& bind_image_cb,
                    int32_t picture_buffer_id,
@@ -91,7 +92,7 @@ class MockVaapiPicture : public VaapiPicture {
                    uint32_t texture_id,
                    uint32_t client_texture_id,
                    uint32_t texture_target)
-      : VaapiPicture(vaapi_wrapper,
+      : VaapiPicture(std::move(vaapi_wrapper),
                      make_context_current_cb,
                      bind_image_cb,
                      picture_buffer_id,
@@ -108,8 +109,7 @@ class MockVaapiPicture : public VaapiPicture {
       gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle) override {
     return true;
   }
-  bool DownloadFromSurface(
-      const scoped_refptr<VASurface>& va_surface) override {
+  bool DownloadFromSurface(scoped_refptr<VASurface> va_surface) override {
     return true;
   }
   bool AllowOverlay() const override { return false; }
@@ -126,7 +126,7 @@ class MockVaapiPictureFactory : public VaapiPictureFactory {
 
   MOCK_METHOD2(MockCreateVaapiPicture, void(VaapiWrapper*, const gfx::Size&));
   std::unique_ptr<VaapiPicture> Create(
-      const scoped_refptr<VaapiWrapper>& vaapi_wrapper,
+      scoped_refptr<VaapiWrapper> vaapi_wrapper,
       const MakeGLContextCurrentCallback& make_context_current_cb,
       const BindGLImageCallback& bind_image_cb,
       const PictureBuffer& picture_buffer) override {
@@ -134,7 +134,7 @@ class MockVaapiPictureFactory : public VaapiPictureFactory {
     const uint32_t client_texture_id = picture_buffer.client_texture_ids()[0];
     MockCreateVaapiPicture(vaapi_wrapper.get(), picture_buffer.size());
     return std::make_unique<MockVaapiPicture>(
-        vaapi_wrapper, make_context_current_cb, bind_image_cb,
+        std::move(vaapi_wrapper), make_context_current_cb, bind_image_cb,
         picture_buffer.id(), picture_buffer.size(), service_texture_id,
         client_texture_id, picture_buffer.texture_target());
   }
@@ -171,7 +171,7 @@ class VaapiVideoDecodeAcceleratorTest : public TestWithParam<TestParams>,
 
     // TODO(crbug.com/917999): add IMPORT mode to test variations.
     vda_.output_mode_ = VideoDecodeAccelerator::Config::OutputMode::ALLOCATE;
-
+    vda_.profile_ = GetParam().video_codec;
     vda_.buffer_allocation_mode_ =
         GetParam().decode_using_client_picture_buffers
             ? VaapiVideoDecodeAccelerator::BufferAllocationMode::kNone
@@ -210,7 +210,7 @@ class VaapiVideoDecodeAcceleratorTest : public TestWithParam<TestParams>,
   }
 
   // Try and QueueInputBuffer()s, where we pretend that |mock_decoder_| requests
-  // to kAllocateNewSurfaces: |vda_| will ping us to ProvidePictureBuffers().
+  // to kConfigChange: |vda_| will ping us to ProvidePictureBuffers().
   // If |expect_dismiss_picture_buffers| is signalled, then we expect as well
   // that |vda_| will emit |num_picture_buffers_to_dismiss| DismissPictureBuffer
   // calls.
@@ -226,11 +226,13 @@ class VaapiVideoDecodeAcceleratorTest : public TestWithParam<TestParams>,
                 SetStream(_, IsExpectedDecoderBuffer(kInputSize, nullptr)))
         .WillOnce(Return());
     EXPECT_CALL(*mock_decoder_, Decode())
-        .WillOnce(Return(AcceleratedVideoDecoder::kAllocateNewSurfaces));
+        .WillOnce(Return(AcceleratedVideoDecoder::kConfigChange));
 
+    EXPECT_CALL(*mock_decoder_, GetPicSize()).WillOnce(Return(picture_size));
+    EXPECT_CALL(*mock_decoder_, GetProfile())
+        .WillOnce(Return(GetParam().video_codec));
     EXPECT_CALL(*mock_decoder_, GetRequiredNumOfPictures())
         .WillOnce(Return(num_pictures));
-    EXPECT_CALL(*mock_decoder_, GetPicSize()).WillOnce(Return(picture_size));
     const size_t kNumReferenceFrames = num_pictures / 2;
     EXPECT_CALL(*mock_decoder_, GetNumReferenceFrames())
         .WillOnce(Return(kNumReferenceFrames));
@@ -485,7 +487,7 @@ constexpr TestParams kTestCases[] = {
     {VP9PROFILE_MIN, false /* decode_using_client_picture_buffers */},
     {VP9PROFILE_MIN, true /* decode_using_client_picture_buffers */}};
 
-INSTANTIATE_TEST_SUITE_P(/* No prefix. */,
+INSTANTIATE_TEST_SUITE_P(All,
                          VaapiVideoDecodeAcceleratorTest,
                          ValuesIn(kTestCases));
 

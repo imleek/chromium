@@ -101,7 +101,10 @@ class TestAppListConfigProviderObserver
 
 class AppListConfigProviderTest : public testing::Test {
  public:
-  AppListConfigProviderTest() = default;
+  AppListConfigProviderTest() {
+    scoped_feature_list_.InitWithFeatures({app_list_features::kScalableAppList},
+                                          {});
+  }
   ~AppListConfigProviderTest() override = default;
 
   void SetUp() override {
@@ -117,15 +120,39 @@ class AppListConfigProviderTest : public testing::Test {
     AppListConfigProvider::Get().ResetForTesting();
   }
 
+  base::test::ScopedFeatureList scoped_feature_list_;
   TestAppListConfigProviderObserver registry_observer_;
+};
 
-  DISALLOW_COPY_AND_ASSIGN(AppListConfigProviderTest);
+class SharedConfigAppListConfigProviderTest : public testing::Test {
+ public:
+  SharedConfigAppListConfigProviderTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {}, {app_list_features::kScalableAppList});
+  }
+  ~SharedConfigAppListConfigProviderTest() override = default;
+
+  void SetUp() override {
+    // AppListConfigProvider is base::NoDestruct, which means it may not be
+    // cleared between test runs - clear the registry to ensure this test starts
+    // with the clean app list config registry.
+    AppListConfigProvider::Get().ResetForTesting();
+    AppListConfigProvider::Get().AddObserver(&registry_observer_);
+  }
+
+  void TearDown() override {
+    AppListConfigProvider::Get().RemoveObserver(&registry_observer_);
+    AppListConfigProvider::Get().ResetForTesting();
+  }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
+  TestAppListConfigProviderObserver registry_observer_;
 };
 
 // Tests that shared AppListConfig type is considered available by default, and
 // that AppListConfig::instance() can be used to access the default, unscaled
 // ash::AppListConfigType::kShared app list config.
-TEST_F(AppListConfigProviderTest, SharedInstance) {
+TEST_F(SharedConfigAppListConfigProviderTest, SharedInstance) {
   AppListConfig* shared_config = AppListConfigProvider::Get().GetConfigForType(
       ash::AppListConfigType::kShared, false);
   ASSERT_TRUE(shared_config);
@@ -143,10 +170,6 @@ TEST_F(AppListConfigProviderTest, SharedInstance) {
 // Tests GetConfigForType behavior for app list configs associated with
 // kScalableAppList feature.
 TEST_F(AppListConfigProviderTest, NonSharedConfigGetters) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({app_list_features::kScalableAppList},
-                                       {});
-
   std::vector<ash::AppListConfigType> test_cases = {
       ash::AppListConfigType::kSmall, ash::AppListConfigType::kMedium,
       ash::AppListConfigType::kLarge};
@@ -187,10 +210,6 @@ TEST_F(AppListConfigProviderTest, NonSharedConfigGetters) {
 // Tests calling CreateConfigByDisplayWorkArea creates the appropriate app list
 // configuration depending on display size.
 TEST_F(AppListConfigProviderTest, CreateConfigByDisplayWorkArea) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({app_list_features::kScalableAppList},
-                                       {});
-
   const struct TestCase {
     gfx::Size work_area_size;
     ash::AppListConfigType config_type;
@@ -211,8 +230,8 @@ TEST_F(AppListConfigProviderTest, CreateConfigByDisplayWorkArea) {
 
     std::unique_ptr<AppListConfig> config =
         AppListConfigProvider::Get().CreateForAppListWidget(
-            test_case.work_area_size, 32 /*min_horizontal_margin*/,
-            56 /*shelf_height*/, nullptr);
+            test_case.work_area_size, gfx::Insets(0, 0, 56, 0) /*shelf_insets*/,
+            nullptr);
 
     ASSERT_TRUE(config.get());
     EXPECT_EQ(test_case.config_type, config->type());
@@ -235,8 +254,8 @@ TEST_F(AppListConfigProviderTest, CreateConfigByDisplayWorkArea) {
     // Verify CreateForAppListWidget returns nullptr if the created config would
     // be the same as |config|.
     EXPECT_FALSE(AppListConfigProvider::Get().CreateForAppListWidget(
-        test_case.work_area_size, 32 /*min_horizontal_margin*/,
-        56 /*shelf_height*/, config.get()));
+        test_case.work_area_size, gfx::Insets(0, 0, 56, 0) /*shelf_insets*/,
+        config.get()));
   }
 }
 
@@ -244,40 +263,31 @@ TEST_F(AppListConfigProviderTest, CreateConfigByDisplayWorkArea) {
 // value of the old config passed to the method.
 TEST_F(AppListConfigProviderTest,
        CreateConfigByDisplayWorkAreaWithNonNullConfig) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({app_list_features::kScalableAppList},
-                                       {});
-
   // Create initial configuration.
   std::unique_ptr<AppListConfig> config =
       AppListConfigProvider::Get().CreateForAppListWidget(
-          gfx::Size(1200, 768), 32 /*min_horizontal_margin*/,
-          56 /*shelf_height*/, nullptr);
+          gfx::Size(1200, 768), gfx::Insets(0, 0, 56, 0) /*shelf_insets*/,
+          nullptr);
   ASSERT_TRUE(config);
   EXPECT_EQ(ash::AppListConfigType::kLarge, config->type());
 
   // Verify CreateForAppListWidget returns nullptr if the created config would
   // be the same as |config|.
   EXPECT_FALSE(AppListConfigProvider::Get().CreateForAppListWidget(
-      gfx::Size(768, 1200), 32 /*min_horizontal_margin*/, 56 /*shelf_height*/,
+      gfx::Size(768, 1200), gfx::Insets(0, 0, 56, 0) /*shelf_insets*/,
       config.get()));
 
   // Create different config.
   std::unique_ptr<AppListConfig> updated_config =
       AppListConfigProvider::Get().CreateForAppListWidget(
-          gfx::Size(960, 600), 32 /*min_horizontal_margin*/,
-          56 /*shelf_height*/, config.get());
+          gfx::Size(960, 600), gfx::Insets(0, 0, 56, 0) /*shelf_insets*/,
+          config.get());
   ASSERT_TRUE(updated_config);
   EXPECT_EQ(ash::AppListConfigType::kMedium, updated_config->type());
 }
 
-TEST_F(AppListConfigProviderTest,
+TEST_F(SharedConfigAppListConfigProviderTest,
        CreateScaledConfigByDisplayWorkAreaLandscape) {
-  // Explicitly disable kScalableAppList feature.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({},
-                                       {app_list_features::kScalableAppList});
-
   const int kMinGridWidth = 560;   // 112 * 5
   const int kMinGridHeight = 480;  // 120 * 4;
 
@@ -285,7 +295,7 @@ TEST_F(AppListConfigProviderTest,
   std::unique_ptr<AppListConfig> config =
       AppListConfigProvider::Get().CreateForAppListWidget(
           gfx::Size(1200, 768) /*display_work_area_size*/,
-          32 /*min_horizontal_margin*/, 56 /*shelf_height*/, nullptr);
+          gfx::Insets(0, 0, 56, 0) /*shelf_insets*/, nullptr);
   ASSERT_TRUE(config.get());
   EXPECT_EQ(ash::AppListConfigType::kShared, config->type());
   EXPECT_EQ(1, config->scale_x());
@@ -304,12 +314,12 @@ TEST_F(AppListConfigProviderTest,
   // previous one.
   EXPECT_FALSE(AppListConfigProvider::Get().CreateForAppListWidget(
       gfx::Size(1200, 768) /*display_work_area_size*/,
-      32 /*min_horizontal_margin*/, 56 /*shelf_height*/, config.get()));
+      gfx::Insets(0, 0, 56, 0) /*shelf_insets*/, config.get()));
 
   // The app list has to be scaled down horizontally.
   config = AppListConfigProvider::Get().CreateForAppListWidget(
       gfx::Size(800, 700) /*display_work_area_size*/,
-      150 /*min_horizontal_margin*/, 56 /*shelf_height*/, config.get());
+      gfx::Insets(0, 102, 56, 102) /*shelf_insets*/, config.get());
   ASSERT_TRUE(config);
   EXPECT_EQ(ash::AppListConfigType::kShared, config->type());
   EXPECT_EQ(500.f / kMinGridWidth, config->scale_x());
@@ -324,7 +334,7 @@ TEST_F(AppListConfigProviderTest,
   // The app list has to be scaled down vertically.
   config = AppListConfigProvider::Get().CreateForAppListWidget(
       gfx::Size(800, 624) /*display_work_area_size*/,
-      32 /*min_horizontal_margin*/, 56 /*shelf_height*/, config.get());
+      gfx::Insets(0, 0, 56, 0) /*shelf_insets*/, config.get());
   ASSERT_TRUE(config);
   EXPECT_EQ(ash::AppListConfigType::kShared, config->type());
   EXPECT_EQ(1, config->scale_x());
@@ -341,7 +351,7 @@ TEST_F(AppListConfigProviderTest,
   // Both vertical and horizontal scaling required.
   config = AppListConfigProvider::Get().CreateForAppListWidget(
       gfx::Size(800, 624) /*display_work_area_size*/,
-      150 /*min_horizontal_margin*/, 56 /*shelf_height*/, config.get());
+      gfx::Insets(0, 102, 56, 102) /*shelf_insets*/, config.get());
   ASSERT_TRUE(config);
   EXPECT_EQ(ash::AppListConfigType::kShared, config->type());
   EXPECT_EQ(500.f / kMinGridWidth, config->scale_x());
@@ -358,12 +368,8 @@ TEST_F(AppListConfigProviderTest,
                                 "Horizontal and vertical scaling");
 }
 
-TEST_F(AppListConfigProviderTest, CreateScaledConfigByDisplayWorkAreaPortrait) {
-  // Explicitly disable kScalableAppList feature.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures({},
-                                       {app_list_features::kScalableAppList});
-
+TEST_F(SharedConfigAppListConfigProviderTest,
+       CreateScaledConfigByDisplayWorkAreaPortrait) {
   const int kMinGridWidth = 448;   // 112 * 4
   const int kMinGridHeight = 600;  // 120 * 5;
 
@@ -371,7 +377,7 @@ TEST_F(AppListConfigProviderTest, CreateScaledConfigByDisplayWorkAreaPortrait) {
   std::unique_ptr<AppListConfig> config =
       AppListConfigProvider::Get().CreateForAppListWidget(
           gfx::Size(768, 1200) /*display_work_area_size*/,
-          32 /*min_horizontal_margin*/, 56 /*shelf_height*/, nullptr);
+          gfx::Insets(0, 0, 56, 0) /*shelf_insets*/, nullptr);
   ASSERT_TRUE(config.get());
   EXPECT_EQ(ash::AppListConfigType::kShared, config->type());
   EXPECT_EQ(1, config->scale_x());
@@ -390,12 +396,12 @@ TEST_F(AppListConfigProviderTest, CreateScaledConfigByDisplayWorkAreaPortrait) {
   // previous one.
   EXPECT_FALSE(AppListConfigProvider::Get().CreateForAppListWidget(
       gfx::Size(768, 1200) /*display_work_area_size*/,
-      32 /*min_horizontal_margin*/, 56 /*shelf_height*/, config.get()));
+      gfx::Insets(0, 0, 56, 0) /*shelf_insets*/, config.get()));
 
   // The app list has to be scaled down horizontally.
   config = AppListConfigProvider::Get().CreateForAppListWidget(
       gfx::Size(600, 800) /*display_work_area_size*/,
-      100 /*min_horizontal_margin*/, 56 /*shelf_height*/, config.get());
+      gfx::Insets(0, 52, 56, 52) /*shelf_insets*/, config.get());
   ASSERT_TRUE(config);
   EXPECT_EQ(ash::AppListConfigType::kShared, config->type());
   EXPECT_EQ(400.f / kMinGridWidth, config->scale_x());
@@ -410,7 +416,7 @@ TEST_F(AppListConfigProviderTest, CreateScaledConfigByDisplayWorkAreaPortrait) {
   // The app list has to be scaled down vertically.
   config = AppListConfigProvider::Get().CreateForAppListWidget(
       gfx::Size(600, 624) /*display_work_area_size*/,
-      32 /*min_horizontal_margin*/, 56 /*shelf_height*/, config.get());
+      gfx::Insets(0, 0, 56, 0) /*shelf_insets*/, config.get());
   ASSERT_TRUE(config);
   EXPECT_EQ(ash::AppListConfigType::kShared, config->type());
   EXPECT_EQ(1, config->scale_x());
@@ -427,7 +433,7 @@ TEST_F(AppListConfigProviderTest, CreateScaledConfigByDisplayWorkAreaPortrait) {
   // Both vertical and horizontal scaling required.
   config = AppListConfigProvider::Get().CreateForAppListWidget(
       gfx::Size(600, 732) /*display_work_area_size*/,
-      150 /*min_horizontal_margin*/, 56 /*shelf_height*/, config.get());
+      gfx::Insets(0, 102, 56, 102) /*shelf_insets*/, config.get());
   ASSERT_TRUE(config);
   EXPECT_EQ(ash::AppListConfigType::kShared, config->type());
   EXPECT_EQ(300.f / kMinGridWidth, config->scale_x());

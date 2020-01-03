@@ -16,7 +16,7 @@
             {
               "cipd_package": "chromium/chrome/test/chromedriver/cipd",
               "location": "chrome/test/chromedriver/cipd",
-              "revision": "PCCG9OmVmpDaf9oaKhJ3sSxXgINilZ9qpl4oaRU0R60C"
+              "revision": "tLMjWvOcbQX4nMo5WnMsKWn0aaVludzuSX9yiVFUCoUC"
             }
           ],
           "dimension_sets": [
@@ -31,7 +31,8 @@
           "expiration": 18000,
           "hard_timeout": 14400,
           "shards": 15
-        }
+        },
+        "test_target": "//chrome/android:chrome_public_wpt"
       },
       {
         "isolate_name": "system_webview_wpt",
@@ -46,7 +47,7 @@
             {
               "cipd_package": "chromium/chrome/test/chromedriver/cipd",
               "location": "chrome/test/chromedriver/cipd",
-              "revision": "PCCG9OmVmpDaf9oaKhJ3sSxXgINilZ9qpl4oaRU0R60C"
+              "revision": "tLMjWvOcbQX4nMo5WnMsKWn0aaVludzuSX9yiVFUCoUC"
             }
           ],
           "dimension_sets": [
@@ -61,7 +62,8 @@
           "expiration": 18000,
           "hard_timeout": 14400,
           "shards": 15
-        }
+        },
+        "test_target": "//android_webview/test:system_webview_wpt"
       }
     ]
   },
@@ -111,7 +113,8 @@
             }
           ]
         },
-        "test": "android_webview_unittests"
+        "test": "android_webview_unittests",
+        "test_target": "//android_webview/test:android_webview_unittests"
       },
       {
         "args": [
@@ -157,7 +160,8 @@
             }
           ]
         },
-        "test": "system_webview_shell_layout_test_apk"
+        "test": "system_webview_shell_layout_test_apk",
+        "test_target": "//android_webview/tools/system_webview_shell:system_webview_shell_layout_test_apk"
       },
       {
         "args": [
@@ -207,9 +211,10 @@
               "name": "shard #${SHARD_INDEX} logcats"
             }
           ],
-          "shards": 3
+          "shards": 2
         },
-        "test": "webview_cts_tests"
+        "test": "webview_cts_tests",
+        "test_target": "//android_webview/test:webview_cts_tests"
       },
       {
         "args": [
@@ -256,7 +261,8 @@
           ],
           "shards": 12
         },
-        "test": "webview_instrumentation_test_apk"
+        "test": "webview_instrumentation_test_apk",
+        "test_target": "//android_webview/test:webview_instrumentation_test_apk"
       },
       {
         "args": [
@@ -302,7 +308,8 @@
             }
           ]
         },
-        "test": "webview_ui_test_app_test_apk"
+        "test": "webview_ui_test_app_test_apk",
+        "test_target": "//android_webview/tools/automated_ui_tests:webview_ui_test_app_test_apk"
       }
     ],
     "isolated_scripts": [
@@ -322,7 +329,7 @@
             {
               "cipd_package": "chromium/chrome/test/chromedriver/cipd",
               "location": "chrome/test/chromedriver/cipd",
-              "revision": "PCCG9OmVmpDaf9oaKhJ3sSxXgINilZ9qpl4oaRU0R60C"
+              "revision": "tLMjWvOcbQX4nMo5WnMsKWn0aaVludzuSX9yiVFUCoUC"
             }
           ],
           "dimension_sets": [
@@ -337,7 +344,8 @@
           "expiration": 18000,
           "hard_timeout": 14400,
           "shards": 15
-        }
+        },
+        "test_target": "//chrome/android:chrome_public_wpt"
       },
       {
         "args": [
@@ -355,7 +363,7 @@
             {
               "cipd_package": "chromium/chrome/test/chromedriver/cipd",
               "location": "chrome/test/chromedriver/cipd",
-              "revision": "PCCG9OmVmpDaf9oaKhJ3sSxXgINilZ9qpl4oaRU0R60C"
+              "revision": "tLMjWvOcbQX4nMo5WnMsKWn0aaVludzuSX9yiVFUCoUC"
             }
           ],
           "dimension_sets": [
@@ -370,42 +378,8 @@
           "expiration": 18000,
           "hard_timeout": 14400,
           "shards": 15
-        }
-      }
-    ]
-  },
-  "Memory Infra Tester": {
-    "isolated_scripts": [
-      {
-        "args": [
-          "--pageset-repeat=1",
-          "--benchmarks=heap_profiling.mobile.disabled,heap_profiling.mobile.native,heap_profiling.mobile.pseudo",
-          "-v",
-          "--output-format=chartjson",
-          "--browser=android-chromium"
-        ],
-        "isolate_name": "performance_test_suite",
-        "merge": {
-          "args": [
-            "--smoke-test-mode"
-          ],
-          "script": "//tools/perf/process_perf_results.py"
         },
-        "name": "heap_profiling.mobile",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "device_os": "KTU84P",
-              "device_type": "hammerhead",
-              "os": "Android"
-            }
-          ],
-          "expiration": 36000,
-          "hard_timeout": 10800,
-          "ignore_task_failure": false,
-          "io_timeout": 3600
-        }
+        "test_target": "//android_webview/test:system_webview_wpt"
       }
     ]
   },
@@ -456,7 +430,8 @@
             }
           ]
         },
-        "test": "android_browsertests"
+        "test": "android_browsertests",
+        "test_target": "//chrome/test:android_browsertests"
       },
       {
         "args": [
@@ -504,7 +479,8 @@
           ],
           "shards": 20
         },
-        "test": "chrome_public_test_apk"
+        "test": "chrome_public_test_apk",
+        "test_target": "//chrome/android:chrome_public_test_apk"
       },
       {
         "args": [
@@ -552,7 +528,8 @@
           ],
           "shards": 20
         },
-        "test": "content_browsertests"
+        "test": "content_browsertests",
+        "test_target": "//content/test:content_browsertests"
       },
       {
         "args": [
@@ -600,7 +577,8 @@
           ],
           "shards": 5
         },
-        "test": "content_shell_test_apk"
+        "test": "content_shell_test_apk",
+        "test_target": "//content/shell/android:content_shell_test_apk"
       },
       {
         "args": [
@@ -648,7 +626,8 @@
           ],
           "shards": 10
         },
-        "test": "content_unittests"
+        "test": "content_unittests",
+        "test_target": "//content/test:content_unittests"
       },
       {
         "args": [
@@ -696,7 +675,8 @@
           ],
           "shards": 10
         },
-        "test": "unit_tests"
+        "test": "unit_tests",
+        "test_target": "//chrome/test:unit_tests"
       }
     ]
   },
@@ -731,7 +711,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -755,7 +737,8 @@
             }
           ]
         },
-        "test": "android_browsertests"
+        "test": "android_browsertests",
+        "test_target": "//chrome/test:android_browsertests"
       },
       {
         "args": [
@@ -786,7 +769,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -810,7 +795,8 @@
             }
           ]
         },
-        "test": "android_webview_unittests"
+        "test": "android_webview_unittests",
+        "test_target": "//android_webview/test:android_webview_unittests"
       },
       {
         "args": [
@@ -841,7 +827,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -865,7 +853,8 @@
             }
           ]
         },
-        "test": "angle_unittests"
+        "test": "angle_unittests",
+        "test_target": "//third_party/angle/src/tests:angle_unittests"
       },
       {
         "args": [
@@ -896,7 +885,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -920,7 +911,8 @@
             }
           ]
         },
-        "test": "base_unittests"
+        "test": "base_unittests",
+        "test_target": "//base:base_unittests"
       },
       {
         "args": [
@@ -951,7 +943,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -975,7 +969,8 @@
             }
           ]
         },
-        "test": "base_util_unittests"
+        "test": "base_util_unittests",
+        "test_target": "//base/util:base_util_unittests"
       },
       {
         "args": [
@@ -1006,7 +1001,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1030,7 +1027,8 @@
             }
           ]
         },
-        "test": "blink_common_unittests"
+        "test": "blink_common_unittests",
+        "test_target": "//third_party/blink/common:blink_common_unittests"
       },
       {
         "args": [
@@ -1061,7 +1059,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1085,7 +1085,8 @@
             }
           ]
         },
-        "test": "blink_heap_unittests"
+        "test": "blink_heap_unittests",
+        "test_target": "//third_party/blink/renderer/platform/heap:blink_heap_unittests"
       },
       {
         "args": [
@@ -1116,7 +1117,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1140,7 +1143,8 @@
             }
           ]
         },
-        "test": "blink_platform_unittests"
+        "test": "blink_platform_unittests",
+        "test_target": "//third_party/blink/renderer/platform:blink_platform_unittests"
       },
       {
         "args": [
@@ -1172,7 +1176,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1197,7 +1203,8 @@
           ],
           "shards": 4
         },
-        "test": "blink_unittests"
+        "test": "blink_unittests",
+        "test_target": "//third_party/blink/renderer/controller:blink_unittests"
       },
       {
         "args": [
@@ -1228,7 +1235,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1252,7 +1261,8 @@
             }
           ]
         },
-        "test": "boringssl_crypto_tests"
+        "test": "boringssl_crypto_tests",
+        "test_target": "//third_party/boringssl:boringssl_crypto_tests"
       },
       {
         "args": [
@@ -1283,7 +1293,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1307,7 +1319,8 @@
             }
           ]
         },
-        "test": "boringssl_ssl_tests"
+        "test": "boringssl_ssl_tests",
+        "test_target": "//third_party/boringssl:boringssl_ssl_tests"
       },
       {
         "args": [
@@ -1338,7 +1351,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1362,7 +1377,8 @@
             }
           ]
         },
-        "test": "breakpad_unittests"
+        "test": "breakpad_unittests",
+        "test_target": "//third_party/breakpad:breakpad_unittests"
       },
       {
         "args": [
@@ -1393,7 +1409,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1417,7 +1435,8 @@
             }
           ]
         },
-        "test": "cacheinvalidation_unittests"
+        "test": "cacheinvalidation_unittests",
+        "test_target": "//third_party/cacheinvalidation:cacheinvalidation_unittests"
       },
       {
         "args": [
@@ -1449,7 +1468,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1473,7 +1494,8 @@
             }
           ]
         },
-        "test": "capture_unittests"
+        "test": "capture_unittests",
+        "test_target": "//media/capture:capture_unittests"
       },
       {
         "args": [
@@ -1504,7 +1526,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1528,7 +1552,8 @@
             }
           ]
         },
-        "test": "cast_unittests"
+        "test": "cast_unittests",
+        "test_target": "//media/cast:cast_unittests"
       },
       {
         "args": [
@@ -1559,7 +1584,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1583,7 +1610,8 @@
             }
           ]
         },
-        "test": "cc_unittests"
+        "test": "cc_unittests",
+        "test_target": "//cc:cc_unittests"
       },
       {
         "args": [
@@ -1614,7 +1642,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1638,7 +1668,8 @@
             }
           ]
         },
-        "test": "chrome_modern_public_bundle_fake_modules_smoke_test"
+        "test": "chrome_modern_public_bundle_fake_modules_smoke_test",
+        "test_target": "//chrome/android:chrome_modern_public_bundle_fake_modules_smoke_test"
       },
       {
         "args": [
@@ -1669,7 +1700,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1693,7 +1726,8 @@
             }
           ]
         },
-        "test": "chrome_modern_public_bundle_smoke_test"
+        "test": "chrome_modern_public_bundle_smoke_test",
+        "test_target": "//chrome/android:chrome_modern_public_bundle_smoke_test"
       },
       {
         "args": [
@@ -1724,7 +1758,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1748,7 +1784,8 @@
             }
           ]
         },
-        "test": "chrome_modern_public_smoke_test"
+        "test": "chrome_modern_public_smoke_test",
+        "test_target": "//chrome/android:chrome_modern_public_smoke_test"
       },
       {
         "args": [
@@ -1779,7 +1816,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1803,7 +1842,8 @@
             }
           ]
         },
-        "test": "chrome_public_smoke_test"
+        "test": "chrome_public_smoke_test",
+        "test_target": "//chrome/android:chrome_public_smoke_test"
       },
       {
         "args": [
@@ -1834,7 +1874,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1859,7 +1901,8 @@
           ],
           "shards": 20
         },
-        "test": "chrome_public_test_apk"
+        "test": "chrome_public_test_apk",
+        "test_target": "//chrome/android:chrome_public_test_apk"
       },
       {
         "args": [
@@ -1892,7 +1935,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1917,7 +1962,8 @@
           ],
           "shards": 20
         },
-        "test": "chrome_public_test_apk"
+        "test": "chrome_public_test_apk",
+        "test_target": "//chrome/android:chrome_public_test_apk"
       },
       {
         "args": [
@@ -1948,7 +1994,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -1972,7 +2020,8 @@
             }
           ]
         },
-        "test": "components_browsertests"
+        "test": "components_browsertests",
+        "test_target": "//components:components_browsertests"
       },
       {
         "args": [
@@ -2005,7 +2054,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2029,7 +2080,8 @@
             }
           ]
         },
-        "test": "components_browsertests"
+        "test": "components_browsertests",
+        "test_target": "//components:components_browsertests"
       },
       {
         "args": [
@@ -2060,7 +2112,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2085,7 +2139,8 @@
           ],
           "shards": 4
         },
-        "test": "components_unittests"
+        "test": "components_unittests",
+        "test_target": "//components:components_unittests"
       },
       {
         "args": [
@@ -2116,7 +2171,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2141,7 +2198,8 @@
           ],
           "shards": 9
         },
-        "test": "content_browsertests"
+        "test": "content_browsertests",
+        "test_target": "//content/test:content_browsertests"
       },
       {
         "args": [
@@ -2174,7 +2232,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2199,7 +2259,8 @@
           ],
           "shards": 5
         },
-        "test": "content_browsertests"
+        "test": "content_browsertests",
+        "test_target": "//content/test:content_browsertests"
       },
       {
         "args": [
@@ -2230,7 +2291,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2255,7 +2318,8 @@
           ],
           "shards": 3
         },
-        "test": "content_shell_test_apk"
+        "test": "content_shell_test_apk",
+        "test_target": "//content/shell/android:content_shell_test_apk"
       },
       {
         "args": [
@@ -2288,7 +2352,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2313,7 +2379,8 @@
           ],
           "shards": 5
         },
-        "test": "content_shell_test_apk"
+        "test": "content_shell_test_apk",
+        "test_target": "//content/shell/android:content_shell_test_apk"
       },
       {
         "args": [
@@ -2344,7 +2411,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2369,7 +2438,8 @@
           ],
           "shards": 3
         },
-        "test": "content_unittests"
+        "test": "content_unittests",
+        "test_target": "//content/test:content_unittests"
       },
       {
         "args": [
@@ -2400,7 +2470,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2424,7 +2496,8 @@
             }
           ]
         },
-        "test": "crypto_unittests"
+        "test": "crypto_unittests",
+        "test_target": "//crypto:crypto_unittests"
       },
       {
         "args": [
@@ -2455,7 +2528,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2479,7 +2554,8 @@
             }
           ]
         },
-        "test": "device_unittests"
+        "test": "device_unittests",
+        "test_target": "//device:device_unittests"
       },
       {
         "args": [
@@ -2510,7 +2586,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2534,7 +2612,8 @@
             }
           ]
         },
-        "test": "display_unittests"
+        "test": "display_unittests",
+        "test_target": "//ui/display:display_unittests"
       },
       {
         "args": [
@@ -2565,7 +2644,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2589,7 +2670,8 @@
             }
           ]
         },
-        "test": "events_unittests"
+        "test": "events_unittests",
+        "test_target": "//ui/events:events_unittests"
       },
       {
         "args": [
@@ -2620,7 +2702,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2644,7 +2728,8 @@
             }
           ]
         },
-        "test": "gcm_unit_tests"
+        "test": "gcm_unit_tests",
+        "test_target": "//google_apis/gcm:gcm_unit_tests"
       },
       {
         "args": [
@@ -2675,7 +2760,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2699,7 +2786,8 @@
             }
           ]
         },
-        "test": "gfx_unittests"
+        "test": "gfx_unittests",
+        "test_target": "//ui/gfx:gfx_unittests"
       },
       {
         "args": [
@@ -2730,7 +2818,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2754,7 +2844,8 @@
             }
           ]
         },
-        "test": "gin_unittests"
+        "test": "gin_unittests",
+        "test_target": "//gin:gin_unittests"
       },
       {
         "args": [
@@ -2785,7 +2876,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2809,7 +2902,8 @@
             }
           ]
         },
-        "test": "gl_tests"
+        "test": "gl_tests",
+        "test_target": "//gpu:gl_tests"
       },
       {
         "args": [
@@ -2840,7 +2934,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2864,7 +2960,8 @@
             }
           ]
         },
-        "test": "gl_unittests"
+        "test": "gl_unittests",
+        "test_target": "//ui/gl:gl_unittests"
       },
       {
         "args": [
@@ -2895,7 +2992,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2919,7 +3018,8 @@
             }
           ]
         },
-        "test": "google_apis_unittests"
+        "test": "google_apis_unittests",
+        "test_target": "//google_apis:google_apis_unittests"
       },
       {
         "args": [
@@ -2950,7 +3050,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -2974,7 +3076,8 @@
             }
           ]
         },
-        "test": "gpu_unittests"
+        "test": "gpu_unittests",
+        "test_target": "//gpu:gpu_unittests"
       },
       {
         "args": [
@@ -3005,7 +3108,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3029,7 +3134,8 @@
             }
           ]
         },
-        "test": "gwp_asan_unittests"
+        "test": "gwp_asan_unittests",
+        "test_target": "//components/gwp_asan:gwp_asan_unittests"
       },
       {
         "args": [
@@ -3060,7 +3166,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3084,7 +3192,8 @@
             }
           ]
         },
-        "test": "ipc_tests"
+        "test": "ipc_tests",
+        "test_target": "//ipc:ipc_tests"
       },
       {
         "args": [
@@ -3115,7 +3224,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3139,7 +3250,8 @@
             }
           ]
         },
-        "test": "jingle_unittests"
+        "test": "jingle_unittests",
+        "test_target": "//jingle:jingle_unittests"
       },
       {
         "args": [
@@ -3170,7 +3282,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3194,7 +3308,8 @@
             }
           ]
         },
-        "test": "latency_unittests"
+        "test": "latency_unittests",
+        "test_target": "//ui/latency:latency_unittests"
       },
       {
         "args": [
@@ -3225,7 +3340,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3249,7 +3366,8 @@
             }
           ]
         },
-        "test": "libjingle_xmpp_unittests"
+        "test": "libjingle_xmpp_unittests",
+        "test_target": "//third_party/libjingle_xmpp:libjingle_xmpp_unittests"
       },
       {
         "args": [
@@ -3280,7 +3398,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3304,7 +3424,8 @@
             }
           ]
         },
-        "test": "media_blink_unittests"
+        "test": "media_blink_unittests",
+        "test_target": "//media/blink:media_blink_unittests"
       },
       {
         "args": [
@@ -3335,7 +3456,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3359,7 +3482,8 @@
             }
           ]
         },
-        "test": "media_service_unittests"
+        "test": "media_service_unittests",
+        "test_target": "//media/mojo/services:media_service_unittests"
       },
       {
         "args": [
@@ -3390,7 +3514,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3414,7 +3540,8 @@
             }
           ]
         },
-        "test": "media_unittests"
+        "test": "media_unittests",
+        "test_target": "//media:media_unittests"
       },
       {
         "args": [
@@ -3445,7 +3572,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3469,7 +3598,8 @@
             }
           ]
         },
-        "test": "midi_unittests"
+        "test": "midi_unittests",
+        "test_target": "//media/midi:midi_unittests"
       },
       {
         "args": [
@@ -3500,7 +3630,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3524,7 +3656,8 @@
             }
           ]
         },
-        "test": "mojo_test_apk"
+        "test": "mojo_test_apk",
+        "test_target": "//mojo/public/java/system:mojo_test_apk"
       },
       {
         "args": [
@@ -3555,7 +3688,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3579,7 +3714,8 @@
             }
           ]
         },
-        "test": "mojo_unittests"
+        "test": "mojo_unittests",
+        "test_target": "//mojo:mojo_unittests"
       },
       {
         "args": [
@@ -3610,7 +3746,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3635,7 +3773,8 @@
           ],
           "shards": 3
         },
-        "test": "net_unittests"
+        "test": "net_unittests",
+        "test_target": "//net:net_unittests"
       },
       {
         "args": [
@@ -3666,7 +3805,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3690,7 +3831,8 @@
             }
           ]
         },
-        "test": "perfetto_unittests"
+        "test": "perfetto_unittests",
+        "test_target": "//third_party/perfetto:perfetto_unittests"
       },
       {
         "args": [
@@ -3721,7 +3863,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3745,7 +3889,8 @@
             }
           ]
         },
-        "test": "sandbox_linux_unittests"
+        "test": "sandbox_linux_unittests",
+        "test_target": "//sandbox/linux:sandbox_linux_unittests"
       },
       {
         "args": [
@@ -3776,7 +3921,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3800,7 +3947,8 @@
             }
           ]
         },
-        "test": "services_unittests"
+        "test": "services_unittests",
+        "test_target": "//services:services_unittests"
       },
       {
         "args": [
@@ -3831,7 +3979,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3855,7 +4005,8 @@
             }
           ]
         },
-        "test": "shell_dialogs_unittests"
+        "test": "shell_dialogs_unittests",
+        "test_target": "//ui/shell_dialogs:shell_dialogs_unittests"
       },
       {
         "args": [
@@ -3886,7 +4037,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3910,7 +4063,8 @@
             }
           ]
         },
-        "test": "skia_unittests"
+        "test": "skia_unittests",
+        "test_target": "//skia:skia_unittests"
       },
       {
         "args": [
@@ -3941,7 +4095,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -3965,7 +4121,8 @@
             }
           ]
         },
-        "test": "sql_unittests"
+        "test": "sql_unittests",
+        "test_target": "//sql:sql_unittests"
       },
       {
         "args": [
@@ -3996,7 +4153,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4020,7 +4179,8 @@
             }
           ]
         },
-        "test": "storage_unittests"
+        "test": "storage_unittests",
+        "test_target": "//storage:storage_unittests"
       },
       {
         "args": [
@@ -4051,7 +4211,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4075,7 +4237,8 @@
             }
           ]
         },
-        "test": "ui_android_unittests"
+        "test": "ui_android_unittests",
+        "test_target": "//ui/android:ui_android_unittests"
       },
       {
         "args": [
@@ -4106,7 +4269,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4130,7 +4295,8 @@
             }
           ]
         },
-        "test": "ui_base_unittests"
+        "test": "ui_base_unittests",
+        "test_target": "//ui/base:ui_base_unittests"
       },
       {
         "args": [
@@ -4161,7 +4327,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4185,7 +4353,8 @@
             }
           ]
         },
-        "test": "ui_touch_selection_unittests"
+        "test": "ui_touch_selection_unittests",
+        "test_target": "//ui/touch_selection:ui_touch_selection_unittests"
       },
       {
         "args": [
@@ -4216,7 +4385,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4239,9 +4410,10 @@
               "name": "shard #${SHARD_INDEX} logcats"
             }
           ],
-          "shards": 10
+          "shards": 2
         },
-        "test": "unit_tests"
+        "test": "unit_tests",
+        "test_target": "//chrome/test:unit_tests"
       },
       {
         "args": [
@@ -4272,7 +4444,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4296,7 +4470,8 @@
             }
           ]
         },
-        "test": "url_unittests"
+        "test": "url_unittests",
+        "test_target": "//url:url_unittests"
       },
       {
         "args": [
@@ -4327,7 +4502,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4351,7 +4528,8 @@
             }
           ]
         },
-        "test": "viz_unittests"
+        "test": "viz_unittests",
+        "test_target": "//components/viz:viz_unittests"
       },
       {
         "args": [
@@ -4382,7 +4560,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4406,7 +4586,8 @@
             }
           ]
         },
-        "test": "weblayer_browsertests"
+        "test": "weblayer_browsertests",
+        "test_target": "//weblayer/test:weblayer_browsertests"
       },
       {
         "args": [
@@ -4437,7 +4618,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4461,7 +4644,8 @@
             }
           ]
         },
-        "test": "weblayer_instrumentation_test_apk"
+        "test": "weblayer_instrumentation_test_apk",
+        "test_target": "//weblayer/browser/android/javatests:weblayer_instrumentation_test_apk"
       },
       {
         "args": [
@@ -4492,7 +4676,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4517,7 +4703,8 @@
           ],
           "shards": 7
         },
-        "test": "webview_instrumentation_test_apk"
+        "test": "webview_instrumentation_test_apk",
+        "test_target": "//android_webview/test:webview_instrumentation_test_apk"
       },
       {
         "args": [
@@ -4551,7 +4738,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4576,7 +4765,8 @@
           ],
           "shards": 20
         },
-        "test": "webview_instrumentation_test_apk"
+        "test": "webview_instrumentation_test_apk",
+        "test_target": "//android_webview/test:webview_instrumentation_test_apk"
       },
       {
         "args": [
@@ -4607,7 +4797,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4631,7 +4823,8 @@
             }
           ]
         },
-        "test": "wtf_unittests"
+        "test": "wtf_unittests",
+        "test_target": "//third_party/blink/renderer/platform/wtf:wtf_unittests"
       }
     ],
     "isolated_scripts": [
@@ -4655,7 +4848,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4668,7 +4863,8 @@
               "path": ".emulator_sdk"
             }
           ]
-        }
+        },
+        "test_target": "//components:components_perftests"
       },
       {
         "args": [
@@ -4688,7 +4884,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4701,7 +4899,8 @@
               "path": ".emulator_sdk"
             }
           ]
-        }
+        },
+        "test_target": "//content/shell:content_shell_crash_test"
       },
       {
         "args": [
@@ -4720,7 +4919,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4733,7 +4934,8 @@
               "path": ".emulator_sdk"
             }
           ]
-        }
+        },
+        "test_target": "//chrome/android/monochrome:monochrome_apk_checker"
       },
       {
         "args": [
@@ -4752,7 +4954,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "idempotent": false,
@@ -4767,7 +4971,8 @@
             }
           ],
           "shards": 12
-        }
+        },
+        "test_target": "//chrome/test:telemetry_perf_unittests"
       }
     ]
   },
@@ -4802,7 +5007,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4826,7 +5033,8 @@
             }
           ]
         },
-        "test": "android_browsertests"
+        "test": "android_browsertests",
+        "test_target": "//chrome/test:android_browsertests"
       },
       {
         "args": [
@@ -4857,7 +5065,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4881,7 +5091,8 @@
             }
           ]
         },
-        "test": "android_webview_unittests"
+        "test": "android_webview_unittests",
+        "test_target": "//android_webview/test:android_webview_unittests"
       },
       {
         "args": [
@@ -4912,7 +5123,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4936,7 +5149,8 @@
             }
           ]
         },
-        "test": "angle_unittests"
+        "test": "angle_unittests",
+        "test_target": "//third_party/angle/src/tests:angle_unittests"
       },
       {
         "args": [
@@ -4967,7 +5181,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -4991,7 +5207,8 @@
             }
           ]
         },
-        "test": "base_unittests"
+        "test": "base_unittests",
+        "test_target": "//base:base_unittests"
       },
       {
         "args": [
@@ -5022,7 +5239,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5046,7 +5265,8 @@
             }
           ]
         },
-        "test": "base_util_unittests"
+        "test": "base_util_unittests",
+        "test_target": "//base/util:base_util_unittests"
       },
       {
         "args": [
@@ -5077,7 +5297,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5101,7 +5323,8 @@
             }
           ]
         },
-        "test": "blink_common_unittests"
+        "test": "blink_common_unittests",
+        "test_target": "//third_party/blink/common:blink_common_unittests"
       },
       {
         "args": [
@@ -5132,7 +5355,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5156,7 +5381,8 @@
             }
           ]
         },
-        "test": "blink_heap_unittests"
+        "test": "blink_heap_unittests",
+        "test_target": "//third_party/blink/renderer/platform/heap:blink_heap_unittests"
       },
       {
         "args": [
@@ -5187,7 +5413,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5211,7 +5439,8 @@
             }
           ]
         },
-        "test": "blink_platform_unittests"
+        "test": "blink_platform_unittests",
+        "test_target": "//third_party/blink/renderer/platform:blink_platform_unittests"
       },
       {
         "args": [
@@ -5243,7 +5472,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5268,7 +5499,8 @@
           ],
           "shards": 4
         },
-        "test": "blink_unittests"
+        "test": "blink_unittests",
+        "test_target": "//third_party/blink/renderer/controller:blink_unittests"
       },
       {
         "args": [
@@ -5299,7 +5531,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5323,7 +5557,8 @@
             }
           ]
         },
-        "test": "boringssl_crypto_tests"
+        "test": "boringssl_crypto_tests",
+        "test_target": "//third_party/boringssl:boringssl_crypto_tests"
       },
       {
         "args": [
@@ -5354,7 +5589,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5378,7 +5615,8 @@
             }
           ]
         },
-        "test": "boringssl_ssl_tests"
+        "test": "boringssl_ssl_tests",
+        "test_target": "//third_party/boringssl:boringssl_ssl_tests"
       },
       {
         "args": [
@@ -5409,7 +5647,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5433,7 +5673,8 @@
             }
           ]
         },
-        "test": "breakpad_unittests"
+        "test": "breakpad_unittests",
+        "test_target": "//third_party/breakpad:breakpad_unittests"
       },
       {
         "args": [
@@ -5464,7 +5705,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5488,7 +5731,8 @@
             }
           ]
         },
-        "test": "cacheinvalidation_unittests"
+        "test": "cacheinvalidation_unittests",
+        "test_target": "//third_party/cacheinvalidation:cacheinvalidation_unittests"
       },
       {
         "args": [
@@ -5520,7 +5764,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5544,7 +5790,8 @@
             }
           ]
         },
-        "test": "capture_unittests"
+        "test": "capture_unittests",
+        "test_target": "//media/capture:capture_unittests"
       },
       {
         "args": [
@@ -5575,7 +5822,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5599,7 +5848,8 @@
             }
           ]
         },
-        "test": "cast_unittests"
+        "test": "cast_unittests",
+        "test_target": "//media/cast:cast_unittests"
       },
       {
         "args": [
@@ -5630,7 +5880,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5654,7 +5906,66 @@
             }
           ]
         },
-        "test": "cc_unittests"
+        "test": "cc_unittests",
+        "test_target": "//cc:cc_unittests"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices",
+          "--avd-config=../../tools/android/avd/proto/generic_android28.textpb"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "chrome_java_test_pagecontroller_tests"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "device_os": null,
+              "device_type": null,
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
+            }
+          ],
+          "named_caches": [
+            {
+              "name": "avd_generic_android28",
+              "path": ".android"
+            },
+            {
+              "name": "system_images_android_28_google_apis_x86",
+              "path": ".emulator_sdk"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "chrome_java_test_pagecontroller_tests",
+        "test_target": "//chrome/test/android:chrome_java_test_pagecontroller_tests"
       },
       {
         "args": [
@@ -5685,7 +5996,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5709,7 +6022,8 @@
             }
           ]
         },
-        "test": "chrome_public_smoke_test"
+        "test": "chrome_public_smoke_test",
+        "test_target": "//chrome/android:chrome_public_smoke_test"
       },
       {
         "args": [
@@ -5740,7 +6054,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5765,7 +6081,8 @@
           ],
           "shards": 20
         },
-        "test": "chrome_public_test_apk"
+        "test": "chrome_public_test_apk",
+        "test_target": "//chrome/android:chrome_public_test_apk"
       },
       {
         "args": [
@@ -5798,7 +6115,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5823,7 +6142,8 @@
           ],
           "shards": 20
         },
-        "test": "chrome_public_test_apk"
+        "test": "chrome_public_test_apk",
+        "test_target": "//chrome/android:chrome_public_test_apk"
       },
       {
         "args": [
@@ -5854,7 +6174,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5878,7 +6200,8 @@
             }
           ]
         },
-        "test": "components_browsertests"
+        "test": "components_browsertests",
+        "test_target": "//components:components_browsertests"
       },
       {
         "args": [
@@ -5911,7 +6234,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5935,7 +6260,8 @@
             }
           ]
         },
-        "test": "components_browsertests"
+        "test": "components_browsertests",
+        "test_target": "//components:components_browsertests"
       },
       {
         "args": [
@@ -5966,7 +6292,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -5991,7 +6319,8 @@
           ],
           "shards": 4
         },
-        "test": "components_unittests"
+        "test": "components_unittests",
+        "test_target": "//components:components_unittests"
       },
       {
         "args": [
@@ -6022,7 +6351,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6047,7 +6378,8 @@
           ],
           "shards": 9
         },
-        "test": "content_browsertests"
+        "test": "content_browsertests",
+        "test_target": "//content/test:content_browsertests"
       },
       {
         "args": [
@@ -6080,7 +6412,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6105,7 +6439,8 @@
           ],
           "shards": 10
         },
-        "test": "content_browsertests"
+        "test": "content_browsertests",
+        "test_target": "//content/test:content_browsertests"
       },
       {
         "args": [
@@ -6136,7 +6471,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6161,7 +6498,8 @@
           ],
           "shards": 3
         },
-        "test": "content_shell_test_apk"
+        "test": "content_shell_test_apk",
+        "test_target": "//content/shell/android:content_shell_test_apk"
       },
       {
         "args": [
@@ -6194,7 +6532,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6219,7 +6559,8 @@
           ],
           "shards": 5
         },
-        "test": "content_shell_test_apk"
+        "test": "content_shell_test_apk",
+        "test_target": "//content/shell/android:content_shell_test_apk"
       },
       {
         "args": [
@@ -6250,7 +6591,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6275,7 +6618,8 @@
           ],
           "shards": 3
         },
-        "test": "content_unittests"
+        "test": "content_unittests",
+        "test_target": "//content/test:content_unittests"
       },
       {
         "args": [
@@ -6306,7 +6650,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6330,7 +6676,8 @@
             }
           ]
         },
-        "test": "crypto_unittests"
+        "test": "crypto_unittests",
+        "test_target": "//crypto:crypto_unittests"
       },
       {
         "args": [
@@ -6361,7 +6708,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6385,7 +6734,8 @@
             }
           ]
         },
-        "test": "device_unittests"
+        "test": "device_unittests",
+        "test_target": "//device:device_unittests"
       },
       {
         "args": [
@@ -6416,7 +6766,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6440,7 +6792,8 @@
             }
           ]
         },
-        "test": "display_unittests"
+        "test": "display_unittests",
+        "test_target": "//ui/display:display_unittests"
       },
       {
         "args": [
@@ -6471,7 +6824,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6495,7 +6850,8 @@
             }
           ]
         },
-        "test": "events_unittests"
+        "test": "events_unittests",
+        "test_target": "//ui/events:events_unittests"
       },
       {
         "args": [
@@ -6526,7 +6882,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6550,7 +6908,8 @@
             }
           ]
         },
-        "test": "gcm_unit_tests"
+        "test": "gcm_unit_tests",
+        "test_target": "//google_apis/gcm:gcm_unit_tests"
       },
       {
         "args": [
@@ -6581,7 +6940,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6605,7 +6966,8 @@
             }
           ]
         },
-        "test": "gfx_unittests"
+        "test": "gfx_unittests",
+        "test_target": "//ui/gfx:gfx_unittests"
       },
       {
         "args": [
@@ -6636,7 +6998,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6660,7 +7024,8 @@
             }
           ]
         },
-        "test": "gin_unittests"
+        "test": "gin_unittests",
+        "test_target": "//gin:gin_unittests"
       },
       {
         "args": [
@@ -6691,7 +7056,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6715,7 +7082,8 @@
             }
           ]
         },
-        "test": "gl_tests"
+        "test": "gl_tests",
+        "test_target": "//gpu:gl_tests"
       },
       {
         "args": [
@@ -6746,7 +7114,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6770,7 +7140,8 @@
             }
           ]
         },
-        "test": "gl_unittests"
+        "test": "gl_unittests",
+        "test_target": "//ui/gl:gl_unittests"
       },
       {
         "args": [
@@ -6801,7 +7172,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6825,7 +7198,8 @@
             }
           ]
         },
-        "test": "google_apis_unittests"
+        "test": "google_apis_unittests",
+        "test_target": "//google_apis:google_apis_unittests"
       },
       {
         "args": [
@@ -6856,7 +7230,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6880,7 +7256,8 @@
             }
           ]
         },
-        "test": "gpu_unittests"
+        "test": "gpu_unittests",
+        "test_target": "//gpu:gpu_unittests"
       },
       {
         "args": [
@@ -6911,7 +7288,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6935,7 +7314,8 @@
             }
           ]
         },
-        "test": "gwp_asan_unittests"
+        "test": "gwp_asan_unittests",
+        "test_target": "//components/gwp_asan:gwp_asan_unittests"
       },
       {
         "args": [
@@ -6966,7 +7346,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -6990,7 +7372,8 @@
             }
           ]
         },
-        "test": "ipc_tests"
+        "test": "ipc_tests",
+        "test_target": "//ipc:ipc_tests"
       },
       {
         "args": [
@@ -7021,7 +7404,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7045,7 +7430,8 @@
             }
           ]
         },
-        "test": "jingle_unittests"
+        "test": "jingle_unittests",
+        "test_target": "//jingle:jingle_unittests"
       },
       {
         "args": [
@@ -7076,7 +7462,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7100,7 +7488,8 @@
             }
           ]
         },
-        "test": "latency_unittests"
+        "test": "latency_unittests",
+        "test_target": "//ui/latency:latency_unittests"
       },
       {
         "args": [
@@ -7131,7 +7520,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7155,7 +7546,8 @@
             }
           ]
         },
-        "test": "libjingle_xmpp_unittests"
+        "test": "libjingle_xmpp_unittests",
+        "test_target": "//third_party/libjingle_xmpp:libjingle_xmpp_unittests"
       },
       {
         "args": [
@@ -7186,7 +7578,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7210,7 +7604,8 @@
             }
           ]
         },
-        "test": "media_blink_unittests"
+        "test": "media_blink_unittests",
+        "test_target": "//media/blink:media_blink_unittests"
       },
       {
         "args": [
@@ -7241,7 +7636,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7265,7 +7662,8 @@
             }
           ]
         },
-        "test": "media_service_unittests"
+        "test": "media_service_unittests",
+        "test_target": "//media/mojo/services:media_service_unittests"
       },
       {
         "args": [
@@ -7296,7 +7694,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7320,7 +7720,8 @@
             }
           ]
         },
-        "test": "media_unittests"
+        "test": "media_unittests",
+        "test_target": "//media:media_unittests"
       },
       {
         "args": [
@@ -7351,7 +7752,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7375,7 +7778,8 @@
             }
           ]
         },
-        "test": "midi_unittests"
+        "test": "midi_unittests",
+        "test_target": "//media/midi:midi_unittests"
       },
       {
         "args": [
@@ -7406,7 +7810,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7430,7 +7836,8 @@
             }
           ]
         },
-        "test": "mojo_test_apk"
+        "test": "mojo_test_apk",
+        "test_target": "//mojo/public/java/system:mojo_test_apk"
       },
       {
         "args": [
@@ -7461,7 +7868,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7485,7 +7894,182 @@
             }
           ]
         },
-        "test": "mojo_unittests"
+        "test": "mojo_unittests",
+        "test_target": "//mojo:mojo_unittests"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices",
+          "--avd-config=../../tools/android/avd/proto/generic_android28.textpb"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "monochrome_public_bundle_fake_modules_smoke_test"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "device_os": null,
+              "device_type": null,
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
+            }
+          ],
+          "named_caches": [
+            {
+              "name": "avd_generic_android28",
+              "path": ".android"
+            },
+            {
+              "name": "system_images_android_28_google_apis_x86",
+              "path": ".emulator_sdk"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "monochrome_public_bundle_fake_modules_smoke_test",
+        "test_target": "//chrome/android:monochrome_public_bundle_fake_modules_smoke_test"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices",
+          "--avd-config=../../tools/android/avd/proto/generic_android28.textpb"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "monochrome_public_bundle_smoke_test"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "device_os": null,
+              "device_type": null,
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
+            }
+          ],
+          "named_caches": [
+            {
+              "name": "avd_generic_android28",
+              "path": ".android"
+            },
+            {
+              "name": "system_images_android_28_google_apis_x86",
+              "path": ".emulator_sdk"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "monochrome_public_bundle_smoke_test",
+        "test_target": "//chrome/android:monochrome_public_bundle_smoke_test"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices",
+          "--avd-config=../../tools/android/avd/proto/generic_android28.textpb"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "monochrome_public_smoke_test"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "device_os": null,
+              "device_type": null,
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
+            }
+          ],
+          "named_caches": [
+            {
+              "name": "avd_generic_android28",
+              "path": ".android"
+            },
+            {
+              "name": "system_images_android_28_google_apis_x86",
+              "path": ".emulator_sdk"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "monochrome_public_smoke_test",
+        "test_target": "//chrome/android:monochrome_public_smoke_test"
       },
       {
         "args": [
@@ -7516,7 +8100,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7541,7 +8127,8 @@
           ],
           "shards": 3
         },
-        "test": "net_unittests"
+        "test": "net_unittests",
+        "test_target": "//net:net_unittests"
       },
       {
         "args": [
@@ -7572,7 +8159,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7596,7 +8185,8 @@
             }
           ]
         },
-        "test": "perfetto_unittests"
+        "test": "perfetto_unittests",
+        "test_target": "//third_party/perfetto:perfetto_unittests"
       },
       {
         "args": [
@@ -7627,7 +8217,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7651,7 +8243,8 @@
             }
           ]
         },
-        "test": "sandbox_linux_unittests"
+        "test": "sandbox_linux_unittests",
+        "test_target": "//sandbox/linux:sandbox_linux_unittests"
       },
       {
         "args": [
@@ -7682,7 +8275,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7706,7 +8301,8 @@
             }
           ]
         },
-        "test": "services_unittests"
+        "test": "services_unittests",
+        "test_target": "//services:services_unittests"
       },
       {
         "args": [
@@ -7737,7 +8333,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7761,7 +8359,8 @@
             }
           ]
         },
-        "test": "shell_dialogs_unittests"
+        "test": "shell_dialogs_unittests",
+        "test_target": "//ui/shell_dialogs:shell_dialogs_unittests"
       },
       {
         "args": [
@@ -7792,7 +8391,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7816,7 +8417,8 @@
             }
           ]
         },
-        "test": "skia_unittests"
+        "test": "skia_unittests",
+        "test_target": "//skia:skia_unittests"
       },
       {
         "args": [
@@ -7847,7 +8449,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7871,7 +8475,8 @@
             }
           ]
         },
-        "test": "sql_unittests"
+        "test": "sql_unittests",
+        "test_target": "//sql:sql_unittests"
       },
       {
         "args": [
@@ -7902,7 +8507,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7926,7 +8533,66 @@
             }
           ]
         },
-        "test": "storage_unittests"
+        "test": "storage_unittests",
+        "test_target": "//storage:storage_unittests"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices",
+          "--avd-config=../../tools/android/avd/proto/generic_android28.textpb"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "system_webview_shell_layout_test_apk"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "device_os": null,
+              "device_type": null,
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
+            }
+          ],
+          "named_caches": [
+            {
+              "name": "avd_generic_android28",
+              "path": ".android"
+            },
+            {
+              "name": "system_images_android_28_google_apis_x86",
+              "path": ".emulator_sdk"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "system_webview_shell_layout_test_apk",
+        "test_target": "//android_webview/tools/system_webview_shell:system_webview_shell_layout_test_apk"
       },
       {
         "args": [
@@ -7957,7 +8623,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -7981,7 +8649,8 @@
             }
           ]
         },
-        "test": "ui_android_unittests"
+        "test": "ui_android_unittests",
+        "test_target": "//ui/android:ui_android_unittests"
       },
       {
         "args": [
@@ -8012,7 +8681,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -8036,7 +8707,8 @@
             }
           ]
         },
-        "test": "ui_base_unittests"
+        "test": "ui_base_unittests",
+        "test_target": "//ui/base:ui_base_unittests"
       },
       {
         "args": [
@@ -8067,7 +8739,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -8091,7 +8765,8 @@
             }
           ]
         },
-        "test": "ui_touch_selection_unittests"
+        "test": "ui_touch_selection_unittests",
+        "test_target": "//ui/touch_selection:ui_touch_selection_unittests"
       },
       {
         "args": [
@@ -8122,7 +8797,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -8145,9 +8822,10 @@
               "name": "shard #${SHARD_INDEX} logcats"
             }
           ],
-          "shards": 10
+          "shards": 2
         },
-        "test": "unit_tests"
+        "test": "unit_tests",
+        "test_target": "//chrome/test:unit_tests"
       },
       {
         "args": [
@@ -8178,7 +8856,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -8202,7 +8882,8 @@
             }
           ]
         },
-        "test": "url_unittests"
+        "test": "url_unittests",
+        "test_target": "//url:url_unittests"
       },
       {
         "args": [
@@ -8233,7 +8914,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -8257,7 +8940,188 @@
             }
           ]
         },
-        "test": "viz_unittests"
+        "test": "viz_unittests",
+        "test_target": "//components/viz:viz_unittests"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices",
+          "--avd-config=../../tools/android/avd/proto/generic_android28.textpb"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "weblayer_browsertests"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "device_os": null,
+              "device_type": null,
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
+            }
+          ],
+          "named_caches": [
+            {
+              "name": "avd_generic_android28",
+              "path": ".android"
+            },
+            {
+              "name": "system_images_android_28_google_apis_x86",
+              "path": ".emulator_sdk"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "weblayer_browsertests",
+        "test_target": "//weblayer/test:weblayer_browsertests"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices",
+          "--avd-config=../../tools/android/avd/proto/generic_android28.textpb"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "weblayer_instrumentation_test_apk"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "device_os": null,
+              "device_type": null,
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
+            }
+          ],
+          "named_caches": [
+            {
+              "name": "avd_generic_android28",
+              "path": ".android"
+            },
+            {
+              "name": "system_images_android_28_google_apis_x86",
+              "path": ".emulator_sdk"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "weblayer_instrumentation_test_apk",
+        "test_target": "//weblayer/browser/android/javatests:weblayer_instrumentation_test_apk"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices",
+          "--avd-config=../../tools/android/avd/proto/generic_android28.textpb"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "webview_cts_tests"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "chromium/android_webview/tools/cts_archive",
+              "location": "android_webview/tools/cts_archive",
+              "revision": "4kDr36wBuZtvbfaEin4U4oeFD7oAuN0flkWDImKBts4C"
+            },
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "device_os": null,
+              "device_type": null,
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
+            }
+          ],
+          "named_caches": [
+            {
+              "name": "avd_generic_android28",
+              "path": ".android"
+            },
+            {
+              "name": "system_images_android_28_google_apis_x86",
+              "path": ".emulator_sdk"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ],
+          "shards": 2
+        },
+        "test": "webview_cts_tests",
+        "test_target": "//android_webview/test:webview_cts_tests"
       },
       {
         "args": [
@@ -8288,7 +9152,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -8313,7 +9179,8 @@
           ],
           "shards": 7
         },
-        "test": "webview_instrumentation_test_apk"
+        "test": "webview_instrumentation_test_apk",
+        "test_target": "//android_webview/test:webview_instrumentation_test_apk"
       },
       {
         "args": [
@@ -8347,7 +9214,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -8372,7 +9241,66 @@
           ],
           "shards": 20
         },
-        "test": "webview_instrumentation_test_apk"
+        "test": "webview_instrumentation_test_apk",
+        "test_target": "//android_webview/test:webview_instrumentation_test_apk"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices",
+          "--avd-config=../../tools/android/avd/proto/generic_android28.textpb"
+        ],
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "webview_ui_test_app_test_apk"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "dimension_sets": [
+            {
+              "cpu": "x86-64",
+              "device_os": null,
+              "device_type": null,
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
+            }
+          ],
+          "named_caches": [
+            {
+              "name": "avd_generic_android28",
+              "path": ".android"
+            },
+            {
+              "name": "system_images_android_28_google_apis_x86",
+              "path": ".emulator_sdk"
+            }
+          ],
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ]
+        },
+        "test": "webview_ui_test_app_test_apk",
+        "test_target": "//android_webview/tools/automated_ui_tests:webview_ui_test_app_test_apk"
       },
       {
         "args": [
@@ -8403,7 +9331,9 @@
               "cpu": "x86-64",
               "device_os": null,
               "device_type": null,
-              "os": "Ubuntu-16.04"
+              "os": "Ubuntu-16.04",
+              "pool": "chromium.tests.avd",
+              "ssd": "1"
             }
           ],
           "named_caches": [
@@ -8427,7 +9357,8 @@
             }
           ]
         },
-        "test": "wtf_unittests"
+        "test": "wtf_unittests",
+        "test_target": "//third_party/blink/renderer/platform/wtf:wtf_unittests"
       }
     ]
   }

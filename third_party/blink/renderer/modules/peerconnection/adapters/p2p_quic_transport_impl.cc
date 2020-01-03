@@ -548,6 +548,26 @@ void P2PQuicTransportImpl::OnCryptoHandshakeEvent(CryptoHandshakeEvent event) {
   }
 }
 
+void P2PQuicTransportImpl::SetDefaultEncryptionLevel(
+    quic::EncryptionLevel level) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  QuicSession::SetDefaultEncryptionLevel(level);
+  if (level == quic::ENCRYPTION_FORWARD_SECURE) {
+    DCHECK(IsEncryptionEstablished());
+    DCHECK(IsCryptoHandshakeConfirmed());
+    P2PQuicNegotiatedParams negotiated_params;
+    // The guaranteed largest message payload will not change throughout the
+    // connection.
+    uint16_t max_datagram_length =
+        quic::QuicSession::GetGuaranteedLargestMessagePayload();
+    if (max_datagram_length > 0) {
+      // Datagrams are supported in this case.
+      negotiated_params.set_max_datagram_length(max_datagram_length);
+    }
+    delegate_->OnConnected(negotiated_params);
+  }
+}
+
 void P2PQuicTransportImpl::OnCanWrite() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   while (!datagram_buffer_.empty()) {
@@ -563,7 +583,8 @@ void P2PQuicTransportImpl::OnCanWrite() {
   QuicSession::OnCanWrite();
 }
 
-void P2PQuicTransportImpl::OnMessageReceived(quic::QuicStringPiece message) {
+void P2PQuicTransportImpl::OnMessageReceived(
+    quiche::QuicheStringPiece message) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   // This will never overflow because of the datagram size limit.
   Vector<uint8_t> datagram(static_cast<wtf_size_t>(message.size()));

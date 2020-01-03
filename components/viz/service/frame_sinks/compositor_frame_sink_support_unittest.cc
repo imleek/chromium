@@ -39,7 +39,6 @@ namespace viz {
 namespace {
 
 constexpr bool kIsRoot = false;
-constexpr bool kNeedsSyncPoints = true;
 
 constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
 constexpr FrameSinkId kAnotherArbitraryFrameSinkId(2, 2);
@@ -67,8 +66,7 @@ gpu::SyncToken GenTestSyncToken(int id) {
 
 bool BeginFrameArgsAreEquivalent(const BeginFrameArgs& first,
                                  const BeginFrameArgs& second) {
-  return first.source_id == second.source_id &&
-         first.sequence_number == second.sequence_number;
+  return first.frame_id == second.frame_id;
 }
 
 }  // namespace
@@ -104,8 +102,7 @@ class CompositorFrameSinkSupportTest : public testing::Test {
     manager_.RegisterFrameSinkId(kArbitraryFrameSinkId,
                                  true /* report_activation */);
     support_ = std::make_unique<CompositorFrameSinkSupport>(
-        &fake_support_client_, &manager_, kArbitraryFrameSinkId, kIsRoot,
-        kNeedsSyncPoints);
+        &fake_support_client_, &manager_, kArbitraryFrameSinkId, kIsRoot);
     support_->SetBeginFrameSource(&begin_frame_source_);
   }
   ~CompositorFrameSinkSupportTest() override {
@@ -562,8 +559,7 @@ TEST_F(CompositorFrameSinkSupportTest, AddDuringEviction) {
                                true /* report_activation */);
   MockCompositorFrameSinkClient mock_client;
   auto support = std::make_unique<CompositorFrameSinkSupport>(
-      &mock_client, &manager_, kAnotherArbitraryFrameSinkId, kIsRoot,
-      kNeedsSyncPoints);
+      &mock_client, &manager_, kAnotherArbitraryFrameSinkId, kIsRoot);
   LocalSurfaceId local_surface_id(6, kArbitraryToken);
   support->SubmitCompositorFrame(local_surface_id,
                                  MakeDefaultCompositorFrame());
@@ -588,8 +584,7 @@ TEST_F(CompositorFrameSinkSupportTest, MonotonicallyIncreasingLocalSurfaceIds) {
                                true /* report_activation */);
   MockCompositorFrameSinkClient mock_client;
   auto support = std::make_unique<CompositorFrameSinkSupport>(
-      &mock_client, &manager_, kAnotherArbitraryFrameSinkId, kIsRoot,
-      kNeedsSyncPoints);
+      &mock_client, &manager_, kAnotherArbitraryFrameSinkId, kIsRoot);
   base::UnguessableToken embed_token = base::UnguessableToken::Create();
   LocalSurfaceId local_surface_id1(6, 1, embed_token);
   LocalSurfaceId local_surface_id2(6, 2, embed_token);
@@ -645,7 +640,7 @@ TEST_F(CompositorFrameSinkSupportTest, ProhibitsUnprivilegedCopyRequests) {
   MockCompositorFrameSinkClient mock_client;
   auto support = std::make_unique<CompositorFrameSinkSupport>(
       &mock_client, &manager_, kAnotherArbitraryFrameSinkId,
-      false /* not root frame sink */, kNeedsSyncPoints);
+      false /* not root frame sink */);
 
   bool did_receive_aborted_copy_result = false;
   auto request = std::make_unique<CopyOutputRequest>(
@@ -678,8 +673,7 @@ TEST_F(CompositorFrameSinkSupportTest, EvictLastActivatedSurface) {
                                true /* report_activation */);
   MockCompositorFrameSinkClient mock_client;
   auto support = std::make_unique<CompositorFrameSinkSupport>(
-      &mock_client, &manager_, kAnotherArbitraryFrameSinkId, kIsRoot,
-      kNeedsSyncPoints);
+      &mock_client, &manager_, kAnotherArbitraryFrameSinkId, kIsRoot);
   LocalSurfaceId local_surface_id(7, kArbitraryToken);
   SurfaceId id(kAnotherArbitraryFrameSinkId, local_surface_id);
 
@@ -1190,7 +1184,7 @@ TEST_F(CompositorFrameSinkSupportTest,
   MockCompositorFrameSinkClient mock_client;
   auto support = std::make_unique<CompositorFrameSinkSupport>(
       &mock_client, &manager_, kAnotherArbitraryFrameSinkId,
-      false /* not root frame sink */, kNeedsSyncPoints);
+      false /* not root frame sink */);
   LocalSurfaceId local_surface_id(31232, local_surface_id_.embed_token());
   result = support->MaybeSubmitCompositorFrame(
       local_surface_id, MakeDefaultCompositorFrame(), base::nullopt, 0,
@@ -1251,8 +1245,7 @@ TEST_F(CompositorFrameSinkSupportTest, HitTestRegionValidation) {
   constexpr FrameSinkId frame_sink_id(1234, 5678);
   manager_.RegisterFrameSinkId(frame_sink_id, true /* report_activation */);
   auto support = std::make_unique<CompositorFrameSinkSupport>(
-      &fake_support_client_, &manager_, frame_sink_id, kIsRoot,
-      kNeedsSyncPoints);
+      &fake_support_client_, &manager_, frame_sink_id, kIsRoot);
   LocalSurfaceId local_surface_id(6, 1, base::UnguessableToken::Create());
 
   HitTestRegionList hit_test_region_list;
@@ -1336,8 +1329,7 @@ TEST_F(CompositorFrameSinkSupportTest, ThrottleUnresponsiveClient) {
 
   MockCompositorFrameSinkClient mock_client;
   auto support = std::make_unique<CompositorFrameSinkSupport>(
-      &mock_client, &manager_, kAnotherArbitraryFrameSinkId, /*is_root=*/true,
-      kNeedsSyncPoints);
+      &mock_client, &manager_, kAnotherArbitraryFrameSinkId, /*is_root=*/true);
   support->SetBeginFrameSource(&begin_frame_source);
   support->SetNeedsBeginFrame(true);
 
@@ -1349,8 +1341,7 @@ TEST_F(CompositorFrameSinkSupportTest, ThrottleUnresponsiveClient) {
 
   // Issue ten OnBeginFrame() messages with no response. They should all be
   // received by the client.
-  for (; sent_frames < CompositorFrameSinkSupport::kOutstandingFramesThrottle;
-       ++sent_frames) {
+  for (; sent_frames < BeginFrameTracker::kLimitThrottle; ++sent_frames) {
     frametime += interval;
 
     args = CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 0,
@@ -1360,8 +1351,7 @@ TEST_F(CompositorFrameSinkSupportTest, ThrottleUnresponsiveClient) {
     testing::Mock::VerifyAndClearExpectations(&mock_client);
   }
 
-  for (; sent_frames < CompositorFrameSinkSupport::kOutstandingFramesStop;
-       ++sent_frames) {
+  for (; sent_frames < BeginFrameTracker::kLimitStop; ++sent_frames) {
     base::TimeTicks unthrottle_time =
         frametime + base::TimeDelta::FromSeconds(1);
 
@@ -1390,6 +1380,8 @@ TEST_F(CompositorFrameSinkSupportTest, ThrottleUnresponsiveClient) {
     testing::Mock::VerifyAndClearExpectations(&mock_client);
   }
 
+  BeginFrameArgs last_sent_args = args;
+
   // The client should no longer receive OnBeginFrame() until it becomes
   // responsive again.
   frametime += base::TimeDelta::FromMinutes(1);
@@ -1401,7 +1393,7 @@ TEST_F(CompositorFrameSinkSupportTest, ThrottleUnresponsiveClient) {
 
   // The client becomes responsive again. The next OnBeginFrame() message should
   // be delivered.
-  support->DidNotProduceFrame(BeginFrameAck(args, false));
+  support->DidNotProduceFrame(BeginFrameAck(last_sent_args, false));
 
   frametime += interval;
   args = CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 0,

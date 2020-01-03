@@ -10,21 +10,14 @@ import("//build/config/fuchsia/symbol_archive.gni")
 import("//testing/test.gni")
 
 declare_args() {
-  # Allow the Cast Runner to use software decoders for rendering video.
-  # TODO(crbug.com/1000858): Revisit this value once hardware playback is fixed
-  #                          (fxb/13659).
-  enable_software_video_decoders = true
-
   # Set to a non-zero value to enable remote debugging on that port in WebRunner.
   web_runner_remote_debugging_port = 0
 }
 
 buildflag_header("buildflags") {
   header = "buildflags.h"
-  flags = [
-    "ENABLE_SOFTWARE_VIDEO_DECODERS=$enable_software_video_decoders",
-    "WEB_RUNNER_REMOTE_DEBUGGING_PORT=$web_runner_remote_debugging_port",
-  ]
+  flags =
+      [ "WEB_RUNNER_REMOTE_DEBUGGING_PORT=$web_runner_remote_debugging_port" ]
   visibility = [ ":*" ]
 }
 
@@ -41,13 +34,13 @@ source_set("common") {
     "//base",
     "//fuchsia/base",
     "//fuchsia/base:modular",
-    "//third_party/fuchsia-sdk/sdk:ui_app",
+    "//third_party/fuchsia-sdk/sdk:fuchsia-ui-app",
     "//url",
   ]
   public_deps = [
-    "//third_party/fuchsia-sdk/sdk:sys",
+    "//third_party/fuchsia-sdk/sdk:fuchsia-sys",
+    "//third_party/fuchsia-sdk/sdk:fuchsia-web",
     "//third_party/fuchsia-sdk/sdk:sys_cpp",
-    "//third_party/fuchsia-sdk/sdk:web",
   ]
   visibility = [ ":*" ]
 }
@@ -72,14 +65,14 @@ source_set("cast_runner_core") {
     "//base",
     "//fuchsia/base",
     "//fuchsia/base:modular",
-    "//third_party/fuchsia-sdk/sdk:modular",
+    "//third_party/fuchsia-sdk/sdk:fuchsia-modular",
     "//third_party/fuchsia-sdk/sdk:sys_cpp",
     "//url",
   ]
   public_deps = [
     ":common",
     "//fuchsia:cast_fidl",
-    "//third_party/fuchsia-sdk/sdk:web",
+    "//third_party/fuchsia-sdk/sdk:fuchsia-web",
   ]
   visibility = [ ":*" ]
 }
@@ -110,7 +103,7 @@ fuchsia_package_runner("cast_runner") {
   install_only = true
   package_deps = [ [
         "//fuchsia/engine:web_engine",
-        "chromium",
+        "web_engine",
       ] ]
 }
 
@@ -128,7 +121,7 @@ source_set("cast_runner_test_core") {
   public_deps = [
     "//base",
     "//fuchsia:cast_fidl",
-    "//third_party/fuchsia-sdk/sdk:sys",
+    "//third_party/fuchsia-sdk/sdk:fuchsia-sys",
     "//url",
   ]
   visibility = [ ":*" ]
@@ -148,7 +141,7 @@ test("cast_runner_unittests") {
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/fuchsia-sdk/sdk:web",
+    "//third_party/fuchsia-sdk/sdk:fuchsia-web",
   ]
 }
 
@@ -167,12 +160,13 @@ test("cast_runner_integration_tests") {
     "//fuchsia/base:test_support",
     "//net:test_support",
     "//testing/gtest",
-    "//third_party/fuchsia-sdk/sdk:modular",
+    "//third_party/fuchsia-sdk/sdk:fuchsia-modular",
+    "//third_party/fuchsia-sdk/sdk:scenic_cpp",
     "//third_party/fuchsia-sdk/sdk:sys_cpp",
   ]
   package_deps = [ [
         "//fuchsia/engine:web_engine",
-        "chromium",
+        "web_engine",
       ] ]
 }
 
@@ -205,6 +199,7 @@ executable("web_runner_exe") {
     "web/main.cc",
   ]
   deps = [
+    ":buildflags",
     ":common",
     "//base",
     "//fuchsia/base",
@@ -224,7 +219,7 @@ fuchsia_package_runner("web_runner") {
   install_only = true
   package_deps = [ [
         "//fuchsia/engine:web_engine",
-        "chromium",
+        "web_engine",
       ] ]
 }
 
@@ -239,12 +234,12 @@ test("web_runner_integration_tests") {
     "//fuchsia/base:modular",
     "//net:test_support",
     "//testing/gtest",
-    "//third_party/fuchsia-sdk/sdk:sys",
+    "//third_party/fuchsia-sdk/sdk:fuchsia-sys",
   ]
   package_deps = [
     [
       "//fuchsia/engine:web_engine",
-      "chromium",
+      "web_engine",
     ],
     [
       ":web_runner_pkg",

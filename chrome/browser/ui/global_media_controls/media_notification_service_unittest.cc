@@ -10,6 +10,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/unguessable_token.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/test/mock_media_router.h"
 #include "chrome/browser/ui/global_media_controls/cast_media_notification_provider.h"
@@ -35,7 +36,6 @@ using testing::_;
 using testing::AtLeast;
 using testing::Expectation;
 using testing::Return;
-using testing::SaveArg;
 
 namespace {
 
@@ -104,10 +104,23 @@ class MockOverlayMediaNotification : public OverlayMediaNotification {
       delete;
   ~MockOverlayMediaNotification() override = default;
 
+  OverlayMediaNotificationsManager* manager() { return manager_; }
+
   // MockOverlayMediaNotification implementation.
-  MOCK_METHOD1(SetManager, void(OverlayMediaNotificationsManager* manager));
+  void SetManager(OverlayMediaNotificationsManager* manager) {
+    manager_ = manager;
+    SetManagerProxy(manager);
+  }
   MOCK_METHOD0(ShowNotification, void());
   MOCK_METHOD0(CloseNotification, void());
+
+  // Use a proxy so we can add expectations on it while also storing the
+  // manager for future use.
+  MOCK_METHOD1(SetManagerProxy,
+               void(OverlayMediaNotificationsManager* manager));
+
+ private:
+  OverlayMediaNotificationsManager* manager_ = nullptr;
 };
 
 }  // anonymous namespace
@@ -122,7 +135,7 @@ class MediaNotificationServiceTest : public testing::Test {
   void SetUp() override {
     media_router::MediaRouterFactory::GetInstance()->SetTestingFactory(
         &profile_, base::BindRepeating(&media_router::MockMediaRouter::Create));
-    service_ = std::make_unique<MediaNotificationService>(&profile_, nullptr);
+    service_ = std::make_unique<MediaNotificationService>(&profile_);
     service_->AddObserver(&observer_);
   }
 
@@ -214,6 +227,10 @@ class MediaNotificationServiceTest : public testing::Test {
     return item_itr->second.item()->frozen();
   }
 
+  bool IsSessionInactive(const base::UnguessableToken& id) const {
+    return base::Contains(service_->inactive_session_ids_, id.ToString());
+  }
+
   bool HasActiveNotifications() const {
     return service_->HasActiveNotifications();
   }
@@ -240,12 +257,6 @@ class MediaNotificationServiceTest : public testing::Test {
     item_itr->second.WebContentsDestroyed();
   }
 
-  void SimulateTabFocused(const base::UnguessableToken& id) {
-    auto item_itr = service_->sessions_.find(id.ToString());
-    EXPECT_NE(service_->sessions_.end(), item_itr);
-    item_itr->second.OnWebContentsFocused(nullptr);
-  }
-
   void SimulatePlaybackStateChanged(const base::UnguessableToken& id,
                                     bool playing) {
     MediaSessionInfoPtr session_info(MediaSessionInfo::New());
@@ -265,18 +276,65 @@ class MediaNotificationServiceTest : public testing::Test {
     item_itr->second.MediaSessionPositionChanged(base::nullopt);
   }
 
+  void SimulateNotificationClicked(const base::UnguessableToken& id) {
+    service_->OnContainerClicked(id.ToString());
+  }
+
   void SimulateDismissButtonClicked(const base::UnguessableToken& id) {
     service_->OnContainerDismissed(id.ToString());
   }
 
-  void SimulateNotificationDraggedOut(const base::UnguessableToken& id,
-                                      gfx::Rect bounds) {
-    service_->OnContainerDraggedOut(id.ToString(), bounds);
+  // Simulates the media notification of the given |id| being dragged out of the
+  // given dialog.
+  MockOverlayMediaNotification* SimulateNotificationDraggedOut(
+      const base::UnguessableToken& id,
+      MockMediaDialogDelegate* dialog_delegate) {
+    const gfx::Rect dragged_out_bounds(0, 1, 2, 3);
+    auto overlay_notification_unique =
+        std::make_unique<MockOverlayMediaNotification>();
+    MockOverlayMediaNotification* overlay_notification =
+        overlay_notification_unique.get();
+
+    // When the notification is dragged out, the dialog should be asked to
+    // remove the notification and return an overlay version of it.
+    EXPECT_CALL(*dialog_delegate,
+                PopOutProxy(id.ToString(), dragged_out_bounds))
+        .WillOnce(Return(overlay_notification_unique.release()));
+
+    // Then, that overlay notification should receive a manager and be shown.
+    Expectation set_manager =
+        EXPECT_CALL(*overlay_notification, SetManagerProxy(_));
+    EXPECT_CALL(*overlay_notification, ShowNotification()).After(set_manager);
+
+    // Fire the drag out.
+    service_->OnContainerDraggedOut(id.ToString(), dragged_out_bounds);
+    testing::Mock::VerifyAndClearExpectations(dialog_delegate);
+    testing::Mock::VerifyAndClearExpectations(overlay_notification);
+
+    return overlay_notification;
   }
 
   void ExpectHistogramCountRecorded(int count, int size) {
     histogram_tester_.ExpectBucketCount(
         media_message_center::kCountHistogramName, count, size);
+  }
+
+  void ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason reason,
+      int count) {
+    histogram_tester_.ExpectBucketCount(
+        "Media.GlobalMediaControls.DismissReason", reason, count);
+  }
+
+  void ExpectHistogramInteractionDelayAfterPause(base::TimeDelta time,
+                                                 int count) {
+    histogram_tester_.ExpectTimeBucketCount(
+        "Media.GlobalMediaControls.InteractionDelayAfterPause", time, count);
+  }
+
+  void ExpectEmptyInteractionHistogram() {
+    histogram_tester_.ExpectTotalCount(
+        "Media.GlobalMediaControls.InteractionDelayAfterPause", 0);
   }
 
   void SimulateMediaRoutesUpdate(
@@ -407,13 +465,25 @@ TEST_F(MediaNotificationServiceTest, HideAfterTimeoutAndActiveAgainOnPlay) {
   EXPECT_TRUE(HasActiveNotifications());
 
   // Then, stop playing media so the session is frozen, but not yet hidden.
+  ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason::
+          kMediaSessionStopped,
+      0);
   SimulateFocusLost(id);
   EXPECT_FALSE(HasActiveNotifications());
   EXPECT_TRUE(HasFrozenNotifications());
+  ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason::
+          kMediaSessionStopped,
+      0);
 
   // If the time hasn't elapsed yet, the session should still be frozen.
   AdvanceClockMilliseconds(2400);
   EXPECT_TRUE(HasFrozenNotifications());
+  ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason::
+          kMediaSessionStopped,
+      0);
 
   // Once the time is elapsed, the session should be hidden.
   EXPECT_CALL(observer(), OnNotificationListChanged()).Times(AtLeast(1));
@@ -421,6 +491,10 @@ TEST_F(MediaNotificationServiceTest, HideAfterTimeoutAndActiveAgainOnPlay) {
   EXPECT_FALSE(HasActiveNotifications());
   EXPECT_FALSE(HasFrozenNotifications());
   testing::Mock::VerifyAndClearExpectations(&observer());
+  ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason::
+          kMediaSessionStopped,
+      1);
 
   // If media starts playing again, we should show and enable the button.
   EXPECT_CALL(observer(), OnNotificationListChanged()).Times(AtLeast(1));
@@ -493,10 +567,16 @@ TEST_F(MediaNotificationServiceTest,
 
   // Then, close the tab. The session should immediately be hidden.
   EXPECT_CALL(observer(), OnNotificationListChanged()).Times(AtLeast(1));
+  ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason::kTabClosed,
+      0);
   SimulateTabClosed(id);
   EXPECT_FALSE(HasActiveNotifications());
   EXPECT_FALSE(HasFrozenNotifications());
   testing::Mock::VerifyAndClearExpectations(&observer());
+  ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason::kTabClosed,
+      1);
 }
 
 TEST_F(MediaNotificationServiceTest, DismissesMediaSession) {
@@ -511,23 +591,37 @@ TEST_F(MediaNotificationServiceTest, DismissesMediaSession) {
 
   // Then, click the dismiss button. This should stop and hide the session.
   EXPECT_CALL(dialog_delegate, HideMediaSession(id.ToString()));
+  ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason::
+          kUserDismissedNotification,
+      0);
   SimulateDismissButtonClicked(id);
   testing::Mock::VerifyAndClearExpectations(&dialog_delegate);
+  ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason::
+          kUserDismissedNotification,
+      1);
 }
 
-TEST_F(MediaNotificationServiceCastTest, CountCastSessionsAsActive) {
+// TODO(https://crbug.com/1034406) Flaky on Mac10.12
+#if defined(OS_MACOSX)
+#define MAYBE_CountCastSessionsAsActive DISABLED_CountCastSessionsAsActive
+#else
+#define MAYBE_CountCastSessionsAsActive CountCastSessionsAsActive
+#endif
+TEST_F(MediaNotificationServiceCastTest, MAYBE_CountCastSessionsAsActive) {
   media_router::MediaRoute media_route("id",
                                        media_router::MediaSource("source_id"),
                                        "sink_id", "description", true, true);
   media_route.set_controller_type(media_router::RouteControllerType::kGeneric);
 
-  EXPECT_CALL(observer(), OnNotificationListChanged());
+  EXPECT_CALL(observer(), OnNotificationListChanged()).Times(AtLeast(1));
   EXPECT_FALSE(HasActiveNotifications());
   SimulateMediaRoutesUpdate({media_route});
   EXPECT_TRUE(HasActiveNotifications());
   testing::Mock::VerifyAndClearExpectations(&observer());
 
-  EXPECT_CALL(observer(), OnNotificationListChanged());
+  EXPECT_CALL(observer(), OnNotificationListChanged()).Times(AtLeast(1));
   SimulateMediaRoutesUpdate({});
   EXPECT_FALSE(HasActiveNotifications());
   testing::Mock::VerifyAndClearExpectations(&observer());
@@ -579,27 +673,9 @@ TEST_F(MediaNotificationServiceTest, ShowsOverlayForDraggedOutNotifications) {
   EXPECT_CALL(dialog_delegate, ShowMediaSession(id.ToString(), _));
   SimulateDialogOpened(&dialog_delegate);
 
-  gfx::Rect dragged_out_bounds(0, 1, 2, 3);
-  auto overlay_notification_unique =
-      std::make_unique<MockOverlayMediaNotification>();
-  MockOverlayMediaNotification* overlay_notification =
-      overlay_notification_unique.get();
-
-  // When the notification is dragged out, the dialog should be asked to remove
-  // the notification and return an overlay version of it.
-  EXPECT_CALL(dialog_delegate, PopOutProxy(id.ToString(), dragged_out_bounds))
-      .WillOnce(Return(overlay_notification_unique.release()));
-
-  // Then, that overlay notification should receive a manager and be shown.
-  OverlayMediaNotificationsManager* manager = nullptr;
-  Expectation set_manager = EXPECT_CALL(*overlay_notification, SetManager(_))
-                                .WillOnce(SaveArg<0>(&manager));
-  EXPECT_CALL(*overlay_notification, ShowNotification()).After(set_manager);
-
   // Drag out the notification.
-  SimulateNotificationDraggedOut(id, dragged_out_bounds);
-  testing::Mock::VerifyAndClearExpectations(&dialog_delegate);
-  testing::Mock::VerifyAndClearExpectations(overlay_notification);
+  MockOverlayMediaNotification* overlay_notification =
+      SimulateNotificationDraggedOut(id, &dialog_delegate);
 
   // Now, dismiss the notification. Since the notification is an overlay
   // notification, this should just close the overlay notification.
@@ -610,7 +686,7 @@ TEST_F(MediaNotificationServiceTest, ShowsOverlayForDraggedOutNotifications) {
   // After we close, we notify our manager, and the dialog should be informed
   // that it can show the notification again.
   EXPECT_CALL(dialog_delegate, ShowMediaSession(id.ToString(), _));
-  manager->OnOverlayNotificationClosed(id.ToString());
+  overlay_notification->manager()->OnOverlayNotificationClosed(id.ToString());
   testing::Mock::VerifyAndClearExpectations(&dialog_delegate);
 }
 
@@ -628,8 +704,93 @@ TEST_F(MediaNotificationServiceTest, HidesInactiveNotifications) {
   EXPECT_TRUE(HasActiveNotifications());
 
   // But once it's been inactive for over an hour, it should disappear.
+  ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason::
+          kInactiveTimeout,
+      0);
   AdvanceClockMinutes(2);
   EXPECT_FALSE(HasActiveNotifications());
+  ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason::
+          kInactiveTimeout,
+      1);
+
+  // Since the user never interacted with the media before it was paused, we
+  // should not have recorded any post-pause interactions.
+  ExpectEmptyInteractionHistogram();
+
+  // If we now close the tab, then it shouldn't record that as the dismiss
+  // reason, since we already recorded a reason.
+  ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason::kTabClosed,
+      0);
+
+  SimulateTabClosed(id);
+
+  ExpectHistogramDismissReasonRecorded(
+      MediaNotificationService::GlobalMediaControlsDismissReason::kTabClosed,
+      0);
+}
+
+TEST_F(MediaNotificationServiceTest, InactiveBecomesActive_PlayPause) {
+  // Start playing active media.
+  base::UnguessableToken id = SimulatePlayingControllableMedia();
+  EXPECT_TRUE(HasActiveNotifications());
+
+  // Then, pause the media. We should still have the active notification.
+  SimulatePlaybackStateChanged(id, false);
+  EXPECT_TRUE(HasActiveNotifications());
+  EXPECT_FALSE(IsSessionInactive(id));
+
+  // Let the notification become inactive.
+  AdvanceClockMinutes(70);
+  EXPECT_FALSE(HasActiveNotifications());
+  EXPECT_TRUE(IsSessionInactive(id));
+
+  ExpectHistogramInteractionDelayAfterPause(base::TimeDelta::FromMinutes(70),
+                                            0);
+
+  // Then, play the media. The notification should become active.
+  SimulatePlaybackStateChanged(id, true);
+
+  // We should have recorded an interaction even though the timer has finished.
+  ExpectHistogramInteractionDelayAfterPause(base::TimeDelta::FromMinutes(70),
+                                            1);
+  EXPECT_TRUE(HasActiveNotifications());
+  EXPECT_FALSE(IsSessionInactive(id));
+}
+
+TEST_F(MediaNotificationServiceTest, InactiveBecomesActive_Seeking) {
+  // Start playing active media.
+  base::UnguessableToken id = SimulatePlayingControllableMedia();
+  EXPECT_TRUE(HasActiveNotifications());
+
+  // Then, pause the media. We should still have the active notification.
+  SimulatePlaybackStateChanged(id, false);
+  EXPECT_TRUE(HasActiveNotifications());
+  EXPECT_FALSE(IsSessionInactive(id));
+
+  // Let the notification become inactive.
+  AdvanceClockMinutes(70);
+  EXPECT_FALSE(HasActiveNotifications());
+  EXPECT_TRUE(IsSessionInactive(id));
+
+  ExpectHistogramInteractionDelayAfterPause(base::TimeDelta::FromMinutes(70),
+                                            0);
+
+  // Then, seek the media. The notification should become active.
+  SimulateMediaSeeked(id);
+
+  // We should have recorded an interaction even though the timer has finished.
+  ExpectHistogramInteractionDelayAfterPause(base::TimeDelta::FromMinutes(70),
+                                            1);
+  EXPECT_TRUE(HasActiveNotifications());
+  EXPECT_FALSE(IsSessionInactive(id));
+
+  // If we don't interact again, the notification should become inactive again.
+  AdvanceClockMinutes(70);
+  EXPECT_FALSE(HasActiveNotifications());
+  EXPECT_TRUE(IsSessionInactive(id));
 }
 
 TEST_F(MediaNotificationServiceTest, DelaysHidingNotifications_PlayPause) {
@@ -647,7 +808,11 @@ TEST_F(MediaNotificationServiceTest, DelaysHidingNotifications_PlayPause) {
 
   // If we start playing again, we should not hide the notification, even after
   // an hour.
+  ExpectHistogramInteractionDelayAfterPause(base::TimeDelta::FromMinutes(59),
+                                            0);
   SimulatePlaybackStateChanged(id, true);
+  ExpectHistogramInteractionDelayAfterPause(base::TimeDelta::FromMinutes(59),
+                                            1);
   AdvanceClockMinutes(2);
   EXPECT_TRUE(HasActiveNotifications());
 
@@ -670,18 +835,88 @@ TEST_F(MediaNotificationServiceTest, DelaysHidingNotifications_Interactions) {
   AdvanceClockMinutes(59);
   EXPECT_TRUE(HasActiveNotifications());
 
-  // If the user goes back to the tab, it should reset the hide timer.
-  SimulateTabFocused(id);
-  AdvanceClockMinutes(59);
+  // If the user clicks to go back to the tab, it should reset the hide timer.
+  ExpectHistogramInteractionDelayAfterPause(base::TimeDelta::FromMinutes(59),
+                                            0);
+  SimulateNotificationClicked(id);
+  ExpectHistogramInteractionDelayAfterPause(base::TimeDelta::FromMinutes(59),
+                                            1);
+  AdvanceClockMinutes(50);
   EXPECT_TRUE(HasActiveNotifications());
 
   // If the user seeks the media before an hour is up, it should reset the hide
   // timer.
+  ExpectHistogramInteractionDelayAfterPause(base::TimeDelta::FromMinutes(50),
+                                            0);
   SimulateMediaSeeked(id);
+  ExpectHistogramInteractionDelayAfterPause(base::TimeDelta::FromMinutes(50),
+                                            1);
   AdvanceClockMinutes(59);
   EXPECT_TRUE(HasActiveNotifications());
 
   // After the hour has passed, the notification should hide.
   AdvanceClockMinutes(2);
   EXPECT_FALSE(HasActiveNotifications());
+}
+
+TEST_F(MediaNotificationServiceTest,
+       DelaysHidingNotifications_OverlayThenPause) {
+  // Start playing active media.
+  base::UnguessableToken id = SimulatePlayingControllableMedia();
+  EXPECT_TRUE(HasActiveNotifications());
+
+  // Then, open a dialog.
+  MockMediaDialogDelegate dialog_delegate;
+  EXPECT_CALL(dialog_delegate, ShowMediaSession(id.ToString(), _));
+  SimulateDialogOpened(&dialog_delegate);
+
+  // Then, pull out the notification into an overlay notification.
+  MockOverlayMediaNotification* overlay_notification =
+      SimulateNotificationDraggedOut(id, &dialog_delegate);
+
+  // Then, pause the media.
+  SimulatePlaybackStateChanged(id, false);
+
+  // Since the notification is in an overlay, it should never time out as
+  // inactive.
+  AdvanceClockMinutes(61);
+  EXPECT_FALSE(IsSessionInactive(id));
+
+  // Now, close the overlay notification.
+  overlay_notification->manager()->OnOverlayNotificationClosed(id.ToString());
+
+  // The notification should become inactive now that it's not in an overlay.
+  AdvanceClockMinutes(61);
+  EXPECT_TRUE(IsSessionInactive(id));
+}
+
+TEST_F(MediaNotificationServiceTest,
+       DelaysHidingNotifications_PauseThenOverlay) {
+  // Start playing active media.
+  base::UnguessableToken id = SimulatePlayingControllableMedia();
+  EXPECT_TRUE(HasActiveNotifications());
+
+  // Then, pause the media.
+  SimulatePlaybackStateChanged(id, false);
+
+  // Then, open a dialog.
+  MockMediaDialogDelegate dialog_delegate;
+  EXPECT_CALL(dialog_delegate, ShowMediaSession(id.ToString(), _));
+  SimulateDialogOpened(&dialog_delegate);
+
+  // Then, pull out the notification into an overlay notification.
+  MockOverlayMediaNotification* overlay_notification =
+      SimulateNotificationDraggedOut(id, &dialog_delegate);
+
+  // Since the notification is in an overlay, it should never time out as
+  // inactive.
+  AdvanceClockMinutes(61);
+  EXPECT_FALSE(IsSessionInactive(id));
+
+  // Now, close the overlay notification.
+  overlay_notification->manager()->OnOverlayNotificationClosed(id.ToString());
+
+  // The notification should become inactive now that it's not in an overlay.
+  AdvanceClockMinutes(61);
+  EXPECT_TRUE(IsSessionInactive(id));
 }

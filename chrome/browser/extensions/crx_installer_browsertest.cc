@@ -32,7 +32,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/extensions/browser_action_test_util.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/grit/generated_resources.h"
@@ -131,14 +130,6 @@ SkBitmap CreateSquareBitmap(int size) {
   return bitmap;
 }
 
-WebApplicationIconInfo CreateIconInfoWithBitmap(int size) {
-  WebApplicationIconInfo icon_info;
-  icon_info.width = size;
-  icon_info.height = size;
-  icon_info.data = CreateSquareBitmap(size);
-  return icon_info;
-}
-
 WebApplicationInfo CreateWebAppInfo(const char* title,
                                     const char* description,
                                     const char* app_url,
@@ -148,8 +139,7 @@ WebApplicationInfo CreateWebAppInfo(const char* title,
   web_app_info.description = base::UTF8ToUTF16(description);
   web_app_info.app_url = GURL(app_url);
   web_app_info.scope = GURL(app_url);
-
-  web_app_info.icons.push_back(CreateIconInfoWithBitmap(size));
+  web_app_info.icon_bitmaps[size] = CreateSquareBitmap(size);
 
   return web_app_info;
 }

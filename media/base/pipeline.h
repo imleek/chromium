@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/buffering_state.h"
@@ -57,7 +58,7 @@ class MEDIA_EXPORT Pipeline {
     // Executed whenever a text track is added.
     // The client is expected to create a TextTrack and call |done_cb|.
     virtual void OnAddTextTrack(const TextTrackConfig& config,
-                                const AddTextTrackDoneCB& done_cb) = 0;
+                                AddTextTrackDoneCB done_cb) = 0;
 
     // Executed whenever the pipeline is waiting because of |reason|.
     virtual void OnWaiting(WaitingReason reason) = 0;
@@ -212,6 +213,12 @@ class MEDIA_EXPORT Pipeline {
   // range from 0.0f (muted) to 1.0f (full volume).  This value affects all
   // channels proportionately for multi-channel audio streams.
   virtual void SetVolume(float volume) = 0;
+
+  // Hint from player about target latency as a guide for the desired amount of
+  // post-decode buffering required to start playback or resume from
+  // seek/underflow. A null option indicates the hint is unset and the pipeline
+  // can choose its own default.
+  virtual void SetLatencyHint(base::Optional<base::TimeDelta> latency_hint) = 0;
 
   // Returns the current media playback time, which progresses from 0 until
   // GetMediaDuration().

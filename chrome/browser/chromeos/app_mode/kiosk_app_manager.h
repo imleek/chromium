@@ -36,7 +36,6 @@ class Extension;
 
 namespace chromeos {
 
-class AppSession;
 class ExternalCache;
 class KioskAppData;
 class KioskExternalUpdater;
@@ -56,9 +55,9 @@ class KioskAppManager : public KioskAppManagerBase,
     CONSUMER_KIOSK_AUTO_LAUNCH_DISABLED,
   };
 
-  typedef base::Callback<void(bool success)> EnableKioskAutoLaunchCallback;
-  typedef base::Callback<void(ConsumerKioskAutoLaunchStatus status)>
-      GetConsumerKioskAutoLaunchStatusCallback;
+  using EnableKioskAutoLaunchCallback = base::OnceCallback<void(bool success)>;
+  using GetConsumerKioskAutoLaunchStatusCallback =
+      base::OnceCallback<void(ConsumerKioskAutoLaunchStatus status)>;
 
   typedef std::vector<App> Apps;
 
@@ -109,12 +108,11 @@ class KioskAppManager : public KioskAppManagerBase,
 
   // Initiates reading of consumer kiosk mode auto-launch status.
   void GetConsumerKioskAutoLaunchStatus(
-      const GetConsumerKioskAutoLaunchStatusCallback& callback);
+      GetConsumerKioskAutoLaunchStatusCallback callback);
 
   // Enables consumer kiosk mode app auto-launch feature. Upon completion,
   // |callback| will be invoked with outcome of this operation.
-  void EnableConsumerKioskAutoLaunch(
-      const EnableKioskAutoLaunchCallback& callback);
+  void EnableConsumerKioskAutoLaunch(EnableKioskAutoLaunchCallback callback);
 
   // Returns true if this device is consumer kiosk auto launch enabled.
   bool IsConsumerKioskDeviceWithAutoLaunch();
@@ -250,8 +248,6 @@ class KioskAppManager : public KioskAppManagerBase,
                      const GURL& update_url,
                      const std::string& required_platform_version);
 
-  AppSession* app_session() { return app_session_.get(); }
-
  private:
   friend struct base::LazyInstanceTraitsBase<KioskAppManager>;
   friend std::default_delete<KioskAppManager>;
@@ -291,18 +287,17 @@ class KioskAppManager : public KioskAppManagerBase,
 
   // Callback for InstallAttributes::LockDevice() during
   // EnableConsumerModeKiosk() call.
-  void OnLockDevice(const EnableKioskAutoLaunchCallback& callback,
+  void OnLockDevice(EnableKioskAutoLaunchCallback callback,
                     InstallAttributes::LockResult result);
 
   // Callback for InstallAttributes::ReadImmutableAttributes() during
   // GetConsumerKioskModeStatus() call.
   void OnReadImmutableAttributes(
-      const GetConsumerKioskAutoLaunchStatusCallback& callback);
+      GetConsumerKioskAutoLaunchStatusCallback callback);
 
   // Callback for reading handling checks of the owner public.
-  void OnOwnerFileChecked(
-      const GetConsumerKioskAutoLaunchStatusCallback& callback,
-      bool* owner_present);
+  void OnOwnerFileChecked(GetConsumerKioskAutoLaunchStatusCallback callback,
+                          bool* owner_present);
 
   // Reads/writes auto login state from/to local state.
   AutoLoginState GetAutoLoginState() const;
@@ -345,8 +340,6 @@ class KioskAppManager : public KioskAppManagerBase,
 
   // Callback registered using SetSecondaryAppsLoaderPrefsChangedHandler().
   base::RepeatingClosure secondary_apps_changed_handler_;
-
-  std::unique_ptr<AppSession> app_session_;
 
   DISALLOW_COPY_AND_ASSIGN(KioskAppManager);
 };

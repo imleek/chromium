@@ -12,6 +12,7 @@
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
@@ -67,8 +68,10 @@
 @synthesize incognitoTabModel = _incognitoTabModel;
 
 - (instancetype)initWithWindow:(nullable UIWindow*)window
-    applicationCommandEndpoint:
-        (id<ApplicationCommands>)applicationCommandEndpoint {
+     applicationCommandEndpoint:
+         (id<ApplicationCommands>)applicationCommandEndpoint
+    browsingDataCommandEndpoint:
+        (id<BrowsingDataCommands>)browsingDataCommandEndpoint {
   if ((self = [super initWithWindow:window])) {
     _dispatcher = [[CommandDispatcher alloc] init];
     [_dispatcher startDispatchingToTarget:applicationCommandEndpoint
@@ -79,7 +82,7 @@
     [_dispatcher
         startDispatchingToTarget:applicationCommandEndpoint
                      forProtocol:@protocol(ApplicationSettingsCommands)];
-    [_dispatcher startDispatchingToTarget:applicationCommandEndpoint
+    [_dispatcher startDispatchingToTarget:browsingDataCommandEndpoint
                               forProtocol:@protocol(BrowsingDataCommands)];
   }
   return self;
@@ -185,8 +188,8 @@
       self.remoteTabsMediator;
   baseViewController.remoteTabsViewController.delegate =
       self.remoteTabsMediator;
-  baseViewController.remoteTabsViewController.dispatcher =
-      static_cast<id<ApplicationCommands>>(self.dispatcher);
+  baseViewController.remoteTabsViewController.handler =
+      HandlerForProtocol(self.dispatcher, ApplicationCommands);
   baseViewController.remoteTabsViewController.loadStrategy =
       UrlLoadStrategy::ALWAYS_NEW_FOREGROUND_TAB;
   baseViewController.remoteTabsViewController.restoredTabDisposition =
@@ -373,7 +376,8 @@
       UrlLoadStrategy::ALWAYS_NEW_FOREGROUND_TAB;
   self.historyCoordinator.presentationDelegate = self;
   self.historyCoordinator.dispatcher =
-      static_cast<id<ApplicationCommands>>(self.dispatcher);
+      static_cast<id<ApplicationCommands, BrowsingDataCommands>>(
+          self.dispatcher);
   [self.historyCoordinator start];
 }
 

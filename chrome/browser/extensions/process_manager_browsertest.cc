@@ -22,7 +22,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/extensions/browser_action_test_util.h"
+#include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
@@ -415,7 +415,7 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   EXPECT_FALSE(pm->IsBackgroundHostClosing(popup->id()));
 
   // Simulate clicking on the action to open a popup.
-  auto test_util = BrowserActionTestUtil::Create(browser());
+  auto test_util = ExtensionActionTestHelper::Create(browser());
   content::WindowedNotificationObserver frame_observer(
       content::NOTIFICATION_LOAD_COMPLETED_MAIN_FRAME,
       content::NotificationService::AllSources());
@@ -671,7 +671,14 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
 
 // Verify correct keepalive count behavior on network request events.
 // Regression test for http://crbug.com/535716.
-IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest, KeepaliveOnNetworkRequest) {
+// Disabled on Linux for flakiness: http://crbug.com/1030435.
+#if defined(OS_LINUX)
+#define MAYBE_KeepaliveOnNetworkRequest DISABLED_KeepaliveOnNetworkRequest
+#else
+#define MAYBE_KeepaliveOnNetworkRequest KeepaliveOnNetworkRequest
+#endif
+IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
+                       MAYBE_KeepaliveOnNetworkRequest) {
   // Load an extension with a lazy background page.
   scoped_refptr<const Extension> extension =
       LoadExtension(test_data_dir_.AppendASCII("api_test")
@@ -1290,16 +1297,9 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
   }
 }
 
-#if defined(OS_MACOSX)
-#define MAYBE_NestedURLNavigationsViaNoOpenerPopupBlocked \
-  NestedURLNavigationsViaNoOpenerPopupBlocked
-#else
-#define MAYBE_NestedURLNavigationsViaNoOpenerPopupBlocked \
-  DISABLED_NestedURLNavigationsViaNoOpenerPopupBlocked
-#endif
-// TODO(crbug.com/909570): This test is flaky everywhere except Mac.
+// TODO(crbug.com/909570): This test is flaky everywhere.
 IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
-                       MAYBE_NestedURLNavigationsViaNoOpenerPopupBlocked) {
+                       DISABLED_NestedURLNavigationsViaNoOpenerPopupBlocked) {
   // Create a simple extension without a background page.
   const Extension* extension = CreateExtension("Extension", false);
   embedded_test_server()->ServeFilesFromDirectory(extension->path());

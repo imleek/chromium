@@ -112,7 +112,7 @@ void GCMProfileService::IdentityObserver::StartAccountTracker(
     return;
 
   std::unique_ptr<AccountTracker> gaia_account_tracker(
-      new AccountTracker(identity_manager_, std::move(url_loader_factory)));
+      new AccountTracker(identity_manager_));
 
   gcm_account_tracker_.reset(new GCMAccountTracker(
       std::move(gaia_account_tracker), identity_manager_, driver_));
@@ -159,9 +159,15 @@ GCMProfileService::GCMProfileService(
     scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner)
     : identity_manager_(identity_manager),
       url_loader_factory_(std::move(url_loader_factory)) {
+  signin::IdentityManager::AccountIdMigrationState id_migration =
+      identity_manager_->GetAccountIdMigrationState();
+  bool remove_account_mappings_with_email_key =
+      (id_migration == signin::IdentityManager::MIGRATION_IN_PROGRESS) ||
+      (id_migration == signin::IdentityManager::MIGRATION_DONE);
   driver_ = CreateGCMDriverDesktop(
       std::move(gcm_client_factory), prefs,
       path.Append(gcm_driver::kGCMStoreDirname),
+      remove_account_mappings_with_email_key,
       base::BindRepeating(get_socket_factory_callback,
                           weak_ptr_factory_.GetWeakPtr()),
       url_loader_factory_, network_connection_tracker, channel,

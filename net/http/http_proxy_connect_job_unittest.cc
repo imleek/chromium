@@ -56,8 +56,8 @@ class HttpProxyConnectJobTest : public ::testing::TestWithParam<HttpProxyType>,
                                 public WithTaskEnvironment {
  protected:
   HttpProxyConnectJobTest()
-      : WithTaskEnvironment(base::test::TaskEnvironment::TimeSource::MOCK_TIME),
-        field_trial_list_(nullptr) {
+      : WithTaskEnvironment(
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
     // Used a mock HostResolver that does not have a cache.
     session_deps_.host_resolver = std::make_unique<MockHostResolver>();
 
@@ -255,8 +255,6 @@ class HttpProxyConnectJobTest : public ::testing::TestWithParam<HttpProxyType>,
   std::unique_ptr<TestNetworkQualityEstimator> network_quality_estimator_;
 
   std::unique_ptr<HttpNetworkSession> session_;
-
-  base::FieldTrialList field_trial_list_;
 
   SpdyTestUtil spdy_util_;
 
@@ -810,6 +808,22 @@ TEST_P(HttpProxyConnectJobTest, HaveAuth) {
     if (GetParam() == SPDY)
       session_->CloseAllConnections();
   }
+}
+
+TEST_P(HttpProxyConnectJobTest, HostResolutionFailure) {
+  session_deps_.host_resolver->rules()->AddSimulatedTimeoutFailure(
+      kHttpProxyHost);
+  session_deps_.host_resolver->rules()->AddSimulatedTimeoutFailure(
+      kHttpsProxyHost);
+
+  TestConnectJobDelegate test_delegate;
+  std::unique_ptr<ConnectJob> connect_job =
+      CreateConnectJobForHttpRequest(&test_delegate, DEFAULT_PRIORITY);
+  test_delegate.StartJobExpectingResult(connect_job.get(),
+                                        ERR_PROXY_CONNECTION_FAILED,
+                                        false /* expect_sync_result */);
+  EXPECT_THAT(connect_job->GetResolveErrorInfo().error,
+              test::IsError(ERR_DNS_TIMED_OUT));
 }
 
 TEST_P(HttpProxyConnectJobTest, RequestPriority) {

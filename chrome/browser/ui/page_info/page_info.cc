@@ -131,9 +131,8 @@ ContentSettingsType kPermissionType[] = {
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
     ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER,
 #endif
-    ContentSettingsType::AUTOPLAY,
     ContentSettingsType::MIDI_SYSEX,
-    ContentSettingsType::CLIPBOARD_READ,
+    ContentSettingsType::CLIPBOARD_READ_WRITE,
 #if defined(OS_ANDROID)
     ContentSettingsType::NFC,
 #endif
@@ -210,10 +209,6 @@ bool ShouldShowPermission(
                                           std::string(), nullptr) != nullptr) {
     return true;
   }
-
-  // Autoplay is Android-only at the moment.
-  if (info.type == ContentSettingsType::AUTOPLAY)
-    return false;
 
   // NFC is Android-only at the moment.
   if (info.type == ContentSettingsType::NFC)
@@ -662,7 +657,10 @@ void PageInfo::OnWhitelistPasswordReuseButtonPressed(
 #endif
 }
 
-void PageInfo::ComputeUIInputs(
+// TODO(crbug.com/1030099): ComputeUIInputs causes Chrome OS' compiler to hang
+// during an optimization pass; optnone appears to fix that. Remove this once
+// that's fixed.
+__attribute__((optnone)) void PageInfo::ComputeUIInputs(
     const GURL& url,
     security_state::SecurityLevel security_level,
     const security_state::VisibleSecurityState& visible_security_state) {
@@ -926,7 +924,7 @@ void PageInfo::ComputeUIInputs(
   // Safe Browsing error (since otherwise it's confusing which warning you're
   // re-enabling).
   show_ssl_decision_revoke_button_ =
-      delegate->HasAllowException(url.host()) &&
+      delegate->HasAllowException(url.host(), web_contents()) &&
       visible_security_state.malicious_content_status ==
           security_state::MALICIOUS_CONTENT_STATUS_NONE;
 }
@@ -940,6 +938,9 @@ void PageInfo::PresentSitePermissions() {
     permission_info.type = kPermissionType[i];
 
     content_settings::SettingInfo info;
+
+    // TODO(crbug.com/1030245) Investigate why the value is queried from the low
+    // level routine GetWebsiteSettings.
     std::unique_ptr<base::Value> value = content_settings_->GetWebsiteSetting(
         site_url_, site_url_, permission_info.type, std::string(), &info);
     DCHECK(value.get());
@@ -978,8 +979,10 @@ void PageInfo::PresentSitePermissions() {
 
       // If under embargo, update |permission_info| to reflect that.
       if (permission_result.content_setting == CONTENT_SETTING_BLOCK &&
-          permission_result.source ==
-              PermissionStatusSource::MULTIPLE_DISMISSALS) {
+          (permission_result.source ==
+               PermissionStatusSource::MULTIPLE_DISMISSALS ||
+           permission_result.source ==
+               PermissionStatusSource::MULTIPLE_IGNORES)) {
         permission_info.setting = permission_result.content_setting;
       }
     }
@@ -1077,13 +1080,9 @@ void PageInfo::RecordPasswordReuseEvent() {
 
 std::vector<ContentSettingsType> PageInfo::GetAllPermissionsForTesting() {
   std::vector<ContentSettingsType> permission_list;
-  for (size_t i = 0; i < base::size(kPermissionType); ++i) {
-#if !defined(OS_ANDROID)
-    if (kPermissionType[i] == ContentSettingsType::AUTOPLAY)
-      continue;
-#endif
+  for (size_t i = 0; i < base::size(kPermissionType); ++i)
     permission_list.push_back(kPermissionType[i]);
-  }
+
   return permission_list;
 }
 
@@ -1091,6 +1090,7 @@ void PageInfo::GetSafeBrowsingStatusByMaliciousContentStatus(
     security_state::MaliciousContentStatus malicious_content_status,
     PageInfo::SafeBrowsingStatus* status,
     base::string16* details) {
+  std::vector<size_t> placeholder_offsets;
   switch (malicious_content_status) {
     case security_state::MALICIOUS_CONTENT_STATUS_NONE:
       NOTREACHED();
@@ -1117,7 +1117,8 @@ void PageInfo::GetSafeBrowsingStatusByMaliciousContentStatus(
           password_protection_service_
               ? password_protection_service_->GetWarningDetailText(
                     password_protection_service_
-                        ->reused_password_account_type_for_last_shown_warning())
+                        ->reused_password_account_type_for_last_shown_warning(),
+                    &placeholder_offsets)
               : base::string16();
 #endif
       break;
@@ -1129,7 +1130,8 @@ void PageInfo::GetSafeBrowsingStatusByMaliciousContentStatus(
           password_protection_service_
               ? password_protection_service_->GetWarningDetailText(
                     password_protection_service_
-                        ->reused_password_account_type_for_last_shown_warning())
+                        ->reused_password_account_type_for_last_shown_warning(),
+                    &placeholder_offsets)
               : base::string16();
 #endif
       break;
@@ -1143,7 +1145,8 @@ void PageInfo::GetSafeBrowsingStatusByMaliciousContentStatus(
           password_protection_service_
               ? password_protection_service_->GetWarningDetailText(
                     password_protection_service_
-                        ->reused_password_account_type_for_last_shown_warning())
+                        ->reused_password_account_type_for_last_shown_warning(),
+                    &placeholder_offsets)
               : base::string16();
 #endif
       break;
@@ -1155,7 +1158,8 @@ void PageInfo::GetSafeBrowsingStatusByMaliciousContentStatus(
           password_protection_service_
               ? password_protection_service_->GetWarningDetailText(
                     password_protection_service_
-                        ->reused_password_account_type_for_last_shown_warning())
+                        ->reused_password_account_type_for_last_shown_warning(),
+                    &placeholder_offsets)
               : base::string16();
 #endif
       break;

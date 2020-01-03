@@ -13,9 +13,9 @@
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
-#include "services/data_decoder/bundled_exchanges_parser_factory.h"
 #include "services/data_decoder/json_parser_impl.h"
 #include "services/data_decoder/public/mojom/image_decoder.mojom.h"
+#include "services/data_decoder/web_bundle_parser_factory.h"
 #include "services/data_decoder/xml_parser.h"
 
 #if defined(OS_CHROMEOS)
@@ -68,10 +68,14 @@ void DataDecoderService::BindXmlParser(
                               std::move(receiver));
 }
 
-void DataDecoderService::BindBundledExchangesParserFactory(
-    mojo::PendingReceiver<mojom::BundledExchangesParserFactory> receiver) {
-  mojo::MakeSelfOwnedReceiver(std::make_unique<BundledExchangesParserFactory>(),
-                              std::move(receiver));
+void DataDecoderService::BindWebBundleParserFactory(
+    mojo::PendingReceiver<mojom::WebBundleParserFactory> receiver) {
+  if (web_bundle_parser_factory_binder_) {
+    web_bundle_parser_factory_binder_.Run(std::move(receiver));
+  } else {
+    mojo::MakeSelfOwnedReceiver(std::make_unique<WebBundleParserFactory>(),
+                                std::move(receiver));
+  }
 }
 
 #ifdef OS_CHROMEOS

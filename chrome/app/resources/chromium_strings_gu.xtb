@@ -5,7 +5,6 @@
 
 કેટલીક સુવિધાઓ ઉપલબ્ધ હોઈ શકે છે અને પસંદગીઓ પરના ફેરફારોને સાચવવામાં આવશે નહીં.</translation>
 <translation id="1104942323762546749">Chromium તમારા પાસવર્ડની નિકાસ કરવા માગે છે. આને મંજૂરી આપવા માટે તમારો Windows પાસવર્ડ ટાઇપ કરો.</translation>
-<translation id="1115445892567829615">Chromium તમારા ડેટાને સમન્વયિત કરી શક્યું નથી. કૃપા કરીને તમારા સમન્વયન પાસફ્રેઝને અપડેટ કરો.</translation>
 <translation id="113122355610423240">Chromium તમારું ડિફૉલ્ટ બ્રાઉઝર છે</translation>
 <translation id="1185134272377778587">Chromium વિશે</translation>
 <translation id="1396446129537741364">Chromium પાસવર્ડ્સ બતાવવાનો પ્રયાસ કરી રહ્યું છે.</translation>
@@ -22,7 +21,7 @@
 <translation id="1929939181775079593">Chromium પ્રતિસાદ આપતું નથી. હવે ફરીથી લોંચ કરીએ?</translation>
 <translation id="1966382378801805537">Chromium ડિફૉલ્ટ બ્રાઉઝરને નિર્ધારિત અથવા સેટ કરી શકતું નથી</translation>
 <translation id="2008474315282236005">આ, 1 આઇટમને આ ડિવાઇસમાંથી ડિલીટ કરશે. પછીથી તમારો ડેટા ફરીથી મેળવવા માટે, Chromium માં <ph name="USER_EMAIL" /> તરીકે સાઇન ઇન કરો.</translation>
-<translation id="2119636228670142020">&amp;Chromium OS વિશે</translation>
+<translation id="2147976119693222405">Chromium OS તમારા ડેટાને સિંક કરી શક્યું નથી. હમણાં જ સુધારો.</translation>
 <translation id="2241627712206172106">જો તમે કમ્પ્યુટરને શેર કરો છો, તો મિત્રો અને કુટુંબીજનો અલગ-અલગ બ્રાઉઝ કરી અને તેમને જોઇએ તેમ Chromium ને સેટ કરી શકે છે.</translation>
 <translation id="2347108572062610441">જ્યારે તમે Chromium શરૂ કરો છો ત્યારે જે પૃષ્ઠ દર્શાવવામાં આવે છે તે આ એક્સટેન્શને બદલ્યું છે.</translation>
 <translation id="2396765026452590966">જ્યારે તમે Chromium શરૂ કરો છો ત્યારે જે પૃષ્ઠ દર્શાવવામાં આવે છે તે <ph name="EXTENSION_NAME" /> એક્સટેન્શને બદલ્યું છે.</translation>
@@ -38,6 +37,7 @@
 <translation id="2718390899429598676">ઉમેરેલી સુરક્ષા માટે, Chromium તમારા ડેટાને એન્ક્રિપ્ટ કરશે.</translation>
 <translation id="2770231113462710648">ડિફૉલ્ટ બ્રાઉઝરને આના પર બદલો:</translation>
 <translation id="2799223571221894425">ફરીથી લોંચ કરો</translation>
+<translation id="2805036593126168338">Chromium OS તમારા પાસવર્ડને સિંક કરી શક્યું નથી. હમણાં જ સુધારો.</translation>
 <translation id="2838154144102149890">અપડેટ થવા માટે, આ કમ્પ્યુટર પર Chromium ચાલતું બંધ થવું જરૂરી છે. આના કારણે, આ કમ્પ્યુટરમાં લૉગ ઇન થયેલા બીજા વપરાશકર્તાઓના સાચવ્યા વિનાના ફેરફારો ગુમ થઈ શકે છે.</translation>
 <translation id="2847479871509788944">Chromium માંથી દૂર કરો...</translation>
 <translation id="2886012850691518054">વૈકલ્પિક: ઉપયોગનાં આંકડાઓ અને ક્રૅશ રીપોર્ટ્સ ઑટોમૅટિક રીતે Googleને મોકલીને Chromium ને વધુ સારું બનાવવમાં સહાય કરો.</translation>
@@ -109,7 +109,6 @@
 <translation id="5631814766731275228">Chromiumમાંનું નામ અને ફોટો</translation>
 <translation id="5634636535844844681">Chromium માટે Windows 7 અથવા તે પછીનું સંસ્કરણ આવશ્યક છે.</translation>
 <translation id="5653831366781983928">કૃપા કરીને હવે Chromium ફરી શરૂ કરો</translation>
-<translation id="5680901439334282664">Chromium માં સાઇન ઇન કરો</translation>
 <translation id="5698481217667032250">આ ભાષામાં Chromium બતાવો</translation>
 <translation id="5820394555380036790">Chromium OS</translation>
 <translation id="5862307444128926510">Chromium માં સ્વાગત છે</translation>

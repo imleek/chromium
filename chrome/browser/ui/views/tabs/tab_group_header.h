@@ -5,11 +5,10 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TABS_TAB_GROUP_HEADER_H_
 #define CHROME_BROWSER_UI_VIEWS_TABS_TAB_GROUP_HEADER_H_
 
-#include "chrome/browser/ui/tabs/tab_group_id.h"
 #include "chrome/browser/ui/views/tabs/tab_slot_view.h"
+#include "components/tab_groups/tab_group_id.h"
 #include "ui/views/widget/widget_observer.h"
 
-class TabGroupVisualData;
 class TabStrip;
 struct TabSizeInfo;
 
@@ -23,17 +22,21 @@ class View;
 // strip flow and positioned left of the leftmost tab in the group.
 class TabGroupHeader : public TabSlotView {
  public:
-  TabGroupHeader(TabStrip* tab_strip, TabGroupId group);
+  TabGroupHeader(TabStrip* tab_strip, tab_groups::TabGroupId group);
+  ~TabGroupHeader() override = default;
 
   // TabSlotView:
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
+  void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
+  void OnThemeChanged() override;
   TabSlotView::ViewType GetTabSlotViewType() const override;
   TabSizeInfo GetTabSizeInfo() const override;
 
-  // Updates our visual state according to the TabGroupVisualData for our group.
+  // Updates our visual state according to the tab_groups::TabGroupVisualData
+  // for our group.
   void VisualsChanged();
 
   // Removes {editor_bubble_tracker_} from observing the widget.
@@ -53,7 +56,7 @@ class TabGroupHeader : public TabSlotView {
   class EditorBubbleTracker : public views::WidgetObserver {
    public:
     EditorBubbleTracker() = default;
-    ~EditorBubbleTracker() override = default;
+    ~EditorBubbleTracker() override;
 
     void Opened(views::Widget* bubble_widget);
     bool is_open() const { return is_open_; }
@@ -63,6 +66,7 @@ class TabGroupHeader : public TabSlotView {
 
    private:
     bool is_open_ = false;
+    views::Widget* widget_;
   };
 
   EditorBubbleTracker editor_bubble_tracker_;

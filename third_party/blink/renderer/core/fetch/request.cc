@@ -5,9 +5,9 @@
 #include "third_party/blink/renderer/core/fetch/request.h"
 
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "services/network/public/cpp/request_destination.h"
 #include "services/network/public/cpp/request_mode.h"
 #include "third_party/blink/public/common/blob/blob_utils.h"
-#include "third_party/blink/public/common/loader/request_destination.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/url/url_search_params.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/cors/cors.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_utils.h"
@@ -52,7 +53,7 @@ namespace blink {
 FetchRequestData* CreateCopyOfFetchRequestDataForFetch(
     ScriptState* script_state,
     const FetchRequestData* original) {
-  FetchRequestData* request = FetchRequestData::Create();
+  auto* request = MakeGarbageCollected<FetchRequestData>();
   request->SetURL(original->Url());
   request->SetMethod(original->Method());
   request->SetHeaderList(original->HeaderList()->Clone());
@@ -103,7 +104,7 @@ static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
 
   if (V8Blob::HasInstance(body, isolate)) {
     Blob* blob = V8Blob::ToImpl(body.As<v8::Object>());
-    return_buffer = MakeGarbageCollected<BodyStreamBuffer>(
+    return_buffer = BodyStreamBuffer::Create(
         script_state,
         MakeGarbageCollected<BlobBytesConsumer>(execution_context,
                                                 blob->GetBlobDataHandle()),
@@ -113,7 +114,7 @@ static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
     // Avoid calling into V8 from the following constructor parameters, which
     // is potentially unsafe.
     DOMArrayBuffer* array_buffer = V8ArrayBuffer::ToImpl(body.As<v8::Object>());
-    return_buffer = MakeGarbageCollected<BodyStreamBuffer>(
+    return_buffer = BodyStreamBuffer::Create(
         script_state, MakeGarbageCollected<FormDataBytesConsumer>(array_buffer),
         nullptr /* AbortSignal */);
   } else if (body->IsArrayBufferView()) {
@@ -121,7 +122,7 @@ static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
     // is potentially unsafe.
     DOMArrayBufferView* array_buffer_view =
         V8ArrayBufferView::ToImpl(body.As<v8::Object>());
-    return_buffer = MakeGarbageCollected<BodyStreamBuffer>(
+    return_buffer = BodyStreamBuffer::Create(
         script_state,
         MakeGarbageCollected<FormDataBytesConsumer>(array_buffer_view),
         nullptr /* AbortSignal */);
@@ -132,19 +133,19 @@ static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
     // FormDataEncoder::generateUniqueBoundaryString.
     content_type = AtomicString("multipart/form-data; boundary=") +
                    form_data->Boundary().data();
-    return_buffer = MakeGarbageCollected<BodyStreamBuffer>(
-        script_state,
-        MakeGarbageCollected<FormDataBytesConsumer>(execution_context,
-                                                    std::move(form_data)),
-        nullptr /* AbortSignal */);
+    return_buffer =
+        BodyStreamBuffer::Create(script_state,
+                                 MakeGarbageCollected<FormDataBytesConsumer>(
+                                     execution_context, std::move(form_data)),
+                                 nullptr /* AbortSignal */);
   } else if (V8URLSearchParams::HasInstance(body, isolate)) {
     scoped_refptr<EncodedFormData> form_data =
         V8URLSearchParams::ToImpl(body.As<v8::Object>())->ToEncodedFormData();
-    return_buffer = MakeGarbageCollected<BodyStreamBuffer>(
-        script_state,
-        MakeGarbageCollected<FormDataBytesConsumer>(execution_context,
-                                                    std::move(form_data)),
-        nullptr /* AbortSignal */);
+    return_buffer =
+        BodyStreamBuffer::Create(script_state,
+                                 MakeGarbageCollected<FormDataBytesConsumer>(
+                                     execution_context, std::move(form_data)),
+                                 nullptr /* AbortSignal */);
     content_type = "application/x-www-form-urlencoded;charset=UTF-8";
   } else {
     String string = NativeValueTraits<IDLUSVString>::NativeValue(
@@ -152,7 +153,7 @@ static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
     if (exception_state.HadException())
       return nullptr;
 
-    return_buffer = MakeGarbageCollected<BodyStreamBuffer>(
+    return_buffer = BodyStreamBuffer::Create(
         script_state, MakeGarbageCollected<FormDataBytesConsumer>(string),
         nullptr /* AbortSignal */);
     content_type = "text/plain;charset=UTF-8";
@@ -224,8 +225,8 @@ Request* Request::CreateRequestWithRequestOrString(
   // |request|'s cache mode, redirect mode is |request|'s redirect mode, and
   // integrity metadata is |request|'s integrity metadata."
   FetchRequestData* request = CreateCopyOfFetchRequestDataForFetch(
-      script_state,
-      input_request ? input_request->GetRequest() : FetchRequestData::Create());
+      script_state, input_request ? input_request->GetRequest()
+                                  : MakeGarbageCollected<FetchRequestData>());
 
   if (input_request) {
     // "Set |signal| to input’s signal."
@@ -320,7 +321,7 @@ Request* Request::CreateRequestWithRequestOrString(
       if ((parsed_referrer.ProtocolIsAbout() &&
            parsed_referrer.Host().IsEmpty() &&
            parsed_referrer.GetPath() == "client") ||
-          !origin->IsSameSchemeHostPort(
+          !origin->IsSameOriginWith(
               SecurityOrigin::Create(parsed_referrer).get())) {
         // If |parsedReferrer|'s host is empty
         // it's cannot-be-a-base-URL flag must be set
@@ -570,7 +571,7 @@ Request* Request::CreateRequestWithRequestOrString(
   // non-null, run these substeps:"
   if (input_request && input_request->BodyBuffer()) {
     // "Let |dummyStream| be an empty ReadableStream object."
-    auto* dummy_stream = MakeGarbageCollected<BodyStreamBuffer>(
+    auto* dummy_stream = BodyStreamBuffer::Create(
         script_state, BytesConsumer::CreateClosed(), nullptr);
     // "Set |input|'s request's body to a new body whose stream is
     // |dummyStream|."
@@ -684,7 +685,7 @@ const KURL& Request::url() const {
 
 String Request::destination() const {
   // "The destination attribute’s getter must return request’s destination."
-  return GetRequestDestinationFromContext(request_->Context());
+  return network::RequestDestinationToString(request_->Destination());
 }
 
 String Request::referrer() const {
@@ -856,6 +857,7 @@ mojom::blink::FetchAPIRequestPtr Request::CreateFetchAPIRequest() const {
   fetch_api_request->integrity = request_->Integrity();
   fetch_api_request->is_history_navigation = request_->IsHistoryNavigation();
   fetch_api_request->request_context_type = request_->Context();
+  fetch_api_request->destination = request_->Destination();
 
   // Strip off the fragment part of URL. So far, all callers expect the fragment
   // to be excluded.
@@ -899,6 +901,20 @@ String Request::ContentType() const {
   String result;
   request_->HeaderList()->Get(http_names::kContentType, result);
   return result;
+}
+
+mojom::RequestContextType Request::GetRequestContextType() const {
+  if (!request_) {
+    return mojom::RequestContextType::UNSPECIFIED;
+  }
+  return request_->Context();
+}
+
+network::mojom::RequestDestination Request::GetRequestDestination() const {
+  if (!request_) {
+    return network::mojom::RequestDestination::kEmpty;
+  }
+  return request_->Destination();
 }
 
 void Request::Trace(blink::Visitor* visitor) {

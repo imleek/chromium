@@ -152,11 +152,11 @@ end up packaged into the final APK by the build system.
 
 It uses the following keys:
 
-* `deps_info['resource_dirs']`:
-List of paths to the source directories containing the resources for this
-target. This key is optional, because some targets can refer to prebuilt
-`.aar` archives.
 
+* `deps_info['res_sources_path']`:
+Path to file containing a list of resource source files used by the
+android_resources target. This replaces `deps_info['resource_dirs']` which is
+now no longer used.
 
 * `deps_info['resources_zip']`:
 *Required*. Path to the `.resources.zip` file that contains all raw/uncompiled
@@ -370,10 +370,13 @@ Empty if only a single ABI is supported.
 A boolean indicating whether native libraries are stored uncompressed in the
 APK.
 
-* `native['extra_shared_libraries']`
+* `native['loadable_modules']`
 A list of native libraries to store within the APK, in addition to those from
 `native['libraries']`. These correspond to things like the Chromium linker
 or instrumentation libraries.
+
+* `native['secondary_abi_loadable_modules']`
+Secondary ABI version of loadable_modules
 
 * `assets`
 A list of assets stored compressed in the APK. Each entry has the format
@@ -548,6 +551,7 @@ import sys
 import xml.dom.minidom
 
 from util import build_utils
+from util import resource_utils
 
 # Types that should never be used as a dependency of another build config.
 _ROOT_TYPES = ('android_apk', 'java_binary', 'java_annotation_processor',
@@ -828,6 +832,9 @@ def main(argv):
   parser.add_option('--android-manifest', help='Path to android manifest.')
   parser.add_option('--resource-dirs', action='append', default=[],
                     help='GYP-list of resource dirs')
+  parser.add_option(
+      '--res-sources-path',
+      help='Path to file containing a list of paths to resources.')
 
   # android_assets options
   parser.add_option('--asset-sources', help='List of asset sources.')
@@ -877,19 +884,21 @@ def main(argv):
   parser.add_option('--shared-libraries-runtime-deps',
                     help='Path to file containing runtime deps for shared '
                          'libraries.')
-  parser.add_option('--native-libs',
-                    action='append',
-                    help='GN-list of native libraries for primary '
-                         'android-abi. Can be specified multiple times.',
-                    default=[])
+  parser.add_option(
+      '--loadable-modules',
+      action='append',
+      help='GN-list of native libraries for primary '
+      'android-abi. Can be specified multiple times.',
+      default=[])
   parser.add_option('--secondary-abi-shared-libraries-runtime-deps',
                     help='Path to file containing runtime deps for secondary '
                          'abi shared libraries.')
-  parser.add_option('--secondary-native-libs',
-                    action='append',
-                    help='GN-list of native libraries for secondary '
-                         'android-abi. Can be specified multiple times.',
-                    default=[])
+  parser.add_option(
+      '--secondary-abi-loadable-modules',
+      action='append',
+      help='GN-list of native libraries for secondary '
+      'android-abi. Can be specified multiple times.',
+      default=[])
   parser.add_option(
       '--native-lib-placeholders',
       action='append',
@@ -930,10 +939,6 @@ def main(argv):
       '--static-library-dependent-configs',
       help='GN list of .build_configs of targets that use this target as a '
       'static library.')
-  parser.add_option(
-      '--resource-ids-provider',
-      help='Path to the .build_config for the APK that this static library '
-      'target uses to generate stable resource IDs.')
 
   # options shared between android_resources and apk targets
   parser.add_option('--r-text-path', help='Path to target\'s R.txt file.')
@@ -1237,10 +1242,10 @@ def main(argv):
     if options.package_name:
       deps_info['package_name'] = options.package_name
 
-    deps_info['resources_dirs'] = []
-    if options.resource_dirs:
-      for gyp_list in options.resource_dirs:
-        deps_info['resources_dirs'].extend(build_utils.ParseGnList(gyp_list))
+
+    deps_info['res_sources_path'] = ''
+    if options.res_sources_path:
+      deps_info['res_sources_path'] = options.res_sources_path
 
   if options.requires_android and is_java_target:
     # Lint all resources that are not already linted by a dependent library.
@@ -1251,8 +1256,12 @@ def main(argv):
       # Always use resources_dirs in favour of resources_zips so that lint error
       # messages have paths that are closer to reality (and to avoid needing to
       # extract during lint).
-      if c['resources_dirs']:
-        owned_resource_dirs.update(c['resources_dirs'])
+      if c['res_sources_path']:
+        with open(c['res_sources_path']) as f:
+          resource_files = f.readlines()
+        resource_dirs = resource_utils.ExtractResourceDirsFromFileList(
+            resource_files)
+        owned_resource_dirs.update(resource_dirs)
       else:
         owned_resource_zips.add(c['resources_zip'])
       srcjar = c.get('srcjar')
@@ -1661,16 +1670,15 @@ def main(argv):
           options.secondary_abi_shared_libraries_runtime_deps)
       all_inputs.append(options.secondary_abi_shared_libraries_runtime_deps)
 
-    secondary_abi_library_paths.extend(
-        build_utils.ParseGnList(options.secondary_native_libs))
-
     native_library_placeholder_paths = build_utils.ParseGnList(
         options.native_lib_placeholders)
 
     secondary_native_library_placeholder_paths = build_utils.ParseGnList(
         options.secondary_native_lib_placeholders)
 
-    extra_shared_libraries = build_utils.ParseGnList(options.native_libs)
+    loadable_modules = build_utils.ParseGnList(options.loadable_modules)
+    secondary_abi_loadable_modules = build_utils.ParseGnList(
+        options.secondary_abi_loadable_modules)
 
     config['native'] = {
         'libraries':
@@ -1685,8 +1693,10 @@ def main(argv):
         java_libraries_list,
         'uncompress_shared_libraries':
         options.uncompress_shared_libraries,
-        'extra_shared_libraries':
-        extra_shared_libraries,
+        'loadable_modules':
+        loadable_modules,
+        'secondary_abi_loadable_modules':
+        secondary_abi_loadable_modules,
     }
     config['assets'], config['uncompressed_assets'], locale_paks = (
         _MergeAssets(deps.All('android_assets')))

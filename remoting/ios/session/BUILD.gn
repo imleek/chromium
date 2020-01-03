@@ -16,7 +16,7 @@ source_set("session") {
 
   deps = [
     "//base",
-    "//ios/third_party/material_components_ios",
+    "//ios/third_party/material_components_ios:material_components_ios+link",
     "//remoting/client",
     "//remoting/client/display",
     "//remoting/client/ui",
@@ -24,6 +24,8 @@ source_set("session") {
     "//remoting/ios/domain",
     "//remoting/protocol",
   ]
+
+  libs = [ "CoreGraphics.framework" ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
 }

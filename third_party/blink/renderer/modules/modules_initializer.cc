@@ -68,6 +68,7 @@
 #include "third_party/blink/renderer/modules/presentation/presentation_controller.h"
 #include "third_party/blink/renderer/modules/presentation/presentation_receiver.h"
 #include "third_party/blink/renderer/modules/push_messaging/push_messaging_client.h"
+#include "third_party/blink/renderer/modules/remote_objects/remote_object_gateway_impl.h"
 #include "third_party/blink/renderer/modules/remoteplayback/html_media_element_remote_playback.h"
 #include "third_party/blink/renderer/modules/remoteplayback/remote_playback.h"
 #include "third_party/blink/renderer/modules/screen_orientation/screen_orientation_controller_impl.h"
@@ -88,6 +89,7 @@
 #include "third_party/blink/renderer/modules/webgpu/gpu_canvas_context.h"
 #include "third_party/blink/renderer/modules/worklet/animation_and_paint_worklet_thread.h"
 #include "third_party/blink/renderer/modules/xr/navigator_xr.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
@@ -169,6 +171,8 @@ void ModulesInitializer::InitLocalFrame(LocalFrame& frame) const {
       &AppBannerController::BindMojoRequest, WrapWeakPersistent(&frame)));
   frame.GetInterfaceRegistry()->AddInterface(WTF::BindRepeating(
       &TextSuggestionBackendImpl::Create, WrapWeakPersistent(&frame)));
+  frame.GetInterfaceRegistry()->AddInterface(WTF::BindRepeating(
+      &RemoteObjectGatewayFactoryImpl::Create, WrapWeakPersistent(&frame)));
 }
 
 void ModulesInitializer::InstallSupplements(LocalFrame& frame) const {
@@ -207,7 +211,7 @@ MediaControls* ModulesInitializer::CreateMediaControls(
 
 PictureInPictureController*
 ModulesInitializer::CreatePictureInPictureController(Document& document) const {
-  return PictureInPictureControllerImpl::Create(document);
+  return MakeGarbageCollected<PictureInPictureControllerImpl>(document);
 }
 
 void ModulesInitializer::InitInspectorAgentSession(
@@ -249,6 +253,11 @@ void ModulesInitializer::OnClearWindowObjectInMainWorld(
     // presentation can offer a connection to the presentation receiver.
     PresentationReceiver::From(document);
   }
+
+  LocalFrame* frame = document.GetFrame();
+  DCHECK(frame);
+  if (auto* gateway = RemoteObjectGatewayImpl::From(*frame))
+    gateway->OnClearWindowObjectInMainWorld();
 }
 
 std::unique_ptr<WebMediaPlayer> ModulesInitializer::CreateWebMediaPlayer(
@@ -314,11 +323,11 @@ void ModulesInitializer::DidChangeManifest(LocalFrame& frame) {
 
 void ModulesInitializer::RegisterInterfaces(mojo::BinderMap& binders) {
   DCHECK(Platform::Current());
+  binders.Add(ConvertToBaseRepeatingCallback(
+                  CrossThreadBindRepeating(&WebDatabaseImpl::Create)),
+              Platform::Current()->GetIOTaskRunner());
   binders.Add(
-      ConvertToBaseCallback(CrossThreadBindRepeating(&WebDatabaseImpl::Create)),
-      Platform::Current()->GetIOTaskRunner());
-  binders.Add(
-      ConvertToBaseCallback(CrossThreadBindRepeating(
+      ConvertToBaseRepeatingCallback(CrossThreadBindRepeating(
           &PeerConnectionTracker::Bind,
           WTF::CrossThreadUnretained(PeerConnectionTracker::GetInstance()))),
       Thread::MainThread()->GetTaskRunner());

@@ -38,7 +38,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/app_modal/javascript_dialog_manager.h"
-#include "components/performance_manager/performance_manager_tab_helper.h"
+#include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/sync_preferences/pref_service_syncable.h"
@@ -63,8 +63,8 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/escape.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/public_buildflags.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
@@ -421,10 +421,8 @@ DevToolsWindow::~DevToolsWindow() {
   DCHECK(it != instances->end());
   instances->erase(it);
 
-  if (!close_callback_.is_null()) {
-    close_callback_.Run();
-    close_callback_ = base::Closure();
-  }
+  if (!close_callback_.is_null())
+    std::move(close_callback_).Run();
   // Defer deletion of the main web contents, since we could get here
   // via RenderFrameHostImpl method that expects WebContents to live
   // for some time. See http://crbug.com/997299 for details.
@@ -964,8 +962,8 @@ DevToolsWindow::DevToolsWindow(FrontendType frontend_type,
   zoom::ZoomController::CreateForWebContents(main_web_contents_);
   zoom::ZoomController::FromWebContents(main_web_contents_)
       ->SetShowsNotificationBubble(false);
-  performance_manager::PerformanceManagerTabHelper::CreateForWebContents(
-      main_web_contents_);
+  performance_manager::PerformanceManagerRegistry::GetInstance()
+      ->CreatePageNodeForWebContents(main_web_contents_);
 
   g_devtools_window_instances.Get().push_back(this);
 
@@ -1516,10 +1514,8 @@ void DevToolsWindow::OnLoadCompleted() {
 
 void DevToolsWindow::ReadyForTest() {
   ready_for_test_ = true;
-  if (!ready_for_test_callback_.is_null()) {
-    ready_for_test_callback_.Run();
-    ready_for_test_callback_ = base::Closure();
-  }
+  if (!ready_for_test_callback_.is_null())
+    std::move(ready_for_test_callback_).Run();
 }
 
 void DevToolsWindow::ConnectionReady() {

@@ -14,7 +14,7 @@ var TermsOfServiceScreenState = {LOADING: 0, LOADED: 1, ERROR: 2};
 Polymer({
   is: 'terms-of-service',
 
-  behaviors: [I18nBehavior, OobeDialogHostBehavior, LoginScreenBehavior],
+  behaviors: [OobeI18nBehavior, OobeDialogHostBehavior, LoginScreenBehavior],
 
   properties: {
 
@@ -154,9 +154,6 @@ Polymer({
             '#tosContainer {' +
             '  overflow: auto;' +
             '  height: 99%;' +
-            '  border: 0.5px solid rgb(224, 224, 224);' +
-            '  border-radius: 4px;' +
-            '  box-shadow: inset 0 0 4px 4px rgba(224, 224, 224, .5);' +
             '  padding-left: 16px;' +
             '  padding-right: 16px;' +
             '}' +

@@ -169,7 +169,7 @@ bool ShouldHandleChildren(const Node& node,
                           const TextIteratorBehavior& behavior) {
   // To support |TextIteratorEmitsImageAltText|, we don't traversal child
   // nodes, in flat tree.
-  if (IsHTMLImageElement(node))
+  if (IsA<HTMLImageElement>(node))
     return false;
   // Traverse internals of text control elements in flat tree only when
   // |EntersTextControls| flag is set.
@@ -374,9 +374,9 @@ void TextIteratorAlgorithm<Strategy>::Advance() {
                      (layout_object->IsImage() ||
                       layout_object->IsLayoutEmbeddedContent() ||
                       (html_element &&
-                       (IsHTMLFormControlElement(html_element) ||
+                       (IsA<HTMLFormControlElement>(html_element) ||
                         IsA<HTMLLegendElement>(html_element) ||
-                        IsHTMLImageElement(html_element) ||
+                        IsA<HTMLImageElement>(html_element) ||
                         IsA<HTMLMeterElement>(html_element) ||
                         IsA<HTMLProgressElement>(html_element))))) {
             HandleReplacedElement();
@@ -509,10 +509,12 @@ bool TextIteratorAlgorithm<Strategy>::SupportsAltText(const Node& node) {
     return false;
 
   // FIXME: Add isSVGImageElement.
-  if (IsHTMLImageElement(*element))
+  if (IsA<HTMLImageElement>(*element))
     return true;
-  if (IsHTMLInputElement(*element) &&
-      ToHTMLInputElement(node).type() == input_type_names::kImage)
+
+  auto* html_input_element = DynamicTo<HTMLInputElement>(element);
+  if (html_input_element &&
+      html_input_element->type() == input_type_names::kImage)
     return true;
   return false;
 }
@@ -590,8 +592,9 @@ bool TextIteratorAlgorithm<Strategy>::ShouldEmitNewlineForNode(
 
   if (layout_object ? !layout_object->IsBR() : !IsA<HTMLBRElement>(node))
     return false;
-  return emits_original_text || !(node.IsInShadowTree() &&
-                                  IsHTMLInputElement(*node.OwnerShadowHost()));
+  return emits_original_text ||
+         !(node.IsInShadowTree() &&
+           IsA<HTMLInputElement>(*node.OwnerShadowHost()));
 }
 
 static bool ShouldEmitNewlinesBeforeAndAfterNode(const Node& node) {

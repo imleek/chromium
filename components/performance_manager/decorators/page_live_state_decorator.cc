@@ -25,10 +25,39 @@ class PageLiveStateDataImpl
   PageLiveStateDataImpl& operator=(const PageLiveStateDataImpl&) = delete;
 
   // PageLiveStateDecorator::Data:
-  bool IsAttachedToUSB() const override { return is_attached_to_usb_; }
+  bool IsConnectedToUSBDevice() const override {
+    return is_connected_to_usb_device_;
+  }
+  bool IsConnectedToBluetoothDevice() const override {
+    return is_connected_to_bluetooth_device_;
+  }
+  bool IsCapturingVideo() const override { return is_capturing_video_; }
+  bool IsCapturingAudio() const override { return is_capturing_audio_; }
+  bool IsBeingMirrored() const override { return is_being_mirrored_; }
+  bool IsCapturingDesktop() const override { return is_capturing_desktop_; }
+  bool IsAutoDiscardable() const override { return is_auto_discardable_; }
 
-  void set_is_attached_to_usb(bool is_attached_to_usb) {
-    is_attached_to_usb_ = is_attached_to_usb;
+  void set_is_connected_to_usb_device(bool is_connected_to_usb_device) {
+    is_connected_to_usb_device_ = is_connected_to_usb_device;
+  }
+  void set_is_connected_to_bluetooth_device(
+      bool is_connected_to_bluetooth_device) {
+    is_connected_to_bluetooth_device_ = is_connected_to_bluetooth_device;
+  }
+  void set_is_capturing_video(bool is_capturing_video) {
+    is_capturing_video_ = is_capturing_video;
+  }
+  void set_is_capturing_audio(bool is_capturing_audio) {
+    is_capturing_audio_ = is_capturing_audio;
+  }
+  void set_is_being_mirrored(bool is_being_mirrored) {
+    is_being_mirrored_ = is_being_mirrored;
+  }
+  void set_is_capturing_desktop(bool is_capturing_desktop) {
+    is_capturing_desktop_ = is_capturing_desktop;
+  }
+  void set_is_auto_discardable(bool is_auto_discardable) {
+    is_auto_discardable_ = is_auto_discardable;
   }
 
  private:
@@ -39,7 +68,13 @@ class PageLiveStateDataImpl
 
   explicit PageLiveStateDataImpl(const PageNodeImpl* page_node) {}
 
-  bool is_attached_to_usb_ = false;
+  bool is_connected_to_usb_device_ = false;
+  bool is_connected_to_bluetooth_device_ = false;
+  bool is_capturing_video_ = false;
+  bool is_capturing_audio_ = false;
+  bool is_being_mirrored_ = false;
+  bool is_capturing_desktop_ = false;
+  bool is_auto_discardable_ = false;
 };
 
 // Helper function to set a property in PageLiveStateDataImpl. This does the
@@ -70,12 +105,66 @@ void SetPropertyForWebContents(
 }  // namespace
 
 // static
-void PageLiveStateDecorator::OnWebContentsAttachedToUSBChange(
+void PageLiveStateDecorator::OnIsConnectedToUSBDeviceChanged(
     content::WebContents* contents,
-    bool is_attached_to_usb) {
+    bool is_connected_to_usb_device) {
+  SetPropertyForWebContents(
+      contents, &PageLiveStateDataImpl::set_is_connected_to_usb_device,
+      is_connected_to_usb_device);
+}
+
+// static
+void PageLiveStateDecorator::OnIsConnectedToBluetoothDeviceChanged(
+    content::WebContents* contents,
+    bool is_connected_to_bluetooth_device) {
+  SetPropertyForWebContents(
+      contents, &PageLiveStateDataImpl::set_is_connected_to_bluetooth_device,
+      is_connected_to_bluetooth_device);
+}
+
+// static
+void PageLiveStateDecorator::OnIsCapturingVideoChanged(
+    content::WebContents* contents,
+    bool is_capturing_video) {
   SetPropertyForWebContents(contents,
-                            &PageLiveStateDataImpl::set_is_attached_to_usb,
-                            is_attached_to_usb);
+                            &PageLiveStateDataImpl::set_is_capturing_video,
+                            is_capturing_video);
+}
+
+// static
+void PageLiveStateDecorator::OnIsCapturingAudioChanged(
+    content::WebContents* contents,
+    bool is_capturing_audio) {
+  SetPropertyForWebContents(contents,
+                            &PageLiveStateDataImpl::set_is_capturing_audio,
+                            is_capturing_audio);
+}
+
+// static
+void PageLiveStateDecorator::OnIsBeingMirroredChanged(
+    content::WebContents* contents,
+    bool is_being_mirrored) {
+  SetPropertyForWebContents(contents,
+                            &PageLiveStateDataImpl::set_is_being_mirrored,
+                            is_being_mirrored);
+}
+
+// static
+void PageLiveStateDecorator::OnIsCapturingDesktopChanged(
+    content::WebContents* contents,
+    bool is_capturing_desktop) {
+  SetPropertyForWebContents(contents,
+                            &PageLiveStateDataImpl::set_is_capturing_desktop,
+                            is_capturing_desktop);
+}
+
+// static
+void PageLiveStateDecorator::SetIsAutoDiscardable(
+    content::WebContents* contents,
+    bool is_auto_discardable) {
+  SetPropertyForWebContents(contents,
+                            &PageLiveStateDataImpl::set_is_auto_discardable,
+                            is_auto_discardable);
 }
 
 PageLiveStateDecorator::Data::Data() = default;

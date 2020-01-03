@@ -30,10 +30,10 @@ public abstract class SuggestionsMetrics {
 
     public static void recordSurfaceVisible() {
         if (!SharedPreferencesManager.getInstance().readBoolean(
-                    ChromePreferenceKeys.CONTENT_SUGGESTIONS_SHOWN_KEY, false)) {
+                    ChromePreferenceKeys.CONTENT_SUGGESTIONS_SHOWN, false)) {
             RecordUserAction.record("Suggestions.FirstTimeSurfaceVisible");
             SharedPreferencesManager.getInstance().writeBoolean(
-                    ChromePreferenceKeys.CONTENT_SUGGESTIONS_SHOWN_KEY, true);
+                    ChromePreferenceKeys.CONTENT_SUGGESTIONS_SHOWN, true);
         }
 
         RecordUserAction.record("Suggestions.SurfaceVisible");
@@ -221,8 +221,7 @@ public abstract class SuggestionsMetrics {
         private void recordSpinnerShowUMA(@State int state) {
             int feedSpinnerType;
 
-            // Here is convert the to {@link SpinnerType} in /third_party/feed/src/main/java/com/
-            // google/android/libraries/feed/host/logging/SpinnerType.java.
+            // Here is convert the to {@link SpinnerType} in SpinnerType.java.
             // {@link SpinnerType} cannot be directly used here since feed libraries are not always
             // compiled.
             switch (state) {

@@ -6,8 +6,10 @@
 #define CONTENT_BROWSER_FRAME_HOST_BACK_FORWARD_CACHE_CAN_STORE_DOCUMENT_RESULT_H_
 
 #include <bitset>
+#include <set>
 
 #include "content/browser/frame_host/back_forward_cache_metrics.h"
+#include "content/browser/frame_host/should_swap_browsing_instance.h"
 
 namespace content {
 
@@ -29,6 +31,10 @@ class BackForwardCacheCanStoreDocumentResult {
 
   void No(BackForwardCacheMetrics::NotRestoredReason reason);
   void NoDueToFeatures(uint64_t features);
+  void NoDueToRelatedActiveContents(base::Optional<ShouldSwapBrowsingInstance>
+                                        browsing_instance_not_swapped_reason);
+  void NoDueToDisableForRenderFrameHostCalled(
+      const std::set<std::string>& reasons);
 
   bool CanStore() const;
   operator bool() const { return CanStore(); }
@@ -37,6 +43,13 @@ class BackForwardCacheCanStoreDocumentResult {
     return not_stored_reasons_;
   }
   uint64_t blocklisted_features() const { return blocklisted_features_; }
+  base::Optional<ShouldSwapBrowsingInstance>
+  browsing_instance_not_swapped_reason() const {
+    return browsing_instance_not_swapped_reason_;
+  }
+  const std::set<std::string>& disabled_reasons() const {
+    return disabled_reasons_;
+  }
 
   std::string ToString() const;
 
@@ -46,6 +59,9 @@ class BackForwardCacheCanStoreDocumentResult {
 
   NotStoredReasons not_stored_reasons_;
   uint64_t blocklisted_features_ = 0;
+  base::Optional<ShouldSwapBrowsingInstance>
+      browsing_instance_not_swapped_reason_;
+  std::set<std::string> disabled_reasons_;
 };
 
 }  // namespace content

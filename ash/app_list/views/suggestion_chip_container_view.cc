@@ -29,7 +29,7 @@ namespace {
 constexpr int kChipSpacing = 8;
 
 // The minimum allowed number of suggestion chips shown in the container
-// (provided that the suggestoin chip results contain at least than number of
+// (provided that the suggestion chip results contain at least that number of
 // items).
 constexpr int kMinimumSuggestionChipNumber = 3;
 
@@ -274,9 +274,23 @@ void SuggestionChipContainerView::DisableFocusForShowingActiveFolder(
 }
 
 void SuggestionChipContainerView::OnTabletModeChanged(bool started) {
-  // Enable/Disable chips' background blur based on tablet mode.
+  in_tablet_mode_ = started;
+  UpdateBlurState();
+}
+
+void SuggestionChipContainerView::SetBlurDisabled(bool blur_disabled) {
+  if (blur_disabled_ == blur_disabled)
+    return;
+
+  blur_disabled_ = blur_disabled;
+  UpdateBlurState();
+}
+
+void SuggestionChipContainerView::UpdateBlurState() {
+  // Enable/Disable chips' background blur based on tablet mode, and whether
+  // blur has been explicitly disabled.
   for (auto* chip : suggestion_chip_views_)
-    chip->SetBackgroundBlurEnabled(started);
+    chip->SetBackgroundBlurEnabled(in_tablet_mode_ && !blur_disabled_);
 }
 
 }  // namespace ash

@@ -56,8 +56,12 @@ const AtomicString& RadioInputType::FormControlType() const {
 }
 
 bool RadioInputType::ValueMissing(const String&) const {
-  return GetElement().IsInRequiredRadioButtonGroup() &&
-         !GetElement().CheckedRadioButtonForGroup();
+  HTMLInputElement& input = GetElement();
+  if (auto* scope = input.GetRadioButtonGroupScope())
+    return scope->IsInRequiredGroup(&input) && !CheckedRadioButtonForGroup();
+  // TODO(crbug.com/883723): This function should work even if this radio
+  // button doesn't belong to any RadioButtonGroupScope.
+  return false;
 }
 
 String RadioInputType::ValueMissingText() const {
@@ -165,7 +169,8 @@ bool RadioInputType::IsKeyboardFocusable() const {
   // skip any other elements in the group.
   Element* current_focused_element =
       GetElement().GetDocument().FocusedElement();
-  if (auto* focused_input = ToHTMLInputElementOrNull(current_focused_element)) {
+  if (auto* focused_input =
+          DynamicTo<HTMLInputElement>(current_focused_element)) {
     if (focused_input->type() == input_type_names::kRadio &&
         focused_input->Form() == GetElement().Form() &&
         focused_input->GetName() == GetElement().GetName())
@@ -174,7 +179,7 @@ bool RadioInputType::IsKeyboardFocusable() const {
 
   // Allow keyboard focus if we're checked or if nothing in the group is
   // checked.
-  return GetElement().checked() || !GetElement().CheckedRadioButtonForGroup();
+  return GetElement().checked() || !CheckedRadioButtonForGroup();
 }
 
 bool RadioInputType::ShouldSendChangeEventAfterCheckedChanged() {
@@ -196,7 +201,7 @@ ClickHandlingState* RadioInputType::WillDispatchClick() {
   ClickHandlingState* state = MakeGarbageCollected<ClickHandlingState>();
 
   state->checked = GetElement().checked();
-  state->checked_radio_button = GetElement().CheckedRadioButtonForGroup();
+  state->checked_radio_button = CheckedRadioButtonForGroup();
   GetElement().setChecked(true, TextFieldEventBehavior::kDispatchChangeEvent);
   is_in_click_handler_ = true;
   return state;
@@ -224,7 +229,7 @@ void RadioInputType::DidDispatchClick(Event& event,
 }
 
 bool RadioInputType::ShouldAppearIndeterminate() const {
-  return !GetElement().CheckedRadioButtonForGroup();
+  return !CheckedRadioButtonForGroup();
 }
 
 HTMLInputElement* RadioInputType::NextRadioButtonInGroup(
@@ -243,6 +248,15 @@ HTMLInputElement* RadioInputType::NextRadioButtonInGroup(
         input_element->GetName() == current->GetName())
       return input_element;
   }
+  return nullptr;
+}
+
+HTMLInputElement* RadioInputType::CheckedRadioButtonForGroup() const {
+  HTMLInputElement& input = GetElement();
+  if (input.checked())
+    return &input;
+  if (auto* scope = input.GetRadioButtonGroupScope())
+    return scope->CheckedButtonForGroup(input.GetName());
   return nullptr;
 }
 

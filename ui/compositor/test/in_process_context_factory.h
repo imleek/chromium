@@ -65,10 +65,6 @@ class InProcessContextFactory : public ContextFactory,
   // ContextFactory implementation.
   void CreateLayerTreeFrameSink(base::WeakPtr<Compositor> compositor) override;
 
-  std::unique_ptr<Reflector> CreateReflector(Compositor* mirrored_compositor,
-                                             Layer* mirroring_layer) override;
-  void RemoveReflector(Reflector* reflector) override;
-
   scoped_refptr<viz::ContextProvider> SharedMainThreadContextProvider()
       override;
   scoped_refptr<viz::RasterContextProvider>
@@ -101,11 +97,8 @@ class InProcessContextFactory : public ContextFactory,
       ui::Compositor* compositor,
       mojo::PendingRemote<viz::mojom::VSyncParameterObserver> observer)
       override {}
-  void SetDisplayTransformHint(Compositor* compositor,
-                               gfx::OverlayTransform transform) override {}
   void AddObserver(ContextFactoryObserver* observer) override;
   void RemoveObserver(ContextFactoryObserver* observer) override;
-  bool SyncTokensRequiredForDisplayCompositor() override;
 
   SkMatrix44 GetOutputColorMatrix(Compositor* compositor) const;
   gfx::ColorSpace GetDisplayColorSpace(ui::Compositor* compositor) const;

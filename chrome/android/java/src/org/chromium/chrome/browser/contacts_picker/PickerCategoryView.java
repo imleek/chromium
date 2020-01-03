@@ -23,7 +23,7 @@ import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.GlobalDiscardableReferencePool;
-import org.chromium.chrome.browser.ui.widget.RoundedIconGenerator;
+import org.chromium.chrome.browser.favicon.RoundedIconGenerator;
 import org.chromium.chrome.browser.util.BitmapCache;
 import org.chromium.chrome.browser.util.ConversionUtils;
 import org.chromium.chrome.browser.widget.selection.SelectableListLayout;
@@ -169,6 +169,12 @@ public class PickerCategoryView extends OptimizedFrameLayout
         mToolbar.setNavigationOnClickListener(this);
         mToolbar.initializeSearchView(this, R.string.contacts_picker_search, 0);
         mToolbar.setDelegate(delegate);
+        mPickerAdapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
+            @Override
+            public void onChanged() {
+                updateSelectionState();
+            }
+        });
         mSelectableListLayout.configureWideDisplayStyle();
 
         mSearchButton = (ImageView) mToolbar.findViewById(R.id.search);
@@ -326,6 +332,11 @@ public class PickerCategoryView extends OptimizedFrameLayout
 
     boolean multiSelectionAllowed() {
         return mMultiSelectionAllowed;
+    }
+
+    private void updateSelectionState() {
+        boolean filterChipsSelected = mTopView == null || mTopView.filterChipsChecked() > 0;
+        mToolbar.setFilterChipsSelected(filterChipsSelected);
     }
 
     /**

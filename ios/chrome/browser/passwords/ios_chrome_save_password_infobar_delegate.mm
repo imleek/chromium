@@ -116,6 +116,15 @@ bool IsUpdateInfobar(PasswordInfobarType infobar_type) {
 
 using password_manager::PasswordFormManagerForUI;
 
+// static
+IOSChromeSavePasswordInfoBarDelegate*
+IOSChromeSavePasswordInfoBarDelegate::FromInfobarDelegate(
+    infobars::InfoBarDelegate* delegate) {
+  return delegate->GetIdentifier() == SAVE_PASSWORD_INFOBAR_DELEGATE_MOBILE
+             ? static_cast<IOSChromeSavePasswordInfoBarDelegate*>(delegate)
+             : nullptr;
+}
+
 IOSChromeSavePasswordInfoBarDelegate::IOSChromeSavePasswordInfoBarDelegate(
     bool is_sync_user,
     bool password_update,
@@ -177,7 +186,7 @@ base::string16 IOSChromeSavePasswordInfoBarDelegate::GetButtonLabel(
         return IsPasswordUpdate()
                    ? base::string16()
                    : l10n_util::GetStringUTF16(
-                         IDS_IOS_PASSWORD_MANAGER_MODAL_BLACKLIST_BUTTON);
+                         IDS_IOS_PASSWORD_MANAGER_MODAL_BLOCK_BUTTON);
       }
       case BUTTON_NONE:
         NOTREACHED();
@@ -186,7 +195,7 @@ base::string16 IOSChromeSavePasswordInfoBarDelegate::GetButtonLabel(
   } else {
     return l10n_util::GetStringUTF16(
         (button == BUTTON_OK) ? IDS_IOS_PASSWORD_MANAGER_SAVE_BUTTON
-                              : IDS_IOS_PASSWORD_MANAGER_BLACKLIST_BUTTON);
+                              : IDS_IOS_PASSWORD_MANAGER_BLOCK_BUTTON);
   }
 }
 

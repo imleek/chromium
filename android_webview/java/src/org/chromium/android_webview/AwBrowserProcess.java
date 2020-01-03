@@ -77,6 +77,7 @@ public final class AwBrowserProcess {
      *                             process; null to use no suffix.
      */
     public static void loadLibrary(String processDataDirSuffix) {
+        LibraryLoader.getInstance().setLibraryProcessType(LibraryProcessType.PROCESS_WEBVIEW);
         if (processDataDirSuffix == null) {
             PathUtils.setPrivateDataDirectorySuffix(WEBVIEW_DIR_BASENAME, "WebView");
         } else {
@@ -103,10 +104,10 @@ public final class AwBrowserProcess {
         final boolean isExternalService = true;
         final boolean bindToCaller = true;
         final boolean ignoreVisibilityForImportance = true;
-        ChildProcessCreationParams.set(getWebViewPackageName(), isExternalService,
+        ChildProcessCreationParams.set(getWebViewPackageName(), null /* privilegedServicesName */,
+                getWebViewPackageName(), null /* sandboxedServicesName */, isExternalService,
                 LibraryProcessType.PROCESS_WEBVIEW_CHILD, bindToCaller,
-                ignoreVisibilityForImportance, null /* privilegedServicesName */,
-                null /* sandboxedServicesName */);
+                ignoreVisibilityForImportance);
     }
 
     /**

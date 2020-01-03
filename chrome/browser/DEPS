@@ -172,8 +172,9 @@ include_rules = [
   "+components/payments/content",
   "+components/payments/core",
   "+components/performance_manager/public",
-  "+components/performance_manager/test_support",
+  "+components/performance_manager/embedder",
   "+components/performance_manager/performance_manager_tab_helper.h",
+  "+components/performance_manager/test_support",
   "+components/performance_manager/performance_manager_impl.h",
   "+components/pdf/browser",
   "+components/policy",
@@ -235,6 +236,7 @@ include_rules = [
   "+components/sync_sessions",
   "+components/sync_user_events",
   "+components/tab_count_metrics",
+  "+components/tab_groups",
   "+components/tracing/common",
   "+components/translate/content/browser",
   "+components/translate/content/common",
@@ -356,9 +358,10 @@ include_rules = [
   "-ui/message_center",
   "+ui/message_center/public",
 
-  # chrome only needs switches from cc. All usage of the compositor is from
-  # content. Definitely don't include generic stuff from cc/base here, if this
-  # is needed these files need to move to base/
+  # chrome only needs switches and features flags from cc. All usage of the
+  # compositor is from content. Definitely don't include generic stuff from
+  # cc/base here, if this is needed these files need to move to base/
+  "+cc/base/features.h",
   "+cc/base/switches.h",
 
   # Unsafe to use from //chrome, see http://goo.gl/QQG5wo
@@ -378,6 +381,7 @@ include_rules = [
   # Ensure that only the public interface of performance_manager gets used.
   "-chrome/browser/performance_manager",
   "+chrome/browser/performance_manager/public",
+  "+chrome/browser/performance_manager/test_support",
   "+chrome/browser/performance_manager/chrome_browser_main_extra_parts_performance_manager.h",
   "+chrome/browser/performance_manager/chrome_content_browser_client_performance_manager_part.h",
   "+chrome/browser/performance_manager/graph/policies/policy_features.h",
@@ -411,19 +415,10 @@ include_rules = [
   "-third_party/blink",
   "+third_party/blink/public/common",
   "+third_party/blink/public/mojom",
-  "+third_party/blink/public/platform/web_float_point.h",
-  "+third_party/blink/public/platform/web_gesture_event.h",
-  "+third_party/blink/public/platform/web_input_event.h",
-  "+third_party/blink/public/platform/web_mouse_event.h",
-  "+third_party/blink/public/platform/web_mouse_wheel_event.h",
-  "+third_party/blink/public/platform/web_touch_event.h",
   "+third_party/blink/public/public_buildflags.h",
 ]
 
 specific_include_rules = {
-  "ash_service_registry\.cc": [
-    "+ash/ash_service.h",
-  ],
   "platform_util_linux.cc": [
     # The following is used to call the org.freedesktop.FileManager1
     # DBus interface to highlight a file within its parent folder

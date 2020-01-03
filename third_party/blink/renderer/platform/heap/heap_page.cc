@@ -35,11 +35,11 @@
 #include "base/trace_event/process_memory_dump.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
-#include "third_party/blink/renderer/platform/heap/address_cache.h"
 #include "third_party/blink/renderer/platform/heap/blink_gc_memory_dump_provider.h"
 #include "third_party/blink/renderer/platform/heap/heap_compact.h"
 #include "third_party/blink/renderer/platform/heap/heap_stats_collector.h"
 #include "third_party/blink/renderer/platform/heap/marking_verifier.h"
+#include "third_party/blink/renderer/platform/heap/page_bloom_filter.h"
 #include "third_party/blink/renderer/platform/heap/page_memory.h"
 #include "third_party/blink/renderer/platform/heap/page_pool.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
@@ -311,11 +311,9 @@ bool BaseArena::LazySweepWithDeadline(base::TimeTicks deadline) {
   DCHECK(ScriptForbiddenScope::IsScriptForbidden());
 
   size_t page_count = 1;
-  // TODO(bikineev): We should probably process pages in the reverse order. This
-  // will leave more work for concurrent sweeper and reduce memory footprint
-  // faster.
-  while (BasePage* page = unswept_pages_.PopLocked()) {
-    SweepUnsweptPage(page);
+  // First, process empty pages to faster reduce memory footprint.
+  while (BasePage* page = swept_unfinalized_empty_pages_.PopLocked()) {
+    page->FinalizeSweep(SweepResult::kPageEmpty);
     if (page_count % kDeadlineCheckInterval == 0) {
       if (deadline <= base::TimeTicks::Now()) {
         // Deadline has come.
@@ -324,6 +322,7 @@ bool BaseArena::LazySweepWithDeadline(base::TimeTicks deadline) {
     }
     page_count++;
   }
+  // Second, execute finalizers to leave more work for concurrent sweeper.
   while (BasePage* page = swept_unfinalized_pages_.PopLocked()) {
     swept_pages_.PushLocked(page);
     page->FinalizeSweep(SweepResult::kPageNotEmpty);
@@ -335,8 +334,9 @@ bool BaseArena::LazySweepWithDeadline(base::TimeTicks deadline) {
     }
     page_count++;
   }
-  while (BasePage* page = swept_unfinalized_empty_pages_.PopLocked()) {
-    page->FinalizeSweep(SweepResult::kPageEmpty);
+  // Help concurrent sweeper.
+  while (BasePage* page = unswept_pages_.PopLocked()) {
+    SweepUnsweptPage(page);
     if (page_count % kDeadlineCheckInterval == 0) {
       if (deadline <= base::TimeTicks::Now()) {
         // Deadline has come.
@@ -384,13 +384,13 @@ void BaseArena::CompleteSweep() {
   // Some phases, e.g. verification, require iterability of a page.
   MakeIterable();
 
-  // First, sweep and finalize pages.
+  // First, finalize pages that have been processed by concurrent sweepers.
+  InvokeFinalizersOnSweptPages();
+
+  // Then, sweep and finalize pages.
   while (BasePage* page = unswept_pages_.PopLocked()) {
     SweepUnsweptPage(page);
   }
-
-  // Then, finalize pages that have been processed by concurrent sweepers.
-  InvokeFinalizersOnSweptPages();
 
   // Verify object start bitmap after all freelists have been merged.
   VerifyObjectStartBitmap();
@@ -631,7 +631,6 @@ bool NormalPageArena::PagesToBeSweptContains(Address address) {
 #endif
 
 void NormalPageArena::AllocatePage() {
-  GetThreadState()->Heap().address_cache()->MarkDirty();
   PageMemory* page_memory =
       GetThreadState()->Heap().GetFreePagePool()->Take(ArenaIndex());
 
@@ -668,8 +667,9 @@ void NormalPageArena::AllocatePage() {
       new (page_memory->WritableStart()) NormalPage(page_memory, this);
   swept_pages_.PushLocked(page);
 
-  GetThreadState()->Heap().stats_collector()->IncreaseAllocatedSpace(
-      page->size());
+  ThreadHeap& heap = GetThreadState()->Heap();
+  heap.stats_collector()->IncreaseAllocatedSpace(page->size());
+  heap.page_bloom_filter()->Add(page->GetAddress());
 #if DCHECK_IS_ON() || defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER)
   // Allow the following addToFreeList() to add the newly allocated memory
   // to the free list.
@@ -683,8 +683,9 @@ void NormalPageArena::AllocatePage() {
 }
 
 void NormalPageArena::FreePage(NormalPage* page) {
-  GetThreadState()->Heap().stats_collector()->DecreaseAllocatedSpace(
-      page->size());
+  ThreadHeap& heap = GetThreadState()->Heap();
+  heap.stats_collector()->DecreaseAllocatedSpace(page->size());
+  heap.page_bloom_filter()->Remove(page->GetAddress());
 
   PageMemory* memory = page->Storage();
   page->~NormalPage();
@@ -971,7 +972,6 @@ Address LargeObjectArena::DoAllocateLargeObjectPage(size_t allocation_size,
   large_object_size += kAllocationGranularity;
 #endif
 
-  GetThreadState()->Heap().address_cache()->MarkDirty();
   PageMemory* page_memory = PageMemory::Allocate(
       large_object_size, GetThreadState()->Heap().GetRegionTree());
   Address large_object_address = page_memory->WritableStart();
@@ -997,6 +997,14 @@ Address LargeObjectArena::DoAllocateLargeObjectPage(size_t allocation_size,
 
   swept_pages_.PushLocked(large_object);
 
+  // Add all segments of kBlinkPageSize to the bloom filter so that the large
+  // object can be kept by derived pointers on stack. An alternative might be to
+  // prohibit derived pointers to large objects, but that is dangerous since the
+  // compiler is free to optimize on-stack base pointers away.
+  for (Address page_begin = RoundToBlinkPageStart(large_object->GetAddress());
+       page_begin < large_object->PayloadEnd(); page_begin += kBlinkPageSize) {
+    GetThreadState()->Heap().page_bloom_filter()->Add(page_begin);
+  }
   GetThreadState()->Heap().stats_collector()->IncreaseAllocatedSpace(
       large_object->size());
   GetThreadState()->Heap().stats_collector()->IncreaseAllocatedObjectSize(
@@ -1007,8 +1015,9 @@ Address LargeObjectArena::DoAllocateLargeObjectPage(size_t allocation_size,
 void LargeObjectArena::FreeLargeObjectPage(LargeObjectPage* object) {
   ASAN_UNPOISON_MEMORY_REGION(object->Payload(), object->PayloadSize());
   object->ObjectHeader()->Finalize(object->Payload(), object->PayloadSize());
-  GetThreadState()->Heap().stats_collector()->DecreaseAllocatedSpace(
-      object->size());
+  ThreadHeap& heap = GetThreadState()->Heap();
+  heap.stats_collector()->DecreaseAllocatedSpace(object->size());
+  heap.page_bloom_filter()->Remove(object->GetAddress());
 
   // Unpoison the object header and allocationGranularity bytes after the
   // object before freeing.
@@ -1116,7 +1125,9 @@ void FreeList::Add(Address address, size_t size) {
 }
 
 void FreeList::MoveFrom(FreeList* other) {
+#if DCHECK_IS_ON()
   const size_t expected_size = FreeListSize() + other->FreeListSize();
+#endif
 
   // Newly created entries get added to the head.
   for (size_t index = 0; index < kBlinkPageSizeLog2; ++index) {
@@ -1137,7 +1148,9 @@ void FreeList::MoveFrom(FreeList* other) {
       std::max(biggest_free_list_index_, other->biggest_free_list_index_);
   other->biggest_free_list_index_ = 0;
 
+#if DCHECK_IS_ON()
   DCHECK_EQ(expected_size, FreeListSize());
+#endif
   DCHECK(other->IsEmpty());
 }
 

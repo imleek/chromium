@@ -25,7 +25,6 @@
 
 #include "third_party/blink/renderer/core/dom/class_collection.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
-#include "third_party/blink/renderer/core/dom/node_child_removal_tracker.h"
 #include "third_party/blink/renderer/core/dom/node_rare_data.h"
 #include "third_party/blink/renderer/core/html/document_all_name_collection.h"
 #include "third_party/blink/renderer/core/html/document_name_collection.h"
@@ -201,12 +200,7 @@ unsigned HTMLCollection::length() const {
 }
 
 Element* HTMLCollection::item(unsigned offset) const {
-  Element* element = collection_items_cache_.NodeAt(*this, offset);
-  if (element && element->GetDocument().InDOMNodeRemovedHandler()) {
-    if (NodeChildRemovalTracker::IsBeingRemoved(*element))
-      GetDocument().CountDetachingNodeAccessInDOMNodeRemovedHandler();
-  }
-  return element;
+  return collection_items_cache_.NodeAt(*this, offset);
 }
 
 static inline bool IsMatchingHTMLElement(const HTMLCollection& html_collection,
@@ -241,9 +235,10 @@ static inline bool IsMatchingHTMLElement(const HTMLCollection& html_collection,
           .ElementMatches(element);
     case kMapAreas:
       return element.HasTagName(html_names::kAreaTag);
-    case kDocApplets:
-      return IsHTMLObjectElement(element) &&
-             ToHTMLObjectElement(element).ContainsJavaApplet();
+    case kDocApplets: {
+      auto* html_image_element = DynamicTo<HTMLObjectElement>(element);
+      return html_image_element && html_image_element->ContainsJavaApplet();
+    }
     case kDocEmbeds:
       return element.HasTagName(html_names::kEmbedTag);
     case kDocLinks:
@@ -255,8 +250,8 @@ static inline bool IsMatchingHTMLElement(const HTMLCollection& html_collection,
              element.FastHasAttribute(html_names::kNameAttr);
     case kFormControls:
       DCHECK(IsA<HTMLFieldSetElement>(html_collection.ownerNode()));
-      return IsHTMLObjectElement(element) ||
-             IsHTMLFormControlElement(element) ||
+      return IsA<HTMLObjectElement>(element) ||
+             IsA<HTMLFormControlElement>(element) ||
              element.IsFormAssociatedCustomElement();
     case kClassCollectionType:
     case kTagCollectionType:
@@ -282,13 +277,13 @@ inline bool HTMLCollection::ElementMatches(const Element& element) const {
     case kNodeChildren:
       return true;
     case kClassCollectionType:
-      return ToClassCollection(*this).ElementMatches(element);
+      return To<ClassCollection>(*this).ElementMatches(element);
     case kTagCollectionType:
-      return ToTagCollection(*this).ElementMatches(element);
+      return To<TagCollection>(*this).ElementMatches(element);
     case kHTMLTagCollectionType:
       return ToHTMLTagCollection(*this).ElementMatches(element);
     case kTagCollectionNSType:
-      return ToTagCollectionNS(*this).ElementMatches(element);
+      return To<TagCollectionNS>(*this).ElementMatches(element);
     case kWindowNamedItems:
       return ToWindowNameCollection(*this).ElementMatches(element);
     case kDocumentAllNamedItems:
@@ -360,7 +355,7 @@ Element* HTMLCollection::TraverseToFirst() const {
           RootNode(), MakeIsMatch(ToHTMLTagCollection(*this)));
     case kClassCollectionType:
       return ElementTraversal::FirstWithin(
-          RootNode(), MakeIsMatch(ToClassCollection(*this)));
+          RootNode(), MakeIsMatch(To<ClassCollection>(*this)));
     default:
       if (OverridesItemAfter())
         return VirtualItemAfter(nullptr);
@@ -390,7 +385,7 @@ Element* HTMLCollection::TraverseForwardToOffset(
     case kClassCollectionType:
       return TraverseMatchingElementsForwardToOffset(
           current_element, &RootNode(), offset, current_offset,
-          MakeIsMatch(ToClassCollection(*this)));
+          MakeIsMatch(To<ClassCollection>(*this)));
     default:
       if (OverridesItemAfter()) {
         for (Element* next = VirtualItemAfter(&current_element); next;

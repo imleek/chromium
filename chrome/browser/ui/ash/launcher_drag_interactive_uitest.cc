@@ -4,17 +4,20 @@
 
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/app_list/test/chrome_app_list_test_support.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/perf/drag_event_generator.h"
 #include "chrome/test/base/perf/performance_test.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/display/display.h"
@@ -81,12 +84,21 @@ IN_PROC_BROWSER_TEST_F(LauncherDragClamshellModeTest, Open) {
 class LauncherDragTest : public LauncherDragClamshellModeTest,
                          public ::testing::WithParamInterface<bool> {
  public:
-  LauncherDragTest() = default;
+  LauncherDragTest() {
+    tablet_mode_ = GetParam();
+
+    // Drag from top to close app list in tablet mode is disabled if
+    // kDragFromShelfToHomeOrOverview feature is enabled.
+    if (tablet_mode_) {
+      scoped_features_.InitWithFeatures(
+          {}, {ash::features::kDragFromShelfToHomeOrOverview,
+               chromeos::features::kShelfHotseat});
+    }
+  }
   ~LauncherDragTest() override = default;
 
   // UIPerformanceTest:
   void SetUpOnMainThread() override {
-    tablet_mode_ = GetParam();
     if (tablet_mode_)
       ash::ShellTestApi().SetTabletModeEnabledForTest(true);
 
@@ -103,6 +115,7 @@ class LauncherDragTest : public LauncherDragClamshellModeTest,
 
  private:
   bool tablet_mode_ = false;
+  base::test::ScopedFeatureList scoped_features_;
 
   DISALLOW_COPY_AND_ASSIGN(LauncherDragTest);
 };
@@ -132,6 +145,6 @@ IN_PROC_BROWSER_TEST_P(LauncherDragTest, Close) {
   shell_test_api.WaitForLauncherAnimationState(ash::AppListViewState::kClosed);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          LauncherDragTest,
                          /*tablet_mode=*/::testing::Bool());

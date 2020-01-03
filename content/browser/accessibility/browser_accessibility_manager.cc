@@ -27,7 +27,7 @@ namespace content {
 
 namespace {
 // A function to call when focus changes, for testing only.
-base::LazyInstance<base::Closure>::DestructorAtExit
+base::LazyInstance<base::RepeatingClosure>::DestructorAtExit
     g_focus_change_callback_for_testing = LAZY_INSTANCE_INITIALIZER;
 
 // If 2 or more tree updates can all be merged into others,
@@ -342,20 +342,12 @@ void BrowserAccessibilityManager::OnWindowBlurred() {
     SetLastFocusedNode(nullptr);
 }
 
-void BrowserAccessibilityManager::UserIsNavigatingAway() {
-  user_is_navigating_away_ = true;
-}
-
 void BrowserAccessibilityManager::UserIsReloading() {
   user_is_navigating_away_ = true;
 }
 
-void BrowserAccessibilityManager::NavigationSucceeded() {
-  user_is_navigating_away_ = false;
-}
-
-void BrowserAccessibilityManager::NavigationFailed() {
-  user_is_navigating_away_ = false;
+void BrowserAccessibilityManager::DidStartLoading() {
+  user_is_navigating_away_ = true;
 }
 
 void BrowserAccessibilityManager::DidStopLoading() {
@@ -472,8 +464,8 @@ bool BrowserAccessibilityManager::OnAccessibilityEvents(
 
     // Also, perform the initial run of language detection.
     // TODO(chrishall): we will want to run this more often for dynamic pages.
-    tree_->language_detection_manager->DetectLanguageForSubtree(tree_->root());
-    tree_->language_detection_manager->LabelLanguageForSubtree(tree_->root());
+    tree_->language_detection_manager->DetectLanguages(tree_->root());
+    tree_->language_detection_manager->LabelLanguages(tree_->root());
   }
 
   // Allow derived classes to do event post-processing.
@@ -535,7 +527,7 @@ void BrowserAccessibilityManager::ActivateFindInPageResult(int request_id) {
     return;
 
   // If an ancestor of this node is a leaf node, fire the notification on that.
-  node = node->GetClosestPlatformObject();
+  node = node->PlatformGetClosestPlatformObject();
 
   // The "scrolled to anchor" notification is a great way to get a
   // screen reader to jump directly to a specific location in a document.
@@ -668,8 +660,8 @@ void BrowserAccessibilityManager::SetFocusLocallyForTesting(
 
 // static
 void BrowserAccessibilityManager::SetFocusChangeCallbackForTesting(
-    const base::Closure& callback) {
-  g_focus_change_callback_for_testing.Get() = callback;
+    base::RepeatingClosure callback) {
+  g_focus_change_callback_for_testing.Get() = std::move(callback);
 }
 
 void BrowserAccessibilityManager::SetGeneratedEventCallbackForTesting(
@@ -752,7 +744,8 @@ void BrowserAccessibilityManager::ScrollToMakeVisible(
     const BrowserAccessibility& node,
     gfx::Rect subfocus,
     ax::mojom::ScrollAlignment horizontal_scroll_alignment,
-    ax::mojom::ScrollAlignment vertical_scroll_alignment) {
+    ax::mojom::ScrollAlignment vertical_scroll_alignment,
+    ax::mojom::ScrollBehavior scroll_behavior) {
   if (!delegate_)
     return;
 
@@ -765,6 +758,7 @@ void BrowserAccessibilityManager::ScrollToMakeVisible(
   action_data.target_rect = subfocus;
   action_data.horizontal_scroll_alignment = horizontal_scroll_alignment;
   action_data.vertical_scroll_alignment = vertical_scroll_alignment;
+  action_data.scroll_behavior = scroll_behavior;
   delegate_->AccessibilityPerformAction(action_data);
 }
 
@@ -1428,14 +1422,14 @@ void BrowserAccessibilityManager::UseCustomDeviceScaleFactorForTesting(
 
 BrowserAccessibility* BrowserAccessibilityManager::CachingAsyncHitTest(
     const gfx::Point& screen_point) {
+  BrowserAccessibilityManager* root_manager = GetRootManager();
+  if (root_manager && root_manager != this)
+    return root_manager->CachingAsyncHitTest(screen_point);
+
   gfx::Point scaled_point =
       IsUseZoomForDSFEnabled()
           ? ScaleToRoundedPoint(screen_point, device_scale_factor())
           : screen_point;
-
-  BrowserAccessibilityManager* root_manager = GetRootManager();
-  if (root_manager && root_manager != this)
-    return root_manager->CachingAsyncHitTest(scaled_point);
 
   if (delegate_) {
     // This triggers an asynchronous request to compute the true object that's

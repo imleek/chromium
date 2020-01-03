@@ -67,8 +67,8 @@ constexpr auto kUIPaintTimeout = base::TimeDelta::FromSeconds(5);
 // -[NSWindow close] when the animation ends, releasing itself.
 @interface ViewsNSWindowCloseAnimator : NSObject <NSAnimationDelegate> {
  @private
-  base::scoped_nsobject<NSWindow> window_;
-  base::scoped_nsobject<NSAnimation> animation_;
+  base::scoped_nsobject<NSWindow> _window;
+  base::scoped_nsobject<NSAnimation> _animation;
 }
 + (void)closeWindowWithAnimation:(NSWindow*)window;
 @end
@@ -77,12 +77,12 @@ constexpr auto kUIPaintTimeout = base::TimeDelta::FromSeconds(5);
 
 - (instancetype)initWithWindow:(NSWindow*)window {
   if ((self = [super init])) {
-    window_.reset([window retain]);
-    animation_.reset(
+    _window.reset([window retain]);
+    _animation.reset(
         [[ConstrainedWindowAnimationHide alloc] initWithWindow:window]);
-    [animation_ setDelegate:self];
-    [animation_ setAnimationBlockingMode:NSAnimationNonblocking];
-    [animation_ startAnimation];
+    [_animation setDelegate:self];
+    [_animation setAnimationBlockingMode:NSAnimationNonblocking];
+    [_animation startAnimation];
   }
   return self;
 }
@@ -92,8 +92,8 @@ constexpr auto kUIPaintTimeout = base::TimeDelta::FromSeconds(5);
 }
 
 - (void)animationDidEnd:(NSAnimation*)animation {
-  [window_ close];
-  [animation_ setDelegate:nil];
+  [_window close];
+  [_animation setDelegate:nil];
   [self release];
 }
 @end
@@ -115,33 +115,33 @@ constexpr auto kUIPaintTimeout = base::TimeDelta::FromSeconds(5);
 @implementation ModalShowAnimationWithLayer {
   // This is the "real" delegate, but this class acts as the NSAnimationDelegate
   // to avoid a separate object.
-  remote_cocoa::NativeWidgetNSWindowBridge* bridgedNativeWidget_;
+  remote_cocoa::NativeWidgetNSWindowBridge* _bridgedNativeWidget;
 }
 - (instancetype)initWithBridgedNativeWidget:
     (remote_cocoa::NativeWidgetNSWindowBridge*)widget {
   if ((self = [super initWithWindow:widget->ns_window()])) {
-    bridgedNativeWidget_ = widget;
+    _bridgedNativeWidget = widget;
     [self setDelegate:self];
   }
   return self;
 }
 - (void)dealloc {
-  DCHECK(!bridgedNativeWidget_);
+  DCHECK(!_bridgedNativeWidget);
   [super dealloc];
 }
 - (void)animationDidEnd:(NSAnimation*)animation {
-  DCHECK(bridgedNativeWidget_);
-  bridgedNativeWidget_->OnShowAnimationComplete();
-  bridgedNativeWidget_ = nullptr;
+  DCHECK(_bridgedNativeWidget);
+  _bridgedNativeWidget->OnShowAnimationComplete();
+  _bridgedNativeWidget = nullptr;
   [self setDelegate:nil];
 }
 - (void)stopAnimation {
   [super stopAnimation];
-  [window_ invalidateShadow];
+  [_window invalidateShadow];
 }
 - (void)setCurrentProgress:(NSAnimationProgress)progress {
   [super setCurrentProgress:progress];
-  [window_ invalidateShadow];
+  [_window invalidateShadow];
 }
 @end
 
@@ -160,20 +160,6 @@ using NSViewComparatorValue = id;
 #else
 using NSViewComparatorValue = __kindof NSView*;
 #endif
-
-// Returns true if the content_view is reparented.
-bool PositionWindowInNativeViewParent(NSView* content_view) {
-  return [[content_view window] contentView] != content_view;
-}
-
-// Return the offset of the parent native view from the window.
-gfx::Vector2d GetNativeViewParentOffset(NSView* content_view) {
-  NSWindow* window = [content_view window];
-  NSView* parent_view = [content_view superview];
-  NSPoint p = NSMakePoint(0, NSHeight([parent_view frame]));
-  p = [parent_view convertPoint:p toView:nil];
-  return gfx::Vector2d(p.x, NSHeight([window frame]) - p.y);
-}
 
 // Return the content size for a minimum or maximum widget size.
 gfx::Size GetClientSizeForWindowSize(NSWindow* window,
@@ -421,8 +407,6 @@ void NativeWidgetNSWindowBridge::InitWindow(
     mojom::NativeWidgetNSWindowInitParamsPtr params) {
   modal_type_ = params->modal_type;
   is_translucent_window_ = params->is_translucent;
-  widget_is_top_level_ = params->widget_is_top_level;
-  position_window_in_screen_coords_ = params->position_window_in_screen_coords;
   pending_restoration_data_ = params->state_restoration_data;
 
   // Register for application hide notifications so that visibility can be
@@ -509,12 +493,6 @@ void NativeWidgetNSWindowBridge::SetBounds(
   gfx::Rect actual_new_bounds(
       new_bounds.origin(),
       GetWindowSizeForClientSize(window_, clamped_content_size));
-
-  if (parent_ && !position_window_in_screen_coords_)
-    actual_new_bounds.Offset(parent_->GetChildWindowOffset());
-
-  if (PositionWindowInNativeViewParent(bridged_view_))
-    actual_new_bounds.Offset(GetNativeViewParentOffset(bridged_view_));
 
   [window_ setFrame:gfx::ScreenRectToNSRect(actual_new_bounds)
             display:YES
@@ -1298,10 +1276,6 @@ void NativeWidgetNSWindowBridge::RedispatchKeyEvent(
 
 ////////////////////////////////////////////////////////////////////////////////
 // NativeWidgetNSWindowBridge, former BridgedNativeWidgetOwner:
-
-gfx::Vector2d NativeWidgetNSWindowBridge::GetChildWindowOffset() const {
-  return gfx::ScreenRectFromNSRect([window_ frame]).OffsetFromOrigin();
-}
 
 void NativeWidgetNSWindowBridge::RemoveChildWindow(
     NativeWidgetNSWindowBridge* child) {

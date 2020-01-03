@@ -41,13 +41,13 @@
 #include "content/public/test/test_renderer_host.h"
 #include "extensions/common/constants.h"
 #include "extensions/test/extension_test_message_listener.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/net_errors.h"
+#include "net/dns/public/resolve_error_info.h"
 #include "net/ssl/ssl_info.h"
 #include "ppapi/shared_impl/test_utils.h"
 #include "rlz/buildflags/buildflags.h"
@@ -768,8 +768,10 @@ class MockNetworkContext : public network::TestNetworkContext {
  public:
   explicit MockNetworkContext(
       TCPFailureType tcp_failure_type,
+      Browser* browser,
       mojo::PendingReceiver<network::mojom::NetworkContext> receiver)
       : tcp_failure_type_(tcp_failure_type),
+        browser_(browser),
         receiver_(this, std::move(receiver)) {}
 
   ~MockNetworkContext() override {}
@@ -819,16 +821,24 @@ class MockNetworkContext : public network::TestNetworkContext {
   }
 
   void ResolveHost(const net::HostPortPair& host,
+                   const net::NetworkIsolationKey& network_isolation_key,
                    network::mojom::ResolveHostParametersPtr optional_parameters,
                    mojo::PendingRemote<network::mojom::ResolveHostClient>
                        pending_response_client) override {
+    EXPECT_EQ(browser_->tab_strip_model()
+                  ->GetActiveWebContents()
+                  ->GetMainFrame()
+                  ->GetNetworkIsolationKey(),
+              network_isolation_key);
     mojo::Remote<network::mojom::ResolveHostClient> response_client(
         std::move(pending_response_client));
-    response_client->OnComplete(net::OK, net::AddressList(LocalAddress()));
+    response_client->OnComplete(net::OK, net::ResolveErrorInfo(net::OK),
+                                net::AddressList(LocalAddress()));
   }
 
  private:
   TCPFailureType tcp_failure_type_;
+  Browser* const browser_;
 
   std::vector<std::unique_ptr<MockTCPServerSocket>> server_sockets_;
   std::vector<std::unique_ptr<MockTCPBoundSocket>> bound_sockets_;
@@ -845,7 +855,8 @@ class MockNetworkContext : public network::TestNetworkContext {
   do {                                                                        \
     mojo::Remote<network::mojom::NetworkContext> network_context_proxy;       \
     MockNetworkContext network_context(                                       \
-        failure_type, network_context_proxy.BindNewPipeAndPassReceiver());    \
+        failure_type, browser(),                                              \
+        network_context_proxy.BindNewPipeAndPassReceiver());                  \
     ppapi::SetPepperTCPNetworkContextForTesting(network_context_proxy.get()); \
     RunTestViaHTTP(LIST_TEST(test_name));                                     \
     ppapi::SetPepperTCPNetworkContextForTesting(nullptr);                     \
@@ -2043,7 +2054,8 @@ IN_PROC_BROWSER_TEST_F(PPAPINaClPNaClNonSfiTest, MAYBE_PNACL_NONSFI(View)) {
       LIST_TEST(FlashMessageLoop_SuspendScriptCallbackWhileRunning) \
   )
 
-#if defined(OS_LINUX)  // Disabled due to flakiness http://crbug.com/316925
+// Disabled due to flakiness http://crbug.com/1036287
+#if defined(OS_LINUX) || defined(OS_MACOSX)
 #define MAYBE_FlashMessageLoop DISABLED_FlashMessageLoop
 #else
 #define MAYBE_FlashMessageLoop FlashMessageLoop

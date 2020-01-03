@@ -4,25 +4,47 @@
 
 package org.chromium.chrome.browser.share.qrcode;
 
-import android.content.Context;
+import android.app.Activity;
+import android.app.FragmentManager;
 
 import org.chromium.chrome.browser.share.qrcode.scan_tab.QrCodeScanCoordinator;
+import org.chromium.chrome.browser.share.qrcode.scan_tab.QrCodeScanMediator;
 import org.chromium.chrome.browser.share.qrcode.share_tab.QrCodeShareCoordinator;
+
+import java.util.ArrayList;
 
 /**
  * Creates and represents the QrCode main UI.
  */
 public class QrCodeCoordinator {
-    QrCodeDialog mDialog;
+    private final QrCodeDialog mDialog;
+    private final FragmentManager mFragmentManager;
 
-    QrCodeCoordinator(Context context) {
-        QrCodeShareCoordinator shareCoordinator = new QrCodeShareCoordinator(context);
-        QrCodeScanCoordinator scanCoordinator = new QrCodeScanCoordinator(context);
+    public QrCodeCoordinator(Activity activity, QrCodeScanMediator.TabCreator tabCreator) {
+        QrCodeShareCoordinator shareCoordinator = new QrCodeShareCoordinator(activity);
+        QrCodeScanCoordinator scanCoordinator =
+                new QrCodeScanCoordinator(activity, this::dismiss, tabCreator);
 
-        mDialog = new QrCodeDialog(context, shareCoordinator.getView(), scanCoordinator.getView());
+        ArrayList<QrCodeDialogTab> tabs = new ArrayList<QrCodeDialogTab>();
+        tabs.add(shareCoordinator);
+        tabs.add(scanCoordinator);
+
+        mDialog = new QrCodeDialog(tabs);
+
+        mFragmentManager = activity.getFragmentManager();
     }
 
+    /**
+     * Show the main dialog.
+     */
     public void show() {
-        mDialog.show();
+        mDialog.show(mFragmentManager, null);
+    }
+
+    /**
+     * Dismiss the main dialog.
+     */
+    public void dismiss() {
+        mDialog.dismiss();
     }
 }

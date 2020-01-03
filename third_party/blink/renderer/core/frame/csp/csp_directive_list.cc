@@ -741,6 +741,10 @@ bool CSPDirectiveList::AllowInline(
   return !directive || directive->AllowAllInline();
 }
 
+bool CSPDirectiveList::ShouldCheckEval() const {
+  return script_src_ && !script_src_->AllowEval();
+}
+
 bool CSPDirectiveList::AllowEval(
     SecurityViolationReportingPolicy reporting_policy,
     ContentSecurityPolicy::ExceptionStatus exception_status,
@@ -1569,7 +1573,8 @@ WebContentSecurityPolicy CSPDirectiveList::ExposeForNavigationalChecks() const {
   WebContentSecurityPolicy policy;
   policy.disposition =
       static_cast<network::mojom::ContentSecurityPolicyType>(header_type_);
-  policy.source = static_cast<WebContentSecurityPolicySource>(header_source_);
+  policy.source =
+      static_cast<network::mojom::ContentSecurityPolicySource>(header_source_);
   for (const auto& directive :
        {child_src_, default_src_, form_action_, frame_src_, navigate_to_}) {
     if (directive) {

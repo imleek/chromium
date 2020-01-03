@@ -12,8 +12,10 @@ source_set("mdc") {
     "MDCActionImageView.m",
   ]
 
+  libs = [ "UIKit.framework" ]
+
   deps = [
-    "//ios/third_party/material_components_ios",
+    "//ios/third_party/material_components_ios:material_components_ios+link",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]

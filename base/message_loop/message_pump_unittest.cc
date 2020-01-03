@@ -7,7 +7,6 @@
 #include <type_traits>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_pump_for_io.h"
 #include "base/message_loop/message_pump_for_ui.h"
 #include "base/message_loop/message_pump_type.h"
@@ -36,20 +35,11 @@ namespace {
 bool PumpTypeUsesDoSomeWork(MessagePumpType type) {
   switch (type) {
     case MessagePumpType::DEFAULT:
-#if defined(OS_IOS)
-      // iOS uses a MessagePumpCFRunLoop instead of MessagePumpDefault for
-      // TYPE_DEFAULT. TODO(gab): migrate MessagePumpCFRunLoop too.
-      return false;
-#else
       return true;
-#endif
 
     case MessagePumpType::UI:
-#if defined(OS_IOS)
-      // iOS uses a MessagePumpDefault for UI in unit tests, ref.
-      // test_support_ios.mm::CreateMessagePumpForUIForTests().
-      return true;
-#elif defined(OS_WIN) || defined(OS_ANDROID) || defined(USE_GLIB)
+#if defined(OS_WIN) || defined(OS_ANDROID) || defined(USE_GLIB) || \
+    defined(OS_MACOSX)
       return true;
 #elif defined(OS_POSIX) && !defined(OS_NACL_SFI)
       // MessagePumpLibevent was migrated (ref. message_pump_for_ui.h and
@@ -62,7 +52,7 @@ bool PumpTypeUsesDoSomeWork(MessagePumpType type) {
 #endif
 
     case MessagePumpType::IO:
-#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_WIN) || defined(OS_MACOSX)
       return true;
 #elif defined(OS_POSIX) && !defined(OS_NACL_SFI)
       // MessagePumpLibevent was migrated (ref. message_pump_for_io.h and
@@ -356,7 +346,7 @@ TEST_P(MessagePumpTest, NestedRunWithoutScheduleWorkInvokesDoWork) {
   message_pump_->Run(&delegate);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          MessagePumpTest,
                          ::testing::Values(MessagePumpType::DEFAULT,
                                            MessagePumpType::UI,

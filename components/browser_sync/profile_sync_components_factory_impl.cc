@@ -289,7 +289,8 @@ ProfileSyncComponentsFactoryImpl::CreateCommonDataTypeControllers(
                 account_password_store_
                     ? account_password_store_->CreateSyncControllerDelegate()
                     : nullptr,
-                sync_service, sync_client_->GetPasswordStateChangedCallback()));
+                sync_client_->GetPrefService(), sync_service,
+                sync_client_->GetPasswordStateChangedCallback()));
       }
     } else {
       controllers.push_back(std::make_unique<PasswordDataTypeController>(
@@ -320,20 +321,11 @@ ProfileSyncComponentsFactoryImpl::CreateCommonDataTypeControllers(
 
 #if defined(OS_CHROMEOS)
   // When SplitSettingsSync is enabled the controller is created in
-  // ChromeSyncClient so it can live near other printer-related sync code.
+  // ChromeSyncClient.
   if (!disabled_types.Has(syncer::PRINTERS) &&
       !chromeos::features::IsSplitSettingsSyncEnabled()) {
     controllers.push_back(
         CreateModelTypeControllerForModelRunningOnUIThread(syncer::PRINTERS));
-  }
-  if (!disabled_types.Has(syncer::WIFI_CONFIGURATIONS) &&
-      base::FeatureList::IsEnabled(switches::kSyncWifiConfigurations)) {
-    controllers.push_back(std::make_unique<ModelTypeController>(
-        syncer::WIFI_CONFIGURATIONS,
-        std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
-            sync_client_
-                ->GetControllerDelegateForModelType(syncer::WIFI_CONFIGURATIONS)
-                .get())));
   }
 #endif  // defined(OS_CHROMEOS)
 

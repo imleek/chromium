@@ -82,15 +82,14 @@ void ManifestUpdateTask::OnDidGetInstallableData(const InstallableData& data) {
   DCHECK_EQ(stage_, Stage::kPendingInstallableData);
 
   if (!data.errors.empty()) {
-    DestroySelf(ManifestUpdateResult::kAppDataInvalid);
+    DestroySelf(ManifestUpdateResult::kAppNotEligible);
     return;
   }
 
   DCHECK(data.manifest);
   std::unique_ptr<WebApplicationInfo> web_application_info =
       std::make_unique<WebApplicationInfo>();
-  UpdateWebAppInfoFromManifest(*data.manifest, web_application_info.get(),
-                               ForInstallableSite::kYes);
+  UpdateWebAppInfoFromManifest(*data.manifest, web_application_info.get());
   if (!IsUpdateNeeded(*web_application_info)) {
     DestroySelf(ManifestUpdateResult::kAppUpToDate);
     return;
@@ -112,6 +111,9 @@ bool ManifestUpdateTask::IsUpdateNeeded(
     return true;
 
   if (web_application_info.scope != registrar_.GetAppScope(app_id_))
+    return true;
+
+  if (web_application_info.icon_infos != registrar_.GetAppIconInfos(app_id_))
     return true;
 
   // TODO(crbug.com/926083): Check more manifest fields.

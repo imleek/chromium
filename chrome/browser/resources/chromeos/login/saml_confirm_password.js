@@ -5,6 +5,8 @@
 Polymer({
   is: 'saml-confirm-password',
 
+  behaviors: [OobeI18nBehavior],
+
   properties: {
     email: String,
 
@@ -36,16 +38,16 @@ Polymer({
     this.$.navigation.closeVisible = true;
     if (this.$.animatedPages.selected != 0)
       this.$.animatedPages.selected = 0;
-    this.$.passwordInput.isInvalid = false;
+    this.$.passwordInput.invalid = false;
     this.$.passwordInput.value = '';
     if (this.manualInput) {
-      this.$$('#confirmPasswordInput').isInvalid = false;
+      this.$$('#confirmPasswordInput').invalid = false;
       this.$$('#confirmPasswordInput').value = '';
     }
   },
 
   invalidate: function() {
-    this.$.passwordInput.isInvalid = true;
+    this.$.passwordInput.invalid = true;
   },
 
   focus: function() {
@@ -68,17 +70,17 @@ Polymer({
   },
 
   onPasswordSubmitted_: function() {
-    if (!this.$.passwordInput.checkValidity())
+    if (!this.$.passwordInput.validate())
       return;
     if (this.manualInput) {
       // When using manual password entry, both passwords must match.
       var confirmPasswordInput = this.$$('#confirmPasswordInput');
-      if (!confirmPasswordInput.checkValidity())
+      if (!confirmPasswordInput.validate())
         return;
 
       if (confirmPasswordInput.value != this.$.passwordInput.value) {
-        this.$.passwordInput.isInvalid = true;
-        confirmPasswordInput.isInvalid = true;
+        this.$.passwordInput.invalid = true;
+        confirmPasswordInput.invalid = true;
         return;
       }
     }

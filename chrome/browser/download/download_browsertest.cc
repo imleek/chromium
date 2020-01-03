@@ -105,6 +105,7 @@
 #include "components/services/quarantine/test_support.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/device_service.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/download_request_utils.h"
 #include "content/public/browser/notification_source.h"
@@ -112,7 +113,6 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/resource_context.h"
-#include "content/public/browser/system_connector.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
@@ -138,10 +138,8 @@
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
-#include "services/device/public/mojom/constants.mojom.h"
 #include "services/device/public/mojom/wake_lock.mojom.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
@@ -829,7 +827,7 @@ class DownloadTest : public InProcessBrowserTest {
                  : embedded_test_server()->GetURL(
                        content::SlowDownloadHttpResponse::kUnknownSizeUrl));
     GURL finish_url = embedded_test_server()->GetURL(
-        content::SlowDownloadHttpResponse::kFinishDownloadUrl);
+        content::SlowDownloadHttpResponse::kFinishSlowResponseUrl);
 
     // TODO(ahendrickson) -- |expected_title_in_progress| and
     // |expected_title_finished| need to be checked.
@@ -878,8 +876,9 @@ class DownloadTest : public InProcessBrowserTest {
       return false;
 
     // Check the file contents.
-    size_t file_size = content::SlowDownloadHttpResponse::kFirstDownloadSize +
-                       content::SlowDownloadHttpResponse::kSecondDownloadSize;
+    size_t file_size =
+        content::SlowDownloadHttpResponse::kFirstResponsePartSize +
+        content::SlowDownloadHttpResponse::kSecondResponsePartSize;
     std::string expected_contents(file_size, '*');
     EXPECT_TRUE(VerifyFile(download_path, expected_contents, file_size));
 
@@ -1132,6 +1131,7 @@ class DownloadTest : public InProcessBrowserTest {
     base::FilePath destination_folder = GetDownloadDirectory(browser());
     DVLOG(1) << " " << __FUNCTION__ << "()"
              << " folder = '" << destination_folder.value() << "'";
+    base::ScopedAllowBlockingForTesting allow_blocking;
     base::FilePermissionRestorer permission_restorer(destination_folder);
     EXPECT_TRUE(base::MakeFileUnwritable(destination_folder));
 
@@ -1212,7 +1212,7 @@ class DownloadReferrerPolicyTest
 };
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     DownloadReferrerPolicyTest,
     ::testing::Values(network::mojom::ReferrerPolicy::kAlways,
                       network::mojom::ReferrerPolicy::kDefault,
@@ -1305,9 +1305,8 @@ class DownloadWakeLockTest : public DownloadTest {
   DownloadWakeLockTest() = default;
 
   void Initialize() {
-    connector_ = content::GetSystemConnector()->Clone();
-    connector_->Connect(device::mojom::kServiceName,
-                        wake_lock_provider_.BindNewPipeAndPassReceiver());
+    content::GetDeviceService().BindWakeLockProvider(
+        wake_lock_provider_.BindNewPipeAndPassReceiver());
   }
 
   // Returns the number of active wake locks of type |type|.
@@ -1328,7 +1327,6 @@ class DownloadWakeLockTest : public DownloadTest {
 
  protected:
   mojo::Remote<device::mojom::WakeLockProvider> wake_lock_provider_;
-  std::unique_ptr<service_manager::Connector> connector_;
   DISALLOW_COPY_AND_ASSIGN(DownloadWakeLockTest);
 };
 
@@ -2080,7 +2078,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, MAYBE_DownloadHistoryCheck) {
 
   // Finsih the download.
   GURL finish_url = embedded_test_server()->GetURL(
-      content::SlowDownloadHttpResponse::kFinishDownloadUrl);
+      content::SlowDownloadHttpResponse::kFinishSlowResponseUrl);
   ui_test_utils::NavigateToURL(browser(), finish_url);
 
   download_observer->WaitForFinished();
@@ -2110,8 +2108,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, MAYBE_DownloadHistoryCheck) {
   EXPECT_GE(end, row1.end_time);
   EXPECT_EQ(0, row1.received_bytes);  // There's no ETag. So the intermediate
                                       // state is discarded.
-  EXPECT_EQ(content::SlowDownloadHttpResponse::kFirstDownloadSize +
-                content::SlowDownloadHttpResponse::kSecondDownloadSize,
+  EXPECT_EQ(content::SlowDownloadHttpResponse::kFirstResponsePartSize +
+                content::SlowDownloadHttpResponse::kSecondResponsePartSize,
             row1.total_bytes);
   EXPECT_EQ(history::DownloadState::INTERRUPTED, row1.state);
   EXPECT_EQ(history::ToHistoryDownloadInterruptReason(
@@ -2608,7 +2606,15 @@ class DownloadTestWithHistogramTester : public DownloadTest {
   std::unique_ptr<URLLoaderInterceptor> url_loader_interceptor_;
 };
 
-IN_PROC_BROWSER_TEST_F(DownloadTestWithHistogramTester, SavePageNonHTMLViaGet) {
+// Flaky on Linux and Windows. https://crbug.com/1028371
+#if defined(OS_LINUX) || defined(OS_WIN)
+#define MAYBE_SavePageNonHTMLViaGet DISABLED_SavePageNonHTMLViaGet
+#else
+#define MAYBE_SavePageNonHTMLViaGet SavePageNonHTMLViaGet
+#endif
+
+IN_PROC_BROWSER_TEST_F(DownloadTestWithHistogramTester,
+                       MAYBE_SavePageNonHTMLViaGet) {
   embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
   ASSERT_TRUE(embedded_test_server()->Start());
   EnableFileChooser(true);
@@ -4009,7 +4015,7 @@ IN_PROC_BROWSER_TEST_P(DownloadTestWithOptionalSafetyTipsFeature, SafetyTips) {
       security_state::SafetyTipStatus::kBadReputation, 1);
 }
 
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+INSTANTIATE_TEST_SUITE_P(All,
                          DownloadTestWithOptionalSafetyTipsFeature,
                          ::testing::Bool());
 

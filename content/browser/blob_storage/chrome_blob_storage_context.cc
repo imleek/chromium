@@ -56,7 +56,7 @@ void RemoveOldBlobStorageDirectories(FilePath blob_storage_parent,
        name = enumerator.Next()) {
     cleanup_needed = true;
     if (current_run_dir.empty() || name != current_run_dir)
-      success &= base::DeleteFile(name, true /* recursive */);
+      success &= base::DeleteFileRecursively(name);
   }
   if (cleanup_needed)
     UMA_HISTOGRAM_BOOLEAN("Storage.Blob.CleanupSuccess", success);
@@ -141,6 +141,25 @@ ChromeBlobStorageContext* ChromeBlobStorageContext::GetFor(
       context, kBlobStorageContextKeyName);
 }
 
+// static
+mojo::PendingRemote<storage::mojom::BlobStorageContext>
+ChromeBlobStorageContext::GetRemoteFor(BrowserContext* browser_context) {
+  DCHECK(browser_context);
+  mojo::PendingRemote<storage::mojom::BlobStorageContext> remote;
+  auto receiver = remote.InitWithNewPipeAndPassReceiver();
+  base::PostTask(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(
+          [](scoped_refptr<ChromeBlobStorageContext> blob_storage_context,
+             mojo::PendingReceiver<storage::mojom::BlobStorageContext>
+                 receiver) {
+            blob_storage_context->BindMojoContext(std::move(receiver));
+          },
+          base::RetainedRef(ChromeBlobStorageContext::GetFor(browser_context)),
+          std::move(receiver)));
+  return remote;
+}
+
 void ChromeBlobStorageContext::InitializeOnIOThread(
     FilePath blob_storage_dir,
     scoped_refptr<base::TaskRunner> file_task_runner) {
@@ -160,12 +179,11 @@ storage::BlobStorageContext* ChromeBlobStorageContext::context() const {
   return context_.get();
 }
 
-mojo::PendingRemote<storage::mojom::BlobStorageContext>
-ChromeBlobStorageContext::MojoContext() const {
+void ChromeBlobStorageContext::BindMojoContext(
+    mojo::PendingReceiver<storage::mojom::BlobStorageContext> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  mojo::PendingRemote<storage::mojom::BlobStorageContext> remote;
-  context_->Bind(remote.InitWithNewPipeAndPassReceiver());
-  return remote;
+  DCHECK(context_) << "InitializeOnIOThread must be called first";
+  context_->Bind(std::move(receiver));
 }
 
 std::unique_ptr<BlobHandle> ChromeBlobStorageContext::CreateMemoryBackedBlob(

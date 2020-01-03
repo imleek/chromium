@@ -42,8 +42,9 @@ class PaymentHandlerHost : public payments::PaymentHandlerHost::Delegate {
                      const base::android::JavaParamRef<jobject>& delegate);
   ~PaymentHandlerHost() override;
 
-  // Checks whether the payment method change is currently in progress.
-  jboolean IsChangingPaymentMethod(JNIEnv* env) const;
+  // Checks whether any payment method, shipping address or shipping option
+  // change is currently in progress.
+  jboolean IsWaitingForPaymentDetailsUpdate(JNIEnv* env) const;
 
   // Returns the pointer to the payments::PaymentHandlerHost for binding to its
   // IPC endpoint in service_worker_payment_app_bridge.cc.
@@ -60,7 +61,7 @@ class PaymentHandlerHost : public payments::PaymentHandlerHost::Delegate {
 
   // Notifies the payment handler that the merchant ignored the payment
   // method change event.
-  void NoUpdatedPaymentDetails(JNIEnv* env);
+  void OnPaymentDetailsNotUpdated(JNIEnv* env);
 
  private:
   // PaymentHandlerHost::Delegate implementation:

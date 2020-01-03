@@ -30,11 +30,11 @@
 #include "media/gpu/accelerated_video_decoder.h"
 #include "media/gpu/h264_decoder.h"
 #include "media/gpu/macros.h"
+#include "media/gpu/vaapi/h264_vaapi_video_decoder_delegate.h"
 #include "media/gpu/vaapi/vaapi_common.h"
-#include "media/gpu/vaapi/vaapi_h264_accelerator.h"
 #include "media/gpu/vaapi/vaapi_picture.h"
-#include "media/gpu/vaapi/vaapi_vp8_accelerator.h"
-#include "media/gpu/vaapi/vaapi_vp9_accelerator.h"
+#include "media/gpu/vaapi/vp8_vaapi_video_decoder_delegate.h"
+#include "media/gpu/vaapi/vp9_vaapi_video_decoder_delegate.h"
 #include "media/gpu/vp8_decoder.h"
 #include "media/gpu/vp9_decoder.h"
 #include "media/video/picture.h"
@@ -201,15 +201,15 @@ bool VaapiVideoDecodeAccelerator::Initialize(const Config& config,
 
   if (profile >= H264PROFILE_MIN && profile <= H264PROFILE_MAX) {
     decoder_.reset(new H264Decoder(
-        std::make_unique<VaapiH264Accelerator>(this, vaapi_wrapper_),
-        config.container_color_space));
+        std::make_unique<H264VaapiVideoDecoderDelegate>(this, vaapi_wrapper_),
+        profile, config.container_color_space));
   } else if (profile >= VP8PROFILE_MIN && profile <= VP8PROFILE_MAX) {
     decoder_.reset(new VP8Decoder(
-        std::make_unique<VaapiVP8Accelerator>(this, vaapi_wrapper_)));
+        std::make_unique<VP8VaapiVideoDecoderDelegate>(this, vaapi_wrapper_)));
   } else if (profile >= VP9PROFILE_MIN && profile <= VP9PROFILE_MAX) {
     decoder_.reset(new VP9Decoder(
-        std::make_unique<VaapiVP9Accelerator>(this, vaapi_wrapper_),
-        config.container_color_space));
+        std::make_unique<VP9VaapiVideoDecoderDelegate>(this, vaapi_wrapper_),
+        profile, config.container_color_space));
   } else {
     VLOGF(1) << "Unsupported profile " << GetProfileName(profile);
     return false;
@@ -227,7 +227,7 @@ bool VaapiVideoDecodeAccelerator::Initialize(const Config& config,
 }
 
 void VaapiVideoDecodeAccelerator::OutputPicture(
-    const scoped_refptr<VASurface>& va_surface,
+    scoped_refptr<VASurface> va_surface,
     int32_t input_id,
     gfx::Rect visible_rect,
     const VideoColorSpace& picture_color_space) {
@@ -444,18 +444,24 @@ void VaapiVideoDecodeAccelerator::DecodeTask() {
     }
 
     switch (res) {
-      case AcceleratedVideoDecoder::kAllocateNewSurfaces:
+      case AcceleratedVideoDecoder::kConfigChange: {
+        gfx::Size new_size = decoder_->GetPicSize();
+        if (profile_ != decoder_->GetProfile() &&
+            requested_pic_size_ == new_size) {
+          // Profile only is changed.
+          // TODO(crbug.com/1022246): Handle profile change.
+          continue;
+        }
         VLOGF(2) << "Decoder requesting a new set of surfaces";
         task_runner_->PostTask(
             FROM_HERE,
             base::BindOnce(
                 &VaapiVideoDecodeAccelerator::InitiateSurfaceSetChange,
-                weak_this_, decoder_->GetRequiredNumOfPictures(),
-                decoder_->GetPicSize(), decoder_->GetNumReferenceFrames(),
-                decoder_->GetVisibleRect()));
+                weak_this_, decoder_->GetRequiredNumOfPictures(), new_size,
+                decoder_->GetNumReferenceFrames(), decoder_->GetVisibleRect()));
         // We'll get rescheduled once ProvidePictureBuffers() finishes.
         return;
-
+      }
       case AcceleratedVideoDecoder::kRanOutOfStreamData:
         ReturnCurrInputBuffer_Locked();
         break;
@@ -631,8 +637,8 @@ void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
   // |requested_pic_size_| by buffers[0].size(). But AMD driver doesn't decode
   // frames correctly if the surface stride is different from the width of a
   // coded size.
-  // TODO(b/139460315): Update |requested_pic_size_| by buffers[0].size() once
-  // the AMD driver issue is resolved.
+  // TODO(b/139460315): Save buffers[0].size() as |adjusted_size_| once the
+  // AMD driver issue is resolved.
 
   va_surface_format_ = GetVaFormatForVideoCodecProfile(profile_);
   std::vector<VASurfaceID> va_surface_ids;
@@ -994,15 +1000,15 @@ bool VaapiVideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
 }
 
 void VaapiVideoDecodeAccelerator::SurfaceReady(
-    const scoped_refptr<VASurface>& dec_surface,
+    scoped_refptr<VASurface> dec_surface,
     int32_t bitstream_id,
     const gfx::Rect& visible_rect,
     const VideoColorSpace& color_space) {
   if (!task_runner_->BelongsToCurrentThread()) {
     task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&VaapiVideoDecodeAccelerator::SurfaceReady, weak_this_,
-                       dec_surface, bitstream_id, visible_rect, color_space));
+        FROM_HERE, base::BindOnce(&VaapiVideoDecodeAccelerator::SurfaceReady,
+                                  weak_this_, std::move(dec_surface),
+                                  bitstream_id, visible_rect, color_space));
     return;
   }
 
@@ -1014,9 +1020,9 @@ void VaapiVideoDecodeAccelerator::SurfaceReady(
     if (state_ == kResetting || state_ == kDestroying)
       return;
   }
-  pending_output_cbs_.push(
-      base::BindOnce(&VaapiVideoDecodeAccelerator::OutputPicture, weak_this_,
-                     dec_surface, bitstream_id, visible_rect, color_space));
+  pending_output_cbs_.push(base::BindOnce(
+      &VaapiVideoDecodeAccelerator::OutputPicture, weak_this_,
+      std::move(dec_surface), bitstream_id, visible_rect, color_space));
 
   TryOutputPicture();
 }

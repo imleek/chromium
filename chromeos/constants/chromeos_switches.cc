@@ -114,6 +114,13 @@ const char kArcPackagesCacheMode[] = "arc-packages-cache-mode";
 // off - auto-update is forced off.
 const char kArcPlayStoreAutoUpdate[] = "arc-play-store-auto-update";
 
+// Set the scale for ARC apps. This is in DPI. e.g. 280 DPI is ~ 1.75 device
+// scale factor.
+// See
+// https://source.android.com/compatibility/android-cdd#3_7_runtime_compatibility
+// for list of supported DPI values.
+const char kArcScale[] = "arc-scale";
+
 // Defines how to start ARC. This can take one of the following values:
 // - always-start automatically start with Play Store UI support.
 // - always-start-with-no-play-store automatically start without Play Store UI.
@@ -286,10 +293,6 @@ const char kEnableTouchpadThreeFingerClick[] =
 
 // Disables ARC for managed accounts.
 const char kEnterpriseDisableArc[] = "enterprise-disable-arc";
-
-// Disable license type selection by user during enrollment.
-const char kEnterpriseDisableLicenseTypeSelection[] =
-    "enterprise-disable-license-type-selection";
 
 // Whether to enable forced enterprise re-enrollment.
 const char kEnterpriseEnableForcedReEnrollment[] =
@@ -554,8 +557,7 @@ bool IsSigninFrameClientCertUserSelectionEnabled() {
 }
 
 bool ShouldShowShelfHotseat() {
-  return base::FeatureList::IsEnabled(features::kShelfHotseat) ||
-         base::CommandLine::ForCurrentProcess()->HasSwitch(kShelfHotseat);
+  return base::FeatureList::IsEnabled(features::kShelfHotseat);
 }
 
 bool ShouldShowShelfHoverPreviews() {

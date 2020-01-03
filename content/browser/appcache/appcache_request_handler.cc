@@ -17,9 +17,9 @@
 #include "content/browser/appcache/appcache_subresource_url_factory.h"
 #include "content/browser/appcache/appcache_url_loader_job.h"
 #include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/public/common/content_client.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_job.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
@@ -358,8 +358,10 @@ void AppCacheRequestHandler::OnMainResponseFound(
     return;
 
   AppCachePolicy* policy = host_->service()->appcache_policy();
-  bool was_blocked_by_policy = !manifest_url.is_empty() && policy &&
-      !policy->CanLoadAppCache(manifest_url, host_->first_party_url());
+  bool was_blocked_by_policy =
+      !manifest_url.is_empty() && policy &&
+      !policy->CanLoadAppCache(manifest_url,
+                               host_->site_for_cookies().RepresentativeUrl());
 
   if (was_blocked_by_policy) {
     if (IsResourceTypeFrame(resource_type_)) {
@@ -425,7 +427,7 @@ void AppCacheRequestHandler::RunLoaderCallbackForMainResource(
         base::MakeRefCounted<SingleRequestURLLoaderFactory>(std::move(handler));
     FrameTreeNode* frame_tree_node =
         FrameTreeNode::GloballyFindByID(frame_tree_node_id);
-    if (frame_tree_node) {
+    if (frame_tree_node && frame_tree_node->navigation_request()) {
       mojo::PendingRemote<network::mojom::URLLoaderFactory> pending_factory;
       auto factory_receiver = pending_factory.InitWithNewPipeAndPassReceiver();
       bool use_proxy =
@@ -433,8 +435,11 @@ void AppCacheRequestHandler::RunLoaderCallbackForMainResource(
               browser_context, frame_tree_node->current_frame_host(),
               frame_tree_node->current_frame_host()->GetProcess()->GetID(),
               ContentBrowserClient::URLLoaderFactoryType::kNavigation,
-              url::Origin(), &factory_receiver, nullptr /* header_client */,
-              nullptr /* bypass_redirect_checks */);
+              url::Origin(),
+              frame_tree_node->navigation_request()->GetNavigationId(),
+              &factory_receiver, nullptr /* header_client */,
+              nullptr /* bypass_redirect_checks */,
+              nullptr /* factory_override */);
       if (use_proxy) {
         single_request_factory->Clone(std::move(factory_receiver));
         single_request_factory =
@@ -577,9 +582,9 @@ void AppCacheRequestHandler::MaybeCreateLoaderInternal(
 
 bool AppCacheRequestHandler::MaybeCreateLoaderForResponse(
     const network::ResourceRequest& request,
-    const network::ResourceResponseHead& response,
+    network::mojom::URLResponseHeadPtr* response,
     mojo::ScopedDataPipeConsumerHandle* response_body,
-    network::mojom::URLLoaderPtr* loader,
+    mojo::PendingRemote<network::mojom::URLLoader>* loader,
     mojo::PendingReceiver<network::mojom::URLLoaderClient>* client_receiver,
     blink::ThrottlingURLLoader* url_loader,
     bool* skip_other_interceptors,
@@ -591,7 +596,7 @@ bool AppCacheRequestHandler::MaybeCreateLoaderForResponse(
   bool was_called = false;
   loader_callback_ = base::BindOnce(
       [](const network::ResourceRequest& resource_request,
-         network::mojom::URLLoaderPtr* loader,
+         mojo::PendingRemote<network::mojom::URLLoader>* loader,
          mojo::PendingReceiver<network::mojom::URLLoaderClient>*
              client_receiver,
          bool* was_called,
@@ -599,11 +604,12 @@ bool AppCacheRequestHandler::MaybeCreateLoaderForResponse(
         *was_called = true;
         mojo::PendingRemote<network::mojom::URLLoaderClient> client;
         *client_receiver = client.InitWithNewPipeAndPassReceiver();
-        std::move(handler).Run(resource_request, mojo::MakeRequest(loader),
+        std::move(handler).Run(resource_request,
+                               loader->InitWithNewPipeAndPassReceiver(),
                                std::move(client));
       },
       *(request_->GetResourceRequest()), loader, client_receiver, &was_called);
-  request_->set_response(response);
+  request_->set_response(response->Clone());
   if (!MaybeLoadFallbackForResponse(nullptr)) {
     DCHECK(!was_called);
     loader_callback_.Reset();
@@ -650,12 +656,12 @@ void AppCacheRequestHandler::MaybeCreateSubresourceLoader(
 }
 
 void AppCacheRequestHandler::MaybeFallbackForSubresourceResponse(
-    const network::ResourceResponseHead& response,
+    network::mojom::URLResponseHeadPtr response,
     AppCacheLoaderCallback loader_callback) {
   DCHECK(!job_);
   DCHECK(!is_main_resource());
   loader_callback_ = std::move(loader_callback);
-  request_->set_response(response);
+  request_->set_response(std::move(response));
   MaybeLoadFallbackForResponse(nullptr);
   if (loader_callback_)
     std::move(loader_callback_).Run({});

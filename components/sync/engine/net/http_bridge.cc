@@ -19,6 +19,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
+#include "components/variations/net/variations_http_headers.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_cache.h"
@@ -27,8 +28,6 @@
 #include "net/http/http_response_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/static_http_user_agent_settings.h"
-#include "net/url_request/url_request_status.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "third_party/zlib/google/compression_utils.h"
 
@@ -53,15 +52,15 @@ base::LazyInstance<scoped_refptr<base::SequencedTaskRunner>>::Leaky
 
 HttpBridgeFactory::HttpBridgeFactory(
     const std::string& user_agent,
-    std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-        url_loader_factory_info,
+    std::unique_ptr<network::PendingSharedURLLoaderFactory>
+        pending_url_loader_factory,
     const NetworkTimeUpdateCallback& network_time_update_callback)
     : user_agent_(user_agent),
       network_time_update_callback_(network_time_update_callback) {
-  // Some tests pass null'ed out url_loader_factory_info instances.
-  if (url_loader_factory_info) {
+  // Some tests pass null'ed out pending_url_loader_factory instances.
+  if (pending_url_loader_factory) {
     url_loader_factory_ = network::SharedURLLoaderFactory::Create(
-        std::move(url_loader_factory_info));
+        std::move(pending_url_loader_factory));
   }
 }
 
@@ -90,13 +89,13 @@ HttpBridge::URLFetchState::~URLFetchState() {}
 
 HttpBridge::HttpBridge(
     const std::string& user_agent,
-    std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-        url_loader_factory_info,
+    std::unique_ptr<network::PendingSharedURLLoaderFactory>
+        pending_url_loader_factory,
     const NetworkTimeUpdateCallback& network_time_update_callback)
     : user_agent_(user_agent),
       http_post_completed_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                            base::WaitableEvent::InitialState::NOT_SIGNALED),
-      url_loader_factory_info_(std::move(url_loader_factory_info)),
+      pending_url_loader_factory_(std::move(pending_url_loader_factory)),
       network_task_runner_(g_io_capable_task_runner_for_tests.Get()
                                ? g_io_capable_task_runner_for_tests.Get()
                                : base::CreateSequencedTaskRunner(
@@ -204,12 +203,12 @@ void HttpBridge::MakeAsynchronousPost() {
 
   // Some tests inject |url_loader_factory_| created to operated on the
   // IO-capable thread currently running.
-  DCHECK((!url_loader_factory_ && url_loader_factory_info_) ||
-         (url_loader_factory_ && !url_loader_factory_info_));
+  DCHECK((!url_loader_factory_ && pending_url_loader_factory_) ||
+         (url_loader_factory_ && !pending_url_loader_factory_));
   if (!url_loader_factory_) {
-    DCHECK(url_loader_factory_info_);
+    DCHECK(pending_url_loader_factory_);
     url_loader_factory_ = network::SharedURLLoaderFactory::Create(
-        std::move(url_loader_factory_info_));
+        std::move(pending_url_loader_factory_));
   }
 
   fetch_state_.start_time = base::Time::Now();
@@ -253,6 +252,10 @@ void HttpBridge::MakeAsynchronousPost() {
   resource_request->headers.SetHeader("Content-Encoding", "gzip");
   resource_request->headers.SetHeader(net::HttpRequestHeaders::kUserAgent,
                                       user_agent_);
+
+  variations::AppendVariationsHeader(
+      url_for_request_, variations::InIncognito::kNo,
+      variations::SignedIn::kYes, resource_request.get());
 
   fetch_state_.url_loader = network::SimpleURLLoader::Create(
       std::move(resource_request), traffic_annotation);
@@ -301,9 +304,9 @@ const std::string HttpBridge::GetResponseHeaderValue(
 void HttpBridge::Abort() {
   base::AutoLock lock(fetch_state_lock_);
 
-  // Release |url_loader_factory_info_| as soon as possible so that
+  // Release |pending_url_loader_factory_| as soon as possible so that
   // no URLLoaderFactory instances proceed on the network task runner.
-  url_loader_factory_info_.reset();
+  pending_url_loader_factory_.reset();
 
   DCHECK(!fetch_state_.aborted);
   if (fetch_state_.aborted || fetch_state_.request_completed)
@@ -379,12 +382,10 @@ void HttpBridge::OnURLLoadCompleteInternal(
 
   if (fetch_state_.request_succeeded)
     LogTimeout(false);
-  base::UmaHistogramSparse(
-      "Sync.URLFetchResponse",
-      fetch_state_.request_succeeded
-          ? fetch_state_.http_status_code
-          : net::URLRequestStatus::FromError(fetch_state_.net_error_code)
-                .ToNetError());
+  base::UmaHistogramSparse("Sync.URLFetchResponse",
+                           fetch_state_.request_succeeded
+                               ? fetch_state_.http_status_code
+                               : fetch_state_.net_error_code);
   UMA_HISTOGRAM_LONG_TIMES("Sync.URLFetchTime",
                            fetch_state_.end_time - fetch_state_.start_time);
 

@@ -15,6 +15,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
+#include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_compositor_scheduler_state.pbzero.h"
 
 namespace viz {
 
@@ -54,10 +55,8 @@ bool CheckBeginFrameContinuity(BeginFrameObserver* observer,
                                const BeginFrameArgs& args) {
   const BeginFrameArgs& last_args = observer->LastUsedBeginFrameArgs();
   if (!last_args.IsValid() || (args.frame_time > last_args.frame_time)) {
-    DCHECK((args.source_id != last_args.source_id) ||
-           (args.sequence_number > last_args.sequence_number))
-        << "current " << args.AsValue()->ToString() << ", last "
-        << last_args.AsValue()->ToString();
+    DCHECK(!last_args.frame_id.IsNextInSequenceTo(args.frame_id))
+        << "current " << args.ToString() << ", last " << last_args.ToString();
     return true;
   }
   return false;
@@ -85,10 +84,9 @@ bool BeginFrameObserverBase::WantsAnimateOnlyBeginFrames() const {
 void BeginFrameObserverBase::OnBeginFrame(const BeginFrameArgs& args) {
   DCHECK(args.IsValid());
   DCHECK_GE(args.frame_time, last_begin_frame_args_.frame_time);
-  DCHECK(args.sequence_number > last_begin_frame_args_.sequence_number ||
-         args.source_id != last_begin_frame_args_.source_id)
-      << "current " << args.AsValue()->ToString() << ", last "
-      << last_begin_frame_args_.AsValue()->ToString();
+  DCHECK(!last_begin_frame_args_.frame_id.IsNextInSequenceTo(args.frame_id))
+      << "current " << args.ToString() << ", last "
+      << last_begin_frame_args_.ToString();
   bool used = OnBeginFrameDerivedImpl(args);
   if (used) {
     last_begin_frame_args_ = args;
@@ -97,13 +95,11 @@ void BeginFrameObserverBase::OnBeginFrame(const BeginFrameArgs& args) {
   }
 }
 
-void BeginFrameObserverBase::AsValueInto(
-    base::trace_event::TracedValue* state) const {
-  state->SetInteger("dropped_begin_frame_args", dropped_begin_frame_args_);
+void BeginFrameObserverBase::AsProtozeroInto(
+    perfetto::protos::pbzero::BeginFrameObserverState* state) const {
+  state->set_dropped_begin_frame_args(dropped_begin_frame_args_);
 
-  state->BeginDictionary("last_begin_frame_args");
-  last_begin_frame_args_.AsValueInto(state);
-  state->EndDictionary();
+  last_begin_frame_args_.AsProtozeroInto(state->set_last_begin_frame_args());
 }
 
 // BeginFrameSource -------------------------------------------------------
@@ -154,10 +150,10 @@ bool BeginFrameSource::RequestCallbackOnGpuAvailable() {
   return false;
 }
 
-void BeginFrameSource::AsValueInto(
-    base::trace_event::TracedValue* state) const {
+void BeginFrameSource::AsProtozeroInto(
+    perfetto::protos::pbzero::BeginFrameSourceState* state) const {
   // The lower 32 bits of source_id are the interesting piece of |source_id_|.
-  state->SetInteger("source_id", static_cast<uint32_t>(source_id_));
+  state->set_source_id(static_cast<uint32_t>(source_id_));
 }
 
 // StubBeginFrameSource ---------------------------------------------------
@@ -358,10 +354,8 @@ void DelayBasedBeginFrameSource::IssueBeginFrameToObserver(
       (args.frame_time >
        last_args.frame_time + args.interval / kDoubleTickDivisor)) {
     if (args.type == BeginFrameArgs::MISSED) {
-      DCHECK(args.sequence_number > last_args.sequence_number ||
-             args.source_id != last_args.source_id)
-          << "missed " << args.AsValue()->ToString() << ", last "
-          << last_args.AsValue()->ToString();
+      DCHECK(!last_args.frame_id.IsNextInSequenceTo(args.frame_id))
+          << "missed " << args.ToString() << ", last " << last_args.ToString();
     }
     FilterAndIssueBeginFrame(obs, args);
   }
@@ -379,16 +373,13 @@ ExternalBeginFrameSource::~ExternalBeginFrameSource() {
   DCHECK(observers_.empty());
 }
 
-void ExternalBeginFrameSource::AsValueInto(
-    base::trace_event::TracedValue* state) const {
-  BeginFrameSource::AsValueInto(state);
+void ExternalBeginFrameSource::AsProtozeroInto(
+    perfetto::protos::pbzero::BeginFrameSourceState* state) const {
+  BeginFrameSource::AsProtozeroInto(state);
 
-  state->SetBoolean("paused", paused_);
-  state->SetInteger("num_observers", observers_.size());
-
-  state->BeginDictionary("last_begin_frame_args");
-  last_begin_frame_args_.AsValueInto(state);
-  state->EndDictionary();
+  state->set_paused(paused_);
+  state->set_num_observers(observers_.size());
+  last_begin_frame_args_.AsProtozeroInto(state->set_last_begin_frame_args());
 }
 
 void ExternalBeginFrameSource::AddObserver(BeginFrameObserver* obs) {
@@ -441,8 +432,9 @@ void ExternalBeginFrameSource::OnBeginFrame(const BeginFrameArgs& args) {
   // recreated.
   if (last_begin_frame_args_.IsValid() &&
       (args.frame_time <= last_begin_frame_args_.frame_time ||
-       (args.source_id == last_begin_frame_args_.source_id &&
-        args.sequence_number <= last_begin_frame_args_.sequence_number)))
+       (args.frame_id.source_id == last_begin_frame_args_.frame_id.source_id &&
+        args.frame_id.sequence_number <=
+            last_begin_frame_args_.frame_id.sequence_number)))
     return;
 
   if (RequestCallbackOnGpuAvailable()) {

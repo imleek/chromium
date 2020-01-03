@@ -64,6 +64,7 @@
 #include "third_party/blink/renderer/core/xmlhttprequest/xml_http_request.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_info.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
@@ -495,11 +496,20 @@ BuildObjectForResourceRequest(const ResourceRequest& request,
   bool hasPostData =
       FormDataToString(request.HttpBody(), max_body_size, &postData);
   KURL url = request.Url();
+  // protocol::Network::Request doesn't have a separate referrer string member
+  // like blink::ResourceRequest, so here we add ResourceRequest's referrer
+  // string to the protocol request's headers manually.
+  auto headers = request.HttpHeaderFields();
+
+  // The request's referrer must be generated at this point.
+  DCHECK_NE(request.ReferrerString(), Referrer::ClientReferrerString());
+  headers.Set(http_names::kReferer, AtomicString(request.ReferrerString()));
+
   std::unique_ptr<protocol::Network::Request> result =
       protocol::Network::Request::create()
           .setUrl(UrlWithoutFragment(url).GetString())
           .setMethod(request.HttpMethod())
-          .setHeaders(BuildObjectForHeaders(request.HttpHeaderFields()))
+          .setHeaders(BuildObjectForHeaders(headers))
           .setInitialPriority(ResourcePriorityJSON(request.Priority()))
           .setReferrerPolicy(GetReferrerPolicy(request.GetReferrerPolicy()))
           .build();
@@ -859,13 +869,11 @@ void InspectorNetworkAgent::PrepareRequest(
       AtomicString header_name = AtomicString(key);
       // When overriding referer, also override referrer policy
       // for this request to assure the request will be allowed.
-      // TODO(domfarolino): Stop setting the HTTPReferrer header, and instead
-      // use ResourceRequest::referrer_. See https://crbug.com/850813. This
-      // seems to require storing the referrer info that is currently stored
-      // inside state_'s kExtraRequestHeaders, somewhere else.
+      // TODO: Should we store the referrer header somewhere other than
+      // |extra_request_headers_|?
       if (header_name.LowerASCII() == http_names::kReferer.LowerASCII()) {
-        request.SetHttpReferrer(
-            Referrer(value, network::mojom::ReferrerPolicy::kAlways));
+        request.SetReferrerString(value);
+        request.SetReferrerPolicy(network::mojom::ReferrerPolicy::kAlways);
       } else {
         request.SetHttpHeaderField(header_name, AtomicString(value));
       }
@@ -1127,7 +1135,7 @@ void InspectorNetworkAgent::WillLoadXHR(ExecutionContext* execution_context,
                                         const HTTPHeaderMap& headers,
                                         bool include_credentials) {
   DCHECK(!pending_request_type_);
-  pending_xhr_replay_data_ = XHRReplayData::Create(
+  pending_xhr_replay_data_ = MakeGarbageCollected<XHRReplayData>(
       execution_context, method, UrlWithoutFragment(url), async,
       form_data ? form_data->DeepCopy() : nullptr, include_credentials);
   for (const auto& header : headers)
@@ -1544,7 +1552,7 @@ Response InspectorNetworkAgent::getCertificate(
   for (auto& resource : resources_data_->Resources()) {
     scoped_refptr<const SecurityOrigin> resource_origin =
         SecurityOrigin::Create(resource->RequestedURL());
-    if (resource_origin->IsSameSchemeHostPort(security_origin.get()) &&
+    if (resource_origin->IsSameOriginWith(security_origin.get()) &&
         resource->Certificate().size()) {
       for (auto& cert : resource->Certificate()) {
         (*certificate)
@@ -1694,8 +1702,9 @@ InspectorNetworkAgent::InspectorNetworkAgent(
     : inspected_frames_(inspected_frames),
       worker_global_scope_(worker_global_scope),
       v8_session_(v8_session),
-      resources_data_(NetworkResourcesData::Create(kDefaultTotalBufferSize,
-                                                   kDefaultResourceBufferSize)),
+      resources_data_(MakeGarbageCollected<NetworkResourcesData>(
+          kDefaultTotalBufferSize,
+          kDefaultResourceBufferSize)),
       devtools_token_(worker_global_scope_
                           ? worker_global_scope_->GetParentDevToolsToken()
                           : inspected_frames->Root()->GetDevToolsFrameToken()),

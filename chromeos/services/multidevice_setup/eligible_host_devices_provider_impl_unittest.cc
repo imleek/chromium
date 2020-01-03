@@ -166,19 +166,19 @@ TEST_P(MultiDeviceSetupEligibleHostDevicesProviderImplTest,
       device_activity_statuses;
   device_activity_statuses.emplace_back(
       device_sync::mojom::DeviceActivityStatus::New(
-          "publicKey0", base::Time::FromTimeT(50),
+          test_devices()[0].instance_id(), base::Time::FromTimeT(50),
           cryptauthv2::ConnectivityStatus::ONLINE));
   device_activity_statuses.emplace_back(
       device_sync::mojom::DeviceActivityStatus::New(
-          "publicKey1", base::Time::FromTimeT(100),
+          test_devices()[1].instance_id(), base::Time::FromTimeT(100),
           cryptauthv2::ConnectivityStatus::OFFLINE));
   device_activity_statuses.emplace_back(
       device_sync::mojom::DeviceActivityStatus::New(
-          "publicKey2", base::Time::FromTimeT(200),
+          test_devices()[2].instance_id(), base::Time::FromTimeT(200),
           cryptauthv2::ConnectivityStatus::ONLINE));
   device_activity_statuses.emplace_back(
       device_sync::mojom::DeviceActivityStatus::New(
-          "publicKey3", base::Time::FromTimeT(50),
+          test_devices()[3].instance_id(), base::Time::FromTimeT(50),
           cryptauthv2::ConnectivityStatus::ONLINE));
   if (use_get_devices_activity_status()) {
     fake_device_sync_client()->InvokePendingGetDevicesActivityStatusCallback(
@@ -258,7 +258,7 @@ TEST_P(MultiDeviceSetupEligibleHostDevicesProviderImplTest,
   EXPECT_EQ(test_devices()[3], eligible_devices[3]);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          MultiDeviceSetupEligibleHostDevicesProviderImplTest,
                          testing::Bool());
 

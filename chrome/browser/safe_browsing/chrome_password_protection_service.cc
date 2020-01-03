@@ -1015,7 +1015,8 @@ void ChromePasswordProtectionService::HandleResetPasswordOnInterstitial(
 }
 
 base::string16 ChromePasswordProtectionService::GetWarningDetailText(
-    ReusedPasswordAccountType password_type) const {
+    ReusedPasswordAccountType password_type,
+    std::vector<size_t>* placeholder_offsets) const {
   DCHECK(password_type.account_type() == ReusedPasswordAccountType::GSUITE ||
          password_type.account_type() == ReusedPasswordAccountType::GMAIL ||
          password_type.account_type() ==
@@ -1034,8 +1035,7 @@ base::string16 ChromePasswordProtectionService::GetWarningDetailText(
           ReusedPasswordAccountType::SAVED_PASSWORD &&
       base::FeatureList::IsEnabled(
           safe_browsing::kPasswordProtectionForSavedPasswords)) {
-    return l10n_util::GetStringUTF16(
-        IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED);
+    return GetWarningDetailTextForSavedPasswords(placeholder_offsets);
   }
 
   bool enable_warning_for_non_sync_users = base::FeatureList::IsEnabled(
@@ -1058,6 +1058,68 @@ base::string16 ChromePasswordProtectionService::GetWarningDetailText(
   }
   return l10n_util::GetStringUTF16(
       IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_ENTERPRISE);
+}
+
+std::vector<base::string16>
+ChromePasswordProtectionService::GetPlaceholdersForSavedPasswordWarningText()
+    const {
+  const std::vector<std::string>& matching_domains =
+      saved_passwords_matching_domains();
+  const std::list<std::string>& spoofed_domains = common_spoofed_domains();
+
+  // Show most commonly spoofed domains first.
+  std::vector<base::string16> placeholders;
+  for (auto priority_domain_iter = spoofed_domains.begin();
+       priority_domain_iter != spoofed_domains.end(); ++priority_domain_iter) {
+    if (std::find(matching_domains.begin(), matching_domains.end(),
+                  *priority_domain_iter) != matching_domains.end()) {
+      placeholders.push_back(base::UTF8ToUTF16(*priority_domain_iter));
+    }
+  }
+
+  // If there are less than 3 saved default domains, check the saved
+  //  password domains to see if there are more that can be added to the warning
+  //  text.
+  int domains_idx = placeholders.size();
+  for (size_t idx = 0; idx < matching_domains.size() && domains_idx < 3;
+       idx++) {
+    // Do not add duplicate domains if it was already in the default domains.
+    if (std::find(placeholders.begin(), placeholders.end(),
+                  base::UTF8ToUTF16(matching_domains[idx])) !=
+        placeholders.end()) {
+      continue;
+    }
+    placeholders.push_back(base::UTF8ToUTF16(matching_domains[idx]));
+    domains_idx++;
+  }
+  return placeholders;
+}
+
+base::string16
+ChromePasswordProtectionService::GetWarningDetailTextForSavedPasswords(
+    std::vector<size_t>* placeholder_offsets) const {
+  std::vector<base::string16> placeholders =
+      GetPlaceholdersForSavedPasswordWarningText();
+  // If showing the saved passwords domain experiment is not on or if there is
+  // are no saved domains, default to original saved passwords reuse warning.
+  if (!base::FeatureList::IsEnabled(
+          safe_browsing::kPasswordProtectionShowDomainsForSavedPasswords) ||
+      placeholders.size() == 0) {
+    return l10n_util::GetStringUTF16(
+        IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED);
+  } else if (placeholders.size() == 1) {
+    return l10n_util::GetStringFUTF16(
+        IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED_1_DOMAIN, placeholders,
+        placeholder_offsets);
+  } else if (placeholders.size() == 2) {
+    return l10n_util::GetStringFUTF16(
+        IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED_2_DOMAINS, placeholders,
+        placeholder_offsets);
+  } else {
+    return l10n_util::GetStringFUTF16(
+        IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED_3_DOMAINS, placeholders,
+        placeholder_offsets);
+  }
 }
 
 std::string ChromePasswordProtectionService::GetOrganizationName(

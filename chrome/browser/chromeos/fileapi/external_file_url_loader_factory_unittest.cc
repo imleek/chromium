@@ -20,7 +20,6 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_render_process_host.h"
-#include "content/public/test/test_service_manager_context.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/redirect_info.h"
@@ -92,21 +91,20 @@ class ExternalFileURLLoaderFactoryTest : public testing::Test {
     return request;
   }
 
-  network::mojom::URLLoaderPtr CreateURLLoaderAndStart(
+  mojo::PendingRemote<network::mojom::URLLoader> CreateURLLoaderAndStart(
       network::TestURLLoaderClient* client,
       const network::ResourceRequest& resource_request) {
-    network::mojom::URLLoaderPtr loader;
+    mojo::PendingRemote<network::mojom::URLLoader> loader;
     url_loader_factory_->CreateLoaderAndStart(
-        mojo::MakeRequest(&loader), 0 /* routing_id */, 0 /* request_id */,
-        network::mojom::kURLLoadOptionNone, resource_request,
-        client->CreateRemote(),
+        loader.InitWithNewPipeAndPassReceiver(), 0 /* routing_id */,
+        0 /* request_id */, network::mojom::kURLLoadOptionNone,
+        resource_request, client->CreateRemote(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
     return loader;
   }
 
  private:
   content::BrowserTaskEnvironment task_environment_;
-  content::TestServiceManagerContext context_;
 
   std::unique_ptr<ExternalFileURLLoaderFactory> url_loader_factory_;
 
@@ -120,7 +118,7 @@ TEST_F(ExternalFileURLLoaderFactoryTest, NonGetMethod) {
   network::TestURLLoaderClient client;
   network::ResourceRequest request = CreateRequest(kTestUrl);
   request.method = "POST";
-  network::mojom::URLLoaderPtr loader =
+  mojo::PendingRemote<network::mojom::URLLoader> loader =
       CreateURLLoaderAndStart(&client, request);
 
   client.RunUntilComplete();
@@ -131,7 +129,7 @@ TEST_F(ExternalFileURLLoaderFactoryTest, NonGetMethod) {
 
 TEST_F(ExternalFileURLLoaderFactoryTest, RegularFile) {
   network::TestURLLoaderClient client;
-  network::mojom::URLLoaderPtr loader =
+  mojo::PendingRemote<network::mojom::URLLoader> loader =
       CreateURLLoaderAndStart(&client, CreateRequest(kTestUrl));
 
   client.RunUntilComplete();
@@ -146,9 +144,10 @@ TEST_F(ExternalFileURLLoaderFactoryTest, RegularFile) {
 
 TEST_F(ExternalFileURLLoaderFactoryTest, RootDirectory) {
   network::TestURLLoaderClient client;
-  network::mojom::URLLoaderPtr loader = CreateURLLoaderAndStart(
-      &client,
-      CreateRequest("externalfile:abc:test-filesystem:test-user-hash/"));
+  mojo::PendingRemote<network::mojom::URLLoader> loader =
+      CreateURLLoaderAndStart(
+          &client,
+          CreateRequest("externalfile:abc:test-filesystem:test-user-hash/"));
 
   client.RunUntilComplete();
 
@@ -157,9 +156,11 @@ TEST_F(ExternalFileURLLoaderFactoryTest, RootDirectory) {
 
 TEST_F(ExternalFileURLLoaderFactoryTest, NonExistingFile) {
   network::TestURLLoaderClient client;
-  network::mojom::URLLoaderPtr loader = CreateURLLoaderAndStart(
-      &client, CreateRequest("externalfile:abc:test-filesystem:test-user-hash/"
-                             "non-existing-file.txt"));
+  mojo::PendingRemote<network::mojom::URLLoader> loader =
+      CreateURLLoaderAndStart(
+          &client,
+          CreateRequest("externalfile:abc:test-filesystem:test-user-hash/"
+                        "non-existing-file.txt"));
 
   client.RunUntilComplete();
 
@@ -168,7 +169,7 @@ TEST_F(ExternalFileURLLoaderFactoryTest, NonExistingFile) {
 
 TEST_F(ExternalFileURLLoaderFactoryTest, WrongFormat) {
   network::TestURLLoaderClient client;
-  network::mojom::URLLoaderPtr loader =
+  mojo::PendingRemote<network::mojom::URLLoader> loader =
       CreateURLLoaderAndStart(&client, CreateRequest("externalfile:"));
 
   client.RunUntilComplete();
@@ -180,7 +181,7 @@ TEST_F(ExternalFileURLLoaderFactoryTest, RangeHeader) {
   network::TestURLLoaderClient client;
   network::ResourceRequest request = CreateRequest(kTestUrl);
   request.headers.SetHeader(net::HttpRequestHeaders::kRange, "bytes=3-5");
-  network::mojom::URLLoaderPtr loader =
+  mojo::PendingRemote<network::mojom::URLLoader> loader =
       CreateURLLoaderAndStart(&client, request);
 
   client.RunUntilComplete();
@@ -197,7 +198,7 @@ TEST_F(ExternalFileURLLoaderFactoryTest, WrongRangeHeader) {
   network::TestURLLoaderClient client;
   network::ResourceRequest request = CreateRequest(kTestUrl);
   request.headers.SetHeader(net::HttpRequestHeaders::kRange, "Invalid range");
-  network::mojom::URLLoaderPtr loader =
+  mojo::PendingRemote<network::mojom::URLLoader> loader =
       CreateURLLoaderAndStart(&client, request);
 
   client.RunUntilComplete();
@@ -219,7 +220,7 @@ TEST_F(SubresourceExternalFileURLLoaderFactoryTest, SubresourceAllowed) {
       render_process_host_id(), content::kExternalFileScheme);
 
   network::TestURLLoaderClient client;
-  network::mojom::URLLoaderPtr loader =
+  mojo::PendingRemote<network::mojom::URLLoader> loader =
       CreateURLLoaderAndStart(&client, CreateRequest(kTestUrl));
 
   client.RunUntilComplete();

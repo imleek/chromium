@@ -66,6 +66,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
+using network::mojom::CredentialsMode;
 using network::mojom::FetchResponseType;
 using network::mojom::RedirectMode;
 using network::mojom::RequestMode;
@@ -315,9 +316,19 @@ bool FetchManager::Loader::WillFollowRedirect(
 void FetchManager::Loader::DidReceiveResponse(
     uint64_t,
     const ResourceResponse& response) {
+  // Verify that we're dealing with the URL we expect (which could be an
+  // HTTPS-upgraded variant of `url_list_.back()`.
+  //
   // TODO(horo): This check could be false when we will use the response url
   // in service worker responses. (crbug.com/553535)
-  DCHECK(response.CurrentRequestUrl() == url_list_.back());
+  DCHECK(
+      response.CurrentRequestUrl() == url_list_.back() ||
+      (response.CurrentRequestUrl().ProtocolIs("https") &&
+       url_list_.back().ProtocolIs("http") &&
+       response.CurrentRequestUrl().Host() == url_list_.back().Host() &&
+       response.CurrentRequestUrl().GetPath() == url_list_.back().GetPath() &&
+       response.CurrentRequestUrl().Query() == url_list_.back().Query()));
+
   ScriptState* script_state = resolver_->GetScriptState();
   ScriptState::Scope scope(script_state);
 
@@ -399,8 +410,7 @@ void FetchManager::Loader::DidReceiveResponse(
 
   place_holder_body_ = MakeGarbageCollected<PlaceHolderBytesConsumer>();
   FetchResponseData* response_data = FetchResponseData::CreateWithBuffer(
-      MakeGarbageCollected<BodyStreamBuffer>(script_state, place_holder_body_,
-                                             signal_));
+      BodyStreamBuffer::Create(script_state, place_holder_body_, signal_));
   response_data->SetStatus(response.HttpStatusCode());
   if (response.CurrentRequestUrl().ProtocolIsAbout() ||
       response.CurrentRequestUrl().ProtocolIsData() ||
@@ -437,6 +447,12 @@ void FetchManager::Loader::DidReceiveResponse(
         network::mojom::FetchResponseSource::kNetwork);
   }
 
+  // Note if the response was loaded with credentials enabled.
+  response_data->SetLoadedWithCredentials(
+      fetch_request_data_->Credentials() == CredentialsMode::kInclude ||
+      (fetch_request_data_->Credentials() == CredentialsMode::kSameOrigin &&
+       tainting == FetchRequestData::kBasicTainting));
+
   FetchResponseData* tainted_response = nullptr;
 
   DCHECK(!(network_utils::IsRedirectResponseCode(response_http_status_code_) &&
@@ -452,7 +468,7 @@ void FetchManager::Loader::DidReceiveResponse(
         tainted_response = response_data->CreateBasicFilteredResponse();
         break;
       case FetchRequestData::kCorsTainting: {
-        WebHTTPHeaderSet header_names = cors::ExtractCorsExposedHeaderNamesList(
+        HTTPHeaderSet header_names = cors::ExtractCorsExposedHeaderNamesList(
             fetch_request_data_->Credentials(), response);
         tainted_response =
             response_data->CreateCorsFilteredResponse(header_names);
@@ -698,6 +714,7 @@ void FetchManager::Loader::PerformHTTPFetch(ExceptionState& exception_state) {
   request.SetRequestorOrigin(fetch_request_data_->Origin());
   request.SetIsolatedWorldOrigin(fetch_request_data_->IsolatedWorldOrigin());
   request.SetRequestContext(fetch_request_data_->Context());
+  request.SetRequestDestination(fetch_request_data_->Destination());
   request.SetHttpMethod(fetch_request_data_->Method());
   request.SetFetchWindowId(fetch_request_data_->WindowId());
 
@@ -807,6 +824,7 @@ void FetchManager::Loader::PerformDataFetch() {
   ResourceRequest request(fetch_request_data_->Url());
   request.SetRequestorOrigin(fetch_request_data_->Origin());
   request.SetRequestContext(fetch_request_data_->Context());
+  request.SetRequestDestination(fetch_request_data_->Destination());
   request.SetUseStreamOnResponse(true);
   request.SetHttpMethod(fetch_request_data_->Method());
   request.SetCredentialsMode(network::mojom::CredentialsMode::kOmit);
@@ -849,10 +867,6 @@ void FetchManager::Loader::NotifyFinished() {
     fetch_manager_->OnLoaderFinished(this);
 }
 
-FetchManager* FetchManager::Create(ExecutionContext* execution_context) {
-  return MakeGarbageCollected<FetchManager>(execution_context);
-}
-
 FetchManager::FetchManager(ExecutionContext* execution_context)
     : ContextLifecycleObserver(execution_context) {}
 
@@ -871,6 +885,7 @@ ScriptPromise FetchManager::Fetch(ScriptState* script_state,
   }
 
   request->SetContext(mojom::RequestContextType::FETCH);
+  request->SetDestination(network::mojom::RequestDestination::kEmpty);
 
   auto* loader = MakeGarbageCollected<Loader>(
       GetExecutionContext(), this, resolver, request,

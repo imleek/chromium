@@ -179,7 +179,7 @@ void CloneNativeVideoMediaStreamTrack(const WebMediaStreamTrack& original,
       native_source, original_track->adapter_settings(),
       original_track->noise_reduction(), original_track->is_screencast(),
       original_track->min_frame_rate(),
-      MediaStreamVideoSource::ConstraintsCallback(), clone.IsEnabled()));
+      MediaStreamVideoSource::ConstraintsOnceCallback(), clone.IsEnabled()));
 }
 
 void DidSetMediaStreamTrackEnabled(MediaStreamComponent* component) {
@@ -208,11 +208,6 @@ void DidCloneMediaStreamTrack(const WebMediaStreamTrack& original,
 }
 
 }  // namespace
-
-MediaStreamTrack* MediaStreamTrack::Create(ExecutionContext* context,
-                                           MediaStreamComponent* component) {
-  return MakeGarbageCollected<MediaStreamTrack>(context, component);
-}
 
 MediaStreamTrack::MediaStreamTrack(ExecutionContext* context,
                                    MediaStreamComponent* component)
@@ -382,7 +377,7 @@ MediaStreamTrack* MediaStreamTrack::clone(ScriptState* script_state) {
   return cloned_track;
 }
 
-void MediaStreamTrack::SetConstraints(const WebMediaConstraints& constraints) {
+void MediaStreamTrack::SetConstraints(const MediaConstraints& constraints) {
   component_->SetConstraints(constraints);
 }
 
@@ -634,7 +629,7 @@ ScriptPromise MediaStreamTrack::applyConstraints(
 
   MediaErrorState error_state;
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
-  WebMediaConstraints web_constraints = media_constraints_impl::Create(
+  MediaConstraints web_constraints = media_constraints_impl::Create(
       execution_context, constraints, error_state);
   if (error_state.HadException()) {
     resolver->Reject(

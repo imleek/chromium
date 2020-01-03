@@ -48,6 +48,7 @@
 #include "components/autofill/core/common/autofill_util.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
+#include "net/dns/mock_host_resolver.h"
 #include "services/network/public/cpp/data_element.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -217,6 +218,13 @@ class AutofillCapturedSitesInteractiveTest
     AutofillUiTest::TearDownOnMainThread();
   }
 
+  void SetUpInProcessBrowserTestFixture() override {
+    // Allow access exception to live Autofill Server for
+    // overriding cache replay behavior.
+    host_resolver()->AllowDirectLookup("clients1.google.com");
+    AutofillUiTest::SetUpInProcessBrowserTestFixture();
+  }
+
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // Enable the autofill show typed prediction feature. When active this
     // feature forces input elements on a form to display their autofill type
@@ -327,7 +335,7 @@ IN_PROC_BROWSER_TEST_P(AutofillCapturedSitesInteractiveTest, Recipe) {
   }
 }
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     AutofillCapturedSitesInteractiveTest,
     testing::ValuesIn(GetCapturedSites(GetReplayFilesRootDirectory())),
     captured_sites_test_utils::GetParamAsString());

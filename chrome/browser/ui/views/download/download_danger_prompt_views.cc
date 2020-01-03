@@ -28,7 +28,6 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
-#include "ui/views/window/dialog_client_view.h"
 #include "ui/views/window/dialog_delegate.h"
 #include "url/gurl.h"
 
@@ -236,6 +235,7 @@ base::string16 DownloadDangerPromptViews::GetMessageBody() const {
             IDS_PROMPT_DOWNLOAD_CHANGES_SETTINGS,
             download_->GetFileNameToReportUser().LossyDisplayName());
       }
+      case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING:
       case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING:
       case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK:
       case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:

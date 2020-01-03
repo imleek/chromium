@@ -187,7 +187,7 @@ void SigninManagerAndroid::RegisterPolicyWithAccount(
 
   user_policy_signin_service_->RegisterForPolicyWithAccountId(
       account.email, account.account_id,
-      base::AdaptCallbackForRepeating(base::BindOnce(
+      base::BindOnce(
           [](RegisterPolicyWithAccountCallback callback,
              const std::string& dm_token, const std::string& client_id) {
             base::Optional<ManagementCredentials> credentials;
@@ -196,7 +196,7 @@ void SigninManagerAndroid::RegisterPolicyWithAccount(
             }
             std::move(callback).Run(credentials);
           },
-          std::move(callback))));
+          std::move(callback)));
 }
 
 void SigninManagerAndroid::FetchAndApplyCloudPolicy(
@@ -307,8 +307,4 @@ base::android::ScopedJavaLocalRef<jstring> JNI_SigninManager_ExtractDomainName(
   std::string email = base::android::ConvertJavaStringToUTF8(env, j_email);
   std::string domain = gaia::ExtractDomainName(email);
   return base::android::ConvertUTF8ToJavaString(env, domain);
-}
-
-jboolean JNI_SigninManager_IsMobileIdentityConsistencyEnabled(JNIEnv* env) {
-  return base::FeatureList::IsEnabled(signin::kMiceFeature);
 }

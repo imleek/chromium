@@ -155,10 +155,13 @@ Profile* SetupProfilesForLock(Profile* signed_in) {
 
 }  // namespace
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 class ProfileMenuViewExtensionsTest
     : public SupportsTestDialog<extensions::ExtensionBrowserTest> {
  public:
-  ProfileMenuViewExtensionsTest() {}
+  ProfileMenuViewExtensionsTest() {
+    scoped_feature_list_.InitAndDisableFeature(features::kProfileMenuRevamp);
+  }
   ~ProfileMenuViewExtensionsTest() override {}
 
   // SupportsTestUi:
@@ -263,9 +266,12 @@ class ProfileMenuViewExtensionsTest
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(ProfileMenuViewExtensionsTest);
 };
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 // TODO(crbug.com/932818): Remove this class after
 // |kAutofillEnableToolbarStatusChip| is cleaned up. Otherwise we need it
 // because the toolbar is init-ed before each test is set up. Thus need to
@@ -579,7 +585,7 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, SignedInNoUsername) {
   OpenProfileMenuView(browser());
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          ProfileMenuViewExtensionsParamTest,
                          ::testing::Bool());
 
@@ -948,7 +954,7 @@ PROFILE_MENU_CLICK_TEST(kActionableItems_WithUnconsentedPrimaryAccount,
     // The sync confirmation dialog was opened after clicking the signin button
     // in the profile menu. It needs to be manually dismissed to not cause any
     // crashes during shutdown.
-    EXPECT_TRUE(login_ui_test_utils::DismissSyncConfirmationDialog(
+    EXPECT_TRUE(login_ui_test_utils::ConfirmSyncConfirmationDialog(
         browser(), base::TimeDelta::FromSeconds(30)));
   }
 }

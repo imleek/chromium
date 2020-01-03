@@ -171,6 +171,10 @@ struct TargetSnapAreaElementIds {
     return (other.x == x) && (other.y == y);
   }
 
+  bool operator!=(const TargetSnapAreaElementIds& other) const {
+    return !(*this == other);
+  }
+
   // Note that the same element can be snapped to on both the x and y axes.
   ElementId x;
   ElementId y;
@@ -270,6 +274,11 @@ class CC_EXPORT SnapContainerData {
       SearchAxis axis,
       const SnapSelectionStrategy& strategy,
       const SnapSearchResult& cross_axis_snap_result) const;
+
+  // Finds the snap area associated with the target snap area element id for the
+  // given axis.
+  base::Optional<SnapSearchResult> GetTargetSnapAreaSearchResult(
+      SearchAxis axis) const;
 
   // Returns all the info needed to snap at this area on the given axis,
   // including:

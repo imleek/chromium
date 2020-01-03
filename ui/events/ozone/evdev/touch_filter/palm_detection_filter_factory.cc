@@ -15,33 +15,13 @@
 #include "ui/events/ozone/evdev/touch_filter/heuristic_stylus_palm_detection_filter.h"
 #include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter.h"
 #include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_model.h"
+#include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_report_filter.h"
 #include "ui/events/ozone/evdev/touch_filter/open_palm_detection_filter.h"
 #include "ui/events/ozone/evdev/touch_filter/palm_detection_filter.h"
 #include "ui/events/ozone/evdev/touch_filter/palm_model/onedevice_train_palm_detection_filter_model.h"
+#include "ui/events/ozone/features.h"
 
 namespace ui {
-
-const base::Feature kEnableHeuristicPalmDetectionFilter{
-    "EnableHeuristicPalmDetectionFilter", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kEnableNeuralPalmDetectionFilter{
-    "EnableNeuralPalmDetectionFilter", base::FEATURE_DISABLED_BY_DEFAULT};
-
-EVENTS_OZONE_EVDEV_EXPORT
-extern const base::FeatureParam<std::string> kNeuralPalmRadiusPolynomial{
-    &kEnableNeuralPalmDetectionFilter, "neural_palm_radius_polynomial", ""};
-
-const base::FeatureParam<double> kHeuristicCancelThresholdSeconds{
-    &kEnableHeuristicPalmDetectionFilter,
-    "heuristic_palm_cancel_threshold_seconds", 0.4};
-
-const base::FeatureParam<double> kHeuristicHoldThresholdSeconds{
-    &kEnableHeuristicPalmDetectionFilter,
-    "heuristic_palm_hold_threshold_seconds", 1.0};
-
-const base::FeatureParam<int> kHeuristicStrokeCount{
-    &kEnableHeuristicPalmDetectionFilter, "heuristic_palm_stroke_count", 0};
-
 namespace internal {
 
 std::vector<float> ParseRadiusPolynomial(const std::string& radius_string) {
@@ -62,6 +42,22 @@ std::vector<float> ParseRadiusPolynomial(const std::string& radius_string) {
 
 }  // namespace internal
 
+namespace {
+std::string FetchNeuralPalmRadiusPolynomial(const EventDeviceInfo& devinfo,
+                                            const std::string param_string) {
+  if (!param_string.empty()) {
+    return param_string;
+  }
+  // Basking. Does not report vendor_id / product_id
+  if (devinfo.name() == "Elan Touchscreen") {
+    return "0.17889799,4.22584412";
+  }
+
+  // By default, return the original.
+  return param_string;
+}
+}  // namespace
+
 std::unique_ptr<PalmDetectionFilter> CreatePalmDetectionFilter(
     const EventDeviceInfo& devinfo,
     SharedPalmDetectionFilterState* shared_palm_state) {
@@ -69,7 +65,8 @@ std::unique_ptr<PalmDetectionFilter> CreatePalmDetectionFilter(
       NeuralStylusPalmDetectionFilter::
           CompatibleWithNeuralStylusPalmDetectionFilter(devinfo)) {
     std::vector<float> radius_polynomial =
-        internal::ParseRadiusPolynomial(kNeuralPalmRadiusPolynomial.Get());
+        internal::ParseRadiusPolynomial(FetchNeuralPalmRadiusPolynomial(
+            devinfo, kNeuralPalmRadiusPolynomial.Get()));
     // Theres only one model right now.
     std::unique_ptr<NeuralStylusPalmDetectionFilterModel> model =
         std::make_unique<OneDeviceTrainNeuralStylusPalmDetectionFilterModel>(
@@ -87,7 +84,14 @@ std::unique_ptr<PalmDetectionFilter> CreatePalmDetectionFilter(
     return std::make_unique<HeuristicStylusPalmDetectionFilter>(
         shared_palm_state, stroke_count, hold_time, cancel_time);
   }
-  return std::make_unique<OpenPalmDetectionFilter>(shared_palm_state);
+
+  if (base::FeatureList::IsEnabled(kEnableNeuralStylusReportFilter) &&
+      NeuralStylusReportFilter::CompatibleWithNeuralStylusReportFilter(
+          devinfo)) {
+    return std::make_unique<NeuralStylusReportFilter>(shared_palm_state);
+  } else {
+    return std::make_unique<OpenPalmDetectionFilter>(shared_palm_state);
+  }
 }
 
 }  // namespace ui

@@ -27,7 +27,6 @@
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_client_view.h"
 
 using testing::_;
 using testing::Invoke;
@@ -110,7 +109,8 @@ class CastDialogViewTest : public ChromeViewsTestBase {
             })));
     CastDialogView::ShowDialog(anchor_widget_->GetContentsView(),
                                views::BubbleBorder::TOP_RIGHT, &controller_,
-                               &profile_, base::Time::Now());
+                               &profile_, base::Time::Now(),
+                               MediaRouterDialogOpenOrigin::PAGE);
 
     dialog_->OnModelUpdated(model);
   }
@@ -155,7 +155,8 @@ TEST_F(CastDialogViewTest, ShowAndHideDialog) {
   EXPECT_CALL(controller_, AddObserver(_));
   CastDialogView::ShowDialog(anchor_widget_->GetContentsView(),
                              views::BubbleBorder::TOP_RIGHT, &controller_,
-                             &profile_, base::Time::Now());
+                             &profile_, base::Time::Now(),
+                             MediaRouterDialogOpenOrigin::PAGE);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(CastDialogView::IsShowing());
   EXPECT_NE(nullptr, CastDialogView::GetCurrentDialogWidget());

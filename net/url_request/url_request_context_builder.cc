@@ -128,8 +128,7 @@ class BasicNetworkDelegate : public NetworkDelegateImpl {
 // it's not safe to subclass this.
 class ContainerURLRequestContext final : public URLRequestContext {
  public:
-  explicit ContainerURLRequestContext(bool allow_copy)
-      : URLRequestContext(allow_copy), storage_(this) {}
+  explicit ContainerURLRequestContext() : storage_(this) {}
 
   ~ContainerURLRequestContext() override {
 #if BUILDFLAG(ENABLE_REPORTING)
@@ -260,6 +259,11 @@ void URLRequestContextBuilder::set_ct_policy_enforcer(
   ct_policy_enforcer_ = std::move(ct_policy_enforcer);
 }
 
+void URLRequestContextBuilder::set_quic_context(
+    std::unique_ptr<QuicContext> quic_context) {
+  quic_context_ = std::move(quic_context);
+}
+
 void URLRequestContextBuilder::SetCertVerifier(
     std::unique_ptr<CertVerifier> cert_verifier) {
   DCHECK(!shared_cert_verifier_);
@@ -364,7 +368,7 @@ void URLRequestContextBuilder::SetCreateHttpTransactionFactoryCallback(
 
 std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   std::unique_ptr<ContainerURLRequestContext> context(
-      new ContainerURLRequestContext(allow_copy_));
+      new ContainerURLRequestContext());
   URLRequestContextStorage* storage = context->storage();
 
   if (!name_.empty())
@@ -389,7 +393,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
     // builder or resulting context.
     context->set_net_log(net_log_);
   } else {
-    storage->set_net_log(std::make_unique<NetLog>());
+    context->set_net_log(NetLog::Get());
   }
 
   if (host_resolver_) {
@@ -473,7 +477,7 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   } else if (shared_cert_verifier_) {
     context->set_cert_verifier(shared_cert_verifier_);
   } else {
-    // TODO(mattm): Should URLRequestContextBuilder create a CertNetFetcherImpl?
+    // TODO(mattm): Should URLRequestContextBuilder create a CertNetFetcher?
     storage->set_cert_verifier(
         CertVerifier::CreateDefault(/*cert_net_fetcher=*/nullptr));
   }
@@ -491,7 +495,11 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
         std::make_unique<DefaultCTPolicyEnforcer>());
   }
 
-  storage->set_quic_context(std::make_unique<QuicContext>());
+  if (quic_context_) {
+    storage->set_quic_context(std::move(quic_context_));
+  } else {
+    storage->set_quic_context(std::make_unique<QuicContext>());
+  }
 
   if (throttling_enabled_) {
     storage->set_throttler_manager(

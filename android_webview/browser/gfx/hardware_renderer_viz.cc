@@ -163,8 +163,7 @@ void HardwareRendererViz::OnViz::DrawAndSwapOnViz(
   surface_quad->SetNew(quad_state, gfx::Rect(quad_state->quad_layer_rect),
                        gfx::Rect(quad_state->quad_layer_rect),
                        viz::SurfaceRange(base::nullopt, child_id),
-                       SK_ColorWHITE, /*stretch_content_to_fill_bounds=*/false,
-                       /*ignores_input_event=*/false);
+                       SK_ColorWHITE, /*stretch_content_to_fill_bounds=*/false);
 
   viz::CompositorFrame frame;
   // We draw synchronously, so acknowledge a manual BeginFrame.
@@ -203,7 +202,7 @@ void HardwareRendererViz::OnViz::DrawAndSwapOnViz(
   without_gpu_->support()->SubmitCompositorFrame(
       root_id_allocation_.local_surface_id(), std::move(frame));
   display_->Resize(viewport);
-  display_->DrawAndSwap();
+  display_->DrawAndSwap(base::TimeTicks::Now());
 }
 
 void HardwareRendererViz::OnViz::PostDrawOnViz(

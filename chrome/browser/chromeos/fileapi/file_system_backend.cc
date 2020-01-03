@@ -53,7 +53,6 @@ bool FileSystemBackend::CanHandleURL(const storage::FileSystemURL& url) {
     return false;
   return url.type() == storage::kFileSystemTypeNativeLocal ||
          url.type() == storage::kFileSystemTypeRestrictedNativeLocal ||
-         url.type() == storage::kFileSystemTypeDrive ||
          url.type() == storage::kFileSystemTypeProvided ||
          url.type() == storage::kFileSystemTypeDeviceMediaAsFileStorage ||
          url.type() == storage::kFileSystemTypeArcContent ||
@@ -105,7 +104,6 @@ void FileSystemBackend::AddSystemMountPoints() {
 bool FileSystemBackend::CanHandleType(storage::FileSystemType type) const {
   switch (type) {
     case storage::kFileSystemTypeExternal:
-    case storage::kFileSystemTypeDrive:
     case storage::kFileSystemTypeRestrictedNativeLocal:
     case storage::kFileSystemTypeNativeLocal:
     case storage::kFileSystemTypeNativeForPlatformApp:
@@ -354,8 +352,7 @@ storage::FileSystemOperation* FileSystemBackend::CreateFileSystemOperation(
                          .get()));
   }
 
-  DCHECK(url.type() == storage::kFileSystemTypeDrive ||
-         url.type() == storage::kFileSystemTypeProvided ||
+  DCHECK(url.type() == storage::kFileSystemTypeProvided ||
          url.type() == storage::kFileSystemTypeArcContent ||
          url.type() == storage::kFileSystemTypeArcDocumentsProvider);
   return storage::FileSystemOperation::Create(
@@ -365,8 +362,7 @@ storage::FileSystemOperation* FileSystemBackend::CreateFileSystemOperation(
 
 bool FileSystemBackend::SupportsStreaming(
     const storage::FileSystemURL& url) const {
-  return url.type() == storage::kFileSystemTypeDrive ||
-         url.type() == storage::kFileSystemTypeProvided ||
+  return url.type() == storage::kFileSystemTypeProvided ||
          url.type() == storage::kFileSystemTypeDeviceMediaAsFileStorage ||
          url.type() == storage::kFileSystemTypeArcContent ||
          url.type() == storage::kFileSystemTypeArcDocumentsProvider;
@@ -375,7 +371,6 @@ bool FileSystemBackend::SupportsStreaming(
 bool FileSystemBackend::HasInplaceCopyImplementation(
     storage::FileSystemType type) const {
   switch (type) {
-    case storage::kFileSystemTypeDrive:
     case storage::kFileSystemTypeProvided:
     case storage::kFileSystemTypeDeviceMediaAsFileStorage:
     case storage::kFileSystemTypeDriveFs:
@@ -481,19 +476,21 @@ bool FileSystemBackend::GetVirtualPath(const base::FilePath& filesystem_path,
 
 void FileSystemBackend::GetRedirectURLForContents(
     const storage::FileSystemURL& url,
-    const storage::URLCallback& callback) const {
+    storage::URLCallback callback) const {
   DCHECK(url.is_valid());
 
-  if (!IsAccessAllowed(url))
-    return callback.Run(GURL());
+  if (!IsAccessAllowed(url)) {
+    std::move(callback).Run(GURL());
+    return;
+  }
 
   switch (url.type()) {
     case storage::kFileSystemTypeProvided:
-      file_system_provider_delegate_->GetRedirectURLForContents(url,
-                                                                  callback);
+      file_system_provider_delegate_->GetRedirectURLForContents(
+          url, std::move(callback));
       return;
     case storage::kFileSystemTypeDeviceMediaAsFileStorage:
-      mtp_delegate_->GetRedirectURLForContents(url, callback);
+      mtp_delegate_->GetRedirectURLForContents(url, std::move(callback));
       return;
     case storage::kFileSystemTypeNativeLocal:
     case storage::kFileSystemTypeRestrictedNativeLocal:
@@ -501,12 +498,12 @@ void FileSystemBackend::GetRedirectURLForContents(
     case storage::kFileSystemTypeArcDocumentsProvider:
     case storage::kFileSystemTypeDriveFs:
     case storage::kFileSystemTypeSmbFs:
-      callback.Run(GURL());
+      std::move(callback).Run(GURL());
       return;
     default:
       NOTREACHED();
   }
-  callback.Run(GURL());
+  std::move(callback).Run(GURL());
 }
 
 storage::FileSystemURL FileSystemBackend::CreateInternalURL(

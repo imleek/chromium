@@ -121,19 +121,11 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   IntSize OffsetFromLayoutObject() const { return offset_from_layout_object_; }
   void SetOffsetFromLayoutObject(const IntSize&);
 
-  // The position of the layer (the location of its top-left corner in its
-  // parent).
-  const gfx::PointF& GetPosition() const;
-  void SetPosition(const gfx::PointF&);
-
   // The size of the layer.
   const gfx::Size& Size() const;
   void SetSize(const gfx::Size&);
 
   void SetRenderingContext(int id);
-
-  bool MasksToBounds() const;
-  void SetMasksToBounds(bool);
 
   bool DrawsContent() const { return draws_content_; }
   void SetDrawsContent(bool);
@@ -182,7 +174,7 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   void SetContentsToImage(
       Image*,
       Image::ImageDecodingMode decode_mode,
-      RespectImageOrientationEnum = kDoNotRespectImageOrientation);
+      RespectImageOrientationEnum = kRespectImageOrientation);
   // If |prevent_contents_opaque_changes| is set to true, then calls to
   // SetContentsOpaque() will not be passed on to the |layer|. Use when
   // the client wants to have control of the opaqueness of the contents
@@ -295,7 +287,7 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   // Helper functions used by settors to keep layer's the state consistent.
   void UpdateChildList();
   void UpdateLayerIsDrawable();
-  void UpdateContentsRect();
+  void UpdateContentsLayerBounds();
 
   void SetContentsTo(cc::Layer*, bool prevent_contents_opaque_changes);
   void SetupContentsLayer(cc::Layer*);

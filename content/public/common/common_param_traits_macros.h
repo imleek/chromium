@@ -56,7 +56,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(network::mojom::ReferrerPolicy,
                           network::mojom::ReferrerPolicy::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebHistoryScrollRestorationType,
                           blink::kWebHistoryScrollRestorationManual)
-IPC_ENUM_TRAITS_MAX_VALUE(blink::SecurityStyle, blink::SecurityStyle::kLast)
+IPC_ENUM_TRAITS_MAX_VALUE(blink::SecurityStyle, blink::SecurityStyle::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::PermissionStatus,
                           blink::mojom::PermissionStatus::LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(content::EditingBehavior,
@@ -252,6 +252,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(lazy_frame_loading_distance_thresholds_px)
   IPC_STRUCT_TRAITS_MEMBER(lazy_image_loading_distance_thresholds_px)
   IPC_STRUCT_TRAITS_MEMBER(lazy_image_first_k_fully_load)
+  IPC_STRUCT_TRAITS_MEMBER(allow_mixed_content_upgrades)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(blink::mojom::WindowFeatures)
@@ -331,7 +332,6 @@ IPC_STRUCT_TRAITS_BEGIN(blink::mojom::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(accept_languages)
   IPC_STRUCT_TRAITS_MEMBER(disable_client_blocked_error_page)
   IPC_STRUCT_TRAITS_MEMBER(plugin_fullscreen_allowed)
-  IPC_STRUCT_TRAITS_MEMBER(network_contry_iso)
 #if defined(OS_LINUX)
   IPC_STRUCT_TRAITS_MEMBER(system_font_family_name)
 #endif

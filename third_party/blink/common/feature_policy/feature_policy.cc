@@ -340,7 +340,7 @@ mojom::FeaturePolicyFeature FeaturePolicy::FeatureForSandboxFlag(
     case WebSandboxFlags::kPresentationController:
       return mojom::FeaturePolicyFeature::kPresentation;
     case WebSandboxFlags::kDownloads:
-      return mojom::FeaturePolicyFeature::kDownloadsWithoutUserActivation;
+      return mojom::FeaturePolicyFeature::kDownloads;
     // Other flags fall through to the bitmask test below. They are named
     // specifically here so that authors introducing new flags must consider
     // this method when adding them.
@@ -407,17 +407,20 @@ const FeaturePolicy::FeatureList& FeaturePolicy::GetDefaultFeatureList() {
        {mojom::FeaturePolicyFeature::kClientHintUAModel,
         FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
                             mojom::PolicyValueType::kBool)},
+       {mojom::FeaturePolicyFeature::kClientHintUAMobile,
+        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
+                            mojom::PolicyValueType::kBool)},
        {mojom::FeaturePolicyFeature::kClientHintViewportWidth,
         FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
                             mojom::PolicyValueType::kBool)},
        {mojom::FeaturePolicyFeature::kClientHintWidth,
         FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
                             mojom::PolicyValueType::kBool)},
-       {mojom::FeaturePolicyFeature::kCamera,
+       {mojom::FeaturePolicyFeature::kClipboard,
         FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
                             mojom::PolicyValueType::kBool)},
-       {mojom::FeaturePolicyFeature::kDocumentAccess,
-        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
+       {mojom::FeaturePolicyFeature::kCamera,
+        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
                             mojom::PolicyValueType::kBool)},
        {mojom::FeaturePolicyFeature::kDocumentDomain,
         FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
@@ -425,7 +428,7 @@ const FeaturePolicy::FeatureList& FeaturePolicy::GetDefaultFeatureList() {
        {mojom::FeaturePolicyFeature::kDocumentWrite,
         FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
                             mojom::PolicyValueType::kBool)},
-       {mojom::FeaturePolicyFeature::kDownloadsWithoutUserActivation,
+       {mojom::FeaturePolicyFeature::kDownloads,
         FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
                             mojom::PolicyValueType::kBool)},
        {mojom::FeaturePolicyFeature::kEncryptedMedia,
@@ -506,6 +509,9 @@ const FeaturePolicy::FeatureList& FeaturePolicy::GetDefaultFeatureList() {
                             mojom::PolicyValueType::kBool)},
        {mojom::FeaturePolicyFeature::kPresentation,
         FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,
+                            mojom::PolicyValueType::kBool)},
+       {mojom::FeaturePolicyFeature::kPublicKeyCredentials,
+        FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForSelf,
                             mojom::PolicyValueType::kBool)},
        {mojom::FeaturePolicyFeature::kScript,
         FeatureDefaultValue(FeaturePolicy::FeatureDefault::EnableForAll,

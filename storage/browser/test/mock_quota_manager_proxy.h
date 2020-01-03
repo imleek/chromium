@@ -26,7 +26,7 @@ class MockQuotaManagerProxy : public QuotaManagerProxy {
   MockQuotaManagerProxy(MockQuotaManager* quota_manager,
                         base::SingleThreadTaskRunner* task_runner);
 
-  void RegisterClient(QuotaClient* client) override;
+  void RegisterClient(scoped_refptr<QuotaClient> client) override;
 
   virtual void SimulateQuotaManagerDestroyed();
 
@@ -46,8 +46,7 @@ class MockQuotaManagerProxy : public QuotaManagerProxy {
   // which can be accessed via notify_storage_accessed_count().
   // The also records the |origin| and |type| in last_notified_origin_ and
   // last_notified_type_.
-  void NotifyStorageAccessed(QuotaClient::ID client_id,
-                             const url::Origin& origin,
+  void NotifyStorageAccessed(const url::Origin& origin,
                              blink::mojom::StorageType type) override;
 
   // Records the |origin|, |type| and |delta| as last_notified_origin_,
@@ -81,7 +80,7 @@ class MockQuotaManagerProxy : public QuotaManagerProxy {
   blink::mojom::StorageType last_notified_type_;
   int64_t last_notified_delta_;
 
-  QuotaClient* registered_client_;
+  scoped_refptr<QuotaClient> registered_client_;
 
   DISALLOW_COPY_AND_ASSIGN(MockQuotaManagerProxy);
 };

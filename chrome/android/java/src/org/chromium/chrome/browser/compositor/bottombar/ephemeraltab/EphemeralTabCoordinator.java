@@ -19,12 +19,13 @@ import org.chromium.chrome.browser.compositor.bottombar.OverlayContentProgressOb
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelContent;
 import org.chromium.chrome.browser.favicon.FaviconHelper;
 import org.chromium.chrome.browser.favicon.FaviconUtils;
+import org.chromium.chrome.browser.favicon.RoundedIconGenerator;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ssl.SecurityStateModel;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
-import org.chromium.chrome.browser.ui.widget.RoundedIconGenerator;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetContent;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.chrome.browser.widget.bottomsheet.EmptyBottomSheetObserver;
@@ -66,12 +67,12 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
         mFaviconLoader = new FaviconLoader(mActivity);
         mBottomSheetController.addObserver(new EmptyBottomSheetObserver() {
             @Override
-            public void onSheetStateChanged(int newState) {
-                if (newState == SheetState.HIDDEN) {
-                    destroyContent();
-                    return;
-                }
+            public void onSheetContentChanged(BottomSheetContent newContent) {
+                if (newContent != mSheetContent) destroyContent();
+            }
 
+            @Override
+            public void onSheetStateChanged(int newState) {
                 if (mSheetContent == null) return;
                 mSheetContent.showOpenInNewTabButton(newState == SheetState.FULL);
             }
@@ -112,10 +113,7 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
     }
 
     private void destroyContent() {
-        if (mSheetContent != null) {
-            mSheetContent.destroy();
-            mSheetContent = null;
-        }
+        mSheetContent = null; // Will be destroyed by BottomSheet controller.
 
         if (mPanelContent != null) {
             mPanelContent.destroy();
@@ -180,7 +178,7 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
     private int getMaxSheetHeight() {
         Tab tab = mActivity.getActivityTabProvider().get();
         if (tab == null) return 0;
-        return (int) (tab.getHeight() * 0.9f);
+        return (int) (tab.getView().getHeight() * 0.9f);
     }
 
     private WebContentsObserver createWebContentsObserver() {

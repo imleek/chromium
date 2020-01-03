@@ -50,7 +50,6 @@
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
-#include "third_party/blink/public/web/web_page_importance_signals.h"
 #include "third_party/blink/public/web/web_script_source.h"
 #include "third_party/blink/public/web/web_security_policy.h"
 #include "third_party/blink/public/web/web_serialized_script_value.h"
@@ -213,7 +212,6 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetAcceptLanguages(const std::string& accept_languages);
   void SetAllowFileAccessFromFileURLs(bool allow);
   void SetAllowRunningOfInsecureContent(bool allowed);
-  void SetAutoplayAllowed(bool allowed);
   void SetBlockThirdPartyCookies(bool block);
   void SetAudioData(const gin::ArrayBufferView& view);
   void SetBackingScaleFactor(double value, v8::Local<v8::Function> callback);
@@ -265,6 +263,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetTextSubpixelPositioning(bool value);
   void SetViewSourceForFrame(const std::string& name, bool enabled);
   void SetWillSendRequestClearHeader(const std::string& header);
+  void SetWillSendRequestClearReferrer();
   void SetWindowIsKey(bool value);
   void NavigateSecondaryWindow(const std::string& url);
   void InspectSecondaryWindow();
@@ -511,7 +510,6 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::SetAllowFileAccessFromFileURLs)
       .SetMethod("setAllowRunningOfInsecureContent",
                  &TestRunnerBindings::SetAllowRunningOfInsecureContent)
-      .SetMethod("setAutoplayAllowed", &TestRunnerBindings::SetAutoplayAllowed)
       .SetMethod("setBlockThirdPartyCookies",
                  &TestRunnerBindings::SetBlockThirdPartyCookies)
       .SetMethod("setAudioData", &TestRunnerBindings::SetAudioData)
@@ -589,6 +587,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::SetViewSourceForFrame)
       .SetMethod("setWillSendRequestClearHeader",
                  &TestRunnerBindings::SetWillSendRequestClearHeader)
+      .SetMethod("setWillSendRequestClearReferrer",
+                 &TestRunnerBindings::SetWillSendRequestClearReferrer)
       .SetMethod("setWindowIsKey", &TestRunnerBindings::SetWindowIsKey)
       .SetMethod("navigateSecondaryWindow",
                  &TestRunnerBindings::NavigateSecondaryWindow)
@@ -1059,11 +1059,6 @@ void TestRunnerBindings::SetAllowRunningOfInsecureContent(bool allowed) {
     runner_->SetAllowRunningOfInsecureContent(allowed);
 }
 
-void TestRunnerBindings::SetAutoplayAllowed(bool allowed) {
-  if (runner_)
-    runner_->SetAutoplayAllowed(allowed);
-}
-
 void TestRunnerBindings::DumpPermissionClientCallbacks() {
   if (runner_)
     runner_->DumpPermissionClientCallbacks();
@@ -1114,6 +1109,11 @@ void TestRunnerBindings::SetWillSendRequestClearHeader(
     const std::string& header) {
   if (runner_)
     runner_->SetWillSendRequestClearHeader(header);
+}
+
+void TestRunnerBindings::SetWillSendRequestClearReferrer() {
+  if (runner_)
+    runner_->SetWillSendRequestClearReferrer();
 }
 
 void TestRunnerBindings::WaitUntilExternalURLLoad() {
@@ -1543,6 +1543,7 @@ void TestRunner::Reset() {
   did_notify_done_ = false;
 
   http_headers_to_clear_.clear();
+  clear_referrer_ = false;
 
   platform_name_ = "chromium";
   tooltip_text_ = std::string();
@@ -1763,6 +1764,10 @@ bool TestRunner::ShouldWaitUntilExternalURLLoad() const {
 
 const std::set<std::string>* TestRunner::HttpHeadersToClear() const {
   return &http_headers_to_clear_;
+}
+
+bool TestRunner::ClearReferrer() const {
+  return clear_referrer_;
 }
 
 bool TestRunner::IsFramePartOfMainTestWindow(blink::WebFrame* frame) const {
@@ -2349,11 +2354,6 @@ void TestRunner::SetAllowRunningOfInsecureContent(bool allowed) {
   OnWebTestRuntimeFlagsChanged();
 }
 
-void TestRunner::SetAutoplayAllowed(bool allowed) {
-  web_test_runtime_flags_.set_autoplay_allowed(allowed);
-  OnWebTestRuntimeFlagsChanged();
-}
-
 void TestRunner::DumpPermissionClientCallbacks() {
   web_test_runtime_flags_.set_dump_web_content_settings_client_callbacks(true);
   OnWebTestRuntimeFlagsChanged();
@@ -2409,6 +2409,10 @@ void TestRunner::SetShouldStayOnPageAfterHandlingBeforeUnload(bool value) {
 void TestRunner::SetWillSendRequestClearHeader(const std::string& header) {
   if (!header.empty())
     http_headers_to_clear_.insert(header);
+}
+
+void TestRunner::SetWillSendRequestClearReferrer() {
+  clear_referrer_ = true;
 }
 
 void TestRunner::WaitUntilExternalURLLoad() {

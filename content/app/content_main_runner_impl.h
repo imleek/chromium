@@ -14,7 +14,6 @@
 #include "content/browser/startup_data_impl.h"
 #include "content/public/app/content_main.h"
 #include "content/public/app/content_main_runner.h"
-#include "content/public/common/content_client.h"
 #include "content/public/common/main_function_params.h"
 #include "mojo/core/embedder/scoped_ipc_support.h"
 
@@ -73,9 +72,6 @@ class ContentMainRunnerImpl : public ContentMainRunner {
   // True if basic startup was completed.
   bool completed_basic_startup_ = false;
 
-  // Used if the embedder doesn't set one.
-  ContentClient empty_content_client_;
-
   // The delegate will outlive this object.
   ContentMainDelegate* delegate_ = nullptr;
 
@@ -87,7 +83,7 @@ class ContentMainRunnerImpl : public ContentMainRunner {
   base::mac::ScopedNSAutoreleasePool* autorelease_pool_ = nullptr;
 #endif
 
-  base::Closure* ui_task_ = nullptr;
+  base::OnceClosure* ui_task_ = nullptr;
 
   CreatedMainPartsClosure* created_main_parts_closure_ = nullptr;
 

@@ -10,6 +10,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/blame_context.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
 #include "third_party/blink/public/platform/blame_context.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -476,7 +477,6 @@ base::Optional<QueueTraits> FrameSchedulerImpl::CreateQueueTraitsForTaskType(
       }
     case TaskType::kInternalNavigationAssociated:
       return FreezableTaskQueueTraits();
-    case TaskType::kInternalIPC:
     // Some tasks in the tests need to run when objects are paused e.g. to hook
     // when recovering from debugger JavaScript statetment.
     case TaskType::kInternalTest:
@@ -639,6 +639,12 @@ WebScopedVirtualTimePauser FrameSchedulerImpl::CreateWebScopedVirtualTimePauser(
 void FrameSchedulerImpl::ResetForNavigation() {
   document_bound_weak_factory_.InvalidateWeakPtrs();
 
+  for (const auto& it : back_forward_cache_opt_out_counts_) {
+    TRACE_EVENT_ASYNC_END0(
+        "renderer.scheduler", "ActiveSchedulerTrackedFeature",
+        reinterpret_cast<intptr_t>(this) ^ static_cast<int>(it.first));
+  }
+
   back_forward_cache_opt_out_counts_.clear();
   back_forward_cache_opt_outs_.reset();
   last_uploaded_active_features_ = 0;
@@ -651,13 +657,19 @@ void FrameSchedulerImpl::OnStartedUsingFeature(
 
   if (policy.disable_aggressive_throttling)
     OnAddedAggressiveThrottlingOptOut();
-  if (policy.disable_back_forward_cache)
+  if (policy.disable_back_forward_cache) {
     OnAddedBackForwardCacheOptOut(feature);
+  }
 
   uint64_t new_mask = GetActiveFeaturesTrackedForBackForwardCacheMetricsMask();
 
-  if (old_mask != new_mask)
+  if (old_mask != new_mask) {
     NotifyDelegateAboutFeaturesAfterCurrentTask();
+    TRACE_EVENT_ASYNC_BEGIN1(
+        "renderer.scheduler", "ActiveSchedulerTrackedFeature",
+        reinterpret_cast<intptr_t>(this) ^ static_cast<int>(feature), "feature",
+        FeatureToString(feature));
+  }
 }
 
 void FrameSchedulerImpl::OnStoppedUsingFeature(
@@ -672,8 +684,12 @@ void FrameSchedulerImpl::OnStoppedUsingFeature(
 
   uint64_t new_mask = GetActiveFeaturesTrackedForBackForwardCacheMetricsMask();
 
-  if (old_mask != new_mask)
+  if (old_mask != new_mask) {
     NotifyDelegateAboutFeaturesAfterCurrentTask();
+    TRACE_EVENT_ASYNC_END0(
+        "renderer.scheduler", "ActiveSchedulerTrackedFeature",
+        reinterpret_cast<intptr_t>(this) ^ static_cast<int>(feature));
+  }
 }
 
 void FrameSchedulerImpl::NotifyDelegateAboutFeaturesAfterCurrentTask() {
@@ -1143,8 +1159,13 @@ FrameSchedulerImpl::CreateWebSchedulingTaskQueue(
   scoped_refptr<MainThreadTaskQueue> task_queue =
       frame_task_queue_controller_->NewWebSchedulingTaskQueue(
           PausableTaskQueueTraits(), priority);
-  return std::make_unique<WebSchedulingTaskQueueImpl>(priority,
-                                                      task_queue.get());
+  return std::make_unique<WebSchedulingTaskQueueImpl>(task_queue->AsWeakPtr());
+}
+
+void FrameSchedulerImpl::OnWebSchedulingTaskQueuePriorityChanged(
+    MainThreadTaskQueue* queue) {
+  UpdateQueuePolicy(queue,
+                    frame_task_queue_controller_->GetQueueEnabledVoter(queue));
 }
 
 const base::UnguessableToken& FrameSchedulerImpl::GetAgentClusterId() const {

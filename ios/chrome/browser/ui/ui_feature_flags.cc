@@ -20,22 +20,19 @@ const base::Feature kSettingsRefresh{"SettingsRefresh",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kNewOmniboxPopupLayout{"NewOmniboxPopupLayout",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kOmniboxUseDefaultSearchEngineFavicon{
-    "OmniboxUseDefaultSearchEngineFavicon", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kLanguageSettings{"LanguageSettings",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
+    "OmniboxUseDefaultSearchEngineFavicon", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kEmbedderBlockRestoreUrl{"EmbedderBlockRestoreUrl",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kDisableAnimationOnLowBattery{
     "DisableAnimationOnLowBattery", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kVoiceOverUnstackedTabstrip{
-    "VoiceOverUnstackedTabstrip", base::FEATURE_DISABLED_BY_DEFAULT};
+    "VoiceOverUnstackedTabstrip", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kForceUnstackedTabstrip{"ForceUnstackedTabstrip",
                                             base::FEATURE_DISABLED_BY_DEFAULT};

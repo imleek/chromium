@@ -178,7 +178,7 @@ static LayoutVideo* FindFullscreenVideoLayoutObject(Document& document) {
       return nullptr;
     fullscreen_element = Fullscreen::FullscreenElementFrom(*content_document);
   }
-  if (!IsHTMLVideoElement(fullscreen_element))
+  if (!IsA<HTMLVideoElement>(fullscreen_element))
     return nullptr;
   LayoutObject* layout_object = fullscreen_element->GetLayoutObject();
   if (!layout_object)
@@ -317,17 +317,6 @@ GraphicsLayer* PaintLayerCompositor::OverlayFullscreenVideoGraphicsLayer()
   }
 
   return video->Layer()->GetCompositedLayerMapping()->MainGraphicsLayer();
-}
-
-void PaintLayerCompositor::AdjustOverlayFullscreenVideoPosition(
-    GraphicsLayer* video_layer) {
-  if (!video_layer)
-    return;
-  // The fullscreen video has layer position equal to its enclosing frame's
-  // scroll position because fullscreen container is fixed-positioned.
-  // We should reset layer position here since it is attached at the
-  // very top level.
-  video_layer->SetPosition(FloatPoint());
 }
 
 void PaintLayerCompositor::UpdateWithoutAcceleratedCompositing(
@@ -486,7 +475,6 @@ void PaintLayerCompositor::UpdateIfNeeded(
         current_parent->SetChildren(child_list);
     }
   }
-  AdjustOverlayFullscreenVideoPosition(OverlayFullscreenVideoGraphicsLayer());
 
   for (unsigned i = 0; i < layers_needing_paint_invalidation.size(); i++) {
     ForceRecomputeVisualRectsIncludingNonCompositingDescendants(
@@ -574,14 +562,6 @@ bool PaintLayerCompositor::AllocateOrClearCompositedLayerMapping(
   }
 
   layer->ClearClipRects(kPaintingClipRects);
-
-  // If a fixed position layer gained/lost a compositedLayerMapping or the
-  // reason not compositing it changed, the scrolling coordinator needs to
-  // recalculate whether it can do fast scrolling.
-  if (ScrollingCoordinator* scrolling_coordinator = GetScrollingCoordinator()) {
-    scrolling_coordinator->FrameViewFixedObjectsDidChange(
-        layout_view_.GetFrameView());
-  }
 
   // Compositing state affects whether to create paint offset translation of
   // this layer, and amount of paint offset translation of descendants.

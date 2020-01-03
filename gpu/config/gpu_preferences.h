@@ -135,8 +135,11 @@ struct GPU_EXPORT GpuPreferences {
   // Enforce GL minimums.
   bool enforce_gl_minimums = false;
 
-  // Sets the total amount of memory that may be allocated for GPU resources
-  uint32_t force_gpu_mem_available = 0;
+  // Sets the total amount of memory that may be allocated for GPU resources.
+  uint32_t force_gpu_mem_available_bytes = 0u;
+
+  // Sets the maximum discardable cache size limit for GPU resources.
+  uint32_t force_gpu_mem_discardable_limit_bytes = 0u;
 
   // Sets the maximum size of the in-memory gpu program cache, in kb
   uint32_t gpu_program_cache_size = kDefaultMaxProgramCacheMemoryBytes;
@@ -186,9 +189,6 @@ struct GPU_EXPORT GpuPreferences {
   // ===================================
   // Settings from //gpu/config/gpu_switches.h
 
-  // Disables workarounds for various GPU driver bugs.
-  bool disable_gpu_driver_bug_workarounds = false;
-
   // Ignores GPU blacklist.
   bool ignore_gpu_blacklist = false;
 
@@ -232,6 +232,9 @@ struct GPU_EXPORT GpuPreferences {
 
   // Enable the WebGPU command buffer.
   bool enable_webgpu = false;
+
+  // Enable measuring blocked time on GPU Main thread
+  bool enable_gpu_blocked_time_metric = false;
 
 #if defined(USE_OZONE)
   // Determines message pump type for the GPU thread.

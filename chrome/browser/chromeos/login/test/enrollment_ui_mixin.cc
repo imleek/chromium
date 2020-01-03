@@ -18,7 +18,6 @@ namespace ui {
 const char kEnrollmentStepSignin[] = "signin";
 const char kEnrollmentStepWorking[] = "working";
 const char kEnrollmentStepSuccess[] = "success";
-const char kEnrollmentStepLicenses[] = "license";
 const char kEnrollmentStepDeviceAttributes[] = "attribute-prompt";
 const char kEnrollmentStepADJoin[] = "ad-join";
 const char kEnrollmentStepError[] = "error";
@@ -28,10 +27,6 @@ const char kEnrollmentStepADJoinError[] = "active-directory-join-error";
 }  // namespace ui
 
 namespace values {
-
-const char kLicenseTypePerpetual[] = "perpetual";
-const char kLicenseTypeAnnual[] = "annual";
-const char kLicenseTypeKiosk[] = "kiosk";
 
 const char kAssetId[] = "asset_id";
 const char kLocation[] = "location";
@@ -43,10 +38,9 @@ namespace {
 const char kEnrollmentUI[] = "enterprise-enrollment";
 
 const char* const kAllSteps[] = {
-    ui::kEnrollmentStepSignin,   ui::kEnrollmentStepWorking,
-    ui::kEnrollmentStepLicenses, ui::kEnrollmentStepDeviceAttributes,
-    ui::kEnrollmentStepSuccess,  ui::kEnrollmentStepADJoin,
-    ui::kEnrollmentStepError};
+    ui::kEnrollmentStepSignin,           ui::kEnrollmentStepWorking,
+    ui::kEnrollmentStepDeviceAttributes, ui::kEnrollmentStepSuccess,
+    ui::kEnrollmentStepADJoin,           ui::kEnrollmentStepError};
 
 std::string StepElementID(const std::string& step) {
   return "step-" + step;
@@ -86,16 +80,6 @@ void EnrollmentUIMixin::ExpectStepVisibility(bool visibility,
   }
 }
 
-void EnrollmentUIMixin::SelectEnrollmentLicense(
-    const std::string& license_type) {
-  OobeJS().SelectRadioPath({kEnrollmentUI, "oauth-enroll-license-ui",
-                            "license-option-" + license_type});
-}
-
-void EnrollmentUIMixin::UseSelectedLicense() {
-  OobeJS().TapOnPath({kEnrollmentUI, "oauth-enroll-license-ui", "next"});
-}
-
 void EnrollmentUIMixin::ExpectErrorMessage(int error_message_id,
                                            bool can_retry) {
   const std::string element_path =
@@ -125,8 +109,8 @@ void EnrollmentUIMixin::LeaveSuccessScreen() {
 
 void EnrollmentUIMixin::SubmitDeviceAttributes(const std::string& asset_id,
                                                const std::string& location) {
-  OobeJS().TypeIntoPath(asset_id, {kEnrollmentUI, "oauth-enroll-asset-id"});
-  OobeJS().TypeIntoPath(location, {kEnrollmentUI, "oauth-enroll-location"});
+  OobeJS().TypeIntoPath(asset_id, {kEnrollmentUI, "asset-id"});
+  OobeJS().TypeIntoPath(location, {kEnrollmentUI, "location"});
   OobeJS().TapOnPath({kEnrollmentUI, "attributes-submit"});
 }
 

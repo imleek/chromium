@@ -24,10 +24,13 @@ import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.omnibox.LocationBar;
+import org.chromium.chrome.browser.tab.BrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabAttributeKeys;
 import org.chromium.chrome.browser.tab.TabAttributes;
-import org.chromium.chrome.browser.tab.TabBrowserControlsState;
+import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
+import org.chromium.components.browser_ui.modaldialog.ModalDialogView;
+import org.chromium.components.browser_ui.modaldialog.ModalDialogViewBinder;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.BrowserControlsState;
@@ -49,6 +52,8 @@ public class TabModalPresenter
 
     /** The activity displaying the dialogs. */
     private final ChromeActivity mChromeActivity;
+    private final ChromeFullscreenManager mChromeFullscreenManager;
+    private final TabModalBrowserControlsVisibilityDelegate mVisibilityDelegate;
 
     /** The active tab of which the dialog will be shown on top. */
     private Tab mActiveTab;
@@ -87,7 +92,6 @@ public class TabModalPresenter
     /** Enter and exit animation duration that can be overwritten in tests. */
     private int mEnterExitAnimationDurationMs;
 
-    private final ChromeFullscreenManager mChromeFullscreenManager;
     private int mBottomControlsHeight;
     private boolean mShouldUpdateContainerLayoutParams;
 
@@ -118,10 +122,18 @@ public class TabModalPresenter
         mEnterExitAnimationDurationMs = ENTER_EXIT_ANIMATION_DURATION_MS;
         mChromeFullscreenManager = mChromeActivity.getFullscreenManager();
         mChromeFullscreenManager.addListener(this);
+        mVisibilityDelegate = new TabModalBrowserControlsVisibilityDelegate();
     }
 
     public void destroy() {
         mChromeFullscreenManager.removeListener(this);
+    }
+
+    /**
+     * @return The browser controls visibility delegate associated with tab modal dialogs.
+     */
+    public BrowserControlsVisibilityDelegate getBrowserControlsVisibilityDelegate() {
+        return mVisibilityDelegate;
     }
 
     // ModalDialogManager.Presenter implementation.
@@ -188,7 +200,8 @@ public class TabModalPresenter
     public void onToggleOverlayVideoMode(boolean enabled) {}
 
     @Override
-    public void onBottomControlsHeightChanged(int bottomControlsHeight) {
+    public void onBottomControlsHeightChanged(
+            int bottomControlsHeight, int bottomControlsMinHeight) {
         mBottomControlsHeight = bottomControlsHeight;
         mShouldUpdateContainerLayoutParams = true;
     }
@@ -350,15 +363,16 @@ public class TabModalPresenter
 
     private void onTabModalDialogStateChanged(boolean isShowing) {
         TabAttributes.from(mActiveTab).set(TabAttributeKeys.MODAL_DIALOG_SHOWING, isShowing);
+        mVisibilityDelegate.updateConstraintsForTab(mActiveTab);
 
         // Make sure to exit fullscreen mode before showing the tab modal dialog view.
-        if (isShowing) mActiveTab.exitFullscreenMode();
+        mChromeFullscreenManager.onExitFullscreen(mActiveTab);
 
         // Also need to update browser control state after dismissal to refresh the constraints.
         if (isShowing && areRendererInputEventsIgnored()) {
             mChromeFullscreenManager.showAndroidControls(true);
         } else {
-            TabBrowserControlsState.update(mActiveTab, BrowserControlsState.SHOWN,
+            TabBrowserControlsConstraintsHelper.update(mActiveTab, BrowserControlsState.SHOWN,
                     !mChromeFullscreenManager.offsetOverridden());
         }
     }
@@ -426,5 +440,23 @@ public class TabModalPresenter
     @VisibleForTesting
     void disableAnimationForTest() {
         mEnterExitAnimationDurationMs = 0;
+    }
+
+    /**
+     * Handles browser controls constraints for the TabModal dialogs.
+     */
+    static class TabModalBrowserControlsVisibilityDelegate
+            extends BrowserControlsVisibilityDelegate {
+        public TabModalBrowserControlsVisibilityDelegate() {
+            super(BrowserControlsState.BOTH);
+        }
+
+        /**
+         * Updates the tab modal browser constraints for the given tab.
+         */
+        public void updateConstraintsForTab(Tab tab) {
+            if (tab == null) return;
+            set(isDialogShowing(tab) ? BrowserControlsState.SHOWN : BrowserControlsState.BOTH);
+        }
     }
 }

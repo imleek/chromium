@@ -68,7 +68,7 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
         int NUM_ENTRIES = 6;
     }
 
-    private final Tab mTab;
+    private final TabImpl mTab;
     private WebContentsObserver mObserver;
 
     public static void from(Tab tab) {
@@ -85,7 +85,7 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
 
     private TabWebContentsObserver(Tab tab) {
         super(tab);
-        mTab = tab;
+        mTab = (TabImpl) tab;
     }
 
     @Override
@@ -304,7 +304,6 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
                 observers.next().onDidAttachInterstitialPage(mTab);
             }
             mTab.notifyLoadProgress(mTab.getProgress());
-            TabBrowserControlsState.updateEnabledState(mTab);
             PolicyAuditor auditor = AppHooks.get().getPolicyAuditor();
             auditor.notifyCertificateFailure(
                     PolicyAuditorJni.get().getCertificateFailure(mTab.getWebContents()),
@@ -320,7 +319,6 @@ public class TabWebContentsObserver extends TabWebContentsUserData {
                 observers.next().onDidDetachInterstitialPage(mTab);
             }
             mTab.notifyLoadProgress(mTab.getProgress());
-            TabBrowserControlsState.updateEnabledState(mTab);
             if (!mTab.maybeShowNativePage(mTab.getUrl(), false)) {
                 mTab.showRenderedPage();
             }

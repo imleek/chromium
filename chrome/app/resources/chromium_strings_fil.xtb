@@ -5,7 +5,6 @@
 
 Maaaring hindi available ang ilang tampok at hindi mase-save ang mga pagbabago sa mga kagustuhan.</translation>
 <translation id="1104942323762546749">Gustong i-export ng Chromium ang iyong mga password. I-type ang iyong password sa Windows para payagan ito.</translation>
-<translation id="1115445892567829615">Hindi mai-sync ng Chromium ang iyong data. Paki-update ang iyong passphrase sa Pag-sync.</translation>
 <translation id="113122355610423240">Chromium ang iyong default na browser</translation>
 <translation id="1185134272377778587">Tungkol sa Chromium</translation>
 <translation id="1396446129537741364">Sinusubukan ng Chromium na magpakita ng mga password.</translation>
@@ -22,7 +21,7 @@ Maaaring hindi available ang ilang tampok at hindi mase-save ang mga pagbabago s
 <translation id="1929939181775079593">Hindi gumagana ang Chromium. Muling ilunsad ngayon?</translation>
 <translation id="1966382378801805537">Hindi matukoy o maitakda ng Chromium ang default na browser</translation>
 <translation id="2008474315282236005">Magde-delete ito ng 1 item sa device na ito. Upang makuha ang iyong data sa ibang pagkakataon, mag-sign in sa Chromium bilang <ph name="USER_EMAIL" />.</translation>
-<translation id="2119636228670142020">Tungkol sa &amp;Chromium OS</translation>
+<translation id="2147976119693222405">Hindi ma-sync ng Chromium OS ang iyong data. Ayusin ngayon.</translation>
 <translation id="2241627712206172106">Kung nagpapahiram ka ng computer, ang mga kaibigan at kapamilya ay maaaring mag-browse nang hiwalay at i-set up ang Chromium sa paraang gusto nila.</translation>
 <translation id="2347108572062610441">Binago ng extension na ito ang ipinapakitang page kapag sinimulan mo ang Chronium.</translation>
 <translation id="2396765026452590966">Binago ng extension na "<ph name="EXTENSION_NAME" />" ang ipinapakitang page kapag sinimulan mo ang Chromium.</translation>
@@ -38,6 +37,7 @@ Maaaring hindi available ang ilang tampok at hindi mase-save ang mga pagbabago s
 <translation id="2718390899429598676">Para sa karagdagang seguridad, ie-encrypt ng Chromium ang iyong data.</translation>
 <translation id="2770231113462710648">Baguhin ang default na browser sa:</translation>
 <translation id="2799223571221894425">Ilunsad Muli</translation>
+<translation id="2805036593126168338">Hindi ma-sync ng Chromium ang iyong mga password. Ayusin ngayon.</translation>
 <translation id="2838154144102149890">Para i-update, kailangang huminto sa pagtakbo ng Chromium sa computer na ito. Puwedeng magdulot ito sa iba pang user na naka-log in sa computer na ito na mawala ang mga hindi naka-save na pagbabago.</translation>
 <translation id="2847479871509788944">Alisin sa Chromium...</translation>
 <translation id="2886012850691518054">Opsyonal: Tumulong na pahusayin ang Chromium sa pamamagitan ng awtomatikong pagpapadala sa Google ng mga istatistika ng paggamit at mga ulat ng pag-crash.</translation>
@@ -109,7 +109,6 @@ Maaaring hindi available ang ilang tampok at hindi mase-save ang mga pagbabago s
 <translation id="5631814766731275228">pangalan at larawan sa Chromium</translation>
 <translation id="5634636535844844681">Kailangan ng Chromium ng Windows 7 o mas bago.</translation>
 <translation id="5653831366781983928">Paki-restart ang Chromium ngayon</translation>
-<translation id="5680901439334282664">mag-sign in sa Chromium</translation>
 <translation id="5698481217667032250">Ipakita ang Chromium sa wikang ito</translation>
 <translation id="5820394555380036790">Chromium OS</translation>
 <translation id="5862307444128926510">Maligayang Pagdating sa Chromium</translation>

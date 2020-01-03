@@ -588,22 +588,26 @@ using DeclarativeNetRequestBrowserTest_Unpacked =
 #else
 #define MAYBE_BlockRequests_UrlFilter BlockRequests_UrlFilter
 #endif
-// Tests the "urlFilter" property of a declarative rule condition.
+// Tests the "urlFilter" and "regexFilter" property of a declarative rule
+// condition.
 IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
                        MAYBE_BlockRequests_UrlFilter) {
   struct {
-    std::string url_filter;
+    std::string filter;
     int id;
+    bool is_regex_rule;
   } rules_data[] = {
-      {"pages_with_script/*ex", 1},
-      {"||a.b.com", 2},
-      {"|http://*.us", 3},
-      {"pages_with_script/page2.html|", 4},
-      {"|http://msn*/pages_with_script/page.html|", 5},
-      {"%20", 6},     // Block any urls with space.
-      {"%C3%A9", 7},  // Percent-encoded non-ascii character é.
+      {"pages_with_script/*ex", 1, false},
+      {"||a.b.com", 2, false},
+      {"|http://*.us", 3, false},
+      {"pages_with_script/page2.html|", 4, false},
+      {"|http://msn*/pages_with_script/page.html|", 5, false},
+      {"%20", 6, false},     // Block any urls with space.
+      {"%C3%A9", 7, false},  // Percent-encoded non-ascii character é.
       // Internationalized domain "ⱴase.com" in punycode.
-      {"|http://xn--ase-7z0b.com", 8},
+      {"|http://xn--ase-7z0b.com", 8, false},
+      {R"((http|https)://(\w+\.){1,2}com.*reg$)", 9, true},
+      {R"(\d+\.google\.com)", 10, true},
   };
 
   // Rule |i| is the rule with id |i|.
@@ -632,14 +636,26 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
        false},  // Rule 7
       {base::WideToUTF8(L"\x2c74"
                         L"ase.com"),
-       "/pages_with_script/page.html", false},  // Rule 8
+       "/pages_with_script/page.html", false},                  // Rule 8
+      {"abc.com", "/pages_with_script/page2.html?reg", false},  // Rule 9
+      {"abc.com", "/pages_with_script/page2.html?reg1", true},
+      {"w1.w2.com", "/pages_with_script/page2.html?reg", false},  // Rule 9
+      {"w1.w2.w3.com", "/pages_with_script/page2.html?reg", true},
+      {"24.google.com", "/pages_with_script/page.html", false},  // Rule 10
+      {"xyz.google.com", "/pages_with_script/page.html", true},
   };
 
   // Load the extension.
   std::vector<TestRule> rules;
   for (const auto& rule_data : rules_data) {
     TestRule rule = CreateGenericRule();
-    rule.condition->url_filter = rule_data.url_filter;
+    rule.condition->url_filter.reset();
+
+    if (rule_data.is_regex_rule)
+      rule.condition->regex_filter = rule_data.filter;
+    else
+      rule.condition->url_filter = rule_data.filter;
+
     rule.condition->resource_types = std::vector<std::string>({"main_frame"});
     rule.id = rule_data.id;
     rules.push_back(rule);
@@ -2635,8 +2651,19 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest, Redirect) {
   transform->query = "?new_query";
   transform->fragment = "#new_fragment";
 
-  ASSERT_NO_FATAL_FAILURE(LoadExtensionWithRules(
-      {rule1, rule2, rule3}, "test_extension", {URLPattern::kAllUrlsPattern}));
+  TestRule rule4 = CreateGenericRule();
+  rule4.condition->resource_types = std::vector<std::string>({"main_frame"});
+  rule4.id = kMinValidID + 3;
+  rule4.condition->url_filter.reset();
+  rule4.condition->regex_filter = R"(^(.+?)://(abc|def)\.exy\.com(.*)$)";
+  rule4.action->type = std::string("redirect");
+  rule4.priority = kMinValidPriority + 1;
+  rule4.action->redirect.emplace();
+  rule4.action->redirect->regex_substitution = R"(\1://www.\2.com\3)";
+
+  ASSERT_NO_FATAL_FAILURE(
+      LoadExtensionWithRules({rule1, rule2, rule3, rule4}, "test_extension",
+                             {URLPattern::kAllUrlsPattern}));
 
   struct {
     GURL url;
@@ -2654,6 +2681,15 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest, Redirect) {
                      "/manifest.json?query#fragment")},
                {embedded_test_server()->GetURL("ex.com",
                                                "/pages_with_script/index.html"),
+                embedded_test_server()->GetURL(
+                    "google.com", "/pages_with_script/index.html")},
+               // Because of a priority higher than |rule1|, |rule4| is chosen.
+               {embedded_test_server()->GetURL("abc.exy.com",
+                                               "/pages_with_script/page.html"),
+                embedded_test_server()->GetURL("www.abc.com",
+                                               "/pages_with_script/page.html")},
+               {embedded_test_server()->GetURL("xyz.exy.com",
+                                               "/pages_with_script/page.html"),
                 embedded_test_server()->GetURL(
                     "google.com", "/pages_with_script/index.html")}};
 
@@ -3060,20 +3096,21 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
       ExtensionActionManager::Get(incognito_contents->GetBrowserContext())
           ->GetExtensionAction(*dnr_extension);
 
-  // TODO(crbug.com/992251): This should be a "1" after the main-frame
-  // navigation case is fixed.
-  EXPECT_EQ("0", incognito_action->GetDisplayBadgeText(
+  EXPECT_EQ("1", incognito_action->GetDisplayBadgeText(
                      ExtensionTabUtil::GetTabId(incognito_contents)));
 }
 
 // Test that the actions matched badge text for an extension will be reset
 // when a main-frame navigation finishes.
-// TODO(crbug.com/992251): Edit this test to add more main-frame cases.
 IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
                        ActionsMatchedCountAsBadgeTextMainFrame) {
   auto get_url_for_host = [this](std::string hostname) {
     return embedded_test_server()->GetURL(hostname,
                                           "/pages_with_script/index.html");
+  };
+
+  auto get_set_cookie_url = [this](std::string hostname) {
+    return embedded_test_server()->GetURL(hostname, "/set-cookie?a=b");
   };
 
   struct {
@@ -3083,11 +3120,23 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
     std::string action_type;
     std::vector<std::string> resource_types;
     base::Optional<std::string> redirect_url;
+    base::Optional<std::vector<std::string>> remove_headers_list;
   } rules_data[] = {
       {"abc.com", 1, 1, "block", std::vector<std::string>({"script"}),
-       base::nullopt},
-      {"def.com", 2, 1, "redirect", std::vector<std::string>({"main_frame"}),
-       get_url_for_host("abc.com").spec()},
+       base::nullopt, base::nullopt},
+      {"||def.com", 2, 1, "redirect", std::vector<std::string>({"main_frame"}),
+       get_url_for_host("abc.com").spec(), base::nullopt},
+      {"gotodef.com", 3, 1, "redirect",
+       std::vector<std::string>({"main_frame"}),
+       get_url_for_host("def.com").spec(), base::nullopt},
+      {"ghi.com", 4, 1, "block", std::vector<std::string>({"main_frame"}),
+       base::nullopt, base::nullopt},
+      {"gotosetcookie.com", 5, 1, "redirect",
+       std::vector<std::string>({"main_frame"}),
+       get_set_cookie_url("setcookie.com").spec(), base::nullopt},
+      {"setcookie.com", 6, 1, "removeHeaders",
+       std::vector<std::string>({"main_frame"}), base::nullopt,
+       std::vector<std::string>({"setCookie"})},
   };
 
   // Load the extension.
@@ -3101,6 +3150,7 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
     rule.action->type = rule_data.action_type;
     rule.action->redirect.emplace();
     rule.action->redirect->url = rule_data.redirect_url;
+    rule.action->remove_headers_list = rule_data.remove_headers_list;
     rules.push_back(rule);
   }
 
@@ -3121,6 +3171,9 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
     std::string frame_hostname;
     std::string expected_badge_text;
   } test_cases[] = {
+      // The request to ghi.com should be blocked, so the badge text should be 1
+      // once navigation finishes.
+      {"ghi.com", "1"},
       // The script on get_url_for_host("abc.com") matches with a rule and
       // should increment the badge text.
       {"abc.com", "1"},
@@ -3128,7 +3181,15 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
       {"nomatch.com", "0"},
       // The request to def.com will redirect to get_url_for_host("abc.com") and
       // the script on abc.com should match with a rule.
-      {"def.com", "1"},
+      {"def.com", "2"},
+      // Same as the above test, except with an additional redirect from
+      // gotodef.com to def.com caused by a rule match. Therefore the badge text
+      // should be 3.
+      {"gotodef.com", "3"},
+      // The request to gotosetcookie.com will match with a rule and redirect to
+      // setcookie.com. The Set-Cookie header on setcookie.com will also match
+      // with a rule and get removed. Therefore the badge text should be 2.
+      {"gotosetcookie.com", "2"},
   };
 
   int first_tab_id = ExtensionTabUtil::GetTabId(web_contents());
@@ -3621,25 +3682,25 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestResourceTypeBrowserTest, Test2) {
             {"block_none.com", kNone}});
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          DeclarativeNetRequestBrowserTest,
                          ::testing::Values(ExtensionLoadType::PACKED,
                                            ExtensionLoadType::UNPACKED));
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          DeclarativeNetRequestHostPermissionsBrowserTest,
                          ::testing::Values(ExtensionLoadType::PACKED,
                                            ExtensionLoadType::UNPACKED));
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          DeclarativeNetRequestResourceTypeBrowserTest,
                          ::testing::Values(ExtensionLoadType::PACKED,
                                            ExtensionLoadType::UNPACKED));
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          DeclarativeNetRequestBrowserTest_Packed,
                          ::testing::Values(ExtensionLoadType::PACKED));
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          DeclarativeNetRequestBrowserTest_Unpacked,
                          ::testing::Values(ExtensionLoadType::UNPACKED));
 

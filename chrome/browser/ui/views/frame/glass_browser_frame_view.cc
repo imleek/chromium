@@ -107,14 +107,6 @@ GlassBrowserFrameView::GlassBrowserFrameView(BrowserFrame* frame,
     AddChildView(window_icon_);
   }
 
-  if (browser_view->ShouldShowWindowTitle()) {
-    window_title_ = new views::Label(browser_view->GetWindowTitle());
-    window_title_->SetSubpixelRenderingEnabled(false);
-    window_title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    window_title_->SetID(VIEW_ID_WINDOW_TITLE);
-    AddChildView(window_title_);
-  }
-
   web_app::AppBrowserController* controller =
       browser_view->browser()->app_controller();
   if (controller && controller->HasTitlebarToolbar()) {
@@ -126,6 +118,17 @@ GlassBrowserFrameView::GlassBrowserFrameView(BrowserFrame* frame,
             frame, browser_view,
             GetCaptionColor(BrowserFrameActiveState::kActive),
             GetCaptionColor(BrowserFrameActiveState::kInactive))));
+  }
+
+  // The window title appears above the web app frame toolbar (if present),
+  // which surrounds the title with minimal-ui buttons on the left,
+  // and other controls (such as the app menu button) on the right.
+  if (browser_view->ShouldShowWindowTitle()) {
+    window_title_ = new views::Label(browser_view->GetWindowTitle());
+    window_title_->SetSubpixelRenderingEnabled(false);
+    window_title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    window_title_->SetID(VIEW_ID_WINDOW_TITLE);
+    AddChildView(window_title_);
   }
 
   minimize_button_ =
@@ -330,8 +333,8 @@ int GlassBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
                                         DWMWA_CAPTION_BUTTON_BOUNDS,
                                         &button_bounds,
                                         sizeof(button_bounds)))) {
-      gfx::Rect buttons = gfx::ConvertRectToDIP(display::win::GetDPIScale(),
-                                                gfx::Rect(button_bounds));
+      gfx::Rect buttons = GetMirroredRect(gfx::ConvertRectToDIP(
+          display::win::GetDPIScale(), gfx::Rect(button_bounds)));
 
       // There is a small one-pixel strip right above the caption buttons in
       // which the resize border "peeks" through.

@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/content_settings/content_setting_image_model.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
+#include "chrome/browser/ui/views/feature_promos/feature_promo_bubble_view.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/theme_provider.h"
 #include "ui/events/event_utils.h"
@@ -50,7 +51,7 @@ base::Optional<ViewID> GetViewID(
     case ImageType::MIDI_SYSEX:
     case ImageType::SOUND:
     case ImageType::FRAMEBUST:
-    case ImageType::CLIPBOARD_READ:
+    case ImageType::CLIPBOARD_READ_WRITE:
     case ImageType::SENSORS:
     case ImageType::NOTIFICATIONS_QUIET_PROMPT:
       return base::nullopt;
@@ -62,13 +63,17 @@ base::Optional<ViewID> GetViewID(
   return base::nullopt;
 }
 
+// The preferred max width for the promo to be shown.
+const unsigned int promo_width = 240;
+
 }  // namespace
 
 ContentSettingImageView::ContentSettingImageView(
     std::unique_ptr<ContentSettingImageModel> image_model,
+    IconLabelBubbleView::Delegate* parent_delegate,
     Delegate* delegate,
     const gfx::FontList& font_list)
-    : IconLabelBubbleView(font_list),
+    : IconLabelBubbleView(font_list, parent_delegate),
       delegate_(delegate),
       content_setting_image_model_(std::move(image_model)),
       bubble_view_(nullptr) {
@@ -83,8 +88,6 @@ ContentSettingImageView::ContentSettingImageView(
 }
 
 ContentSettingImageView::~ContentSettingImageView() {
-  if (bubble_view_ && bubble_view_->GetWidget())
-    bubble_view_->GetWidget()->RemoveObserver(this);
 }
 
 void ContentSettingImageView::Update() {
@@ -144,8 +147,12 @@ const char* ContentSettingImageView::GetClassName() const {
 
 void ContentSettingImageView::OnBoundsChanged(
     const gfx::Rect& previous_bounds) {
+  if (indicator_promo_)
+    indicator_promo_->OnAnchorBoundsChanged();
+
   if (bubble_view_)
     bubble_view_->OnAnchorBoundsChanged();
+
   IconLabelBubbleView::OnBoundsChanged(previous_bounds);
 }
 
@@ -159,19 +166,15 @@ bool ContentSettingImageView::OnMousePressed(const ui::MouseEvent& event) {
 bool ContentSettingImageView::OnKeyPressed(const ui::KeyEvent& event) {
   // Pause animation so that the icon does not shrink and deselect while the
   // user is attempting to press it using key commands.
-  if (GetKeyClickActionForEvent(event) == KeyClickAction::kOnKeyRelease)
+  if (GetKeyClickActionForEvent(event) == KeyClickAction::kOnKeyRelease) {
     PauseAnimation();
+  }
   return Button::OnKeyPressed(event);
 }
 
 void ContentSettingImageView::OnThemeChanged() {
   UpdateImage();
   IconLabelBubbleView::OnThemeChanged();
-}
-
-SkColor ContentSettingImageView::GetTextColor() const {
-  return GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_TextfieldDefaultColor);
 }
 
 bool ContentSettingImageView::ShouldShowSeparator() const {
@@ -195,7 +198,7 @@ bool ContentSettingImageView::ShowBubbleImpl() {
     bubble_view_->SetHighlightedButton(this);
     views::Widget* bubble_widget =
         views::BubbleDialogDelegateView::CreateBubble(bubble_view_);
-    bubble_widget->AddObserver(this);
+    observer_.Add(bubble_widget);
     bubble_widget->Show();
     delegate_->OnContentSettingImageBubbleShown(
         content_setting_image_model_->image_type());
@@ -208,27 +211,52 @@ bool ContentSettingImageView::IsBubbleShowing() const {
   return bubble_view_ != nullptr;
 }
 
-SkColor ContentSettingImageView::GetInkDropBaseColor() const {
-  return delegate_->GetContentSettingInkDropColor();
-}
-
 ContentSettingImageModel::ImageType ContentSettingImageView::GetTypeForTesting()
     const {
   return content_setting_image_model_->image_type();
 }
 
 void ContentSettingImageView::OnWidgetDestroying(views::Widget* widget) {
-  DCHECK(bubble_view_);
-  DCHECK_EQ(bubble_view_->GetWidget(), widget);
-  widget->RemoveObserver(this);
-  bubble_view_ = nullptr;
-  UnpauseAnimation();
+  if (indicator_promo_ && indicator_promo_->GetWidget() == widget) {
+    SetHighlighted(false);
+    observer_.Remove(widget);
+    indicator_promo_ = nullptr;
+    // The highlighted icon needs to be recolored.
+    SchedulePaint();
+  } else if (bubble_view_ && bubble_view_->GetWidget() == widget) {
+    observer_.Remove(widget);
+    bubble_view_ = nullptr;
+    UnpauseAnimation();
+  }
 }
 
 void ContentSettingImageView::UpdateImage() {
   SetImage(content_setting_image_model_
                ->GetIcon(icon_color_ ? icon_color_.value()
                                      : color_utils::DeriveDefaultIconColor(
-                                           GetTextColor()))
+                                           GetForegroundColor()))
                .AsImageSkia());
+}
+
+void ContentSettingImageView::AnimationEnded(const gfx::Animation* animation) {
+  IconLabelBubbleView::AnimationEnded(animation);
+
+  content::WebContents* web_contents =
+      delegate_->GetContentSettingWebContents();
+
+  // The promo currently is only used for Notifications, and it is only shown
+  // directly after the animation is shown.
+  if (content_setting_image_model_->ShouldShowPromo(web_contents)) {
+    // Owned by its native widget. Will be destroyed as its widget is destroyed.
+    indicator_promo_ = FeaturePromoBubbleView::CreateOwned(
+        this, views::BubbleBorder::TOP_RIGHT,
+        FeaturePromoBubbleView::ActivationAction::ACTIVATE,
+        IDS_NOTIFICATIONS_QUIET_PERMISSION_NEW_REQUEST_PROMO, promo_width,
+        base::nullopt, base::nullopt);
+
+    SetHighlighted(true);
+    observer_.Add(indicator_promo_->GetWidget());
+    SchedulePaint();
+    content_setting_image_model_->SetPromoWasShown(web_contents);
+  }
 }

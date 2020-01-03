@@ -30,6 +30,7 @@ using ::testing::_;
 using ::testing::ByMove;
 using ::testing::Eq;
 using ::testing::NiceMock;
+using ::testing::Property;
 using ::testing::Return;
 
 using SharingMessage = chrome_browser_sharing::SharingMessage;
@@ -37,8 +38,6 @@ using SharingMessage = chrome_browser_sharing::SharingMessage;
 namespace {
 
 const char kText[] = "Some random text to be copied.";
-
-constexpr int kSeparatorCommandId = -1;
 
 class SharedClipboardContextMenuObserverTest : public testing::Test {
  public:
@@ -127,22 +126,18 @@ TEST_F(SharedClipboardContextMenuObserverTest, SingleDevice_ShowMenu) {
       .WillOnce(Return(ByMove(std::move(devices))));
 
   InitMenu(base::ASCIIToUTF16(kText));
+  ASSERT_EQ(1U, menu_.GetMenuSize());
 
-  // The first item is a separator and the second item is the device.
-  EXPECT_EQ(2U, menu_.GetMenuSize());
-
-  // Assert item ordering.
   MockRenderViewContextMenu::MockMenuItem item;
   ASSERT_TRUE(menu_.GetMenuItem(0, &item));
-  EXPECT_EQ(kSeparatorCommandId, item.command_id);
-
-  ASSERT_TRUE(menu_.GetMenuItem(1, &item));
   EXPECT_EQ(IDC_CONTENT_CONTEXT_SHARING_SHARED_CLIPBOARD_SINGLE_DEVICE,
             item.command_id);
 
   // Emulate click on the device.
-  EXPECT_CALL(*service(), SendMessageToDevice(Eq(guid), Eq(kSendMessageTimeout),
-                                              ProtoEquals(sharing_message), _))
+  EXPECT_CALL(*service(),
+              SendMessageToDevice(Property(&syncer::DeviceInfo::guid, guid),
+                                  Eq(kSendMessageTimeout),
+                                  ProtoEquals(sharing_message), _))
       .Times(1);
   menu_.ExecuteCommand(
       IDC_CONTENT_CONTEXT_SHARING_SHARED_CLIPBOARD_SINGLE_DEVICE, 0);
@@ -159,20 +154,16 @@ TEST_F(SharedClipboardContextMenuObserverTest, MultipleDevices_ShowMenu) {
       .WillOnce(Return(ByMove(std::move(devices))));
 
   InitMenu(base::ASCIIToUTF16(kText));
-
-  EXPECT_EQ(device_count + 2U, menu_.GetMenuSize());
+  ASSERT_EQ(device_count + 1U, menu_.GetMenuSize());
 
   // Assert item ordering.
   MockRenderViewContextMenu::MockMenuItem item;
   ASSERT_TRUE(menu_.GetMenuItem(0, &item));
-  EXPECT_EQ(kSeparatorCommandId, item.command_id);
-
-  ASSERT_TRUE(menu_.GetMenuItem(1, &item));
   EXPECT_EQ(IDC_CONTENT_CONTEXT_SHARING_SHARED_CLIPBOARD_MULTIPLE_DEVICES,
             item.command_id);
 
   for (int i = 0; i < device_count; i++) {
-    ASSERT_TRUE(menu_.GetMenuItem(i + 2, &item));
+    ASSERT_TRUE(menu_.GetMenuItem(i + 1, &item));
     EXPECT_EQ(kSubMenuFirstDeviceCommandId + i, item.command_id);
   }
 
@@ -181,8 +172,9 @@ TEST_F(SharedClipboardContextMenuObserverTest, MultipleDevices_ShowMenu) {
   for (int i = 0; i < kMaxDevicesShown; i++) {
     if (i < device_count) {
       EXPECT_CALL(*service(),
-                  SendMessageToDevice(Eq(guids[i]), Eq(kSendMessageTimeout),
-                                      ProtoEquals(sharing_message), _))
+                  SendMessageToDevice(
+                      Property(&syncer::DeviceInfo::guid, guids[i]),
+                      Eq(kSendMessageTimeout), ProtoEquals(sharing_message), _))
           .Times(1);
     } else {
       EXPECT_CALL(*service(), SendMessageToDevice(_, _, _, _)).Times(0);
@@ -204,20 +196,16 @@ TEST_F(SharedClipboardContextMenuObserverTest,
       .WillOnce(Return(ByMove(std::move(devices))));
 
   InitMenu(base::ASCIIToUTF16(kText));
-
-  EXPECT_EQ(kMaxDevicesShown + 2U, menu_.GetMenuSize());
+  ASSERT_EQ(kMaxDevicesShown + 1U, menu_.GetMenuSize());
 
   // Assert item ordering.
   MockRenderViewContextMenu::MockMenuItem item;
   ASSERT_TRUE(menu_.GetMenuItem(0, &item));
-  EXPECT_EQ(kSeparatorCommandId, item.command_id);
-
-  ASSERT_TRUE(menu_.GetMenuItem(1, &item));
   EXPECT_EQ(IDC_CONTENT_CONTEXT_SHARING_SHARED_CLIPBOARD_MULTIPLE_DEVICES,
             item.command_id);
 
   for (int i = 0; i < kMaxDevicesShown; i++) {
-    ASSERT_TRUE(menu_.GetMenuItem(i + 2, &item));
+    ASSERT_TRUE(menu_.GetMenuItem(i + 1, &item));
     EXPECT_EQ(kSubMenuFirstDeviceCommandId + i, item.command_id);
   }
 
@@ -226,8 +214,9 @@ TEST_F(SharedClipboardContextMenuObserverTest,
   for (int i = 0; i < device_count; i++) {
     if (i < kMaxDevicesShown) {
       EXPECT_CALL(*service(),
-                  SendMessageToDevice(Eq(guids[i]), Eq(kSendMessageTimeout),
-                                      ProtoEquals(sharing_message), _))
+                  SendMessageToDevice(
+                      Property(&syncer::DeviceInfo::guid, guids[i]),
+                      Eq(kSendMessageTimeout), ProtoEquals(sharing_message), _))
           .Times(1);
     } else {
       EXPECT_CALL(*service(), SendMessageToDevice(_, _, _, _)).Times(0);

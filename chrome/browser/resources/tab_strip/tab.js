@@ -14,7 +14,7 @@ import {CustomElement} from './custom_element.js';
 import {TabStripEmbedderProxy} from './tab_strip_embedder_proxy.js';
 import {tabStripOptions} from './tab_strip_options.js';
 import {TabSwiper} from './tab_swiper.js';
-import {TabData, TabNetworkState, TabsApiProxy} from './tabs_api_proxy.js';
+import {CloseTabAction, TabData, TabNetworkState, TabsApiProxy} from './tabs_api_proxy.js';
 
 const DEFAULT_ANIMATION_DURATION = 125;
 
@@ -34,6 +34,14 @@ function getAccessibleTitle(tab) {
   }
 
   return tabTitle;
+}
+
+/**
+ * TODO(crbug.com/1025390): padding-inline-end cannot be animated yet.
+ * @return {string}
+ */
+function getPaddingInlineEndProperty() {
+  return isRTL() ? 'paddingLeft' : 'paddingRight';
 }
 
 export class TabElement extends CustomElement {
@@ -56,6 +64,11 @@ export class TabElement extends CustomElement {
         /** @type {!HTMLElement} */ (this.shadowRoot.querySelector('#close'));
     this.closeButtonEl_.setAttribute(
         'aria-label', loadTimeData.getString('closeTab'));
+
+    /** @private {!HTMLElement} */
+    this.dragImageEl_ =
+        /** @type {!HTMLElement} */ (
+            this.shadowRoot.querySelector('#dragImage'));
 
     /** @private {!HTMLElement} */
     this.tabEl_ =
@@ -96,6 +109,9 @@ export class TabElement extends CustomElement {
 
     /** @private @const {!TabSwiper} */
     this.tabSwiper_ = new TabSwiper(this);
+
+    /** @private {!Function} */
+    this.onTabActivating_ = (tabId) => {};
   }
 
   /** @return {!TabData} */
@@ -161,13 +177,18 @@ export class TabElement extends CustomElement {
     this.tab_ = Object.freeze(tab);
   }
 
+  /** @param {!Function} callback */
+  set onTabActivating(callback) {
+    this.onTabActivating_ = callback;
+  }
+
   focus() {
     this.tabEl_.focus();
   }
 
   /** @return {!HTMLElement} */
   getDragImage() {
-    return this.tabEl_;
+    return this.dragImageEl_;
   }
 
   /**
@@ -183,7 +204,9 @@ export class TabElement extends CustomElement {
       return;
     }
 
-    this.tabsApi_.activateTab(this.tab_.id);
+    const tabId = this.tab_.id;
+    this.onTabActivating_(tabId);
+    this.tabsApi_.activateTab(tabId);
 
     if (tabStripOptions.autoCloseEnabled) {
       this.embedderApi_.closeContainer();
@@ -203,6 +226,7 @@ export class TabElement extends CustomElement {
 
     this.embedderApi_.showTabContextMenu(
         this.tab_.id, event.clientX, event.clientY);
+    event.stopPropagation();
   }
 
   /**
@@ -215,14 +239,14 @@ export class TabElement extends CustomElement {
     }
 
     event.stopPropagation();
-    this.tabsApi_.closeTab(this.tab_.id);
+    this.tabsApi_.closeTab(this.tab_.id, CloseTabAction.CLOSE_BUTTON);
   }
 
   /** @private */
   onSwipe_() {
     // Prevent slideOut animation from playing.
     this.remove();
-    this.tabsApi_.closeTab(this.tab_.id);
+    this.tabsApi_.closeTab(this.tab_.id, CloseTabAction.SWIPED_TO_CLOSE);
   }
 
   /**
@@ -246,20 +270,25 @@ export class TabElement extends CustomElement {
    * @return {!Promise}
    */
   slideIn() {
-    // TODO(crbug.com/1025390): margin-inline-end cannot be animated yet.
-    const marginInlineEnd = isRTL() ? 'marginLeft' : 'marginRight';
+    const paddingInlineEnd = getPaddingInlineEndProperty();
+
+    // If this TabElement is the last tab, there needs to be enough space for
+    // the view to scroll to it. Therefore, immediately take up all the space
+    // it needs to and only animate the scale.
+    const isLastChild = this.nextElementSibling === null;
 
     const startState = {
-      maxWidth: 0,
+      maxWidth: isLastChild ? 'var(--tabstrip-tab-width)' : 0,
       transform: `scale(0)`,
     };
-    startState[marginInlineEnd] = 0;
+    startState[paddingInlineEnd] =
+        isLastChild ? 'var(--tabstrip-tab-spacing)' : 0;
 
     const finishState = {
       maxWidth: `var(--tabstrip-tab-width)`,
       transform: `scale(1)`,
     };
-    finishState[marginInlineEnd] = 'var(--tabstrip-tab-margin-inline-end)';
+    finishState[paddingInlineEnd] = 'var(--tabstrip-tab-spacing)';
 
     return new Promise(resolve => {
       const animation = this.animate([startState, finishState], {
@@ -269,6 +298,18 @@ export class TabElement extends CustomElement {
       animation.onfinish = () => {
         resolve();
       };
+
+      // TODO(crbug.com/1035678) By the next animation frame, the animation
+      // should start playing. By the time another animation frame happens,
+      // force play the animation if the animation has not yet begun. Remove
+      // if/when the Blink issue has been fixed.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (animation.pending) {
+            animation.play();
+          }
+        });
+      });
     });
   }
 
@@ -276,7 +317,7 @@ export class TabElement extends CustomElement {
    * @return {!Promise}
    */
   slideOut() {
-    if (!this.embedderApi_.isVisible()) {
+    if (!this.embedderApi_.isVisible() || this.tab_.pinned) {
       // There is no point in animating if the tab strip is hidden.
       this.remove();
       return Promise.resolve();
@@ -288,15 +329,36 @@ export class TabElement extends CustomElement {
         resolve();
       };
 
-      const animation = this.animate(
-          [
-            {maxWidth: 'var(--tabstrip-tab-width)', opacity: 1},
-            {maxWidth: 0, opacity: 0},
-          ],
+      const translateAnimation = this.animate(
           {
-            duration: DEFAULT_ANIMATION_DURATION,
+            transform: ['translateY(0)', 'translateY(-100%)'],
+          },
+          {
+            duration: 150,
+            easing: 'cubic-bezier(.4, 0, 1, 1)',
             fill: 'forwards',
           });
+      const opacityAnimation = this.animate(
+          {
+            opacity: [1, 0],
+          },
+          {
+            delay: 97.5,
+            duration: 50,
+            fill: 'forwards',
+          });
+
+      const widthAnimationKeyframes = {
+        maxWidth: ['var(--tabstrip-tab-width)', 0],
+      };
+      widthAnimationKeyframes[getPaddingInlineEndProperty()] =
+          ['var(--tabstrip-tab-spacing)', 0];
+      const widthAnimation = this.animate(widthAnimationKeyframes, {
+        delay: 97.5,
+        duration: 300,
+        easing: 'cubic-bezier(.4, 0, 0, 1)',
+        fill: 'forwards',
+      });
 
       const visibilityChangeListener = () => {
         if (!this.embedderApi_.isVisible()) {
@@ -304,14 +366,18 @@ export class TabElement extends CustomElement {
           // event will not get fired until the tab strip becomes visible again.
           // Therefore, when the tab strip becomes hidden, immediately call the
           // finish callback.
-          animation.cancel();
+          translateAnimation.cancel();
+          opacityAnimation.cancel();
+          widthAnimation.cancel();
           finishCallback();
         }
       };
 
       document.addEventListener(
           'visibilitychange', visibilityChangeListener, {once: true});
-      animation.onfinish = () => {
+      // The onfinish handler is put on the width animation, as it will end
+      // last.
+      widthAnimation.onfinish = () => {
         document.removeEventListener(
             'visibilitychange', visibilityChangeListener);
         finishCallback();

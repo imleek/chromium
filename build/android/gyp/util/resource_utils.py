@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from xml.etree import ElementTree
 
 import util.build_utils as build_utils
@@ -47,9 +48,21 @@ _ALL_RESOURCE_TYPES = {
     'xml'
 }
 
+AAPT_IGNORE_PATTERN = ':'.join([
+    '*OWNERS',  # Allow OWNERS files within res/
+    '*.py',  # PRESUBMIT.py sometimes exist.
+    '*.pyc',
+    '*~',  # Some editors create these as temp files.
+    '.*',  # Never makes sense to include dot(files/dirs).
+    '*.d.stamp',  # Ignore stamp files
+])
+
+MULTIPLE_RES_MAGIC_STRING = b'magic'
+
 
 def ToAndroidLocaleName(chromium_locale):
-  """Convert an Chromium locale name into a corresponding Android one."""
+  """Convert a Chromium locale name into a corresponding Android one."""
+  # Should be in sync with build/config/locales.gni.
   # First handle the special cases, these are needed to deal with Android
   # releases *before* 5.0/Lollipop.
   android_locale = _CHROME_TO_ANDROID_LOCALE_MAP.get(chromium_locale)
@@ -156,20 +169,124 @@ _TextSymbolEntry = collections.namedtuple('RTextEntry',
     ('java_type', 'resource_type', 'name', 'value'))
 
 
-def CreateResourceInfoFile(files_to_zip, zip_path):
-  """Given a mapping of archive paths to their source, write an info file.
+def _GenerateGlobs(pattern):
+  # This function processes the aapt ignore assets pattern into a list of globs
+  # to be used to exclude files using build_utils.MatchesGlob. It removes the
+  # '!', which is used by aapt to mean 'not chatty' so it does not output if the
+  # file is ignored (we dont output anyways, so it is not required). This
+  # function does not handle the <dir> and <file> prefixes used by aapt and are
+  # assumed not to be included in the pattern string.
+  return pattern.replace('!', '').split(':')
 
-  The info file contains lines of '{archive_path},{source_path}' for ease of
-  parsing. Assumes that there is no comma in the file names.
 
-  Args:
-    files_to_zip: Dict mapping path in the zip archive to original source.
-    zip_path: Path where the zip file ends up, this is where the info file goes.
-  """
-  info_file_path = zip_path + '.info'
-  with open(info_file_path, 'w') as info_file:
-    for archive_path, source_path in files_to_zip.iteritems():
-      info_file.write('{},{}\n'.format(archive_path, source_path))
+def ExtractResourceDirsFromFileList(resource_files,
+                                    ignore_pattern=AAPT_IGNORE_PATTERN):
+  """Return a list of resource directories from a list of resource files."""
+  # Directory list order is important, cannot use set or other data structures
+  # that change order. This is because resource files of the same name in
+  # multiple res/ directories ellide one another (the last one passed is used).
+  # Thus the order must be maintained to prevent non-deterministic and possibly
+  # flakey builds.
+  resource_dirs = []
+  globs = _GenerateGlobs(ignore_pattern)
+  for resource_path in resource_files:
+    if build_utils.MatchesGlob(os.path.basename(resource_path), globs):
+      # Ignore non-resource files like OWNERS and the like.
+      continue
+    # Resources are always 1 directory deep under res/.
+    res_dir = os.path.dirname(os.path.dirname(resource_path))
+    if res_dir not in resource_dirs:
+      resource_dirs.append(res_dir)
+  return resource_dirs
+
+
+def IterResourceFilesInDirectories(directories,
+                                   ignore_pattern=AAPT_IGNORE_PATTERN):
+  globs = _GenerateGlobs(ignore_pattern)
+  for d in directories:
+    for root, _, files in os.walk(d):
+      for f in files:
+        archive_path = f
+        parent_dir = os.path.relpath(root, d)
+        if parent_dir != '.':
+          archive_path = os.path.join(parent_dir, f)
+        path = os.path.join(root, f)
+        if build_utils.MatchesGlob(archive_path, globs):
+          continue
+        yield path, archive_path
+
+
+class ResourceInfoFile(object):
+  """Helper for building up .res.info files."""
+
+  def __init__(self):
+    # Dict of archive_path -> source_path for the current target.
+    self._entries = {}
+    # List of (old_archive_path, new_archive_path) tuples.
+    self._renames = []
+    # We don't currently support using both AddMapping and MergeInfoFile.
+    self._add_mapping_was_called = False
+
+  def AddMapping(self, archive_path, source_path):
+    """Adds a single |archive_path| -> |source_path| entry."""
+    self._add_mapping_was_called = True
+    # "values/" files do not end up in the apk except through resources.arsc.
+    if archive_path.startswith('values'):
+      return
+    source_path = os.path.normpath(source_path)
+    new_value = self._entries.setdefault(archive_path, source_path)
+    if new_value != source_path:
+      raise Exception('Duplicate AddMapping for "{}". old={} new={}'.format(
+          archive_path, new_value, source_path))
+
+  def RegisterRename(self, old_archive_path, new_archive_path):
+    """Records an archive_path rename.
+
+    |old_archive_path| does not need to currently exist in the mappings. Renames
+    are buffered and replayed only when Write() is called.
+    """
+    if not old_archive_path.startswith('values'):
+      self._renames.append((old_archive_path, new_archive_path))
+
+  def MergeInfoFile(self, info_file_path):
+    """Merges the mappings from |info_file_path| into this object.
+
+    Any existing entries are overridden.
+    """
+    assert not self._add_mapping_was_called
+    # Allows clobbering, which is used when overriding resources.
+    with open(info_file_path) as f:
+      self._entries.update(l.rstrip().split('\t') for l in f)
+
+  def _ApplyRenames(self):
+    applied_renames = set()
+    ret = self._entries
+    for rename_tup in self._renames:
+      # Duplicate entries happen for resource overrides.
+      # Use a "seen" set to ensure we still error out if multiple renames
+      # happen for the same old_archive_path with different new_archive_paths.
+      if rename_tup in applied_renames:
+        continue
+      applied_renames.add(rename_tup)
+      old_archive_path, new_archive_path = rename_tup
+      ret[new_archive_path] = ret[old_archive_path]
+      del ret[old_archive_path]
+
+    self._entries = None
+    self._renames = None
+    return ret
+
+  def Write(self, info_file_path):
+    """Applies renames and writes out the file.
+
+    No other methods may be called after this.
+    """
+    entries = self._ApplyRenames()
+    lines = []
+    for archive_path, source_path in entries.iteritems():
+      lines.append('{}\t{}\n'.format(archive_path, source_path))
+    with open(info_file_path, 'w') as info_file:
+      info_file.writelines(sorted(lines))
 
 
 def _ParseTextSymbolsFile(path, fix_package_ids=False):
@@ -643,6 +760,31 @@ def ExtractArscPackage(aapt2_path, apk_path):
   raise Exception('Failed to find arsc package name')
 
 
+def _RenameSubdirsWithPrefix(dir_path, prefix):
+  subdirs = [
+      d for d in os.listdir(dir_path)
+      if os.path.isdir(os.path.join(dir_path, d))
+  ]
+  renamed_subdirs = []
+  for d in subdirs:
+    old_path = os.path.join(dir_path, d)
+    new_path = os.path.join(dir_path, '{}_{}'.format(prefix, d))
+    renamed_subdirs.append(new_path)
+    os.rename(old_path, new_path)
+  return renamed_subdirs
+
+
+def _HasMultipleResDirs(zip_path):
+  """Checks for magic comment set by prepare_resources.py
+
+  Returns: True iff the zipfile has the magic comment that means it contains
+  multiple res/ dirs inside instead of just contents of a single res/ dir
+  (without a wrapping res/).
+  """
+  with zipfile.ZipFile(zip_path) as z:
+    return z.comment == MULTIPLE_RES_MAGIC_STRING
+
+
 def ExtractDeps(dep_zips, deps_dir):
   """Extract a list of resource dependency zip files.
 
@@ -664,7 +806,16 @@ def ExtractDeps(dep_zips, deps_dir):
     if os.path.exists(subdir):
       raise Exception('Resource zip name conflict: ' + subdirname)
     build_utils.ExtractAll(z, path=subdir)
-    dep_subdirs.append(subdir)
+    if _HasMultipleResDirs(z):
+      # basename of the directory is used to create a zip during resource
+      # compilation, include the path in the basename to help blame errors on
+      # the correct target. For example directory 0_res may be renamed
+      # chrome_android_chrome_app_java_resources_0_res pointing to the name and
+      # path of the android_resources target from whence it came.
+      subdir_subdirs = _RenameSubdirsWithPrefix(subdir, subdirname)
+      dep_subdirs.extend(subdir_subdirs)
+    else:
+      dep_subdirs.append(subdir)
   return dep_subdirs
 
 
@@ -717,11 +868,13 @@ class _ResourceBuildContext(object):
 @contextlib.contextmanager
 def BuildContext(temp_dir=None, keep_files=False):
   """Generator for a _ResourceBuildContext instance."""
+  context = None
   try:
     context = _ResourceBuildContext(temp_dir, keep_files)
     yield context
   finally:
-    context.Close()
+    if context:
+      context.Close()
 
 
 def ResourceArgsParser():

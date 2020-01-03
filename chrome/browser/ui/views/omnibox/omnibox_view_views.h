@@ -40,11 +40,15 @@ class WebContents;
 
 namespace gfx {
 class RenderText;
-}
+}  // namespace gfx
 
 namespace ui {
 class OSExchangeData;
 }  // namespace ui
+
+namespace views {
+class Button;
+}  // namespace views
 
 // Views-implementation of OmniboxView.
 class OmniboxViewViews : public OmniboxView,
@@ -189,6 +193,8 @@ class OmniboxViewViews : public OmniboxView,
   void SetAccessibilityLabel(const base::string16& display_text,
                              const AutocompleteMatch& match) override;
 
+  void AnnounceText(const base::string16& message) override;
+
   // Selects the whole omnibox contents as a result of the user gesture. This
   // may also unapply steady state elisions depending on user preferences.
   void SelectAllForUserGesture();
@@ -201,21 +207,22 @@ class OmniboxViewViews : public OmniboxView,
   // flip.)
   bool TextAndUIDirectionMatch() const;
 
-  // Helper function for MaybeFocusTabButton() and MaybeUnfocusTabButton().
-  bool SelectedSuggestionHasTabMatch() const;
+  // Gets the secondary button (like the tab switch or remove suggestion)
+  // for the selected line. Returns nullptr if there is no secondary button.
+  views::Button* GetSecondaryButtonForSelectedLine() const;
 
   // Like SelectionAtEnd(), but accounts for RTL.
   bool DirectionAwareSelectionAtEnd() const;
 
-  // Attempts to either focus or unfocus the tab switch button (tests if all
+  // Attempts to either focus or unfocus the secondary button (tests if all
   // conditions are met and makes necessary subroutine call) and returns
   // whether it succeeded.
-  bool MaybeFocusTabButton();
-  bool MaybeUnfocusTabButton();
+  bool MaybeFocusSecondaryButton();
+  bool MaybeUnfocusSecondaryButton();
 
-  // If the tab switch button is focused, switches to the relevant tab.  Returns
-  // whether the switch was attempted.
-  bool MaybeSwitchToTab(const ui::KeyEvent& event);
+  // If the Secondary button for the current suggestion is focused, clicks it
+  // and returns true.
+  bool MaybeTriggerSecondaryButton(const ui::KeyEvent& event);
 
   // OmniboxView:
   void SetCaretPos(size_t caret_pos) override;
@@ -344,10 +351,6 @@ class OmniboxViewViews : public OmniboxView,
   // GESTURE_TAP. We want to select all only when the textfield is not in focus
   // and gets a tap. So we use this variable to remember focus state before tap.
   bool select_all_on_gesture_tap_ = false;
-
-  // True if we should suppress on-focus suggestions, because we are currently
-  // processing a focus ovent that we know the user didn't explicitly initiate.
-  bool suppress_on_focus_suggestions_ = false;
 
   // The time of the first character insert operation that has not yet been
   // painted. Used to measure omnibox responsiveness with a histogram.

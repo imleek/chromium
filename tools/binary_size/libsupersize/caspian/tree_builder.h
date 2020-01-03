@@ -6,34 +6,38 @@
 #define TOOLS_BINARY_SIZE_LIBSUPERSIZE_CASPIAN_TREE_BUILDER_H_
 
 #include <deque>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
 
+#include "tools/binary_size/libsupersize/caspian/lens.h"
 #include "tools/binary_size/libsupersize/caspian/model.h"
 
 namespace caspian {
 class TreeBuilder {
  public:
-  TreeBuilder(SizeInfo* size_info);
-  TreeBuilder(DeltaSizeInfo* size_info);
+  explicit TreeBuilder(SizeInfo* size_info);
+  explicit TreeBuilder(DeltaSizeInfo* size_info);
   ~TreeBuilder();
-  void Build(bool group_by_component,
+  void Build(std::unique_ptr<BaseLens> lens,
+             char separator,
              bool method_count_mode,
              std::vector<std::function<bool(const BaseSymbol&)>> filters);
+  TreeNode* Find(std::string_view path);
   Json::Value Open(const char* path);
 
  private:
-  void AddFileEntry(const std::string_view source_path,
+  void AddFileEntry(GroupedPath source_path,
                     const std::vector<const BaseSymbol*>& symbols);
 
   TreeNode* GetOrMakeParentNode(TreeNode* child_node);
 
   void AttachToParent(TreeNode* child, TreeNode* parent);
 
-  ContainerType ContainerTypeFromChild(std::string_view child_id_path) const;
+  ContainerType ContainerTypeFromChild(GroupedPath child_path) const;
 
   bool ShouldIncludeSymbol(const BaseSymbol& symbol) const;
 
@@ -41,10 +45,9 @@ class TreeBuilder {
   // method.
   void JoinDexMethodClasses(TreeNode* node);
 
+  BaseSizeInfo* size_info_;
   TreeNode root_;
-  // TODO: A full hash table might be overkill here - could walk tree to find
-  // node.
-  std::unordered_map<std::string_view, TreeNode*> _parents;
+  std::unordered_map<GroupedPath, TreeNode*> _parents;
 
   // Contained TreeNode hold lightweight string_views to fields in SizeInfo.
   // If grouping by component, this isn't possible: TreeNode id_paths are not
@@ -52,7 +55,7 @@ class TreeBuilder {
   // in |owned_strings_|.
   // Deque is used for stability, to support string_view.
   std::deque<std::string> owned_strings_;
-  bool group_by_component_;
+  std::unique_ptr<BaseLens> lens_;
   bool method_count_mode_;
   // The current path separator: '>' if grouping by component, '/' otherwise.
   // Note that we split paths on '/' no matter the value of separator, since

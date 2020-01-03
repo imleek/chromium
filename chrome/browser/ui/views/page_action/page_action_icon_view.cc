@@ -46,11 +46,13 @@ const OmniboxView* PageActionIconView::Delegate::GetOmniboxView() const {
   return nullptr;
 }
 
-PageActionIconView::PageActionIconView(CommandUpdater* command_updater,
-                                       int command_id,
-                                       PageActionIconView::Delegate* delegate,
-                                       const gfx::FontList& font_list)
-    : IconLabelBubbleView(font_list),
+PageActionIconView::PageActionIconView(
+    CommandUpdater* command_updater,
+    int command_id,
+    IconLabelBubbleView::Delegate* parent_delegate,
+    PageActionIconView::Delegate* delegate,
+    const gfx::FontList& font_list)
+    : IconLabelBubbleView(font_list, parent_delegate),
       command_updater_(command_updater),
       delegate_(delegate),
       command_id_(command_id) {
@@ -88,14 +90,10 @@ void PageActionIconView::ExecuteForTesting() {
   OnExecuting(EXECUTE_SOURCE_MOUSE);
 }
 
-SkColor PageActionIconView::GetTextColor() const {
-  return GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_TextfieldDefaultColor);
-}
-
 void PageActionIconView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kButton;
-  node_data->SetName(GetTextForTooltipAndAccessibleName());
+  const base::string16 name_text = GetTextForTooltipAndAccessibleName();
+  node_data->SetName(name_text);
 }
 
 base::string16 PageActionIconView::GetTooltipText(const gfx::Point& p) const {
@@ -113,10 +111,6 @@ void PageActionIconView::ViewHierarchyChanged(
 void PageActionIconView::OnThemeChanged() {
   IconLabelBubbleView::OnThemeChanged();
   UpdateIconImage();
-}
-
-SkColor PageActionIconView::GetInkDropBaseColor() const {
-  return delegate_->GetPageActionInkDropColor();
 }
 
 bool PageActionIconView::ShouldShowSeparator() const {
@@ -193,6 +187,10 @@ void PageActionIconView::OnTouchUiChanged() {
     PreferredSizeChanged();
 }
 
+const char* PageActionIconView::GetClassName() const {
+  return "PageActionIconView";
+}
+
 void PageActionIconView::SetIconColor(SkColor icon_color) {
   icon_color_ = icon_color;
   UpdateIconImage();
@@ -203,6 +201,16 @@ void PageActionIconView::SetActive(bool active) {
     return;
   active_ = active;
   UpdateIconImage();
+}
+
+void PageActionIconView::Update() {
+  // Currently no page action icon should be visible during user input.
+  // A future subclass may need a hook here if that changes.
+  if (delegate_->IsLocationBarUserInputInProgress()) {
+    SetVisible(false);
+  } else {
+    UpdateImpl();
+  }
 }
 
 void PageActionIconView::UpdateIconImage() {

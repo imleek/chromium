@@ -689,6 +689,28 @@ FakeAssociatedUserValidator::~FakeAssociatedUserValidator() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+FakeChromeAvailabilityChecker::FakeChromeAvailabilityChecker(
+    HasSupportedChromeCheckType has_supported_chrome /*=kChromeForceYes*/)
+    : original_checker_(*GetInstanceStorage()),
+      has_supported_chrome_(has_supported_chrome) {
+  *GetInstanceStorage() = this;
+}
+
+FakeChromeAvailabilityChecker::~FakeChromeAvailabilityChecker() {
+  *GetInstanceStorage() = original_checker_;
+}
+
+bool FakeChromeAvailabilityChecker::HasSupportedChromeVersion() {
+  return has_supported_chrome_ == kChromeForceYes;
+}
+
+void FakeChromeAvailabilityChecker::SetHasSupportedChrome(
+    HasSupportedChromeCheckType has_supported_chrome) {
+  has_supported_chrome_ = has_supported_chrome;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 FakeInternetAvailabilityChecker::FakeInternetAvailabilityChecker(
     HasInternetConnectionCheckType has_internet_connection /*=kHicForceYes*/)
     : original_checker_(*GetInstanceStorage()),
@@ -729,6 +751,23 @@ FakePasswordRecoveryManager::FakePasswordRecoveryManager(
 
 FakePasswordRecoveryManager::~FakePasswordRecoveryManager() {
   *GetInstanceStorage() = original_validator_;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+FakeGemDeviceDetailsManager::FakeGemDeviceDetailsManager()
+    : FakeGemDeviceDetailsManager(
+          GemDeviceDetailsManager::kDefaultUploadDeviceDetailsRequestTimeout) {}
+
+FakeGemDeviceDetailsManager::FakeGemDeviceDetailsManager(
+    base::TimeDelta upload_device_details_request_timeout)
+    : GemDeviceDetailsManager(upload_device_details_request_timeout),
+      original_manager_(*GetInstanceStorage()) {
+  *GetInstanceStorage() = this;
+}
+
+FakeGemDeviceDetailsManager::~FakeGemDeviceDetailsManager() {
+  *GetInstanceStorage() = original_manager_;
 }
 
 }  // namespace credential_provider

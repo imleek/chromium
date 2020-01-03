@@ -39,11 +39,10 @@
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon/debug_daemon_client.h"
-#include "chromeos/printing/ppd_cache.h"
 #include "chromeos/printing/ppd_line_reader.h"
-#include "chromeos/printing/ppd_provider.h"
 #include "chromeos/printing/printer_configuration.h"
 #include "chromeos/printing/printer_translator.h"
 #include "chromeos/printing/printing_constants.h"
@@ -245,20 +244,21 @@ Printer::PpdReference GetPpdReference(const base::Value* info) {
       info->FindPath({ppd_ref_pathname, "effectiveMakeAndModel"});
   auto* autoconf = info->FindPath({ppd_ref_pathname, "autoconf"});
 
+  Printer::PpdReference ret;
+
   if (user_supplied_ppd_url != nullptr) {
-    DCHECK(!effective_make_and_model && !autoconf);
-    return Printer::PpdReference{user_supplied_ppd_url->GetString(), "", false};
+    ret.user_supplied_ppd_url = user_supplied_ppd_url->GetString();
   }
 
   if (effective_make_and_model != nullptr) {
-    DCHECK(!user_supplied_ppd_url && !autoconf);
-    return Printer::PpdReference{"", effective_make_and_model->GetString(),
-                                 false};
+    ret.effective_make_and_model = effective_make_and_model->GetString();
   }
 
-  // Otherwise it must be autoconf
-  DCHECK(autoconf && autoconf->GetBool());
-  return Printer::PpdReference{"", "", true};
+  if (autoconf != nullptr) {
+    ret.autoconf = autoconf->GetBool();
+  }
+
+  return ret;
 }
 
 bool ConvertToGURL(const std::string& url, GURL* gurl) {
@@ -728,13 +728,10 @@ void CupsPrintersHandler::AddOrReconfigurePrinter(const base::ListValue* args,
   std::string printer_ppd_path;
   printer_dict->GetString("printerPPDPath", &printer_ppd_path);
 
-  // Checks whether a resolved PPD Reference is available.
-  bool ppd_ref_resolved = false;
-  printer_dict->GetBoolean("printerPpdReferenceResolved", &ppd_ref_resolved);
-
-  // Verify that the printer is autoconf or a valid ppd path is present.
-  if (ppd_ref_resolved) {
-    *printer->mutable_ppd_reference() = GetPpdReference(printer_dict);
+  // Check if the printer already has a valid ppd_reference.
+  Printer::PpdReference ppd_ref = GetPpdReference(printer_dict);
+  if (ppd_ref.IsFilled()) {
+    *printer->mutable_ppd_reference() = ppd_ref;
   } else if (!printer_ppd_path.empty()) {
     GURL tmp = net::FilePathToFileURL(base::FilePath(printer_ppd_path));
     if (!tmp.is_valid()) {
@@ -1195,18 +1192,51 @@ void CupsPrintersHandler::OnGetPrinterPpdManufacturerAndModel(
 }
 
 void CupsPrintersHandler::HandleGetEulaUrl(const base::ListValue* args) {
-  std::string callback_id;
-  std::string ppdManufacturer;
-  std::string ppdModel;
   CHECK_EQ(3U, args->GetSize());
-  CHECK(args->GetString(0, &callback_id));
-  CHECK(args->GetString(1, &ppdManufacturer));
-  CHECK(args->GetString(2, &ppdModel));
+  const std::string callback_id = args->GetList()[0].GetString();
+  const std::string ppd_manufacturer = args->GetList()[1].GetString();
+  const std::string ppd_model = args->GetList()[2].GetString();
 
-  // TODO(crbug/958272): Implement this function to check if a |ppdModel| has an
-  // EULA.
-  ResolveJavascriptCallback(base::Value(callback_id),
-                            base::Value("" /* eulaUrl */));
+  auto resolved_printers_it = resolved_printers_.find(ppd_manufacturer);
+  if (resolved_printers_it == resolved_printers_.end()) {
+    // Exit early if lookup for printers fails for |ppd_manufacturer|.
+    OnGetEulaUrl(callback_id, PpdProvider::CallbackResultCode::NOT_FOUND,
+                 /*license=*/std::string());
+    return;
+  }
+
+  const PpdProvider::ResolvedPrintersList& printers_for_manufacturer =
+      resolved_printers_it->second;
+
+  auto printer_it = std::find_if(
+      printers_for_manufacturer.begin(), printers_for_manufacturer.end(),
+      [&ppd_model](const auto& elem) { return elem.name == ppd_model; });
+
+  if (printer_it == printers_for_manufacturer.end()) {
+    // Unable to find the PpdReference, resolve promise with empty string.
+    OnGetEulaUrl(callback_id, PpdProvider::CallbackResultCode::NOT_FOUND,
+                 /*license=*/std::string());
+    return;
+  }
+
+  ppd_provider_->ResolvePpdLicense(
+      printer_it->ppd_ref.effective_make_and_model,
+      base::BindOnce(&CupsPrintersHandler::OnGetEulaUrl,
+                     weak_factory_.GetWeakPtr(), callback_id));
+}
+
+void CupsPrintersHandler::OnGetEulaUrl(const std::string& callback_id,
+                                       PpdProvider::CallbackResultCode result,
+                                       const std::string& license) {
+  if (result != PpdProvider::SUCCESS || license.empty()) {
+    ResolveJavascriptCallback(base::Value(callback_id), base::Value());
+    return;
+  }
+
+  GURL eula_url(chrome::kChromeUIOSCreditsURL + license);
+  ResolveJavascriptCallback(
+      base::Value(callback_id),
+      eula_url.is_valid() ? base::Value(eula_url.spec()) : base::Value());
 }
 
 void CupsPrintersHandler::OnIpResolved(const std::string& callback_id,

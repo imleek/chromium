@@ -39,9 +39,7 @@ extern const base::Feature kCrostiniGpuSupport;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kCrostiniUsbAllowUnsupported;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const base::Feature kCrostiniWebUIInstaller;
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const base::Feature kCryptAuthV1DeviceSyncDeprecate;
+extern const base::Feature kDisableCryptAuthV1DeviceSync;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kCryptAuthV2DeviceActivityStatus;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -62,8 +60,6 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kEduCoexistence;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kEnableFileManagerFeedbackPanel;
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const base::Feature kEnableFileManagerPiexWasm;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kExoPointerLock;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const base::Feature kFilesNG;
@@ -92,7 +88,10 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kInstantTethering;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const base::Feature kMediaApp;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kNativeRuleBasedTyping;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kParentalControlsSettings;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const base::Feature kQuickAnswers;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kReleaseNotes;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -111,8 +110,6 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kShowPlayInDemoMode;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kSmartDimModelV3;
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const base::Feature kSplitSettings;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kSplitSettingsSync;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -141,13 +138,13 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsImeDecoderWithSandboxEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 bool IsInstantTetheringBackgroundAdvertisingSupported();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsParentalControlsSettingsEnabled();
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsSplitSettingsEnabled();
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsQuickAnswersEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsSplitSettingsSyncEnabled();
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool ShouldDeprecateV1DeviceSync();
 
 // TODO(michaelpg): Remove after M71 branch to re-enable Play Store by default.
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool ShouldShowPlayStoreInDemoMode();
 
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool ShouldUseV1DeviceSync();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool ShouldUseV2DeviceSync();
 
 // Keep alphabetized.

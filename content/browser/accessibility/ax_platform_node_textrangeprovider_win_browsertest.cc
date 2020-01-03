@@ -427,6 +427,54 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
+                       GetAttributeValueIsReadonlyEmptyTextInputs) {
+  LoadInitialAccessibilityTreeFromHtml(std::string(R"HTML(
+      <!DOCTYPE html>
+      <html>
+        <body>
+          <input type='text' aria-label='input_text'>
+          <input type='search' aria-label='input_search'>
+        </body>
+      </html>
+  )HTML"));
+
+  auto* input_text_node = FindNode(ax::mojom::Role::kTextField, "input_text");
+  ASSERT_NE(nullptr, input_text_node);
+  EXPECT_TRUE(input_text_node->PlatformIsLeaf());
+  EXPECT_EQ(0u, input_text_node->PlatformChildCount());
+
+  ComPtr<ITextRangeProvider> text_range_provider;
+  GetTextRangeProviderFromTextNode(*input_text_node, &text_range_provider);
+  ASSERT_NE(nullptr, text_range_provider.Get());
+  EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"");
+
+  base::win::ScopedVariant value;
+  EXPECT_HRESULT_SUCCEEDED(text_range_provider->GetAttributeValue(
+      UIA_IsReadOnlyAttributeId, value.Receive()));
+  EXPECT_EQ(value.type(), VT_BOOL);
+  EXPECT_EQ(V_BOOL(value.ptr()), VARIANT_FALSE);
+  text_range_provider.Reset();
+  value.Reset();
+
+  auto* input_search_node =
+      FindNode(ax::mojom::Role::kSearchBox, "input_search");
+  ASSERT_NE(nullptr, input_search_node);
+  EXPECT_TRUE(input_search_node->PlatformIsLeaf());
+  EXPECT_EQ(0u, input_search_node->PlatformChildCount());
+
+  GetTextRangeProviderFromTextNode(*input_search_node, &text_range_provider);
+  ASSERT_NE(nullptr, text_range_provider.Get());
+  EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"");
+
+  EXPECT_HRESULT_SUCCEEDED(text_range_provider->GetAttributeValue(
+      UIA_IsReadOnlyAttributeId, value.Receive()));
+  EXPECT_EQ(value.type(), VT_BOOL);
+  EXPECT_EQ(V_BOOL(value.ptr()), VARIANT_FALSE);
+  text_range_provider.Reset();
+  value.Reset();
+}
+
+IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
                        GetBoundingRectangles) {
   LoadInitialAccessibilityTreeFromHtml(std::string(R"HTML(
       <!DOCTYPE html>
@@ -643,8 +691,11 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
       <html>
       <body>
         <div>plain 1</div><div>plain 2</div>
-        <div style="font-style: italic">italic 1</div>
+        <div role="heading">plain heading</div>
+        <div role="article" style="font-style: italic">italic 1</div>
         <div style="font-style: italic">italic 2</div>
+        <h1>heading</h1>
+        <h1>heading</h1>
         <div style="font-weight: bold">bold 1</div>
         <div style="font-weight: bold">bold 2</div>
       </body>
@@ -668,30 +719,49 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
       /*count*/ 1,
       /*expected_text*/
-      L"plain 1\nplain 2\nitalic 1\nitalic 2",
+      L"plain 1\nplain 2\nplain heading",
+      /*expected_count*/ 1);
+  EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
+      text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
+      /*count*/ 1,
+      /*expected_text*/
+      L"plain 1\nplain 2\nplain heading\nitalic 1\nitalic 2",
       /*expected_count*/ 1);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
       /*count*/ -1,
-      /*expected_text*/ L"plain 1\nplain 2\n",
+      /*expected_text*/ L"plain 1\nplain 2\nplain heading\n",
       /*expected_count*/ -1);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
       /*count*/ 1,
       /*expected_text*/
-      L"plain 1\nplain 2\nitalic 1\nitalic 2",
+      L"plain 1\nplain 2\nplain heading\nitalic 1\nitalic 2",
+      /*expected_count*/ 1);
+  EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
+      text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
+      /*count*/ 1,
+      /*expected_text*/
+      L"plain 1\nplain 2\nplain heading\nitalic 1\nitalic 2\nheading",
+      /*expected_count*/ 1);
+  EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
+      text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
+      /*count*/ 1,
+      /*expected_text*/
+      L"plain 1\nplain 2\nplain heading\nitalic 1\nitalic 2\nheading\nheading",
       /*expected_count*/ 1);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
       /*count*/ 5,
       /*expected_text*/
-      L"plain 1\nplain 2\nitalic 1\nitalic 2\nbold 1\nbold 2",
+      L"plain 1\nplain 2\nplain heading\nitalic 1\nitalic 2"
+      L"\nheading\nheading\nbold 1\nbold 2",
       /*expected_count*/ 1);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
-      /*count*/ -4,
+      /*count*/ -8,
       /*expected_text*/ L"",
-      /*expected_count*/ -3);
+      /*expected_count*/ -6);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
       /*count*/ 1,
@@ -1816,10 +1886,14 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
                             "text</span> and text after.",
                             {L"a ", L"and ", L"text ", L"after."});
 
+  AssertMoveByUnitForMarkup(
+      TextUnit_Word, "<ol><li>item one</li><li>item two</li></ol>",
+      {L"1. ", L"item ", L"one", L"2. ", L"item ", L"two"});
+
   // The following test should be enabled when crbug.com/1015100 is fixed.
   // AssertMoveByUnitForMarkup(
   //     TextUnit_Word, "<ul><li>item one</li><li>item two</li></ul>",
-  //     {L"* ", L"item ", L"one\n", L"* ", L"item ", L"two"});
+  //     {L"• ", L"item ", L"one", L"• ", L"item ", L"two"});
 }
 
 IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
@@ -1948,9 +2022,9 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
   EXPECT_UIA_DOUBLE_SAFEARRAY_EQ(rectangles.Get(), expected_values);
 
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Character,
-                  /*count*/ 17,
+                  /*count*/ 19,
                   /*expected_text*/ L"e",
-                  /*expected_count*/ 17);
+                  /*expected_count*/ 19);
   text_range_provider->ExpandToEnclosingUnit(TextUnit_Word);
   EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"item");
 

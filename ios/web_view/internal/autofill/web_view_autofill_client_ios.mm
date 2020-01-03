@@ -96,6 +96,10 @@ FormDataImporter* WebViewAutofillClientIOS::GetFormDataImporter() {
   return form_data_importer_.get();
 }
 
+SmsClient* WebViewAutofillClientIOS::GetSmsClient() {
+  return nullptr;
+}
+
 payments::PaymentsClient* WebViewAutofillClientIOS::GetPaymentsClient() {
   return payments_client_.get();
 }
@@ -163,11 +167,6 @@ void WebViewAutofillClientIOS::ShowLocalCardMigrationResults(
   NOTIMPLEMENTED();
 }
 
-void WebViewAutofillClientIOS::ShowWebauthnOfferDialog(
-    WebauthnOfferDialogCallback callback) {
-  NOTIMPLEMENTED();
-}
-
 void WebViewAutofillClientIOS::ConfirmSaveAutofillProfile(
     const AutofillProfile& profile,
     base::OnceClosure callback) {
@@ -220,8 +219,7 @@ bool WebViewAutofillClientIOS::HasCreditCardScanFeature() {
   return false;
 }
 
-void WebViewAutofillClientIOS::ScanCreditCard(
-    const CreditCardScanCallback& callback) {
+void WebViewAutofillClientIOS::ScanCreditCard(CreditCardScanCallback callback) {
   NOTREACHED();
 }
 

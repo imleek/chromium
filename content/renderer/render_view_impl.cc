@@ -52,7 +52,6 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/page_importance_signals.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/referrer_type_converters.h"
 #include "content/public/common/three_d_api_types.h"
@@ -64,7 +63,6 @@
 #include "content/public/renderer/render_view_observer.h"
 #include "content/public/renderer/render_view_visitor.h"
 #include "content/public/renderer/window_features_converter.h"
-#include "content/renderer/browser_plugin/browser_plugin.h"
 #include "content/renderer/compositor/layer_tree_view.h"
 #include "content/renderer/drop_data_builder.h"
 #include "content/renderer/history_serialization.h"
@@ -98,6 +96,7 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/frame/user_activation_update_source.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/plugin/plugin_action.h"
 #include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/public/platform/modules/video_capture/web_video_capture_impl_manager.h"
@@ -105,7 +104,6 @@
 #include "third_party/blink/public/platform/web_connection_type.h"
 #include "third_party/blink/public/platform/web_effective_connection_type.h"
 #include "third_party/blink/public/platform/web_http_body.h"
-#include "third_party/blink/public/platform/web_input_event.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/public/platform/web_network_state_notifier.h"
 #include "third_party/blink/public/platform/web_point.h"
@@ -137,7 +135,6 @@
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
-#include "third_party/blink/public/web/web_page_importance_signals.h"
 #include "third_party/blink/public/web/web_page_popup.h"
 #include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/public/web/web_range.h"
@@ -146,7 +143,6 @@
 #include "third_party/blink/public/web/web_searchable_form_data.h"
 #include "third_party/blink/public/web/web_security_policy.h"
 #include "third_party/blink/public/web/web_settings.h"
-#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/public/web/web_window_features.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
@@ -168,7 +164,6 @@
 #include <cpu-features.h>
 
 #include "base/android/build_info.h"
-#include "base/memory/shared_memory.h"
 #include "content/child/child_thread_impl.h"
 #include "ui/gfx/geometry/rect_f.h"
 
@@ -220,7 +215,6 @@ using blink::WebURL;
 using blink::WebURLError;
 using blink::WebURLRequest;
 using blink::WebURLResponse;
-using blink::WebUserGestureIndicator;
 using blink::WebVector;
 using blink::WebView;
 using blink::WebWidget;
@@ -251,15 +245,6 @@ const int kDelaySecondsForContentStateSync = 1;
 static RenderViewImpl* (*g_create_render_view_impl)(
     CompositorDependencies* compositor_deps,
     const mojom::CreateViewParams&) = nullptr;
-
-// static
-Referrer RenderViewImpl::GetReferrerFromRequest(
-    WebFrame* frame,
-    const WebURLRequest& request) {
-  return Referrer(blink::WebStringToGURL(
-                      request.HttpHeaderField(WebString::FromUTF8("Referer"))),
-                  request.GetReferrerPolicy());
-}
 
 // static
 WindowOpenDisposition RenderViewImpl::NavigationPolicyToDisposition(
@@ -1159,12 +1144,8 @@ void RenderViewImpl::DidCompletePageScaleAnimationForWidget() {
 
 void RenderViewImpl::ResizeWebWidgetForWidget(
     const gfx::Size& widget_size,
-    float top_controls_height,
-    float bottom_controls_height,
-    bool browser_controls_shrink_blink_size) {
-  webview()->ResizeWithBrowserControls(widget_size, top_controls_height,
-                                       bottom_controls_height,
-                                       browser_controls_shrink_blink_size);
+    cc::BrowserControlsParams browser_controls_params) {
+  webview()->ResizeWithBrowserControls(widget_size, browser_controls_params);
 }
 
 void RenderViewImpl::SetScreenMetricsEmulationParametersForWidget(
@@ -1281,6 +1262,7 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(PageMsg_UpdateTextAutosizerPageInfoForRemoteMainFrames,
                         OnTextAutosizerPageInfoChanged)
     IPC_MESSAGE_HANDLER(PageMsg_SetRendererPrefs, OnSetRendererPrefs)
+    IPC_MESSAGE_HANDLER(PageMsg_SetInsidePortal, OnSetInsidePortal)
 
     // Adding a new message? Add platform independent ones first, then put the
     // platform specific ones at the end.
@@ -1334,8 +1316,9 @@ WebView* RenderViewImpl::CreateView(
   params->disposition = NavigationPolicyToDisposition(policy);
   if (!request.IsNull()) {
     params->target_url = request.Url();
-    params->referrer =
-        blink::mojom::Referrer::From(GetReferrerFromRequest(creator, request));
+    params->referrer = blink::mojom::Referrer::New(
+        blink::WebStringToGURL(request.ReferrerString()),
+        request.GetReferrerPolicy());
   }
   params->features = ConvertWebWindowFeaturesToMojoWindowFeatures(features);
 
@@ -1370,8 +1353,8 @@ WebView* RenderViewImpl::CreateView(
 
   // The browser allowed creation of a new window and consumed the user
   // activation.
-  bool was_consumed = WebUserGestureIndicator::ConsumeUserGesture(
-      creator, blink::UserActivationUpdateSource::kBrowser);
+  bool was_consumed = creator->ConsumeTransientUserActivation(
+      blink::UserActivationUpdateSource::kBrowser);
 
   // While this view may be a background extension page, it can spawn a visible
   // render view. So we just assume that the new one is not another background
@@ -1676,10 +1659,6 @@ void RenderViewImpl::FocusedElementChanged(const WebElement& from_element,
     previous_frame->FocusedElementChanged(WebElement());
   if (new_frame)
     new_frame->FocusedElementChanged(to_element);
-
-  // TODO(dmazzoni): remove once there's a separate a11y tree per frame.
-  if (main_render_frame_)
-    main_render_frame_->FocusedElementChangedForAccessibility(to_element);
 }
 
 void RenderViewImpl::DidUpdateMainFrameLayout() {
@@ -1729,7 +1708,7 @@ bool RenderViewImpl::CanHandleGestureEvent() {
   return true;
 }
 
-// TODO(https://crbug.com/937569): Remove this in Chrome 82.
+// TODO(https://crbug.com/937569): Remove this in Chrome 88.
 bool RenderViewImpl::AllowPopupsDuringPageUnload() {
   // The switch version is for enabling via enterprise policy. The feature
   // version is for enabling via about:flags and Finch policy.
@@ -2021,6 +2000,10 @@ void RenderViewImpl::OnTextAutosizerPageInfoChanged(
     webview()->SetTextAutosizePageInfo(page_info);
 }
 
+void RenderViewImpl::OnSetInsidePortal(bool inside_portal) {
+  webview()->SetInsidePortal(inside_portal);
+}
+
 void RenderViewImpl::SetFocus(bool enable) {
   // This is only called from RenderFrameProxy.
   CHECK(!webview()->MainFrame()->IsWebLocalFrame());
@@ -2042,19 +2025,6 @@ void RenderViewImpl::DidUpdateTextAutosizerPageInfo(
       GetRoutingID(), page_info));
 }
 
-void RenderViewImpl::PageImportanceSignalsChanged() {
-  if (!webview() || !main_render_frame_)
-    return;
-
-  auto* web_signals = webview()->PageImportanceSignals();
-
-  PageImportanceSignals signals;
-  signals.had_form_interaction = web_signals->HadFormInteraction();
-
-  main_render_frame_->Send(new FrameHostMsg_UpdatePageImportanceSignals(
-      main_render_frame_->GetRoutingID(), signals));
-}
-
 void RenderViewImpl::DidAutoResize(const blink::WebSize& newSize) {
   // Auto resize should only happen on local main frames.
   DCHECK(render_widget_);
@@ -2065,7 +2035,7 @@ void RenderViewImpl::DidFocus(blink::WebLocalFrame* calling_frame) {
   // TODO(jcivelli): when https://bugs.webkit.org/show_bug.cgi?id=33389 is fixed
   //                 we won't have to test for user gesture anymore and we can
   //                 move that code back to render_widget.cc
-  if (WebUserGestureIndicator::IsProcessingUserGesture(calling_frame) &&
+  if (calling_frame && calling_frame->HasTransientUserActivation() &&
       !RenderThreadImpl::current()->web_test_mode()) {
     Send(new ViewHostMsg_Focus(GetRoutingID()));
 

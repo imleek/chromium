@@ -587,11 +587,6 @@ void AutofillMetrics::LogSubmittedServerCardExpirationStatusMetric(
 }
 
 // static
-void AutofillMetrics::LogMaskedCardComparisonNetworksMatch(bool matches) {
-  UMA_HISTOGRAM_BOOLEAN("Autofill.MaskedCardComparisonNetworksMatch", matches);
-}
-
-// static
 void AutofillMetrics::LogCreditCardSaveNotOfferedDueToMaxStrikesMetric(
     SaveTypeMetric metric) {
   UMA_HISTOGRAM_ENUMERATION(
@@ -1380,12 +1375,12 @@ void AutofillMetrics::LogIsAutofillEnabledAtStartup(bool enabled) {
 }
 
 // static
-void AutofillMetrics::LogIsProfileAutofillEnabledAtStartup(bool enabled) {
+void AutofillMetrics::LogIsAutofillProfileEnabledAtStartup(bool enabled) {
   UMA_HISTOGRAM_BOOLEAN("Autofill.Address.IsEnabled.Startup", enabled);
 }
 
 // static
-void AutofillMetrics::LogIsCreditCardAutofillEnabledAtStartup(bool enabled) {
+void AutofillMetrics::LogIsAutofillCreditCardEnabledAtStartup(bool enabled) {
   UMA_HISTOGRAM_BOOLEAN("Autofill.CreditCard.IsEnabled.Startup", enabled);
 }
 
@@ -1400,7 +1395,7 @@ void AutofillMetrics::LogIsAutofillEnabledAtPageLoad(
 }
 
 // static
-void AutofillMetrics::LogIsProfileAutofillEnabledAtPageLoad(
+void AutofillMetrics::LogIsAutofillProfileEnabledAtPageLoad(
     bool enabled,
     AutofillSyncSigninState sync_state) {
   std::string name("Autofill.Address.IsEnabled.PageLoad");
@@ -1410,7 +1405,7 @@ void AutofillMetrics::LogIsProfileAutofillEnabledAtPageLoad(
 }
 
 // static
-void AutofillMetrics::LogIsCreditCardAutofillEnabledAtPageLoad(
+void AutofillMetrics::LogIsAutofillCreditCardEnabledAtPageLoad(
     bool enabled,
     AutofillSyncSigninState sync_state) {
   std::string name("Autofill.CreditCard.IsEnabled.PageLoad");
@@ -1844,9 +1839,7 @@ void AutofillMetrics::LogDeveloperEngagementUkm(
 AutofillMetrics::FormInteractionsUkmLogger::FormInteractionsUkmLogger(
     ukm::UkmRecorder* ukm_recorder,
     const ukm::SourceId source_id)
-    : ukm_recorder_(ukm_recorder), source_id_(source_id) {
-  UMA_HISTOGRAM_BOOLEAN("Autofill.CanLogUKM", CanLog());
-}
+    : ukm_recorder_(ukm_recorder), source_id_(source_id) {}
 
 void AutofillMetrics::FormInteractionsUkmLogger::OnFormsParsed(
     const ukm::SourceId source_id) {

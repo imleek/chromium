@@ -7,10 +7,11 @@
 
 #include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "chrome/browser/chromeos/arc/accessibility/accessibility_info_data_wrapper.h"
-#include "components/arc/mojom/accessibility_helper.mojom.h"
+#include "components/arc/mojom/accessibility_helper.mojom-forward.h"
 #include "extensions/browser/api/automation_internal/automation_event_router.h"
 #include "ui/accessibility/ax_action_handler.h"
 #include "ui/accessibility/ax_node.h"
@@ -72,9 +73,6 @@ class AXTreeSourceArc : public ui::AXTreeSource<AccessibilityInfoDataWrapper*,
   // parent window).
   bool IsRootOfNodeTree(int32_t id) const;
 
-  // Gets the window id of this tree.
-  int32_t GetWindowId() const;
-
   // AXTreeSource:
   bool GetTreeData(ui::AXTreeData* data) const override;
   AccessibilityInfoDataWrapper* GetRoot() const override;
@@ -87,6 +85,9 @@ class AXTreeSourceArc : public ui::AXTreeSource<AccessibilityInfoDataWrapper*,
   bool is_notification() { return is_notification_; }
 
   bool is_input_method_window() { return is_input_method_window_; }
+
+  // The window id of this tree.
+  base::Optional<int32_t> window_id() const { return window_id_; }
 
  private:
   friend class arc::AXTreeSourceArcTest;
@@ -110,6 +111,15 @@ class AXTreeSourceArc : public ui::AXTreeSource<AccessibilityInfoDataWrapper*,
       int32_t root_index,
       const std::vector<mojom::AccessibilityNodeInfoDataPtr>& nodes,
       const std::map<int32_t, int32_t>& node_id_to_array_index) const;
+
+  // Find the most top-left focusable node under the given node.
+  AccessibilityInfoDataWrapper* FindFirstFocusableNode(
+      AccessibilityInfoDataWrapper* info_data) const;
+
+  void UpdateAXNameCache(AccessibilityInfoDataWrapper* focused_node,
+                         const std::vector<std::string>& event_text);
+
+  void ApplyCachedProperties();
 
   // Resets tree state.
   void Reset();
@@ -139,6 +149,9 @@ class AXTreeSourceArc : public ui::AXTreeSource<AccessibilityInfoDataWrapper*,
   base::Optional<int32_t> focused_id_;
   bool is_notification_;
   bool is_input_method_window_;
+
+  std::map<int32_t, std::string> cached_names_;
+  std::map<int32_t, ax::mojom::Role> cached_roles_;
 
   // A delegate that handles accessibility actions on behalf of this tree. The
   // delegate is valid during the lifetime of this tree.

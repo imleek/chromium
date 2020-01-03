@@ -14,12 +14,13 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
-#include "chrome/browser/policy/browser_dm_token_storage.h"
-#include "chrome/browser/safe_browsing/download_protection/binary_upload_service.h"
+#include "base/time/time.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog_delegate.h"
-#include "components/policy/core/common/cloud/dm_token.h"
 #include "components/safe_browsing/proto/webprotect.pb.h"
 #include "content/public/browser/web_contents_view_delegate.h"
 #include "url/gurl.h"
@@ -28,7 +29,8 @@ class Profile;
 
 namespace safe_browsing {
 
-extern const base::Feature kDeepScanningOfUploads;
+class DeepScanningDialogViews;
+
 extern const base::Feature kDeepScanningOfUploadsUI;
 
 // A tab modal dialog delegate that informs the user of a background deep
@@ -57,7 +59,7 @@ extern const base::Feature kDeepScanningOfUploadsUI;
 //     safe_browsing::DeepScanningDialogDelegate::ShowForWebContents(
 //         contents, std::move(data), base::BindOnce(...));
 //   }
-class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
+class DeepScanningDialogDelegate {
  public:
   // Used as an input to ShowForWebContents() to describe what data needs
   // deeper scanning.  Any members can be empty.
@@ -130,13 +132,11 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
   DeepScanningDialogDelegate(const DeepScanningDialogDelegate&) = delete;
   DeepScanningDialogDelegate& operator=(const DeepScanningDialogDelegate&) =
       delete;
-  ~DeepScanningDialogDelegate() override;
+  virtual ~DeepScanningDialogDelegate();
 
-  // TabModelConfirmDialogDelegate implementation.
-  base::string16 GetTitle() override;
-  base::string16 GetDialogMessage() override;
-  int GetDialogButtons() const override;
-  void OnCanceled() override;
+  // Called when the user decides to cancel the file upload. This will stop the
+  // upload to Chrome since the scan wasn't allowed to complete.
+  void Cancel();
 
   // Returns true if the deep scanning feature is enabled in the upload
   // direction via enterprise policies.  If the appropriate enterprise policies
@@ -155,16 +155,15 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
   // in the background.
   //
   // Whether the UI is enabled or not, verdicts of the scan will be reported.
-  static void ShowForWebContents(content::WebContents* web_contents,
-                                 Data data,
-                                 CompletionCallback callback);
+  static void ShowForWebContents(
+      content::WebContents* web_contents,
+      Data data,
+      CompletionCallback callback,
+      base::Optional<DeepScanAccessPoint> access_point = base::nullopt);
 
   // In tests, sets a factory function for creating fake
   // DeepScanningDialogDelegates.
   static void SetFactoryForTesting(Factory factory);
-
-  // Overrides the DM token used for testing purposes.
-  static void SetDMTokenForTesting(const policy::DMToken& dm_token);
 
   // Returns true if the given file type is supported for scanning.
   static bool FileTypeSupported(const bool for_malware_scan,
@@ -172,9 +171,11 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
                                 const base::FilePath& path);
 
  protected:
-  DeepScanningDialogDelegate(content::WebContents* web_contents,
-                             Data data,
-                             CompletionCallback callback);
+  DeepScanningDialogDelegate(
+      content::WebContents* web_contents,
+      Data data,
+      CompletionCallback callback,
+      base::Optional<DeepScanAccessPoint> access_point = base::nullopt);
 
   // Callbacks from uploading data.  Protected so they can be called from
   // testing derived classes.
@@ -190,9 +191,6 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
 
  private:
   class FileSourceRequest;
-
-  // Gets the device level DM token to use with deep scans.
-  static policy::DMToken GetDMToken();
 
   // Uploads data for deep scanning.  Returns true if uploading is occurring in
   // the background and false if there is nothing to do.
@@ -233,6 +231,14 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
                    std::string sha256,
                    int64_t size);
 
+  // Completion of |FileRequestCallback| once the mime type is obtained
+  // asynchronously.
+  void CompleteFileRequestCallback(size_t index,
+                                   base::FilePath path,
+                                   BinaryUploadService::Result result,
+                                   DeepScanningClientResponse response,
+                                   std::string mime_type);
+
   // The web contents that is attempting to access the data.
   content::WebContents* web_contents_ = nullptr;
 
@@ -256,7 +262,13 @@ class DeepScanningDialogDelegate : public TabModalConfirmDialogDelegate {
   CompletionCallback callback_;
 
   // Pointer to UI when enabled.
-  TabModalConfirmDialog* dialog_ = nullptr;
+  DeepScanningDialogViews* dialog_ = nullptr;
+
+  // Access point to use to record UMA metrics. base::nullopt implies no metrics
+  // are to be recorded.
+  base::Optional<DeepScanAccessPoint> access_point_;
+
+  base::TimeTicks upload_start_time_;
 
   base::WeakPtrFactory<DeepScanningDialogDelegate> weak_ptr_factory_{this};
 };

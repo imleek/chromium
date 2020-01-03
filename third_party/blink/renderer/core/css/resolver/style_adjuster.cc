@@ -74,7 +74,7 @@ TouchAction AdjustTouchActionForElement(TouchAction touch_action,
       element && element == element->GetDocument().documentElement() &&
       element->GetDocument().LocalOwner();
   if (style.ScrollsOverflow() || is_child_document)
-    return touch_action | TouchAction::kTouchActionPan;
+    return touch_action | TouchAction::kPan;
   return touch_action;
 }
 
@@ -87,6 +87,7 @@ static EDisplay EquivalentBlockDisplay(EDisplay display) {
     case EDisplay::kWebkitBox:
     case EDisplay::kFlex:
     case EDisplay::kGrid:
+    case EDisplay::kMath:
     case EDisplay::kListItem:
     case EDisplay::kFlowRoot:
     case EDisplay::kLayoutCustom:
@@ -99,6 +100,8 @@ static EDisplay EquivalentBlockDisplay(EDisplay display) {
       return EDisplay::kFlex;
     case EDisplay::kInlineGrid:
       return EDisplay::kGrid;
+    case EDisplay::kInlineMath:
+      return EDisplay::kMath;
     case EDisplay::kInlineLayoutCustom:
       return EDisplay::kLayoutCustom;
 
@@ -146,7 +149,7 @@ static bool StopPropagateTextDecorations(const ComputedStyle& style,
          style.Display() == EDisplay::kWebkitInlineBox ||
          IsAtUAShadowBoundary(element) || style.IsFloating() ||
          style.HasOutOfFlowPosition() || IsOutermostSVGElement(element) ||
-         IsHTMLRTElement(element);
+         IsA<HTMLRTElement>(element);
 }
 
 // Certain elements (<a>, <font>) override text decoration colors.  "The font
@@ -194,14 +197,32 @@ static void AdjustStyleForFirstLetter(ComputedStyle& style) {
   style.SetPosition(EPosition::kStatic);
 }
 
+static void AdjustStyleForMarker(ComputedStyle& style,
+                                 const ComputedStyle& parent_style,
+                                 Element* element) {
+  if (style.StyleType() != kPseudoIdMarker)
+    return;
+
+  bool is_inside =
+      parent_style.ListStylePosition() == EListStylePosition::kInside ||
+      (element && IsA<HTMLLIElement>(element->parentNode()) &&
+       !parent_style.IsInsideListElement());
+
+  // Outside list markers should generate a block container.
+  if (!is_inside) {
+    DCHECK_EQ(style.Display(), EDisplay::kInline);
+    style.SetDisplay(EDisplay::kInlineBlock);
+  }
+}
+
 static void AdjustStyleForHTMLElement(ComputedStyle& style,
                                       HTMLElement& element) {
   // <div> and <span> are the most common elements on the web, we skip all the
   // work for them.
-  if (IsHTMLDivElement(element) || IsA<HTMLSpanElement>(element))
+  if (IsA<HTMLDivElement>(element) || IsA<HTMLSpanElement>(element))
     return;
 
-  if (IsHTMLTableCellElement(element)) {
+  if (IsA<HTMLTableCellElement>(element)) {
     if (style.WhiteSpace() == EWhiteSpace::kWebkitNowrap) {
       // Figure out if we are really nowrapping or if we should just
       // use normal instead. If the width of the cell is fixed, then
@@ -214,7 +235,7 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
     return;
   }
 
-  if (auto* image = ToHTMLImageElementOrNull(element)) {
+  if (auto* image = DynamicTo<HTMLImageElement>(element)) {
     if (image->IsCollapsed() || style.Display() == EDisplay::kContents)
       style.SetDisplay(EDisplay::kNone);
     return;
@@ -240,7 +261,7 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
     return;
   }
 
-  if (IsHTMLFrameElementBase(element)) {
+  if (IsA<HTMLFrameElementBase>(element)) {
     if (style.Display() == EDisplay::kContents) {
       style.SetDisplay(EDisplay::kNone);
       return;
@@ -252,7 +273,7 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
     return;
   }
 
-  if (IsHTMLRTElement(element)) {
+  if (IsA<HTMLRTElement>(element)) {
     // Ruby text does not support float or position. This might change with
     // evolution of the specification.
     style.SetPosition(EPosition::kStatic);
@@ -280,7 +301,7 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
     return;
   }
 
-  if (IsHTMLTextAreaElement(element)) {
+  if (IsA<HTMLTextAreaElement>(element)) {
     // Textarea considers overflow visible as auto.
     style.SetOverflowX(style.OverflowX() == EOverflow::kVisible
                            ? EOverflow::kAuto
@@ -293,21 +314,26 @@ static void AdjustStyleForHTMLElement(ComputedStyle& style,
     return;
   }
 
-  if (IsHTMLPlugInElement(element)) {
+  if (auto* html_plugin_element = DynamicTo<HTMLPlugInElement>(element)) {
     style.SetRequiresAcceleratedCompositingForExternalReasons(
-        ToHTMLPlugInElement(element).ShouldAccelerate());
+        html_plugin_element->ShouldAccelerate());
     if (style.Display() == EDisplay::kContents)
       style.SetDisplay(EDisplay::kNone);
+    return;
+  }
+
+  if (IsA<HTMLUListElement>(element) || IsA<HTMLOListElement>(element)) {
+    style.SetIsInsideListElement();
     return;
   }
 
   if (style.Display() == EDisplay::kContents) {
     // See https://drafts.csswg.org/css-display/#unbox-html
     // Some of these elements are handled with other adjustments above.
-    if (IsA<HTMLBRElement>(element) || IsHTMLWBRElement(element) ||
+    if (IsA<HTMLBRElement>(element) || IsA<HTMLWBRElement>(element) ||
         IsA<HTMLMeterElement>(element) || IsA<HTMLProgressElement>(element) ||
-        IsA<HTMLCanvasElement>(element) || IsHTMLMediaElement(element) ||
-        IsHTMLInputElement(element) || IsHTMLTextAreaElement(element) ||
+        IsA<HTMLCanvasElement>(element) || IsA<HTMLMediaElement>(element) ||
+        IsA<HTMLInputElement>(element) || IsA<HTMLTextAreaElement>(element) ||
         IsA<HTMLSelectElement>(element)) {
       style.SetDisplay(EDisplay::kNone);
     }
@@ -459,12 +485,12 @@ static void AdjustEffectiveTouchAction(ComputedStyle& style,
   bool is_non_replaced_inline_elements =
       style.IsDisplayInlineType() &&
       !(style.IsDisplayReplacedType() || is_svg_root ||
-        IsHTMLImageElement(element) || is_replaced_canvas);
+        IsA<HTMLImageElement>(element) || is_replaced_canvas);
   bool is_table_row_or_column = style.IsDisplayTableRowOrColumnType();
   bool is_layout_object_needed =
       element && element->LayoutObjectIsNeeded(style);
 
-  TouchAction element_touch_action = TouchAction::kTouchActionAuto;
+  TouchAction element_touch_action = TouchAction::kAuto;
   // Touch actions are only supported by elements that support both the CSS
   // width and height properties.
   // See https://www.w3.org/TR/pointerevents/#the-touch-action-css-property.
@@ -483,7 +509,7 @@ static void AdjustEffectiveTouchAction(ComputedStyle& style,
   // Apply touch action inherited from parent frame.
   if (is_child_document && element->GetDocument().GetFrame()) {
     inherited_action &=
-        TouchAction::kTouchActionPan |
+        TouchAction::kPan |
         element->GetDocument().GetFrame()->InheritedEffectiveTouchAction();
   }
 
@@ -497,9 +523,9 @@ static void AdjustEffectiveTouchAction(ComputedStyle& style,
   inherited_action =
       AdjustTouchActionForElement(inherited_action, style, element);
 
-  TouchAction enforced_by_policy = TouchAction::kTouchActionNone;
+  TouchAction enforced_by_policy = TouchAction::kNone;
   if (element->GetDocument().IsVerticalScrollEnforced())
-    enforced_by_policy = TouchAction::kTouchActionPanY;
+    enforced_by_policy = TouchAction::kPanY;
 
   // Apply the adjusted parent effective touch actions.
   style.SetEffectiveTouchAction((element_touch_action & inherited_action) |
@@ -512,6 +538,59 @@ static void AdjustEffectiveTouchAction(ComputedStyle& style,
       content_frame->SetInheritedEffectiveTouchAction(
           style.GetEffectiveTouchAction());
     }
+  }
+}
+
+static void AdjustStateForRenderSubtree(ComputedStyle& style,
+                                        Element* element) {
+  if (!element)
+    return;
+
+  bool should_be_invisible = style.RenderSubtreeInvisible();
+  auto* context = element->GetDisplayLockContext();
+
+  // Return early if there's no context and no render-subtree invisible token.
+  if (!should_be_invisible && !context)
+    return;
+
+  // If we're using an attribute version of display locking, then also abort.
+  if (context && DisplayLockContext::IsAttributeVersion(context))
+    return;
+
+  // Create a context if we need to be invisible.
+  if (should_be_invisible && !context) {
+    context = &element->EnsureDisplayLockContext(
+        DisplayLockContextCreateMethod::kCSS);
+  }
+  DCHECK(context);
+
+  uint16_t activation_mask =
+      static_cast<uint16_t>(DisplayLockActivationReason::kAny);
+  if (style.RenderSubtreeSkipActivation()) {
+    activation_mask = 0;
+  } else if (style.RenderSubtreeSkipViewportActivation()) {
+    activation_mask &=
+        ~static_cast<uint16_t>(DisplayLockActivationReason::kViewport);
+  }
+
+  // Propagate activatable style to context.
+  context->SetActivatable(activation_mask);
+
+  if (should_be_invisible) {
+    // Add containment to style if we're invisible.
+    auto contain =
+        style.Contain() | kContainsStyle | kContainsLayout | kContainsSize;
+    style.SetContain(contain);
+
+    // If we're unlocked and unactivated, then we should lock the context. Note
+    // that we do this here, since locking the element means we can skip styling
+    // the subtree.
+    if (!context->IsLocked() && !context->IsActivated())
+      context->StartAcquire();
+  } else {
+    context->ClearActivated();
+    if (context->IsLocked())
+      context->StartCommit();
   }
 }
 
@@ -552,6 +631,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     // We don't adjust the first letter style earlier because we may change the
     // display setting in adjustStyeForTagName() above.
     AdjustStyleForFirstLetter(style);
+    AdjustStyleForMarker(style, parent_style, element);
 
     AdjustStyleForDisplay(style, layout_parent_style,
                           element ? &element->GetDocument() : nullptr);
@@ -584,9 +664,12 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     style.SetContain(contain);
   }
 
+  if (RuntimeEnabledFeatures::CSSRenderSubtreeEnabled())
+    AdjustStateForRenderSubtree(style, element);
+
   if (style.IsColorInternalText()) {
-    style.ResolveInternalTextColor(
-        LayoutTheme::GetTheme().RootElementColor(style.UsedColorScheme()));
+    style.ResolveInternalTextColor(LayoutTheme::GetTheme().RootElementColor(
+        style.UsedColorSchemeForInitialColors()));
   }
 
   // Make sure our z-index value is only applied if the object is positioned.
@@ -636,8 +719,8 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
 
     if (style.Display() == EDisplay::kContents &&
         (is_svg_root ||
-         (!IsSVGSVGElement(element) && !IsSVGGElement(element) &&
-          !IsSVGUseElement(element) && !IsSVGTSpanElement(element)))) {
+         (!IsA<SVGSVGElement>(element) && !IsA<SVGGElement>(element) &&
+          !IsA<SVGUseElement>(element) && !IsA<SVGTSpanElement>(element)))) {
       // According to the CSS Display spec[1], nested <svg> elements, <g>,
       // <use>, and <tspan> elements are not rendered and their children are
       // "hoisted". For other elements display:contents behaves as display:none.
@@ -647,12 +730,13 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     }
 
     // SVG text layout code expects us to be a block-level style element.
-    if ((IsSVGForeignObjectElement(*element) || IsSVGTextElement(*element)) &&
+    if ((IsA<SVGForeignObjectElement>(*element) ||
+         IsA<SVGTextElement>(*element)) &&
         style.IsDisplayInlineType())
       style.SetDisplay(EDisplay::kBlock);
 
     // Columns don't apply to svg text elements.
-    if (IsSVGTextElement(*element))
+    if (IsA<SVGTextElement>(*element))
       style.ClearMultiCol();
   } else if (element && element->IsMathMLElement()) {
     if (style.Display() == EDisplay::kContents) {

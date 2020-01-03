@@ -18,8 +18,6 @@ viz_component("service") {
     "display/bsp_tree.h",
     "display/bsp_walk_action.cc",
     "display/bsp_walk_action.h",
-    "display/color_lut_cache.cc",
-    "display/color_lut_cache.h",
     "display/damage_frame_annotator.cc",
     "display/damage_frame_annotator.h",
     "display/direct_renderer.cc",
@@ -27,10 +25,14 @@ viz_component("service") {
     "display/display.cc",
     "display/display.h",
     "display/display_client.h",
+    "display/display_damage_tracker.cc",
+    "display/display_damage_tracker.h",
     "display/display_resource_provider.cc",
     "display/display_resource_provider.h",
     "display/display_scheduler.cc",
     "display/display_scheduler.h",
+    "display/display_scheduler_base.cc",
+    "display/display_scheduler_base.h",
     "display/draw_polygon.cc",
     "display/draw_polygon.h",
     "display/dynamic_geometry_binding.cc",
@@ -56,20 +58,10 @@ viz_component("service") {
     "display/output_surface_frame.h",
     "display/overlay_candidate.cc",
     "display/overlay_candidate.h",
-    "display/overlay_candidate_list.cc",
-    "display/overlay_candidate_list.h",
-    "display/overlay_candidate_validator.cc",
-    "display/overlay_candidate_validator.h",
-    "display/overlay_processor.cc",
-    "display/overlay_processor.h",
-    "display/overlay_strategy_fullscreen.cc",
-    "display/overlay_strategy_fullscreen.h",
-    "display/overlay_strategy_single_on_top.cc",
-    "display/overlay_strategy_single_on_top.h",
-    "display/overlay_strategy_underlay.cc",
-    "display/overlay_strategy_underlay.h",
-    "display/overlay_strategy_underlay_cast.cc",
-    "display/overlay_strategy_underlay_cast.h",
+    "display/overlay_processor_interface.cc",
+    "display/overlay_processor_interface.h",
+    "display/overlay_processor_stub.cc",
+    "display/overlay_processor_stub.h",
     "display/program_binding.cc",
     "display/program_binding.h",
     "display/renderer_utils.cc",
@@ -125,13 +117,12 @@ viz_component("service") {
     "display_embedder/viz_process_context_provider.h",
     "display_embedder/vsync_parameter_listener.cc",
     "display_embedder/vsync_parameter_listener.h",
+    "frame_sinks/begin_frame_tracker.cc",
+    "frame_sinks/begin_frame_tracker.h",
     "frame_sinks/compositor_frame_sink_impl.cc",
     "frame_sinks/compositor_frame_sink_impl.h",
     "frame_sinks/compositor_frame_sink_support.cc",
     "frame_sinks/compositor_frame_sink_support.h",
-    "frame_sinks/compositor_frame_sink_support_manager.h",
-    "frame_sinks/direct_layer_tree_frame_sink.cc",
-    "frame_sinks/direct_layer_tree_frame_sink.h",
     "frame_sinks/external_begin_frame_source_mojo.cc",
     "frame_sinks/external_begin_frame_source_mojo.h",
     "frame_sinks/frame_sink_manager_impl.cc",
@@ -186,6 +177,7 @@ viz_component("service") {
   allow_circular_includes_from = [ ":gpu_service_dependencies" ]
 
   deps = [
+    "//build:chromecast_buildflags",
     "//cc/base",
     "//cc/paint",
     "//components/crash/core/common:crash_key",
@@ -237,7 +229,6 @@ viz_component("service") {
   }
 
   if (is_chromecast) {
-    defines += [ "IS_CHROMECAST" ]
     deps += [ "//chromecast/media/service/mojom" ]
   }
 
@@ -245,8 +236,8 @@ viz_component("service") {
     sources += [
       "display/ca_layer_overlay.cc",
       "display/ca_layer_overlay.h",
-      "display_embedder/overlay_candidate_validator_mac.cc",
-      "display_embedder/overlay_candidate_validator_mac.h",
+      "display/overlay_processor_mac.cc",
+      "display/overlay_processor_mac.h",
       "display_embedder/software_output_device_mac.cc",
       "display_embedder/software_output_device_mac.h",
     ]
@@ -255,14 +246,29 @@ viz_component("service") {
     libs = [ "IOSurface.framework" ]
   }
 
+  if (is_android || use_ozone) {
+    sources += [
+      "display/overlay_processor_using_strategy.cc",
+      "display/overlay_processor_using_strategy.h",
+      "display/overlay_strategy_fullscreen.cc",
+      "display/overlay_strategy_fullscreen.h",
+      "display/overlay_strategy_single_on_top.cc",
+      "display/overlay_strategy_single_on_top.h",
+      "display/overlay_strategy_underlay.cc",
+      "display/overlay_strategy_underlay.h",
+      "display/overlay_strategy_underlay_cast.cc",
+      "display/overlay_strategy_underlay_cast.h",
+    ]
+  }
+
   if (is_android) {
     sources += [
+      "display/overlay_processor_android.cc",
+      "display/overlay_processor_android.h",
+      "display/overlay_processor_surface_control.cc",
+      "display/overlay_processor_surface_control.h",
       "display_embedder/gl_output_surface_android.cc",
       "display_embedder/gl_output_surface_android.h",
-      "display_embedder/overlay_candidate_validator_android.cc",
-      "display_embedder/overlay_candidate_validator_android.h",
-      "display_embedder/overlay_candidate_validator_surface_control.cc",
-      "display_embedder/overlay_candidate_validator_surface_control.h",
       "frame_sinks/external_begin_frame_source_android.cc",
       "frame_sinks/external_begin_frame_source_android.h",
       "gl/throw_uncaught_exception.cc",
@@ -274,8 +280,8 @@ viz_component("service") {
 
   if (use_ozone) {
     sources += [
-      "display_embedder/overlay_candidate_validator_ozone.cc",
-      "display_embedder/overlay_candidate_validator_ozone.h",
+      "display/overlay_processor_ozone.cc",
+      "display/overlay_processor_ozone.h",
       "display_embedder/software_output_device_ozone.cc",
       "display_embedder/software_output_device_ozone.h",
     ]
@@ -291,10 +297,10 @@ viz_component("service") {
     sources += [
       "display/dc_layer_overlay.cc",
       "display/dc_layer_overlay.h",
+      "display/overlay_processor_win.cc",
+      "display/overlay_processor_win.h",
       "display_embedder/output_device_backing.cc",
       "display_embedder/output_device_backing.h",
-      "display_embedder/overlay_candidate_validator_win.cc",
-      "display_embedder/overlay_candidate_validator_win.h",
       "display_embedder/software_output_device_win.cc",
       "display_embedder/software_output_device_win.h",
     ]
@@ -405,7 +411,7 @@ viz_source_set("gpu_service_dependencies") {
     deps += [
       "//third_party/dawn:libdawn_native",
       "//third_party/dawn:libdawn_native_sources",
-      "//third_party/dawn/src/dawn:dawncpp",
+      "//third_party/dawn/src/dawn:libdawn",
     ]
   }
 }
@@ -417,6 +423,7 @@ viz_source_set("unit_tests") {
   sources = [
     "display/bsp_tree_unittest.cc",
     "display/copy_output_scaling_pixeltest.cc",
+    "display/display_damage_tracker_unittest.cc",
     "display/display_resource_provider_unittest.cc",
     "display/display_scheduler_unittest.cc",
     "display/display_unittest.cc",
@@ -438,8 +445,8 @@ viz_source_set("unit_tests") {
     "display_embedder/skia_output_surface_impl_unittest.cc",
     "display_embedder/software_output_surface_unittest.cc",
     "display_embedder/vsync_parameter_listener_unittest.cc",
+    "frame_sinks/begin_frame_tracker_unittest.cc",
     "frame_sinks/compositor_frame_sink_support_unittest.cc",
-    "frame_sinks/direct_layer_tree_frame_sink_unittest.cc",
     "frame_sinks/frame_sink_manager_unittest.cc",
     "frame_sinks/surface_references_unittest.cc",
     "frame_sinks/surface_synchronization_unittest.cc",
@@ -516,8 +523,8 @@ viz_source_set("unit_tests") {
 
   if (is_android) {
     sources += [
+      "display/overlay_processor_surface_control_unittest.cc",
       "display/overlay_unittest.cc",
-      "display_embedder/overlay_candidate_validator_surface_control_unittest.cc",
       "frame_sinks/external_begin_frame_source_android_unittest.cc",
     ]
   }
@@ -585,9 +592,9 @@ if (is_android) {
       "//ui/android:ui_full_java",
     ]
     annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
-    java_files = [
-      "java/src/org/chromium/components/viz/service/gl/ThrowUncaughtException.java",
+    sources = [
       "java/src/org/chromium/components/viz/service/frame_sinks/ExternalBeginFrameSourceAndroid.java",
+      "java/src/org/chromium/components/viz/service/gl/ThrowUncaughtException.java",
     ]
   }
 

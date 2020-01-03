@@ -69,7 +69,7 @@ ElementFragmentAnchor* ElementFragmentAnchor::TryCreate(const KURL& url,
   doc.SetCSSTarget(target);
 
   if (doc.IsSVGDocument()) {
-    if (SVGSVGElement* svg = ToSVGSVGElementOrNull(doc.documentElement()))
+    if (auto* svg = DynamicTo<SVGSVGElement>(doc.documentElement()))
       svg->SetupInitialView(fragment, target);
   }
 
@@ -166,16 +166,6 @@ void ElementFragmentAnchor::DidScroll(ScrollType type) {
   // calling Invoke() because of the ScrollIntoView but that's ok because
   // needs_invoke_ is recomputed at the end of that method.
   needs_invoke_ = false;
-}
-
-void ElementFragmentAnchor::DidCompleteLoad() {
-  DCHECK(frame_);
-  DCHECK(frame_->View());
-
-  // If there is a pending layout, the fragment anchor will be cleared when it
-  // finishes.
-  if (!frame_->View()->NeedsLayout())
-    needs_invoke_ = false;
 }
 
 void ElementFragmentAnchor::Trace(blink::Visitor* visitor) {

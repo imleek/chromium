@@ -10,13 +10,13 @@
 
 namespace content {
 
-void DownloadManagerDelegate::GetNextId(const DownloadIdCallback& callback) {
-  callback.Run(download::DownloadItem::kInvalidId);
+void DownloadManagerDelegate::GetNextId(DownloadIdCallback callback) {
+  std::move(callback).Run(download::DownloadItem::kInvalidId);
 }
 
 bool DownloadManagerDelegate::DetermineDownloadTarget(
     download::DownloadItem* item,
-    const DownloadTargetCallback& callback) {
+    DownloadTargetCallback* callback) {
   return false;
 }
 
@@ -33,7 +33,7 @@ bool DownloadManagerDelegate::ShouldCompleteDownload(
 
 bool DownloadManagerDelegate::ShouldOpenDownload(
     download::DownloadItem* item,
-    const DownloadOpenDelayedCallback& callback) {
+    DownloadOpenDelayedCallback callback) {
   return true;
 }
 
@@ -47,11 +47,6 @@ bool DownloadManagerDelegate::InterceptDownloadIfApplicable(
     bool is_transient,
     WebContents* web_contents) {
   return false;
-}
-
-bool DownloadManagerDelegate::IsMostRecentDownloadItemAtFilePath(
-    download::DownloadItem* download) {
-  return true;
 }
 
 std::string DownloadManagerDelegate::ApplicationClientIdForFileScanning() {

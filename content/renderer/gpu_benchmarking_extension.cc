@@ -19,6 +19,7 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "build/build_config.h"
 #include "cc/layers/layer.h"
 #include "cc/paint/skia_paint_canvas.h"
@@ -45,9 +46,9 @@
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/page/page_visibility_state.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_image_cache.h"
 #include "third_party/blink/public/web/web_local_frame.h"
@@ -546,7 +547,7 @@ GpuBenchmarking::~GpuBenchmarking() {}
 
 void GpuBenchmarking::EnsureRemoteInterface() {
   if (!input_injector_) {
-    render_frame_->GetRemoteInterfaces()->GetInterface(
+    render_frame_->GetBrowserInterfaceBroker()->GetInterface(
         input_injector_.BindNewPipeAndPassReceiver(
             render_frame_->GetTaskRunner(blink::TaskType::kInternalDefault)));
   }
@@ -930,7 +931,7 @@ void GpuBenchmarking::SetBrowserControlsShown(bool show) {
 
 float GpuBenchmarking::VisualViewportY() {
   GpuBenchmarkingContext context(render_frame_.get());
-  float y = context.web_view()->VisualViewportOffset().y;
+  float y = context.web_view()->VisualViewportOffset().y();
   blink::WebRect rect(0, y, 0, 0);
   context.render_widget()->ConvertViewportToWindow(&rect);
   return rect.y;
@@ -938,7 +939,7 @@ float GpuBenchmarking::VisualViewportY() {
 
 float GpuBenchmarking::VisualViewportX() {
   GpuBenchmarkingContext context(render_frame_.get());
-  float x = context.web_view()->VisualViewportOffset().x;
+  float x = context.web_view()->VisualViewportOffset().x();
   blink::WebRect rect(x, 0, 0, 0);
   context.render_widget()->ConvertViewportToWindow(&rect);
   return rect.x;
@@ -946,7 +947,7 @@ float GpuBenchmarking::VisualViewportX() {
 
 float GpuBenchmarking::VisualViewportHeight() {
   GpuBenchmarkingContext context(render_frame_.get());
-  float height = context.web_view()->VisualViewportSize().height;
+  float height = context.web_view()->VisualViewportSize().height();
   blink::WebRect rect(0, 0, 0, height);
   context.render_widget()->ConvertViewportToWindow(&rect);
   return rect.height;
@@ -954,7 +955,7 @@ float GpuBenchmarking::VisualViewportHeight() {
 
 float GpuBenchmarking::VisualViewportWidth() {
   GpuBenchmarkingContext context(render_frame_.get());
-  float width = context.web_view()->VisualViewportSize().width;
+  float width = context.web_view()->VisualViewportSize().width();
   blink::WebRect rect(0, 0, width, 0);
   context.render_widget()->ConvertViewportToWindow(&rect);
   return rect.width;

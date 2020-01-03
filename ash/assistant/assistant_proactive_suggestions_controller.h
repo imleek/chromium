@@ -14,6 +14,7 @@
 #include "ash/public/cpp/assistant/proactive_suggestions_client.h"
 #include "base/macros.h"
 #include "base/timer/timer.h"
+#include "ui/views/widget/widget_observer.h"
 
 namespace ash {
 
@@ -33,7 +34,8 @@ class AssistantProactiveSuggestionsController
     : public AssistantControllerObserver,
       public ProactiveSuggestionsClient::Delegate,
       public AssistantSuggestionsModelObserver,
-      public AssistantViewDelegateObserver {
+      public AssistantViewDelegateObserver,
+      public views::WidgetObserver {
  public:
   using ProactiveSuggestionsShowAttempt =
       assistant::metrics::ProactiveSuggestionsShowAttempt;
@@ -48,6 +50,9 @@ class AssistantProactiveSuggestionsController
   void OnAssistantControllerConstructed() override;
   void OnAssistantControllerDestroying() override;
   void OnAssistantReady() override;
+  void OnDeepLinkReceived(
+      assistant::util::DeepLinkType type,
+      const std::map<std::string, std::string>& params) override;
 
   // ProactiveSuggestionsClient::Delegate:
   void OnProactiveSuggestionsClientDestroying() override;
@@ -67,7 +72,18 @@ class AssistantProactiveSuggestionsController
   void OnProactiveSuggestionsViewHoverChanged(bool is_hovering) override;
   void OnProactiveSuggestionsViewPressed() override;
 
+  // views::WidgetObserver:
+  void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
+  void OnWidgetDestroying(views::Widget* widget) override;
+
  private:
+  void OnCardClickDeepLinkReceived(
+      const std::map<std::string, std::string>& params);
+  void OnEntryPointClickDeepLinkReceived(
+      const std::map<std::string, std::string>& params);
+  void OnViewImpressionDeepLinkReceived(
+      const std::map<std::string, std::string>& params);
+
   void MaybeShowUi();
   void CloseUi(ProactiveSuggestionsShowResult result);
   void HideUi();
@@ -85,6 +101,12 @@ class AssistantProactiveSuggestionsController
   // added to the blacklist as a result of duplicate suppression or as a result
   // of the user explicitly closing the proactive suggestions view.
   std::set<size_t> proactive_suggestions_blacklist_;
+
+  // We record different histograms the first time that a set of proactive
+  // suggestions are shown than we do on subsequent shows. This allows us to
+  // measure user engagement the first time the entry point is presented in
+  // comparison to follow up presentations of the same content.
+  std::set<size_t> proactive_suggestions_seen_by_user_;
 
   base::WeakPtrFactory<AssistantProactiveSuggestionsController> weak_factory_{
       this};

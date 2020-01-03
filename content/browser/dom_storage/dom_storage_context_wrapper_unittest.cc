@@ -13,7 +13,6 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "content/browser/dom_storage/local_storage_context_mojo.h"
 #include "content/browser/dom_storage/session_storage_context_mojo.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
@@ -39,8 +38,9 @@ class DOMStorageContextWrapperTest : public testing::Test {
         /*leveldb_name=*/"");
     session_storage_context->PretendToConnectForTesting();
     context_ = new DOMStorageContextWrapper(
-        fake_mojo_task_runner_, /*mojo_local_storage_context=*/nullptr,
-        session_storage_context);
+        fake_mojo_task_runner_, session_storage_context,
+        mojo::Remote<storage::mojom::LocalStorageControl>(),
+        /*special_storage_policy=*/nullptr);
   }
 
   void TearDown() override {

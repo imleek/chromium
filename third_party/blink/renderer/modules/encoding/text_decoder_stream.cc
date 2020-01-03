@@ -10,7 +10,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/array_buffer_or_array_buffer_view.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
-#include "third_party/blink/renderer/core/streams/transform_stream_default_controller_interface.h"
+#include "third_party/blink/renderer/core/streams/transform_stream_default_controller.h"
 #include "third_party/blink/renderer/core/streams/transform_stream_transformer.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
 #include "third_party/blink/renderer/modules/encoding/encoding.h"
@@ -40,7 +40,7 @@ class TextDecoderStream::Transformer final : public TransformStreamTransformer {
   // Implements the type conversion part of the "decode and enqueue a chunk"
   // algorithm.
   ScriptPromise Transform(v8::Local<v8::Value> chunk,
-                          TransformStreamDefaultControllerInterface* controller,
+                          TransformStreamDefaultController* controller,
                           ExceptionState& exception_state) override {
     ArrayBufferOrArrayBufferView bufferSource;
     V8ArrayBufferOrArrayBufferView::ToImpl(
@@ -54,7 +54,7 @@ class TextDecoderStream::Transformer final : public TransformStreamTransformer {
     if (bufferSource.IsArrayBufferView()) {
       const auto* view = bufferSource.GetAsArrayBufferView().View();
       const char* start = static_cast<const char*>(view->BaseAddress());
-      uint32_t length = view->byteLength();
+      uint32_t length = view->deprecatedByteLengthAsUnsigned();
       DecodeAndEnqueue(start, length, WTF::FlushBehavior::kDoNotFlush,
                        controller, exception_state);
       return ScriptPromise::CastUndefined(script_state_);
@@ -62,15 +62,21 @@ class TextDecoderStream::Transformer final : public TransformStreamTransformer {
     DCHECK(bufferSource.IsArrayBuffer());
     const auto* array_buffer = bufferSource.GetAsArrayBuffer();
     const char* start = static_cast<const char*>(array_buffer->Data());
-    uint32_t length = array_buffer->DeprecatedByteLengthAsUnsigned();
-    DecodeAndEnqueue(start, length, WTF::FlushBehavior::kDoNotFlush, controller,
+    size_t length = array_buffer->ByteLengthAsSizeT();
+    if (length > std::numeric_limits<uint32_t>::max()) {
+      exception_state.ThrowRangeError(
+          "Buffer size exceeds maximum heap object size.");
+      return ScriptPromise();
+    }
+    DecodeAndEnqueue(start, static_cast<uint32_t>(length),
+                     WTF::FlushBehavior::kDoNotFlush, controller,
                      exception_state);
 
     return ScriptPromise::CastUndefined(script_state_);
   }
 
   // Implements the "encode and flush" algorithm.
-  ScriptPromise Flush(TransformStreamDefaultControllerInterface* controller,
+  ScriptPromise Flush(TransformStreamDefaultController* controller,
                       ExceptionState& exception_state) override {
     DecodeAndEnqueue(nullptr, 0u, WTF::FlushBehavior::kDataEOF, controller,
                      exception_state);
@@ -91,7 +97,7 @@ class TextDecoderStream::Transformer final : public TransformStreamTransformer {
   void DecodeAndEnqueue(const char* start,
                         uint32_t length,
                         WTF::FlushBehavior flush,
-                        TransformStreamDefaultControllerInterface* controller,
+                        TransformStreamDefaultController* controller,
                         ExceptionState& exception_state) {
     const UChar kBOM = 0xFEFF;
 
@@ -116,7 +122,9 @@ class TextDecoderStream::Transformer final : public TransformStreamTransformer {
       }
     }
 
-    controller->Enqueue(ToV8(outputChunk, script_state_), exception_state);
+    controller->enqueue(script_state_,
+                        ScriptValue::From(script_state_, outputChunk),
+                        exception_state);
   }
 
   static bool EncodingHasBomRemoval(const WTF::TextEncoding& encoding) {
@@ -178,13 +186,15 @@ TextDecoderStream::TextDecoderStream(ScriptState* script_state,
                                      const WTF::TextEncoding& encoding,
                                      const TextDecoderOptions* options,
                                      ExceptionState& exception_state)
-    : transform_(MakeGarbageCollected<TransformStream>()),
+    : transform_(TransformStream::Create(
+          script_state,
+          MakeGarbageCollected<Transformer>(script_state,
+                                            encoding,
+                                            options->fatal(),
+                                            options->ignoreBOM()),
+          exception_state)),
       encoding_(encoding),
       fatal_(options->fatal()),
-      ignore_bom_(options->ignoreBOM()) {
-  transform_->Init(MakeGarbageCollected<Transformer>(script_state, encoding,
-                                                     fatal_, ignore_bom_),
-                   script_state, exception_state);
-}
+      ignore_bom_(options->ignoreBOM()) {}
 
 }  // namespace blink

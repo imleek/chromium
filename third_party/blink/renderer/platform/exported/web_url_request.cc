@@ -170,20 +170,6 @@ void WebURLRequest::SetHttpHeaderField(const WebString& name,
   resource_request_->SetHttpHeaderField(name, value);
 }
 
-void WebURLRequest::SetHttpReferrer(
-    const WebString& web_referrer,
-    network::mojom::ReferrerPolicy referrer_policy) {
-  // WebString doesn't have the distinction between empty and null. We use
-  // the null WTFString for referrer.
-  DCHECK_EQ(Referrer::NoReferrer(), String());
-  String referrer =
-      web_referrer.IsEmpty() ? Referrer::NoReferrer() : String(web_referrer);
-  // TODO(domfarolino): Stop storing ResourceRequest's generated referrer as a
-  // header and instead use a separate member. See https://crbug.com/850813.
-  resource_request_->SetHttpReferrer(Referrer(referrer, referrer_policy));
-  resource_request_->SetReferrerString(referrer);
-}
-
 void WebURLRequest::AddHttpHeaderField(const WebString& name,
                                        const WebString& value) {
   resource_request_->AddHttpHeaderField(name, value);
@@ -227,6 +213,24 @@ mojom::RequestContextType WebURLRequest::GetRequestContext() const {
   return resource_request_->GetRequestContext();
 }
 
+network::mojom::RequestDestination WebURLRequest::GetRequestDestination()
+    const {
+  return resource_request_->GetRequestDestination();
+}
+
+void WebURLRequest::SetReferrerString(const WebString& referrer) {
+  resource_request_->SetReferrerString(referrer);
+}
+
+void WebURLRequest::SetReferrerPolicy(
+    network::mojom::ReferrerPolicy referrer_policy) {
+  resource_request_->SetReferrerPolicy(referrer_policy);
+}
+
+WebString WebURLRequest::ReferrerString() const {
+  return resource_request_->ReferrerString();
+}
+
 network::mojom::ReferrerPolicy WebURLRequest::GetReferrerPolicy() const {
   return resource_request_->GetReferrerPolicy();
 }
@@ -246,6 +250,11 @@ void WebURLRequest::SetHasUserGesture(bool has_user_gesture) {
 void WebURLRequest::SetRequestContext(
     mojom::RequestContextType request_context) {
   resource_request_->SetRequestContext(request_context);
+}
+
+void WebURLRequest::SetRequestDestination(
+    network::mojom::RequestDestination destination) {
+  resource_request_->SetRequestDestination(destination);
 }
 
 int WebURLRequest::RequestorID() const {
@@ -473,7 +482,7 @@ int WebURLRequest::GetLoadFlagsForWebUrlRequest() const {
               blink::mojom::RequestContextType::PREFETCH);
     DCHECK(base::FeatureList::IsEnabled(
         network::features::kPrefetchMainResourceNetworkIsolationKey));
-    if (!resource_request_->RequestorOrigin()->IsSameSchemeHostPort(
+    if (!resource_request_->RequestorOrigin()->IsSameOriginWith(
             SecurityOrigin::Create(resource_request_->Url()).get())) {
       load_flags |= net::LOAD_RESTRICTED_PREFETCH;
     }

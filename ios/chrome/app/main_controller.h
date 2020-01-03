@@ -14,9 +14,11 @@
 #import "ios/chrome/app/application_delegate/tab_switching.h"
 #import "ios/chrome/app/main_controller_guts.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
 
 @class AppState;
 @class MetricsMediator;
+@protocol BrowsingDataCommands;
 
 // The main controller of the application, owned by the MainWindow nib. Also
 // serves as the delegate for the app. Owns all the various top-level
@@ -29,7 +31,8 @@
                                       MainControllerGuts,
                                       StartupInformation,
                                       TabOpening,
-                                      TabSwitching>
+                                      TabSwitching,
+                                      BrowsingDataCommands>
 
 // The application window.
 @property(nonatomic, strong) UIWindow* window;

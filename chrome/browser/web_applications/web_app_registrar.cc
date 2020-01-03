@@ -33,29 +33,16 @@ bool WebAppRegistrar::IsLocallyInstalled(const AppId& app_id) const {
   return web_app ? web_app->is_locally_installed() : false;
 }
 
-bool WebAppRegistrar::WasExternalAppUninstalledByUser(
-    const AppId& app_id) const {
-  NOTIMPLEMENTED();
-  return false;
-}
-
 bool WebAppRegistrar::WasInstalledByUser(const AppId& app_id) const {
-  // TODO(crbug.com/1012171): Implement.
-  NOTIMPLEMENTED();
-  return true;
+  const WebApp* web_app = GetAppById(app_id);
+  return web_app && web_app->WasInstalledByUser();
 }
 
 int WebAppRegistrar::CountUserInstalledApps() const {
-  NOTIMPLEMENTED();
-
   int num_user_installed = 0;
   for (const WebApp& app : AllApps()) {
-    if (!app.is_locally_installed())
-      continue;
-
-    // TODO(crbug.com/1012171): Exclude if not installed by user.
-
-    ++num_user_installed;
+    if (app.is_locally_installed() && app.WasInstalledByUser())
+      ++num_user_installed;
   }
   return num_user_installed;
 }
@@ -106,6 +93,13 @@ DisplayMode WebAppRegistrar::GetAppUserDisplayMode(const AppId& app_id) const {
   return web_app ? web_app->user_display_mode() : DisplayMode::kUndefined;
 }
 
+std::vector<WebApplicationIconInfo> WebAppRegistrar::GetAppIconInfos(
+    const AppId& app_id) const {
+  auto* web_app = GetAppById(app_id);
+  return web_app ? web_app->icon_infos()
+                 : std::vector<WebApplicationIconInfo>();
+}
+
 std::vector<AppId> WebAppRegistrar::GetAppIds() const {
   std::vector<AppId> app_ids;
   app_ids.reserve(registry_.size());
@@ -114,6 +108,10 @@ std::vector<AppId> WebAppRegistrar::GetAppIds() const {
     app_ids.push_back(app.app_id());
 
   return app_ids;
+}
+
+WebAppRegistrar* WebAppRegistrar::AsWebAppRegistrar() {
+  return this;
 }
 
 WebAppRegistrar::AppSet::AppSet(const WebAppRegistrar* registrar)

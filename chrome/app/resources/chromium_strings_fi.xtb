@@ -3,7 +3,6 @@
 <translationbundle lang="fi">
 <translation id="1065672644894730302">Asetuksiasi ei voi lukea. Kaikkia toimintoja ei voi välttämättä käyttää eikä asetuksiin tehtäviä muutoksia tallenneta.</translation>
 <translation id="1104942323762546749">Chromium yrittää viedä salasanojasi tiedostoon. Salli tämä kirjoittamalla Windows-salasanasi.</translation>
-<translation id="1115445892567829615">Chromium ei voinut synkronoida tietoja. Päivitä synkronoinnin tunnuslause.</translation>
 <translation id="113122355610423240">Chromium on oletusselaimesi.</translation>
 <translation id="1185134272377778587">Tietoja Chromiumista</translation>
 <translation id="1396446129537741364">Chromium yrittää näyttää salasanat.</translation>
@@ -20,7 +19,7 @@
 <translation id="1929939181775079593">Chromium ei vastaa. Käynnistetäänkö uudelleen?</translation>
 <translation id="1966382378801805537">Chromium ei voi tunnistaa tai asettaa oletusselainta.</translation>
 <translation id="2008474315282236005">Tämä poistaa yhden kohteen pysyvästi laitteelta. Jos haluat palauttaa tiedot myöhemmin, kirjaudu Chromiumiin käyttäjänä <ph name="USER_EMAIL" />.</translation>
-<translation id="2119636228670142020">Tietoja &amp;Chromium-käyttöjärjestelmästä</translation>
+<translation id="2147976119693222405">Chromium-käyttöjärjestelmä ei voinut synkronoida tietojasi. Korjaa nyt.</translation>
 <translation id="2241627712206172106">Jos käytät jaettua tietokonetta, kaverisi ja perheenjäsenesi voivat selata verkkoa omista profiileistaan käsin ja muokata Chromiumista juuri itselleen sopivan.</translation>
 <translation id="2347108572062610441">Tämä laajennus on vaihtanut Chromiumin aloitussivun.</translation>
 <translation id="2396765026452590966">Laajennus <ph name="EXTENSION_NAME" /> on vaihtanut Chromiumin aloitussivun.</translation>
@@ -36,6 +35,7 @@
 <translation id="2718390899429598676">Chromium lisää suojausta salaamalla tietosi.</translation>
 <translation id="2770231113462710648">Vaihda oletusselaimeksi:</translation>
 <translation id="2799223571221894425">Käynnistä uudelleen</translation>
+<translation id="2805036593126168338">Chromium-käyttöjärjestelmä ei voinut synkronoida salasanojasi. Korjaa nyt.</translation>
 <translation id="2838154144102149890">Päivittämistä varten Chromium on suljettava tällä tietokoneella. Tämän takia muut tietokoneelle kirjautuneet voivat menettää tallentamattomat muutokset.</translation>
 <translation id="2847479871509788944">Poista Chromiumista…</translation>
 <translation id="2886012850691518054">Valinnainen: Lähetä Googlelle automaattisesti käyttötilastoja ja virheraportteja Chromiumin kehittämiseksi.</translation>
@@ -107,7 +107,6 @@
 <translation id="5631814766731275228">Chromiumin nimi ja kuva</translation>
 <translation id="5634636535844844681">Chromium edellyttää Windows 7:ää tai uudempaa versiota.</translation>
 <translation id="5653831366781983928">Käynnistä Chromium uudelleen nyt</translation>
-<translation id="5680901439334282664">Kirjaudu sisään Chromiumiin</translation>
 <translation id="5698481217667032250">Näytä Chromium tällä kielellä</translation>
 <translation id="5820394555380036790">Chromium-käyttöjärjestelmä</translation>
 <translation id="5862307444128926510">Tervetuloa Chromiumiin</translation>

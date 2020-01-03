@@ -61,24 +61,22 @@ void WebKioskAppData::UpdateFromWebAppInfo(
   if (delegate_)
     delegate_->GetKioskAppIconCacheDir(&cache_dir);
 
-  for (const WebApplicationIconInfo& icon_info : app_info->icons) {
-    if (icon_info.width == kIconSize) {
-      icon_ = gfx::ImageSkia::CreateFrom1xBitmap(icon_info.data);
-      icon_.MakeThreadSafe();
-      SaveIcon(icon_info.data, cache_dir);
-      break;
-    }
+  auto it = app_info->icon_bitmaps.find(kIconSize);
+  if (it != app_info->icon_bitmaps.end()) {
+    const SkBitmap& bitmap = it->second;
+    icon_ = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
+    icon_.MakeThreadSafe();
+    SaveIcon(bitmap, cache_dir);
   }
 
   PrefService* local_state = g_browser_process->local_state();
   DictionaryPrefUpdate dict_update(local_state, dictionary_name());
+  SaveToDictionary(dict_update);
 
   launch_url_ = GURL(app_info->app_url);
-  const std::string app_key =
-      std::string(KioskAppDataBase::kKeyApps) + '.' + app_id();
-  const std::string launch_url_key = app_key + '.' + kKeyLaunchUrl;
-  dict_update->SetString(launch_url_key, launch_url_.spec());
-  SaveToDictionary(dict_update);
+  dict_update->FindDictKey(KioskAppDataBase::kKeyApps)
+      ->FindDictKey(app_id())
+      ->SetStringKey(kKeyLaunchUrl, launch_url_.spec());
 
   SetStatus(STATUS_INSTALLED);
 }
@@ -91,11 +89,13 @@ void WebKioskAppData::SetStatus(Status status) {
 }
 
 bool WebKioskAppData::LoadLaunchUrlFromDictionary(const base::Value& dict) {
-  const std::string app_key =
-      std::string(KioskAppDataBase::kKeyApps) + '.' + app_id();
-  const std::string launch_url_key = app_key + '.' + kKeyLaunchUrl;
+  // All the previous keys should be present since this function is executed
+  // after LoadFromDictionary().
+  const std::string* launch_url_string =
+      dict.FindDictKey(KioskAppDataBase::kKeyApps)
+          ->FindDictKey(app_id())
+          ->FindStringKey(kKeyLaunchUrl);
 
-  const std::string* launch_url_string = dict.FindStringKey(launch_url_key);
   if (!launch_url_string)
     return false;
 

@@ -41,9 +41,9 @@
 
 namespace blink {
 
-inline ProcessingInstruction::ProcessingInstruction(Document& document,
-                                                    const String& target,
-                                                    const String& data)
+ProcessingInstruction::ProcessingInstruction(Document& document,
+                                             const String& target,
+                                             const String& data)
     : CharacterData(document, data, kCreateOther),
       target_(target),
       loading_(false),
@@ -51,12 +51,6 @@ inline ProcessingInstruction::ProcessingInstruction(Document& document,
       is_css_(false),
       is_xsl_(false),
       listener_for_xslt_(nullptr) {}
-
-ProcessingInstruction* ProcessingInstruction::Create(Document& document,
-                                                     const String& target,
-                                                     const String& data) {
-  return MakeGarbageCollected<ProcessingInstruction>(document, target, data);
-}
 
 ProcessingInstruction::~ProcessingInstruction() = default;
 
@@ -85,7 +79,7 @@ Node::NodeType ProcessingInstruction::getNodeType() const {
 Node* ProcessingInstruction::Clone(Document& factory, CloneChildrenFlag) const {
   // FIXME: Is it a problem that this does not copy local_href_?
   // What about other data members?
-  return Create(factory, target_, data_);
+  return MakeGarbageCollected<ProcessingInstruction>(factory, target_, data_);
 }
 
 void ProcessingInstruction::DidAttributeChanged() {
@@ -144,7 +138,8 @@ void ProcessingInstruction::Process(const String& href, const String& charset) {
     // can hang off some parent sheet.
     if (is_xsl_ && RuntimeEnabledFeatures::XSLTEnabled()) {
       KURL final_url(local_href_);
-      sheet_ = XSLStyleSheet::CreateEmbedded(this, final_url);
+      sheet_ = MakeGarbageCollected<XSLStyleSheet>(this, final_url.GetString(),
+                                                   final_url, true);
       loading_ = false;
     }
     return;
@@ -201,8 +196,8 @@ void ProcessingInstruction::NotifyFinished(Resource* resource) {
       is_xsl_ ? std::make_unique<IncrementLoadEventDelayCount>(GetDocument())
               : nullptr;
   if (is_xsl_) {
-    sheet_ = XSLStyleSheet::Create(this, resource->Url(),
-                                   resource->GetResponse().ResponseUrl());
+    sheet_ = MakeGarbageCollected<XSLStyleSheet>(
+        this, resource->Url(), resource->GetResponse().ResponseUrl(), false);
     ToXSLStyleSheet(sheet_.Get())
         ->ParseString(ToXSLStyleSheetResource(resource)->Sheet());
   } else {
@@ -288,6 +283,8 @@ void ProcessingInstruction::ClearSheet() {
 }
 
 void ProcessingInstruction::RemovePendingSheet() {
+  if (is_xsl_)
+    return;
   GetDocument().GetStyleEngine().RemovePendingSheet(*this,
                                                     style_engine_context_);
 }

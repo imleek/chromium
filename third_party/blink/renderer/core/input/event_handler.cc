@@ -32,10 +32,10 @@
 #include <utility>
 
 #include "build/build_config.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
@@ -124,7 +124,7 @@ bool ShouldRefetchEventTarget(const MouseEventWithHitTestResults& mev) {
   if (!target_node || !target_node->parentNode())
     return true;
   if (auto* shadow_root = DynamicTo<ShadowRoot>(target_node))
-    return IsHTMLInputElement(shadow_root->host());
+    return IsA<HTMLInputElement>(shadow_root->host());
   return false;
 }
 
@@ -400,8 +400,9 @@ IntPoint EventHandler::DragDataTransferLocationForTesting() {
 }
 
 static bool IsSubmitImage(Node* node) {
-  return IsHTMLInputElement(node) &&
-         ToHTMLInputElement(node)->type() == input_type_names::kImage;
+  auto* html_input_element = DynamicTo<HTMLInputElement>(node);
+  return html_input_element &&
+         html_input_element->type() == input_type_names::kImage;
 }
 
 bool EventHandler::UseHandCursor(Node* node, bool is_over_link) {
@@ -509,8 +510,25 @@ EventHandler::OptionalCursor EventHandler::SelectCursor(
   if (!node)
     return SelectAutoCursor(result, node, IBeamCursor());
 
-  if (ShouldShowResizeForNode(node, location))
-    return PointerCursor();
+  if (ShouldShowResizeForNode(node, location)) {
+    const LayoutBox* box =
+        node->GetLayoutObject()->EnclosingLayer()->GetLayoutBox();
+    EResize resize = box->StyleRef().Resize(box->ContainingBlock()->StyleRef());
+    switch (resize) {
+      case EResize::kVertical:
+        return NorthSouthResizeCursor();
+      case EResize::kHorizontal:
+        return EastWestResizeCursor();
+      case EResize::kBoth:
+        if (box->ShouldPlaceBlockDirectionScrollbarOnLogicalLeft()) {
+          return SouthWestResizeCursor();
+        } else {
+          return SouthEastResizeCursor();
+        }
+      default:
+        return PointerCursor();
+    }
+  }
 
   LayoutObject* layout_object = node->GetLayoutObject();
   const ComputedStyle* style = layout_object ? layout_object->Style() : nullptr;
@@ -743,7 +761,9 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
     return WebInputEventResult::kHandledSuppressed;
   }
 
-  LocalFrame::NotifyUserActivation(frame_, true);
+  LocalFrame::NotifyUserActivation(
+      frame_,
+      RuntimeEnabledFeatures::BrowserVerifiedUserActivationMouseEnabled());
 
   if (RuntimeEnabledFeatures::MiddleClickAutoscrollEnabled()) {
     // We store whether middle click autoscroll is in progress before calling
@@ -1147,11 +1167,12 @@ WebInputEventResult EventHandler::HandleMouseReleaseEvent(
 }
 
 static LocalFrame* LocalFrameFromTargetNode(Node* target) {
-  if (!IsHTMLFrameElementBase(target))
+  auto* html_frame_base_element = DynamicTo<HTMLFrameElementBase>(target);
+  if (!html_frame_base_element)
     return nullptr;
 
   // Cross-process drag and drop is not yet supported.
-  return DynamicTo<LocalFrame>(ToHTMLFrameElementBase(target)->ContentFrame());
+  return DynamicTo<LocalFrame>(html_frame_base_element->ContentFrame());
 }
 
 WebInputEventResult EventHandler::UpdateDragAndDrop(
@@ -1175,8 +1196,8 @@ WebInputEventResult EventHandler::UpdateDragAndDrop(
 
   if (AutoscrollController* controller =
           scroll_manager_->GetAutoscrollController()) {
-    controller->UpdateDragAndDrop(new_target, event.PositionInRootFrame(),
-                                  event.TimeStamp());
+    controller->UpdateDragAndDrop(
+        new_target, FloatPoint(event.PositionInRootFrame()), event.TimeStamp());
   }
 
   if (drag_target_ != new_target) {
@@ -1888,12 +1909,13 @@ GestureEventWithHitTestResults EventHandler::HitTestResultForGestureEvent(
   LocalFrame& root_frame = frame_->LocalFrameRoot();
   HitTestResult hit_test_result;
   if (hit_rect_size.IsEmpty()) {
-    location = HitTestLocation(adjusted_event.PositionInRootFrame());
+    location =
+        HitTestLocation(FloatPoint(adjusted_event.PositionInRootFrame()));
     hit_test_result = root_frame.GetEventHandler().HitTestResultAtLocation(
         location, hit_type);
   } else {
     PhysicalOffset top_left = PhysicalOffset::FromFloatPointRound(
-        adjusted_event.PositionInRootFrame());
+        FloatPoint(adjusted_event.PositionInRootFrame()));
     top_left -= PhysicalOffset(hit_rect_size * 0.5f);
     location = HitTestLocation(PhysicalRect(top_left, hit_rect_size));
     hit_test_result = root_frame.GetEventHandler().HitTestResultAtLocation(
@@ -1913,7 +1935,8 @@ GestureEventWithHitTestResults EventHandler::HitTestResultForGestureEvent(
     LocalFrame* hit_frame = hit_test_result.InnerNodeFrame();
     if (!hit_frame)
       hit_frame = frame_;
-    location = HitTestLocation(adjusted_event.PositionInRootFrame());
+    location =
+        HitTestLocation(FloatPoint(adjusted_event.PositionInRootFrame()));
     hit_test_result = root_frame.GetEventHandler().HitTestResultAtLocation(
         location,
         (hit_type | HitTestRequest::kReadOnly) & ~HitTestRequest::kListBased);
@@ -1962,7 +1985,7 @@ void EventHandler::ApplyTouchAdjustment(WebGestureEvent* gesture_event,
     DCHECK(location.IsRectBasedTest());
     location = hit_test_result->ResolveRectBasedTest(adjusted_node, point);
     gesture_event->ApplyTouchAdjustment(
-        WebFloatPoint(adjusted_point.X(), adjusted_point.Y()));
+        gfx::PointF(adjusted_point.X(), adjusted_point.Y()));
   }
 }
 
@@ -2113,8 +2136,8 @@ WebInputEventResult EventHandler::ShowNonLocatedContextMenu(
 
   WebMouseEvent mouse_event(
       event_type,
-      WebFloatPoint(location_in_root_frame.X(), location_in_root_frame.Y()),
-      WebFloatPoint(global_position.X(), global_position.Y()),
+      gfx::PointF(location_in_root_frame.X(), location_in_root_frame.Y()),
+      gfx::PointF(global_position.X(), global_position.Y()),
       WebPointerProperties::Button::kNoButton, /* clickCount */ 0,
       WebInputEvent::kNoModifiers, base::TimeTicks::Now(), source_type);
 
@@ -2162,7 +2185,7 @@ void EventHandler::MayUpdateHoverWhenContentUnderMouseChanged(
 }
 
 void EventHandler::MayUpdateHoverAfterScroll(
-    const FloatQuad& scroller_rect_in_frame) {
+    const FloatRect& scroller_rect_in_frame) {
   mouse_event_manager_->MayUpdateHoverAfterScroll(scroller_rect_in_frame);
 }
 
@@ -2395,7 +2418,7 @@ MouseEventWithHitTestResults EventHandler::GetMouseEventTarget(
     const WebMouseEvent& event) {
   PhysicalOffset document_point =
       event_handling_util::ContentPointFromRootFrame(
-          frame_, event.PositionInRootFrame());
+          frame_, FloatPoint(event.PositionInRootFrame()));
 
   // TODO(eirage): This does not handle chorded buttons yet.
   if (RuntimeEnabledFeatures::UnifiedPointerCaptureInBlinkEnabled() &&

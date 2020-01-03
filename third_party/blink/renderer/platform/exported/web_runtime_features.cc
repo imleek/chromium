@@ -40,6 +40,16 @@ void WebRuntimeFeatures::EnableBlockingFocusWithoutUserActivation(bool enable) {
   RuntimeEnabledFeatures::SetBlockingFocusWithoutUserActivationEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableBrowserVerifiedUserActivationKeyboard(
+    bool enable) {
+  RuntimeEnabledFeatures::SetBrowserVerifiedUserActivationKeyboardEnabled(
+      enable);
+}
+
+void WebRuntimeFeatures::EnableBrowserVerifiedUserActivationMouse(bool enable) {
+  RuntimeEnabledFeatures::SetBrowserVerifiedUserActivationMouseEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableExperimentalFeatures(bool enable) {
   RuntimeEnabledFeatures::SetExperimentalFeaturesEnabled(enable);
 }
@@ -209,10 +219,6 @@ void WebRuntimeFeatures::EnableForceTallerSelectPopup(bool enable) {
   RuntimeEnabledFeatures::SetForceTallerSelectPopupEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableFormControlsRefresh(bool enable) {
-  RuntimeEnabledFeatures::SetFormControlsRefreshEnabled(enable);
-}
-
 void WebRuntimeFeatures::EnableGenericSensorExtraClasses(bool enable) {
   RuntimeEnabledFeatures::SetSensorExtraClassesEnabled(enable);
 }
@@ -267,10 +273,6 @@ void WebRuntimeFeatures::EnableMediaCapture(bool enable) {
 
 void WebRuntimeFeatures::EnableMediaSession(bool enable) {
   RuntimeEnabledFeatures::SetMediaSessionEnabled(enable);
-}
-
-void WebRuntimeFeatures::EnableMimeHandlerViewInCrossProcessFrame(bool enable) {
-  RuntimeEnabledFeatures::SetMimeHandlerViewInCrossProcessFrameEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableNotificationConstructor(bool enable) {
@@ -470,24 +472,12 @@ void WebRuntimeFeatures::EnableWebXRARModule(bool enable) {
   RuntimeEnabledFeatures::SetWebXRARModuleEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableWebXRARDOMOverlay(bool enable) {
-  RuntimeEnabledFeatures::SetWebXRARDOMOverlayEnabled(enable);
-}
-
-void WebRuntimeFeatures::EnableWebXRAnchors(bool enable) {
-  RuntimeEnabledFeatures::SetWebXRAnchorsEnabled(enable);
-}
-
-void WebRuntimeFeatures::EnableWebXrGamepadModule(bool enable) {
-  RuntimeEnabledFeatures::SetWebXrGamepadModuleEnabled(enable);
-}
-
 void WebRuntimeFeatures::EnableWebXRHitTest(bool enable) {
   RuntimeEnabledFeatures::SetWebXRHitTestEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableWebXRPlaneDetection(bool enable) {
-  RuntimeEnabledFeatures::SetWebXRPlaneDetectionEnabled(enable);
+void WebRuntimeFeatures::EnableWebXRIncubations(bool enable) {
+  RuntimeEnabledFeatures::SetWebXRIncubationsEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnablePresentationAPI(bool enable) {
@@ -560,6 +550,10 @@ void WebRuntimeFeatures::EnableVideoFullscreenDetection(bool enable) {
   RuntimeEnabledFeatures::SetVideoFullscreenDetectionEnabled(enable);
 }
 
+void WebRuntimeFeatures::EnableVideoPlaybackQuality(bool enable) {
+  RuntimeEnabledFeatures::SetVideoPlaybackQualityEnabled(enable);
+}
+
 void WebRuntimeFeatures::EnableMediaControlsOverlayPlayButton(bool enable) {
   RuntimeEnabledFeatures::SetMediaControlsOverlayPlayButtonEnabled(enable);
 }
@@ -574,6 +568,10 @@ void WebRuntimeFeatures::EnableMediaCastOverlayButton(bool enable) {
 
 void WebRuntimeFeatures::EnableWebAuth(bool enable) {
   RuntimeEnabledFeatures::SetWebAuthEnabled(enable);
+}
+
+void WebRuntimeFeatures::EnableWebAuthenticationFeaturePolicy(bool enable) {
+  RuntimeEnabledFeatures::SetWebAuthenticationFeaturePolicyEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableLazyInitializeMediaControls(bool enable) {
@@ -620,10 +618,6 @@ void WebRuntimeFeatures::EnableTranslateService(bool enable) {
 
 void WebRuntimeFeatures::EnableBackgroundFetch(bool enable) {
   RuntimeEnabledFeatures::SetBackgroundFetchEnabled(enable);
-}
-
-void WebRuntimeFeatures::EnableMergeBlockingNonBlockingPools(bool enable) {
-  RuntimeEnabledFeatures::SetMergeBlockingNonBlockingPoolsEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableGetDisplayMedia(bool enable) {

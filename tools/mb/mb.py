@@ -13,6 +13,7 @@ from __future__ import print_function
 
 import argparse
 import ast
+import collections
 import errno
 import json
 import os
@@ -169,8 +170,10 @@ class MetaBuildWrapper(object):
                             description='Generate a new set of build files.')
     AddCommonOptions(subp)
     subp.add_argument('--swarming-targets-file',
-                      help='save runtime dependencies for targets listed '
-                           'in file.')
+                      help='generates runtime dependencies for targets listed '
+                           'in file as .isolate and .isolated.gen.json files. '
+                           'Targets should be listed by name, separated by '
+                           'newline.')
     subp.add_argument('--json-output',
                       help='Write errors to json.output')
     subp.add_argument('path',
@@ -218,6 +221,10 @@ class MetaBuildWrapper(object):
     AddCommonOptions(subp)
     subp.add_argument('target',
                       help='ninja target to build and run')
+    subp.add_argument('--force', default=False, action='store_true',
+                      help='Force the job to run. Ignores local checkout state;'
+                      ' by default, the tool doesn\'t trigger jobs if there are'
+                      ' local changes which are not present on Gerrit.')
     subp.set_defaults(func=self.CmdTry)
 
     subp = subps.add_parser(
@@ -386,8 +393,17 @@ class MetaBuildWrapper(object):
   def CmdTry(self):
     ninja_target = self.args.target
     if ninja_target.startswith('//'):
-      self.Print("Expected a nijna target like base_unittests, got %s" % target)
+      self.Print("Expected a ninja target like base_unittests, got %s" % (
+        ninja_target))
       return 1
+
+    _, out, _ = self.Run(['git', 'cl', 'diff', '--stat'], force_verbose=False)
+    if out:
+      self.Print("Your checkout appears to local changes which are not uploaded"
+                 " to Gerrit. Changes must be committed and uploaded to Gerrit"
+                 " to be tested using this tool.")
+      if not self.args.force:
+        return 1
 
     json_path = self.PathJoin(self.chromium_src_dir, 'out.json')
     try:
@@ -409,22 +425,33 @@ class MetaBuildWrapper(object):
       self.Print("Missing issue data. Upload your CL to Gerrit and try again.")
       return 1
 
+    class LedException(Exception):
+      pass
+
     def run_cmd(previous_res, cmd):
-      res, out, err = self.Run(cmd, force_verbose=False, stdin=previous_res)
+      if self.args.verbose:
+        self.Print(('| ' if previous_res else '') + ' '.join(cmd))
+
+      res, out, err = self.Call(cmd, stdin=previous_res)
       if res != 0:
-        self.Print("Err while running", cmd)
-        self.Print("Output", out)
-        raise Exception(err)
+        self.Print("Err while running '%s'. Output:\n%s\nstderr:\n%s" % (
+          ' '.join(cmd), out, err))
+        raise LedException()
       return out
 
-    result = LedResult(None, run_cmd).then(
-      # TODO(martiniss): maybe don't always assume the bucket?
-      'led', 'get-builder', 'luci.chromium.try:%s' % self.args.builder).then(
-      'led', 'edit', '-r', 'chromium_trybot_experimental',
-        '-p', 'tests=["%s"]' % ninja_target).then(
-      'led', 'edit-system', '--tag=purpose:user-debug-mb-try').then(
-      'led', 'edit-cr-cl', issue_data['issue_url']).then(
-      'led', 'launch').result
+    try:
+      result = LedResult(None, run_cmd).then(
+        # TODO(martiniss): maybe don't always assume the bucket?
+        'led', 'get-builder', 'luci.chromium.try:%s' % self.args.builder).then(
+        'led', 'edit', '-r', 'chromium_trybot_experimental',
+          '-p', 'tests=["%s"]' % ninja_target).then(
+        'led', 'edit-system', '--tag=purpose:user-debug-mb-try').then(
+        'led', 'edit-cr-cl', issue_data['issue_url']).then(
+        'led', 'launch').result
+    except LedException:
+      self.Print("If this is an unexpected error message, please file a bug"
+                 " with https://goto.google.com/mb-try-bug")
+      raise
 
     swarming_data = json.loads(result)['swarming']
     self.Print("Launched task at https://%s/task?id=%s" % (
@@ -664,7 +691,7 @@ class MetaBuildWrapper(object):
       if 'chromium' in self.masters:
         for builder in self.masters['chromium']:
           config = self.masters['chromium'][builder]
-          def RecurseMixins(current_mixin):
+          def RecurseMixins(builder, current_mixin):
             if current_mixin == 'chrome_with_codecs':
               errs.append('Public artifact builder "%s" can not contain the '
                           '"chrome_with_codecs" mixin.' % builder)
@@ -672,15 +699,43 @@ class MetaBuildWrapper(object):
             if not 'mixins' in self.mixins[current_mixin]:
               return
             for mixin in self.mixins[current_mixin]['mixins']:
-              RecurseMixins(mixin)
+              RecurseMixins(builder, mixin)
 
           for mixin in self.configs[config]:
-            RecurseMixins(mixin)
+            RecurseMixins(builder, mixin)
       else:
         errs.append('Missing "chromium" master. Please update this '
                     'proprietary codecs check with the name of the master '
                     'responsible for public build artifacts.')
 
+    # Check for duplicate configs. Evaluate all configs, and see if, when
+    # evaluated, differently named configs are the same.
+    evaled_to_source = collections.defaultdict(set)
+    for master, builders in self.masters.items():
+      for builder in builders:
+        config = self.masters[master][builder]
+        if not config:
+          continue
+
+        if isinstance(config, dict):
+          # Ignore for now
+          continue
+        elif config.startswith('//'):
+          args = config
+        else:
+          args = self.FlattenConfig(config)['gn_args']
+          if 'error' in args:
+            continue
+
+        evaled_to_source[args].add(config)
+
+    for v in evaled_to_source.values():
+      if len(v) != 1:
+        errs.append('Duplicate configs detected. When evaluated fully, the '
+                    'following configs are all equivalent: %s. Please '
+                    'consolidate these configs into only one unique name per '
+                    'configuration value.' % (
+                      ', '.join(sorted('%r' % val for val in v))))
     if errs:
       raise MBErr(('mb config file %s has problems:' % self.args.config_file) +
                     '\n  ' + '\n  '.join(errs))
@@ -858,7 +913,7 @@ class MetaBuildWrapper(object):
       if 'args_file' in mixin_vals:
         if vals['args_file']:
           raise MBErr('args_file specified multiple times in mixins '
-                      'for %s on %s' % (self.args.builder, self.args.master))
+                      'for mixin %s' % m)
         vals['args_file'] = mixin_vals['args_file']
       if 'gn_args' in mixin_vals:
         if vals['gn_args']:
@@ -1089,7 +1144,6 @@ class MetaBuildWrapper(object):
             target + '.runtime_deps',
             stamp_runtime_deps]
       elif (target_type == 'script' or
-            target_type == 'fuzzer' or
             isolate_map[target].get('label_type') == 'group'):
         # For script targets, the build target is usually a group,
         # for which gn generates the runtime_deps next to the stamp file
@@ -1183,12 +1237,15 @@ class MetaBuildWrapper(object):
               'chromevox_test_data/',
               'gen/ui/file_manager/file_manager/',
               'resources/chromeos/',
-              'resources/chromeos/autoclick/',
-              'resources/chromeos/chromevox/',
-              'resources/chromeos/select_to_speak/',
-              'test_data/chrome/browser/resources/chromeos/autoclick/',
-              'test_data/chrome/browser/resources/chromeos/chromevox/',
-              'test_data/chrome/browser/resources/chromeos/select_to_speak/',
+              'resources/chromeos/accessibility/autoclick/',
+              'resources/chromeos/accessibility/chromevox/',
+              'resources/chromeos/accessibility/select_to_speak/',
+              'test_data/chrome/browser/resources/chromeos/accessibility/'
+                  'autoclick/',
+              'test_data/chrome/browser/resources/chromeos/accessibility/'
+                  'chromevox/',
+              'test_data/chrome/browser/resources/chromeos/accessibility/'
+                  'select_to_speak/',
           )) or
           (is_mac and f in (  # https://crbug.com/1000667
               'AlertNotificationService.xpc/',
@@ -1202,6 +1259,7 @@ class MetaBuildWrapper(object):
               'Google Chrome Helper (Renderer).app/',
               'Google Chrome Helper.app/',
               'Google Chrome.app/',
+              'GoogleUpdate.app/',
               'blink_deprecated_test_plugin.plugin/',
               'blink_test_plugin.plugin/',
               'corb_test_plugin.plugin/',
@@ -1390,13 +1448,6 @@ class MetaBuildWrapper(object):
           '../../testing/test_env.py',
           script,
       ]
-    elif test_type == 'fuzzer':
-      cmdline += [
-        '../../testing/test_env.py',
-        '../../tools/code_coverage/run_fuzz_target.py',
-        '--fuzzer', './' + target,
-        '--output-dir', '${ISOLATED_OUTDIR}',
-        '--timeout', '3600']
     elif is_android and test_type != "script":
       if asan:
         cmdline += [os.path.join('bin', 'run_with_asan'), '--']
@@ -1712,16 +1763,14 @@ class MetaBuildWrapper(object):
     ret, _, _ = self.Run(ninja_cmd, buffer_output=False)
     return ret
 
-  def Run(self, cmd, env=None, force_verbose=True, buffer_output=True,
-          stdin=None):
+  def Run(self, cmd, env=None, force_verbose=True, buffer_output=True):
     # This function largely exists so it can be overridden for testing.
     if self.args.dryrun or self.args.verbose or force_verbose:
       self.PrintCmd(cmd, env)
     if self.args.dryrun:
       return 0, '', ''
 
-    ret, out, err = self.Call(cmd, env=env, buffer_output=buffer_output,
-                              stdin=stdin)
+    ret, out, err = self.Call(cmd, env=env, buffer_output=buffer_output)
     if self.args.verbose or force_verbose:
       if ret:
         self.Print('  -> returned %d' % ret)

@@ -163,7 +163,7 @@ void Blob::PopulateBlobData(
       DOMArrayBufferView* array_buffer_view =
           item.GetAsArrayBufferView().View();
       blob_data->AppendBytes(array_buffer_view->BaseAddress(),
-                             array_buffer_view->byteLength());
+                             array_buffer_view->byteLengthAsSizeT());
     } else if (item.IsBlob()) {
       item.GetAsBlob()->AppendTo(*blob_data);
     } else if (item.IsUSVString()) {
@@ -211,11 +211,12 @@ Blob* Blob::slice(int64_t start,
   auto blob_data = std::make_unique<BlobData>();
   blob_data->SetContentType(NormalizeType(content_type));
   blob_data->AppendBlob(blob_data_handle_, start, length);
-  return Blob::Create(BlobDataHandle::Create(std::move(blob_data), length));
+  return MakeGarbageCollected<Blob>(
+      BlobDataHandle::Create(std::move(blob_data), length));
 }
 
 ReadableStream* Blob::stream(ScriptState* script_state) const {
-  BodyStreamBuffer* body_buffer = MakeGarbageCollected<BodyStreamBuffer>(
+  BodyStreamBuffer* body_buffer = BodyStreamBuffer::Create(
       script_state,
       MakeGarbageCollected<BlobBytesConsumer>(
           ExecutionContext::From(script_state), blob_data_handle_),

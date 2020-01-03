@@ -8,6 +8,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ObservableSupplier;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.AppHooks;
@@ -27,7 +28,6 @@ import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.signin.SigninPromoUtil;
 import org.chromium.chrome.browser.status_indicator.StatusIndicatorCoordinator;
 import org.chromium.chrome.browser.toolbar.ToolbarButtonInProductHelpController;
-import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.ui.ImmersiveModeManager;
 import org.chromium.chrome.browser.ui.RootUiCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
@@ -53,18 +53,15 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator implements Native
     /**
      * Construct a new TabbedRootUiCoordinator.
      * @param activity The activity whose UI the coordinator is responsible for.
-     * @param toolbarManagerCallback callback to invoke when the
-     *         ToolbarManager is created.
      * @param onOmniboxFocusChangedListener callback to invoke when Omnibox focus
      *         changes.
      * @param intentWithEffect Whether or not {@code activity} was launched with an
      *         intent to open a single tab.
      */
     public TabbedRootUiCoordinator(ChromeActivity activity,
-            Callback<ToolbarManager> toolbarManagerCallback,
             Callback<Boolean> onOmniboxFocusChangedListener, boolean intentWithEffect,
-            ShareDelegate shareDelegate) {
-        super(activity, toolbarManagerCallback, onOmniboxFocusChangedListener, shareDelegate);
+            ObservableSupplier<ShareDelegate> shareDelegateSupplier) {
+        super(activity, onOmniboxFocusChangedListener, shareDelegateSupplier);
         mIntentWithEffect = intentWithEffect;
     }
 
@@ -168,7 +165,10 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator implements Native
             final int resourceId = mActivity.getControlContainerHeightResource();
             final int topControlsNewHeight =
                     mActivity.getResources().getDimensionPixelSize(resourceId) + indicatorHeight;
-            mActivity.getFullscreenManager().setTopControlsHeight(topControlsNewHeight);
+            mActivity.getFullscreenManager().setAnimateBrowserControlsHeightChanges(true);
+            mActivity.getFullscreenManager().setTopControlsHeight(
+                    topControlsNewHeight, indicatorHeight);
+            mActivity.getFullscreenManager().setAnimateBrowserControlsHeightChanges(false);
         });
         mStatusIndicatorCoordinator.addObserver(mStatusIndicatorObserver);
     }

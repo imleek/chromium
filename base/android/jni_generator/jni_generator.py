@@ -835,8 +835,9 @@ class JNIFromJavaP(object):
   @staticmethod
   def CreateFromClass(class_file, options):
     class_name = os.path.splitext(os.path.basename(class_file))[0]
+    javap_path = os.path.abspath(options.javap)
     p = subprocess.Popen(
-        args=[options.javap, '-c', '-verbose', '-s', class_name],
+        args=[javap_path, '-c', '-verbose', '-s', class_name],
         cwd=os.path.dirname(class_file),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -1503,13 +1504,22 @@ def GetScriptName():
   return os.sep.join(script_components[base_index:])
 
 
+def _RemoveExistingHeaders(path):
+  if os.path.exists(path) and os.path.isdir(path):
+    for root, _, files in os.walk(path):
+      for f in files:
+        file_path = os.path.join(root, f)
+        if os.path.isfile(file_path) and os.path.splitext(file_path)[1] == '.h':
+          os.remove(file_path)
+
+
 def main():
-  usage = """usage: %prog [OPTIONS]
+  description = """
 This script will parse the given java source code extracting the native
 declarations and print the header file to stdout (or a file).
 See SampleForTests.java for more details.
   """
-  parser = argparse.ArgumentParser(usage=usage)
+  parser = argparse.ArgumentParser(description=description)
 
   parser.add_argument(
       '-j',
@@ -1556,7 +1566,9 @@ See SampleForTests.java for more details.
       'for 64-bit, use long.')
   parser.add_argument('--cpp', default='cpp', help='The path to cpp command.')
   parser.add_argument(
-      '--javap', default='javap', help='The path to javap command.')
+      '--javap',
+      default=build_utils.JAVAP_PATH,
+      help='The path to javap command.')
   parser.add_argument(
       '--enable_profiling',
       action='store_true',
@@ -1576,9 +1588,19 @@ See SampleForTests.java for more details.
   args = parser.parse_args()
   input_files = args.input_files
   output_files = args.output_files
-  if not output_files:
+  if output_files:
+    output_dirs = set(os.path.dirname(f) for f in output_files)
+    if len(output_dirs) != 1:
+      parser.error(
+          'jni_generator only supports a single output directory per target '
+          '(got {})'.format(output_dirs))
+    output_dir = output_dirs.pop()
+    # Remove existing headers so that moving .java source files but not updating
+    # the corresponding C++ include will be a compile failure (otherwise
+    # incremental builds will usually not catch this).
+    _RemoveExistingHeaders(output_dir)
+  else:
     output_files = [None] * len(input_files)
-
   temp_dir = tempfile.mkdtemp()
   try:
     if args.jar_file:

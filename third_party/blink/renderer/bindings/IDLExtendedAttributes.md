@@ -178,9 +178,9 @@ Calling the non-`[Clamp]` version of `setColor()` uses **ToUint8()** to coerce t
 
 Calling the `[Clamp]` version of `setColor()` uses **clampTo()** to coerce the Numbers to octets. Hence calling `context.setColor(-1, 255, 257)` is equivalent to calling `setColorClamped(0, 255, 255)`.
 
-### [Constructor] _(i)_
+### [Constructor] _(i)_ _deprecated_
 
-Standard: [Constructor](https://heycam.github.io/webidl/#Constructor)
+`[Constructor]` is deprecated. Use [constructor operations](https://heycam.github.io/webidl/#idl-constructors) instead.
 
 Summary: `[Constructor]` indicates that the interface should have a constructor, i.e. "new XXX()".
 
@@ -927,7 +927,7 @@ Usage: `[CustomElementCallbacks]` takes no arguments.
 Summary: Denotes an API that exposes data that folks on the internet find useful for fingerprinting.
 
 Attributes and methods marked as `[HighEntropy]` are known to be practically useful for [identifying particular clients](https://dev.chromium.org/Home/chromium-security/client-identification-mechanisms) on the web today.
-Both methods and attribute/constant getters annotated with this attribute are wired up to [`Dactyloscoper::Record`](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/blink/renderer/core/frame/use_counter.cc&q=Dactyloscoper::Record) for additional processing.
+Both methods and attribute/constant getters annotated with this attribute are wired up to [`Dactyloscoper::Record`](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/blink/renderer/core/frame/dactyloscoper.cc&q=Dactyloscoper::Record) for additional processing.
 
 This attribute must be accompanied by either `[Measure]` or `[MeasureAs]`.
 
@@ -1370,7 +1370,9 @@ reads would leak cross-origin information.
 With both `Getter` and `Setter`, allows both cross-origin reads and cross-origin
 writes. This is used for the `Window.location` attribute.
 
-### [CustomConstructor] _(i)_
+### [CustomConstructor] _(i)_ _deprecated_
+
+`[CustomConstructor]` is deprecated. Use [constructor operations](https://heycam.github.io/webidl/#idl-constructors) with `[Custom]`.
 
 Summary: They allow you to write custom bindings for constructors.
 

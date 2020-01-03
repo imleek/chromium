@@ -49,16 +49,25 @@ class WebGPUDecoderTest : public ::testing::Test {
 
     gl_context_->MakeCurrent(gl_surface_.get());
 
+    decoder_client_.reset(new FakeDecoderClient());
     command_buffer_service_.reset(new FakeCommandBufferServiceBase());
-    decoder_.reset(WebGPUDecoder::Create(nullptr, command_buffer_service_.get(),
-                                         &shared_image_manager_, nullptr,
-                                         &outputter_));
+    decoder_.reset(WebGPUDecoder::Create(
+        decoder_client_.get(), command_buffer_service_.get(),
+        &shared_image_manager_, nullptr, &outputter_));
     ASSERT_EQ(decoder_->Initialize(), ContextResult::kSuccess);
 
+    constexpr uint32_t kAdapterClientID = 0;
     cmds::RequestAdapter requestAdapterCmd;
     requestAdapterCmd.Init(
+        kAdapterClientID,
         static_cast<uint32_t>(webgpu::PowerPreference::kHighPerformance));
     ASSERT_EQ(error::kNoError, ExecuteCmd(requestAdapterCmd));
+
+    constexpr uint32_t kAdapterServiceID = 0;
+    constexpr uint32_t kRequestDeviceSerial = 0;
+    cmds::RequestDevice requestDeviceCmd;
+    requestDeviceCmd.Init(kRequestDeviceSerial, kAdapterServiceID, 0, 0, 0);
+    ASSERT_EQ(error::kNoError, ExecuteCmd(requestDeviceCmd));
 
     factory_ = std::make_unique<SharedImageFactory>(
         GpuPreferences(), GpuDriverBugWorkarounds(), GpuFeatureInfo(),
@@ -108,6 +117,7 @@ class WebGPUDecoderTest : public ::testing::Test {
  protected:
   std::unique_ptr<FakeCommandBufferServiceBase> command_buffer_service_;
   std::unique_ptr<WebGPUDecoder> decoder_;
+  std::unique_ptr<FakeDecoderClient> decoder_client_;
   gles2::TraceOutputter outputter_;
   SharedImageManager shared_image_manager_;
   std::unique_ptr<SharedImageFactory> factory_;

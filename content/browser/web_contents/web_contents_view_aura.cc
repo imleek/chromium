@@ -36,7 +36,6 @@
 #include "content/browser/web_contents/aura/gesture_nav_simple.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/guest_mode.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -54,7 +53,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "net/base/filename_util.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/drag_drop_delegate.h"
@@ -962,7 +961,7 @@ void WebContentsViewAura::CreateView(gfx::NativeView context) {
 }
 
 RenderWidgetHostViewBase* WebContentsViewAura::CreateViewForWidget(
-    RenderWidgetHost* render_widget_host, bool is_guest_view_hack) {
+    RenderWidgetHost* render_widget_host) {
   if (render_widget_host->GetView()) {
     // During testing, the view will already be set up in most cases to the
     // test view, so we don't want to clobber it with a real one. To verify that
@@ -976,10 +975,8 @@ RenderWidgetHostViewBase* WebContentsViewAura::CreateViewForWidget(
 
   RenderWidgetHostViewAura* view =
       g_create_render_widget_host_view
-          ? g_create_render_widget_host_view(render_widget_host,
-                                             is_guest_view_hack)
-          : new RenderWidgetHostViewAura(render_widget_host,
-                                         is_guest_view_hack);
+          ? g_create_render_widget_host_view(render_widget_host)
+          : new RenderWidgetHostViewAura(render_widget_host);
   view->InitAsChild(GetRenderWidgetHostViewParent());
 
   RenderWidgetHostImpl* host_impl =
@@ -1002,7 +999,7 @@ RenderWidgetHostViewBase* WebContentsViewAura::CreateViewForWidget(
 
 RenderWidgetHostViewBase* WebContentsViewAura::CreateViewForChildWidget(
     RenderWidgetHost* render_widget_host) {
-  return new RenderWidgetHostViewAura(render_widget_host, false);
+  return new RenderWidgetHostViewAura(render_widget_host);
 }
 
 void WebContentsViewAura::SetPageTitle(const base::string16& title) {

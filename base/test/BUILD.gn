@@ -51,9 +51,8 @@ static_library("test_support") {
     "bind_test_util.h",
     "copy_only_int.cc",
     "copy_only_int.h",
-    "do_nothing_promise.cc",
-    "do_nothing_promise.h",
     "gmock_callback_support.h",
+    "gmock_move_support.h",
     "gtest_util.cc",
     "gtest_util.h",
     "gtest_xml_unittest_result_printer.cc",
@@ -184,6 +183,8 @@ static_library("test_support") {
 
   if (is_ios) {
     sources += [
+      "../ios/weak_nsobject.h",
+      "../ios/weak_nsobject.mm",
       "ios/wait_util.h",
       "ios/wait_util.mm",
       "launcher/unit_test_launcher_ios.cc",
@@ -508,7 +509,7 @@ if (is_android) {
       "//third_party/jsr-305:jsr_305_javalib",
     ]
     srcjar_deps = [ ":test_support_java_aidl" ]
-    java_files = [
+    sources = [
       "android/java/src/org/chromium/base/GarbageCollectionTestUtils.java",
       "android/java/src/org/chromium/base/MainReturnCodeResult.java",
       "android/java/src/org/chromium/base/MultiprocessTestClientLauncher.java",

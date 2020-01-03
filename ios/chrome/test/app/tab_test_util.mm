@@ -59,14 +59,21 @@ void OpenNewTab() {
       return;
     }
       // The TabGrid is currently presented.
-    TabModel* tabModel =
-        GetMainController().interfaceProvider.mainInterface.tabModel;
+    Browser* browser =
+        GetMainController().interfaceProvider.mainInterface.browser;
     UrlLoadParams params = UrlLoadParams::InNewTab(GURL(kChromeUINewTabURL));
     [GetMainController().tabSwitcher
-        dismissWithNewTabAnimationToModel:tabModel
-                        withUrlLoadParams:params
-                                  atIndex:NSNotFound];
+        dismissWithNewTabAnimationToBrowser:browser
+                          withUrlLoadParams:params
+                                    atIndex:INT_MAX];
   }
+}
+
+void SimulateExternalAppURLOpening() {
+  NSURL* url = [NSURL URLWithString:@"http://www.example.com"];
+  UIApplication* application = UIApplication.sharedApplication;
+  id<UIApplicationDelegate> applicationDelegate = application.delegate;
+  [applicationDelegate application:application openURL:url options:@{}];
 }
 
 void OpenNewIncognitoTab() {
@@ -79,13 +86,13 @@ void OpenNewIncognitoTab() {
       return;
     }
       // The TabGrid is currently presented.
-    TabModel* tabModel =
-        GetMainController().interfaceProvider.incognitoInterface.tabModel;
+    Browser* browser =
+        GetMainController().interfaceProvider.incognitoInterface.browser;
     UrlLoadParams params = UrlLoadParams::InNewTab(GURL(kChromeUINewTabURL));
     [GetMainController().tabSwitcher
-        dismissWithNewTabAnimationToModel:tabModel
-                        withUrlLoadParams:params
-                                  atIndex:NSNotFound];
+        dismissWithNewTabAnimationToBrowser:browser
+                          withUrlLoadParams:params
+                                    atIndex:INT_MAX];
   }
 }
 
@@ -132,6 +139,12 @@ void CloseTabAtIndex(NSUInteger index) {
   @autoreleasepool {  // Make sure that all internals are deallocated.
     [GetCurrentTabModel() closeTabAtIndex:index];
   }
+}
+
+NSUInteger GetIndexOfActiveNormalTab() {
+  TabModel* model = chrome_test_util::GetMainController()
+                        .interfaceProvider.mainInterface.tabModel;
+  return model.webStateList->active_index();
 }
 
 void CloseAllTabsInCurrentMode() {

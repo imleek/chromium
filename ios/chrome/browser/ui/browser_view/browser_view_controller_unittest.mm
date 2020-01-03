@@ -12,6 +12,8 @@
 
 #include "components/search_engines/template_url_service.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#include "ios/chrome/browser/favicon/favicon_service_factory.h"
+#include "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #import "ios/chrome/browser/main/test_browser.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
@@ -73,7 +75,15 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     test_cbs_builder.AddTestingFactory(
         IOSChromeLargeIconServiceFactory::GetInstance(),
         IOSChromeLargeIconServiceFactory::GetDefaultFactory());
+    test_cbs_builder.AddTestingFactory(
+        IOSChromeFaviconLoaderFactory::GetInstance(),
+        IOSChromeFaviconLoaderFactory::GetDefaultFactory());
+    test_cbs_builder.AddTestingFactory(
+        ios::FaviconServiceFactory::GetInstance(),
+        ios::FaviconServiceFactory::GetDefaultFactory());
+
     chrome_browser_state_ = test_cbs_builder.Build();
+    ASSERT_TRUE(chrome_browser_state_->CreateHistoryService(true));
 
     // Set up mock TabModel.
     id tabModel = [OCMockObject niceMockForClass:[TabModel class]];
@@ -138,6 +148,7 @@ class BrowserViewControllerTest : public BlockCleanupTest {
                        initWithBrowser:browser_.get()
                      dependencyFactory:factory
             applicationCommandEndpoint:mockApplicationCommandHandler
+           browsingDataCommandEndpoint:nil
                      commandDispatcher:command_dispatcher_
         browserContainerViewController:[[BrowserContainerViewController alloc]
                                            init]];
@@ -247,6 +258,27 @@ TEST_F(BrowserViewControllerTest, TestFocusNextPrevious) {
   EXPECT_EQ(web_state_list->active_index(), 1);
   [keyHandler focusPreviousTab];
   EXPECT_EQ(web_state_list->active_index(), 0);
+}
+
+// Tests that WebState::WasShown() and WebState::WasHidden() is properly called
+// for WebState activations in the BrowserViewController's WebStateList.
+TEST_F(BrowserViewControllerTest, UpdateWebStateVisibility) {
+  WebStateList* web_state_list = tabModel_.webStateList;
+  ASSERT_EQ(3, web_state_list->count());
+
+  // Activate each WebState in the list and check the visibility.
+  web_state_list->ActivateWebStateAt(0);
+  EXPECT_EQ(web_state_list->GetWebStateAt(0)->IsVisible(), true);
+  EXPECT_EQ(web_state_list->GetWebStateAt(1)->IsVisible(), false);
+  EXPECT_EQ(web_state_list->GetWebStateAt(2)->IsVisible(), false);
+  web_state_list->ActivateWebStateAt(1);
+  EXPECT_EQ(web_state_list->GetWebStateAt(0)->IsVisible(), false);
+  EXPECT_EQ(web_state_list->GetWebStateAt(1)->IsVisible(), true);
+  EXPECT_EQ(web_state_list->GetWebStateAt(2)->IsVisible(), false);
+  web_state_list->ActivateWebStateAt(2);
+  EXPECT_EQ(web_state_list->GetWebStateAt(0)->IsVisible(), false);
+  EXPECT_EQ(web_state_list->GetWebStateAt(1)->IsVisible(), false);
+  EXPECT_EQ(web_state_list->GetWebStateAt(2)->IsVisible(), true);
 }
 
 }  // namespace

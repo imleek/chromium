@@ -50,6 +50,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_flags.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
@@ -233,7 +234,8 @@ std::unique_ptr<Shape> Shape::CreateEmptyRasterShape(WritingMode writing_mode,
 
 static bool ExtractImageData(Image* image,
                              const IntSize& image_size,
-                             ArrayBufferContents& contents) {
+                             ArrayBufferContents& contents,
+                             RespectImageOrientationEnum respect_orientation) {
   if (!image)
     return false;
 
@@ -259,13 +261,15 @@ static bool ExtractImageData(Image* image,
   canvas.clear(SK_ColorTRANSPARENT);
 
   image->Draw(&canvas, flags, FloatRect(image_dest_rect), image_source_rect,
-              kDoNotRespectImageOrientation,
-              Image::kDoNotClampImageToSourceRect, Image::kSyncDecode);
+              respect_orientation, Image::kDoNotClampImageToSourceRect,
+              Image::kSyncDecode);
 
-  size_t size_in_bytes =
-      StaticBitmapImage::GetSizeInBytes(image_dest_rect, color_params);
-  if (size_in_bytes > v8::TypedArray::kMaxLength)
+  size_t size_in_bytes;
+  if (!StaticBitmapImage::GetSizeInBytes(image_dest_rect, color_params)
+           .AssignIfValid(&size_in_bytes) ||
+      size_in_bytes > v8::TypedArray::kMaxLength) {
     return false;
+  }
   ArrayBufferContents result(size_in_bytes, 1, ArrayBufferContents::kNotShared,
                              ArrayBufferContents::kZeroInitialize);
   if (result.DataLength() != size_in_bytes)
@@ -273,7 +277,7 @@ static bool ExtractImageData(Image* image,
   result.Transfer(contents);
 
   return StaticBitmapImage::CopyToByteArray(
-      StaticBitmapImage::Create(surface->makeImageSnapshot()),
+      UnacceleratedStaticBitmapImage::Create(surface->makeImageSnapshot()),
       base::span<uint8_t>(reinterpret_cast<uint8_t*>(contents.Data()),
                           contents.DataLength()),
       image_dest_rect, color_params);
@@ -286,12 +290,12 @@ static std::unique_ptr<RasterShapeIntervals> ExtractIntervalsFromImageData(
     const IntRect& margin_rect) {
   DOMArrayBuffer* array_buffer = DOMArrayBuffer::Create(contents);
   DOMUint8ClampedArray* pixel_array = DOMUint8ClampedArray::Create(
-      array_buffer, 0, array_buffer->DeprecatedByteLengthAsUnsigned());
+      array_buffer, 0, array_buffer->ByteLengthAsSizeT());
 
   unsigned pixel_array_offset = 3;  // Each pixel is four bytes: RGBA.
   uint8_t alpha_pixel_threshold = threshold * 255;
 
-  DCHECK_EQ(image_rect.Size().Area() * 4, pixel_array->length());
+  DCHECK_EQ(image_rect.Size().Area() * 4, pixel_array->lengthAsSizeT());
 
   int min_buffer_y = std::max(0, margin_rect.Y() - image_rect.Y());
   int max_buffer_y =
@@ -329,12 +333,14 @@ static bool IsValidRasterShapeSize(const IntSize& size) {
   return size.Area() * 4 < max_image_size_bytes;
 }
 
-std::unique_ptr<Shape> Shape::CreateRasterShape(Image* image,
-                                                float threshold,
-                                                const LayoutRect& image_r,
-                                                const LayoutRect& margin_r,
-                                                WritingMode writing_mode,
-                                                float margin) {
+std::unique_ptr<Shape> Shape::CreateRasterShape(
+    Image* image,
+    float threshold,
+    const LayoutRect& image_r,
+    const LayoutRect& margin_r,
+    WritingMode writing_mode,
+    float margin,
+    RespectImageOrientationEnum respect_orientation) {
   IntRect image_rect = PixelSnappedIntRect(image_r);
   IntRect margin_rect = PixelSnappedIntRect(margin_r);
 
@@ -344,8 +350,10 @@ std::unique_ptr<Shape> Shape::CreateRasterShape(Image* image,
   }
 
   ArrayBufferContents contents;
-  if (!ExtractImageData(image, image_rect.Size(), contents))
+  if (!ExtractImageData(image, image_rect.Size(), contents,
+                        respect_orientation)) {
     return CreateEmptyRasterShape(writing_mode, margin);
+  }
 
   std::unique_ptr<RasterShapeIntervals> intervals =
       ExtractIntervalsFromImageData(contents, threshold, image_rect,

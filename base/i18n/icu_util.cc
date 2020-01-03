@@ -18,6 +18,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromecast_buildflags.h"
 #include "third_party/icu/source/common/unicode/putil.h"
 #include "third_party/icu/source/common/unicode/udata.h"
 
@@ -34,7 +35,16 @@
 #include "base/mac/foundation_util.h"
 #endif
 
-#if defined(OS_ANDROID) || (defined(OS_LINUX) && !defined(IS_CHROMECAST))
+#if defined(OS_FUCHSIA)
+#include "base/fuchsia/intl_profile_watcher.h"
+#endif
+
+#if defined(OS_ANDROID) || defined(OS_FUCHSIA)
+#include "third_party/icu/source/common/unicode/unistr.h"
+#endif
+
+#if defined(OS_ANDROID) || defined(OS_FUCHSIA) || \
+    (defined(OS_LINUX) && !BUILDFLAG(IS_CHROMECAST))
 #include "third_party/icu/source/i18n/unicode/timezone.h"
 #endif
 
@@ -108,7 +118,7 @@ std::unique_ptr<PfRegion> OpenIcuDataFile(const std::string& filename) {
 #if defined(OS_WIN)
   // TODO(brucedawson): http://crbug.com/445616
   wchar_t tmp_buffer[_MAX_PATH] = {0};
-  wcscpy_s(tmp_buffer, as_wcstr(data_path.value()));
+  wcscpy_s(tmp_buffer, data_path.value().c_str());
   debug::Alias(tmp_buffer);
 #endif
   data_path = data_path.AppendASCII(filename);
@@ -116,7 +126,7 @@ std::unique_ptr<PfRegion> OpenIcuDataFile(const std::string& filename) {
 #if defined(OS_WIN)
   // TODO(brucedawson): http://crbug.com/445616
   wchar_t tmp_buffer2[_MAX_PATH] = {0};
-  wcscpy_s(tmp_buffer2, as_wcstr(data_path.value()));
+  wcscpy_s(tmp_buffer2, data_path.value().c_str());
   debug::Alias(tmp_buffer2);
 #endif
 
@@ -152,7 +162,7 @@ std::unique_ptr<PfRegion> OpenIcuDataFile(const std::string& filename) {
     // TODO(brucedawson): http://crbug.com/445616.
     g_debug_icu_pf_last_error = ::GetLastError();
     g_debug_icu_pf_error_details = file.error_details();
-    wcscpy_s(g_debug_icu_pf_filename, as_wcstr(data_path.value()));
+    wcscpy_s(g_debug_icu_pf_filename, data_path.value().c_str());
   }
 #endif  // OS_WIN
 
@@ -266,7 +276,20 @@ void InitializeIcuTimeZone() {
   string16 zone_id = android::GetDefaultTimeZoneId();
   icu::TimeZone::adoptDefault(icu::TimeZone::createTimeZone(
       icu::UnicodeString(FALSE, zone_id.data(), zone_id.length())));
-#elif defined(OS_LINUX) && !defined(IS_CHROMECAST)
+#elif defined(OS_FUCHSIA)
+  // The platform-specific mechanisms used by ICU's detectHostTimeZone() to
+  // determine the default timezone will not work on Fuchsia. Therefore,
+  // proactively set the default system.
+  // This is also required by TimeZoneMonitorFuchsia::ProfileMayHaveChanged(),
+  // which uses the current default to detect whether the time zone changed in
+  // the new profile.
+  // If the system time zone cannot be obtained or is not understood by ICU,
+  // the "unknown" time zone will be returned by createTimeZone() and used.
+  std::string zone_id =
+      fuchsia::IntlProfileWatcher::GetPrimaryTimeZoneIdForIcuInitialization();
+  icu::TimeZone::adoptDefault(
+      icu::TimeZone::createTimeZone(icu::UnicodeString::fromUTF8(zone_id)));
+#elif defined(OS_LINUX) && !BUILDFLAG(IS_CHROMECAST)
   // To respond to the timezone change properly, the default timezone
   // cache in ICU has to be populated on starting up.
   // See TimeZoneMonitorLinux::NotifyClientsFromImpl().

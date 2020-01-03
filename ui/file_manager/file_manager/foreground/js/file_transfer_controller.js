@@ -546,7 +546,16 @@ class FileTransferController {
                     this.volumeManager_.getLocationInfo(destinationEntry);
                 const destinationName = util.getEntryLabel(
                     destinationLocationInfo, destinationEntry);
-                item.destinationMessage = destinationName;
+                // Root of removable volumes can result in an empty string,
+                // so use the filesystem name in that case.
+                if (destinationName === '') {
+                  if (destinationLocationInfo) {
+                    item.destinationMessage =
+                        util.getRootTypeLabel(destinationLocationInfo);
+                  }
+                } else {
+                  item.destinationMessage = destinationName;
+                }
                 this.progressCenter_.updateItem(item);
 
                 // Start the pasting operation.
@@ -740,7 +749,13 @@ class FileTransferController {
     }
 
     const dragThumbnail = this.renderThumbnail_();
-    dt.setDragImage(dragThumbnail, 0, 0);
+    let yOffset = 0;
+    // Position the drag image above the start point for touch intiated drag.
+    if (this.touching_) {
+      const thumbNailExtent = dragThumbnail.getBoundingClientRect();
+      yOffset = thumbNailExtent.height;
+    }
+    dt.setDragImage(dragThumbnail, 0, yOffset);
 
     window[DRAG_AND_DROP_GLOBAL_DATA] = {
       sourceRootURL: dt.getData('fs/sourceRootURL'),
@@ -1059,7 +1074,7 @@ class FileTransferController {
     const missingFileContents =
         volumeInfo.volumeType === VolumeManagerCommon.VolumeType.DRIVE &&
         this.volumeManager_.getDriveConnectionState().type ===
-            VolumeManagerCommon.DriveConnectionType.OFFLINE;
+            chrome.fileManagerPrivate.DriveConnectionStateType.OFFLINE;
 
     this.appendCutOrCopyInfo_(
         clipboardData, effectAllowed, volumeInfo, [entry], missingFileContents);
@@ -1235,8 +1250,15 @@ class FileTransferController {
     }
 
     // If the destination is sub-tree of any of the sources paste isn't allowed.
-    const destinationUrl = destinationEntry.toURL();
-    if (sourceUrls.some(source => destinationUrl.startsWith(source))) {
+    const addTrailingSlash = s => {
+      if (!s.endsWith('/')) {
+        s += '/';
+      }
+      return s;
+    };
+    const destinationUrl = addTrailingSlash(destinationEntry.toURL());
+    if (sourceUrls.some(
+            source => destinationUrl.startsWith(addTrailingSlash(source)))) {
       return false;
     }
 

@@ -13,7 +13,7 @@
 #include "chrome/browser/ui/webui/snippets_internals/snippets_internals.mojom.h"
 #include "chrome/browser/ui/webui/snippets_internals/snippets_internals_page_handler.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/browser_resources.h"
+#include "chrome/grit/dev_ui_browser_resources.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 
@@ -38,14 +38,13 @@ SnippetsInternalsUI::SnippetsInternalsUI(content::WebUI* web_ui)
       ContentSuggestionsServiceFactory::GetInstance()->GetForProfile(profile);
   pref_service_ = profile->GetPrefs();
   content::WebUIDataSource::Add(profile, source);
-  AddHandlerToRegistry(base::BindRepeating(
-      &SnippetsInternalsUI::BindSnippetsInternalsPageHandlerFactory,
-      base::Unretained(this)));
 }
+
+WEB_UI_CONTROLLER_TYPE_IMPL(SnippetsInternalsUI)
 
 SnippetsInternalsUI::~SnippetsInternalsUI() {}
 
-void SnippetsInternalsUI::BindSnippetsInternalsPageHandlerFactory(
+void SnippetsInternalsUI::BindInterface(
     mojo::PendingReceiver<snippets_internals::mojom::PageHandlerFactory>
         receiver) {
   receiver_.reset();

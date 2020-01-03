@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/value_conversions.h"
@@ -70,7 +71,7 @@ PrefServiceSyncable::PrefServiceSyncable(
 #endif
 
   // Let PrefModelAssociators know about changes to preference values.
-  pref_value_store_->set_callback(base::Bind(
+  pref_value_store_->set_callback(base::BindRepeating(
       &PrefServiceSyncable::ProcessPrefChange, base::Unretained(this)));
 
   // Add already-registered syncable preferences to PrefModelAssociator.
@@ -89,15 +90,13 @@ PrefServiceSyncable::PrefServiceSyncable(
 
 PrefServiceSyncable::~PrefServiceSyncable() {
   // Remove our callback from the registry, since it may outlive us.
-  pref_registry_->SetSyncableRegistrationCallback(
-      user_prefs::PrefRegistrySyncable::SyncableRegistrationCallback());
+  pref_registry_->SetSyncableRegistrationCallback(base::NullCallback());
 }
 
 std::unique_ptr<PrefServiceSyncable>
 PrefServiceSyncable::CreateIncognitoPrefService(
     PrefStore* incognito_extension_pref_store,
-    const std::vector<const char*>& persistent_pref_names,
-    std::unique_ptr<PrefValueStore::Delegate> delegate) {
+    const std::vector<const char*>& persistent_pref_names) {
   pref_service_forked_ = true;
   auto pref_notifier = std::make_unique<PrefNotifierImpl>();
 
@@ -105,11 +104,6 @@ PrefServiceSyncable::CreateIncognitoPrefService(
       pref_registry_->ForkForIncognito();
 
   auto overlay = base::MakeRefCounted<InMemoryPrefStore>();
-  if (delegate) {
-    delegate->InitIncognitoUserPrefs(overlay, user_pref_store_,
-                                     persistent_pref_names);
-    delegate->InitPrefRegistry(forked_registry.get());
-  }
   auto incognito_pref_store = base::MakeRefCounted<OverlayUserPrefStore>(
       overlay.get(), user_pref_store_.get());
 
@@ -124,7 +118,7 @@ PrefServiceSyncable::CreateIncognitoPrefService(
       incognito_pref_store.get(),
       nullptr,  // recommended
       forked_registry->defaults().get(), pref_notifier.get(),
-      std::move(delegate));
+      /*delegate=*/nullptr);
   return std::make_unique<PrefServiceSyncable>(
       std::move(pref_notifier), std::move(pref_value_store),
       std::move(incognito_pref_store), std::move(forked_registry),

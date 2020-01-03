@@ -13,8 +13,6 @@
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/geometry/size_f.h"
-#include "ui/gfx/transform.h"
 
 namespace display {
 
@@ -162,10 +160,10 @@ class DISPLAY_EXPORT Display final {
   int RotationAsDegree() const;
   void SetRotationAsDegree(int rotation);
 
-  // Returns an exact matrix representation of the transform that corrects for
-  // the display's rotation.
-  static gfx::Transform GetRotationTransform(Rotation rotation,
-                                             const gfx::SizeF& size);
+  // Panel's native rotation. This is same as |rotation()| in normal case.
+  Rotation panel_rotation() const { return panel_rotation_; }
+  void set_panel_rotation(Rotation rotation) { panel_rotation_ = rotation; }
+  int PanelRotationAsDegree() const;
 
   TouchSupport touch_support() const { return touch_support_; }
   void set_touch_support(TouchSupport support) { touch_support_ = support; }
@@ -264,8 +262,8 @@ class DISPLAY_EXPORT Display final {
     depth_per_component_ = depth_per_component;
   }
 
-  // True if this is a monochrome display (e.g, for accessiblity). Used by media
-  // query APIs.
+  // True if this is a monochrome display (e.g, for accessibility). Used by
+  // media query APIs.
   bool is_monochrome() const { return is_monochrome_; }
   void set_is_monochrome(bool is_monochrome) { is_monochrome_ = is_monochrome; }
 
@@ -292,6 +290,7 @@ class DISPLAY_EXPORT Display final {
   gfx::Rect work_area_;
   float device_scale_factor_;
   Rotation rotation_ = ROTATE_0;
+  Rotation panel_rotation_ = ROTATE_0;
   TouchSupport touch_support_ = TouchSupport::UNKNOWN;
   AccelerometerSupport accelerometer_support_ = AccelerometerSupport::UNKNOWN;
   gfx::Size maximum_cursor_size_;

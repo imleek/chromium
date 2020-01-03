@@ -14,7 +14,6 @@
 #include "chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
-#include "chrome/browser/signin/scoped_account_consistency.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
@@ -130,6 +129,7 @@ class TestSafeBrowsingBlockingPage : public SafeBrowsingBlockingPage {
                                  main_frame_url,
                                  unsafe_resources,
                                  display_options,
+                                 true,
                                  url_loader_for_testing) {
     // Don't delay details at all for the unittest.
     SetThreatDetailsProceedDelayForTesting(0);
@@ -156,8 +156,8 @@ class TestSafeBrowsingBlockingPageFactory
       BaseUIManager* manager,
       WebContents* web_contents,
       const GURL& main_frame_url,
-      const SafeBrowsingBlockingPage::UnsafeResourceList& unsafe_resources)
-      override {
+      const SafeBrowsingBlockingPage::UnsafeResourceList& unsafe_resources,
+      bool should_trigger_reporting) override {
     PrefService* prefs =
         Profile::FromBrowserContext(web_contents->GetBrowserContext())
             ->GetPrefs();
@@ -197,7 +197,8 @@ class TestSafeBrowsingBlockingPageQuiet : public SafeBrowsingBlockingPage {
                                  web_contents,
                                  main_frame_url,
                                  unsafe_resources,
-                                 display_options),
+                                 display_options,
+                                 true),
         sb_error_ui_(unsafe_resources[0].url,
                      main_frame_url,
                      GetInterstitialReason(unsafe_resources),
@@ -236,8 +237,8 @@ class TestSafeBrowsingBlockingQuietPageFactory
       BaseUIManager* manager,
       WebContents* web_contents,
       const GURL& main_frame_url,
-      const SafeBrowsingBlockingPage::UnsafeResourceList& unsafe_resources)
-      override {
+      const SafeBrowsingBlockingPage::UnsafeResourceList& unsafe_resources,
+      bool should_trigger_reporting) override {
     PrefService* prefs =
         Profile::FromBrowserContext(web_contents->GetBrowserContext())
             ->GetPrefs();

@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/webtransport/quic_transport_connector.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -19,22 +19,13 @@
 
 namespace blink {
 
-namespace {
-
-KURL ReparseURLAsHTTPS(KURL url) {
-  url.SetProtocol("https");
-  return url;
-}
-
-}  // namespace
-
 QuicTransport* QuicTransport::Create(ScriptState* script_state,
                                      const String& url,
                                      ExceptionState& exception_state) {
   DVLOG(1) << "QuicTransport::Create() url=" << url;
   auto* transport =
       MakeGarbageCollected<QuicTransport>(PassKey(), script_state, url);
-  transport->Init(exception_state);
+  transport->Init(url, exception_state);
   return transport;
 }
 
@@ -92,12 +83,11 @@ void QuicTransport::Trace(Visitor* visitor) {
   ScriptWrappable::Trace(visitor);
 }
 
-void QuicTransport::Init(ExceptionState& exception_state) {
-  DVLOG(1) << "QuicTransport::Init() url=" << url_ << " this=" << this;
+void QuicTransport::Init(const String& url, ExceptionState& exception_state) {
+  DVLOG(1) << "QuicTransport::Init() url=" << url << " this=" << this;
   if (!url_.IsValid()) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kSyntaxError,
-        "The URL '" + url_.ElidedString() + "' is invalid.");
+    exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError,
+                                      "The URL '" + url + "' is invalid.");
     return;
   }
 
@@ -109,22 +99,11 @@ void QuicTransport::Init(ExceptionState& exception_state) {
     return;
   }
 
-  // TODO(ricea): Use the URL as-is once "quic-transport" it has been added to
-  // the "special" schemes list.
-  KURL url_as_https = ReparseURLAsHTTPS(url_);
-
-  if (!url_as_https.IsValid()) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kSyntaxError,
-        "The URL '" + url_.ElidedString() + "' is invalid.");
-    return;
-  }
-
-  if (url_as_https.HasFragmentIdentifier()) {
+  if (url_.HasFragmentIdentifier()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kSyntaxError,
         "The URL contains a fragment identifier ('#" +
-            url_as_https.FragmentIdentifier() +
+            url_.FragmentIdentifier() +
             "'). Fragment identifiers are not allowed in QuicTransport URLs.");
     return;
   }
@@ -132,7 +111,7 @@ void QuicTransport::Init(ExceptionState& exception_state) {
   auto* execution_context = GetExecutionContext();
 
   if (!execution_context->GetContentSecurityPolicyForWorld()
-           ->AllowConnectToSource(url_as_https)) {
+           ->AllowConnectToSource(url_)) {
     // TODO(ricea): This error should probably be asynchronous like it is for
     // WebSockets and fetch.
     exception_state.ThrowSecurityError(
@@ -149,11 +128,9 @@ void QuicTransport::Init(ExceptionState& exception_state) {
   // disallowed. Must be done before shipping.
 
   mojo::Remote<mojom::blink::QuicTransportConnector> connector;
-  auto* interface_provider = execution_context->GetInterfaceProvider();
-
-  DCHECK(interface_provider);
-  interface_provider->GetInterface(connector.BindNewPipeAndPassReceiver(
-      execution_context->GetTaskRunner(TaskType::kNetworking)));
+  execution_context->GetBrowserInterfaceBroker().GetInterface(
+      connector.BindNewPipeAndPassReceiver(
+          execution_context->GetTaskRunner(TaskType::kNetworking)));
 
   connector->Connect(
       url_, handshake_client_receiver_.BindNewPipeAndPassRemote(

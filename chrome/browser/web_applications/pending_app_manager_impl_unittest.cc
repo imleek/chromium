@@ -175,12 +175,14 @@ class TestPendingAppManagerImpl : public PendingAppManagerImpl {
         TestPendingAppManagerImpl* pending_app_manager_impl,
         Profile* profile,
         ExternalInstallOptions install_options)
-        : PendingAppInstallTask(profile,
-                                pending_app_manager_impl->registrar(),
-                                pending_app_manager_impl->shortcut_manager(),
-                                pending_app_manager_impl->ui_manager(),
-                                pending_app_manager_impl->finalizer(),
-                                install_options),
+        : PendingAppInstallTask(
+              profile,
+              pending_app_manager_impl->registrar(),
+              pending_app_manager_impl->shortcut_manager(),
+              pending_app_manager_impl->file_handler_manager(),
+              pending_app_manager_impl->ui_manager(),
+              pending_app_manager_impl->finalizer(),
+              install_options),
           pending_app_manager_impl_(pending_app_manager_impl),
           externally_installed_app_prefs_(profile->GetPrefs()) {}
     ~TestPendingAppInstallTask() override = default;
@@ -584,7 +586,7 @@ TEST_F(PendingAppManagerImplTest, Install_PendingSuccessfulTask) {
 
 TEST_F(PendingAppManagerImplTest, Install_PendingFailingTask) {
   pending_app_manager_impl()->SetNextInstallationTaskResult(
-      kFooWebAppUrl, InstallResultCode::kFailedUnknownReason);
+      kFooWebAppUrl, InstallResultCode::kWebAppDisabled);
   url_loader()->SetNextLoadUrlResult(kFooWebAppUrl,
                                      WebAppUrlLoader::Result::kUrlLoaded);
   pending_app_manager_impl()->SetNextInstallationTaskResult(
@@ -599,7 +601,7 @@ TEST_F(PendingAppManagerImplTest, Install_PendingFailingTask) {
   pending_app_manager_impl()->Install(
       GetFooInstallOptions(),
       base::BindLambdaForTesting([&](const GURL& url, InstallResultCode code) {
-        EXPECT_EQ(InstallResultCode::kFailedUnknownReason, code);
+        EXPECT_EQ(InstallResultCode::kWebAppDisabled, code);
         EXPECT_EQ(kFooWebAppUrl, url);
 
         EXPECT_EQ(1u, install_run_count());
@@ -791,7 +793,7 @@ TEST_F(PendingAppManagerImplTest, Install_AlwaysUpdate) {
 
 TEST_F(PendingAppManagerImplTest, Install_InstallationFails) {
   pending_app_manager_impl()->SetNextInstallationTaskResult(
-      kFooWebAppUrl, InstallResultCode::kFailedUnknownReason);
+      kFooWebAppUrl, InstallResultCode::kWebAppDisabled);
   url_loader()->SetNextLoadUrlResult(kFooWebAppUrl,
                                      WebAppUrlLoader::Result::kUrlLoaded);
 
@@ -800,7 +802,7 @@ TEST_F(PendingAppManagerImplTest, Install_InstallationFails) {
   std::tie(url, code) =
       InstallAndWait(pending_app_manager_impl(), GetFooInstallOptions());
 
-  EXPECT_EQ(InstallResultCode::kFailedUnknownReason, code);
+  EXPECT_EQ(InstallResultCode::kWebAppDisabled, code);
   EXPECT_EQ(kFooWebAppUrl, url);
 
   EXPECT_EQ(1u, install_run_count());
@@ -849,7 +851,7 @@ TEST_F(PendingAppManagerImplTest, InstallApps_Succeeds) {
 
 TEST_F(PendingAppManagerImplTest, InstallApps_FailsInstallationFails) {
   pending_app_manager_impl()->SetNextInstallationTaskResult(
-      kFooWebAppUrl, InstallResultCode::kFailedUnknownReason);
+      kFooWebAppUrl, InstallResultCode::kWebAppDisabled);
   url_loader()->SetNextLoadUrlResult(kFooWebAppUrl,
                                      WebAppUrlLoader::Result::kUrlLoaded);
 
@@ -861,7 +863,7 @@ TEST_F(PendingAppManagerImplTest, InstallApps_FailsInstallationFails) {
 
   EXPECT_EQ(results,
             InstallAppsResults(
-                {{kFooWebAppUrl, InstallResultCode::kFailedUnknownReason}}));
+                {{kFooWebAppUrl, InstallResultCode::kWebAppDisabled}}));
 
   EXPECT_EQ(1u, install_run_count());
 }
@@ -1148,7 +1150,9 @@ TEST_F(PendingAppManagerImplTest, ExternalAppUninstalled) {
 
   // Simulate external app for the app getting uninstalled by the user.
   const std::string app_id = GenerateFakeAppId(kFooWebAppUrl);
-  registrar()->SimulateExternalAppUninstalledByUser(app_id);
+  install_finalizer()->SimulateExternalAppUninstalledByUser(app_id);
+  if (registrar()->IsInstalled(app_id))
+    registrar()->RemoveExternalApp(app_id);
 
   // The app was uninstalled by the user. Installing again should succeed
   // or fail depending on whether we set override_previous_user_uninstall. We

@@ -30,6 +30,7 @@
 #include "chrome/browser/chromeos/login/screens/error_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
+#include "chrome/browser/chromeos/multidevice_setup/multidevice_setup_service_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/settings/shutdown_policy_handler.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
@@ -66,6 +67,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/network_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_display_chooser.h"
+#include "chrome/browser/ui/webui/chromeos/login/packaged_license_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/recommend_apps_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/reset_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
@@ -90,7 +92,7 @@
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/component_extension_resources.h"
 #include "chromeos/constants/chromeos_switches.h"
-#include "chromeos/services/multidevice_setup/public/mojom/constants.mojom.h"
+#include "chromeos/services/multidevice_setup/multidevice_setup_service.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"  // nogncheck
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_service.h"
@@ -99,7 +101,6 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -463,6 +464,9 @@ void OobeUI::ConfigureOobeDisplay() {
   AddScreenHandler(std::make_unique<MultiDeviceSetupScreenHandler>(
       js_calls_container_.get()));
 
+  AddScreenHandler(std::make_unique<PackagedLicenseScreenHandler>(
+      js_calls_container_.get()));
+
   Profile* profile = Profile::FromWebUI(web_ui());
   // Set up the chrome://theme/ source, for Chrome logo.
   content::URLDataSource::Add(profile, std::make_unique<ThemeSource>(profile));
@@ -487,30 +491,27 @@ void OobeUI::ConfigureOobeDisplay() {
     oobe_display_chooser_ = std::make_unique<OobeDisplayChooser>();
 }
 
-service_manager::Connector* OobeUI::GetLoggedInUserMojoConnector() {
-  // This function should only be called after the user has logged in.
-  DCHECK(
-      user_manager::UserManager::Get()->IsUserLoggedIn() &&
-      user_manager::UserManager::Get()->GetActiveUser()->is_profile_created());
-  return content::BrowserContext::GetConnectorFor(
-      ProfileManager::GetActiveUserProfile());
-}
-
-void OobeUI::BindMultiDeviceSetup(
+void OobeUI::BindInterface(
     mojo::PendingReceiver<multidevice_setup::mojom::MultiDeviceSetup>
         receiver) {
-  GetLoggedInUserMojoConnector()->Connect(
-      multidevice_setup::mojom::kServiceName, std::move(receiver));
+  multidevice_setup::MultiDeviceSetupService* service =
+      multidevice_setup::MultiDeviceSetupServiceFactory::GetForProfile(
+          ProfileManager::GetActiveUserProfile());
+  if (service)
+    service->BindMultiDeviceSetup(std::move(receiver));
 }
 
-void OobeUI::BindPrivilegedHostDeviceSetter(
+void OobeUI::BindInterface(
     mojo::PendingReceiver<multidevice_setup::mojom::PrivilegedHostDeviceSetter>
         receiver) {
-  GetLoggedInUserMojoConnector()->Connect(
-      multidevice_setup::mojom::kServiceName, std::move(receiver));
+  multidevice_setup::MultiDeviceSetupService* service =
+      multidevice_setup::MultiDeviceSetupServiceFactory::GetForProfile(
+          ProfileManager::GetActiveUserProfile());
+  if (service)
+    service->BindPrivilegedHostDeviceSetter(std::move(receiver));
 }
 
-void OobeUI::BindCrosNetworkConfig(
+void OobeUI::BindInterface(
     mojo::PendingReceiver<chromeos::network_config::mojom::CrosNetworkConfig>
         receiver) {
   ash::GetNetworkConfigService(std::move(receiver));
@@ -552,13 +553,6 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
         GURL("chrome://resources/polymer/v1_0/polymer/polymer.html"),
         base::BindOnce(DisablePolymer2));
   }
-
-  AddHandlerToRegistry(base::BindRepeating(&OobeUI::BindMultiDeviceSetup,
-                                           base::Unretained(this)));
-  AddHandlerToRegistry(base::BindRepeating(
-      &OobeUI::BindPrivilegedHostDeviceSetter, base::Unretained(this)));
-  AddHandlerToRegistry(base::BindRepeating(&OobeUI::BindCrosNetworkConfig,
-                                           base::Unretained(this)));
 }
 
 OobeUI::~OobeUI() {
@@ -703,5 +697,7 @@ void OobeUI::OnDisplayConfigurationChanged() {
 void OobeUI::SetLoginUserCount(int user_count) {
   core_handler_->SetLoginUserCount(user_count);
 }
+
+WEB_UI_CONTROLLER_TYPE_IMPL(OobeUI)
 
 }  // namespace chromeos

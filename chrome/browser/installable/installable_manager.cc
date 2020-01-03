@@ -11,8 +11,7 @@
 #include "base/callback.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/task/post_task.h"
-#include "base/task/task_traits.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
@@ -36,8 +35,6 @@
 #endif
 
 namespace {
-
-const char kPngExtension[] = ".png";
 
 // This constant is the icon size on Android (48dp) multiplied by the scale
 // factor of a Nexus 5 device (3x). It is the currently advertised minimum icon
@@ -97,7 +94,43 @@ int GetIdealPrimaryAdaptiveLauncherIconSizeInPx() {
 
 using IconPurpose = blink::Manifest::ImageResource::Purpose;
 
-// Returns true if |manifest| specifies a PNG icon that either
+struct ImageTypeDetails {
+  const char* extension;
+  const char* mimetype;
+};
+
+constexpr ImageTypeDetails kSupportedImageTypes[] = {
+    {".png", "image/png"},
+// TODO(https://crbug.com/578122): Add SVG support for Android.
+// TODO(https://crbug.com/466958): Add WebP support for Android.
+#if !defined(OS_ANDROID)
+    {".svg", "image/svg+xml"},
+    {".webp", "image/webp"},
+#endif
+};
+
+bool IsIconTypeSupported(const blink::Manifest::ImageResource& icon) {
+  // The type field is optional. If it isn't present, fall back on checking
+  // the src extension.
+  if (icon.type.empty()) {
+    std::string filename = icon.src.ExtractFileName();
+    for (const ImageTypeDetails& details : kSupportedImageTypes) {
+      if (base::EndsWith(filename, details.extension,
+                         base::CompareCase::INSENSITIVE_ASCII)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  for (const ImageTypeDetails& details : kSupportedImageTypes) {
+    if (base::EqualsASCII(icon.type, details.mimetype))
+      return true;
+  }
+  return false;
+}
+
+// Returns true if |manifest| specifies an SVG or PNG icon that either
 // 1. has IconPurpose::ANY, with height and width >= kMinimumPrimaryIconSizeInPx
 // (or size "any")
 // 2. if maskable icon is preferred, has IconPurpose::MASKABLE with height and
@@ -106,12 +139,7 @@ using IconPurpose = blink::Manifest::ImageResource::Purpose;
 bool DoesManifestContainRequiredIcon(const blink::Manifest& manifest,
                                      bool prefer_maskable_icon) {
   for (const auto& icon : manifest.icons) {
-    // The type field is optional. If it isn't present, fall back on checking
-    // the src extension, and allow the icon if the extension ends with png.
-    if (!base::EqualsASCII(icon.type, "image/png") &&
-        !(icon.type.empty() && base::EndsWith(
-            icon.src.ExtractFileName(), kPngExtension,
-            base::CompareCase::INSENSITIVE_ASCII)))
+    if (!IsIconTypeSupported(icon))
       continue;
 
     if (!(base::Contains(icon.purpose,
@@ -162,6 +190,12 @@ void OnDidCompleteGetAllErrors(
   }
 
   std::move(callback).Run(std::move(error_messages));
+}
+
+void OnDidCompleteGetPrimaryIcon(
+    base::OnceCallback<void(const SkBitmap*)> callback,
+    const InstallableData& data) {
+  std::move(callback).Run(data.primary_icon);
 }
 
 }  // namespace
@@ -269,6 +303,14 @@ void InstallableManager::GetAllErrors(
   params.is_debug_mode = true;
   GetData(params,
           base::BindOnce(OnDidCompleteGetAllErrors, std::move(callback)));
+}
+
+void InstallableManager::GetPrimaryIcon(
+    base::OnceCallback<void(const SkBitmap*)> callback) {
+  InstallableParams params;
+  params.valid_primary_icon = true;
+  GetData(params,
+          base::BindOnce(OnDidCompleteGetPrimaryIcon, std::move(callback)));
 }
 
 bool InstallableManager::IsIconFetched(const IconPurpose purpose) const {
@@ -473,8 +515,8 @@ void InstallableManager::WorkOnTask() {
   if ((!check_passed && !params.is_debug_mode) || IsComplete(params)) {
     // Yield the UI thread before processing the next task. If this object is
     // deleted in the meantime, the next task naturally won't run.
-    base::PostTask(FROM_HERE, {base::CurrentThread()},
-                   base::BindOnce(&InstallableManager::CleanupAndStartNextTask,
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&InstallableManager::CleanupAndStartNextTask,
                                   weak_factory_.GetWeakPtr()));
 
     auto task = std::move(task_queue_.Current());

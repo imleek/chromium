@@ -3,7 +3,6 @@
 <translationbundle lang="bn">
 <translation id="1065672644894730302">আপনার অভিরুচিগুলি পড়া যাবে না৷ কিছু বৈশিষ্ট্য অনুপলব্ধ থাকতে পারে ও অভিরুচিগুলিতে করা পরিবর্তনগুলি সংরক্ষিত হবে না৷</translation>
 <translation id="1104942323762546749">Chromium আপনার পাসওয়ার্ড এক্সপোর্ট করতে চাইছে। অনুমতি দিতে Windows এর পাসওয়ার্ড টাইপ করুন।</translation>
-<translation id="1115445892567829615">Chromium আপনার ডেটা সিঙ্ক করতে পারেনি৷ দয়া করে আপনার সিঙ্ক পাসফ্রেজ আপডেট করুন৷</translation>
 <translation id="113122355610423240">Chromium আপনার ডিফল্ট ব্রাউজার</translation>
 <translation id="1185134272377778587">Chromium সম্পর্কে</translation>
 <translation id="1396446129537741364">Chromium পাসওয়ার্ডগুলি দেখানোর চেষ্টা করছে৷</translation>
@@ -20,7 +19,7 @@
 <translation id="1929939181775079593">Chromium সাড়া দিচ্ছে না৷ আবার শুরু করবেন?</translation>
 <translation id="1966382378801805537">Chromium ডিফল্ট ব্রাউজার নির্ধারণ বা সেট করতে পারছে না</translation>
 <translation id="2008474315282236005">এটি এই ডিভাইস থেকে ১টি আইটেম মুছে দেবে। আপনার ডেটা পরে পুনরুদ্ধার করার জন্য, Chromium-এ <ph name="USER_EMAIL" /> হিসেবে সাইন-ইন করুন।</translation>
-<translation id="2119636228670142020">&amp;Chromium OS সম্পর্কে</translation>
+<translation id="2147976119693222405">Chromium OS আপনার ডেটা সিঙ্ক করতে পারেনি। এখনই ঠিক করুন।</translation>
 <translation id="2241627712206172106">যদি আপনি একটি কম্পিউটার শেয়ার করেন, তাহলে বন্ধু ও পরিবারের লোকজন পৃথকভাবে ব্রাউজ করতে পারবেন এবং তাদের ইচ্ছা অনুযায়ী Chromium-এর সেট-আপ করতে পারবেন৷</translation>
 <translation id="2347108572062610441">আপনি Chromium চালু করলে কোন পৃষ্ঠাটি দেখানো হবে তা এই এক্সটেনশনটি পরিবর্তন করেছে।</translation>
 <translation id="2396765026452590966">আপনি Chromium চালু করলে কোন পৃষ্ঠাটি দেখানো হবে তা "<ph name="EXTENSION_NAME" />" এক্সটেনশনটি পরিবর্তন করেছে।</translation>
@@ -36,6 +35,7 @@
 <translation id="2718390899429598676">অতিরিক্ত নিরাপত্তার জন্য Chromium আপনার ডেটা এনক্রিপ্ট করবে।</translation>
 <translation id="2770231113462710648">ডিফল্ট ব্রাউজার এতে পরিবর্তন করুন:</translation>
 <translation id="2799223571221894425">পুনঃশুরু</translation>
+<translation id="2805036593126168338">Chromium OS আপনার পাসওয়ার্ড সিঙ্ক করতে পারেনি। এখনই ঠিক করুন।</translation>
 <translation id="2838154144102149890">আপডেট করতে, এই কম্পিউটারে Chromium বন্ধ করতে হবে। এর ফলে, এই কম্পিউটারে লগ-ইন করে থাকা অন্যান্য ব্যবহারকারীরা যে পরিবর্তনগুলি সেভ করে রাখেননি সেগুলি হারাতে পারেন।</translation>
 <translation id="2847479871509788944">Chromium থেকে সরান...</translation>
 <translation id="2886012850691518054">ঐচ্ছিক: অটোমেটিক Google-এ ব্যবহার পরিসংখ্যান এবং ক্র্যাশ রিপোর্ট পাঠিয়ে Chromium-কে আরও ভালো করতে সাহায্য করুন৷</translation>
@@ -107,7 +107,6 @@
 <translation id="5631814766731275228">Chromium এর নাম এবং ছবি</translation>
 <translation id="5634636535844844681">Chromium এর জন্য Windows 7 বা উচ্চতর সংস্করণ প্রয়োজন।</translation>
 <translation id="5653831366781983928">এখনই Chromium রিস্টার্ট করুন</translation>
-<translation id="5680901439334282664">Chromium-এ সাইন-ইন করুন</translation>
 <translation id="5698481217667032250">এই ভাষায় Chromium প্রদর্শন করুন</translation>
 <translation id="5820394555380036790">Chromium OS</translation>
 <translation id="5862307444128926510">Chromium-এ স্বাগতম</translation>

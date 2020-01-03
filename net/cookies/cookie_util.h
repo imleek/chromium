@@ -14,6 +14,7 @@
 #include "net/base/net_export.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_options.h"
+#include "net/cookies/site_for_cookies.h"
 #include "url/origin.h"
 
 class GURL;
@@ -113,7 +114,7 @@ NET_EXPORT std::string SerializeRequestCookieLine(
 NET_EXPORT CookieOptions::SameSiteCookieContext
 ComputeSameSiteContextForRequest(const std::string& http_method,
                                  const GURL& url,
-                                 const GURL& site_for_cookies,
+                                 const SiteForCookies& site_for_cookies,
                                  const base::Optional<url::Origin>& initiator,
                                  bool attach_same_site_cookies);
 
@@ -122,7 +123,7 @@ ComputeSameSiteContextForRequest(const std::string& http_method,
 // If |attach_same_site_cookies| is true, this returns SAME_SITE_STRICT.
 NET_EXPORT CookieOptions::SameSiteCookieContext
 ComputeSameSiteContextForScriptGet(const GURL& url,
-                                   const GURL& site_for_cookies,
+                                   const SiteForCookies& site_for_cookies,
                                    const base::Optional<url::Origin>& initiator,
                                    bool attach_same_site_cookies);
 
@@ -133,7 +134,7 @@ ComputeSameSiteContextForScriptGet(const GURL& url,
 // If |attach_same_site_cookies| is true, this returns SAME_SITE_LAX.
 NET_EXPORT CookieOptions::SameSiteCookieContext
 ComputeSameSiteContextForResponse(const GURL& url,
-                                  const GURL& site_for_cookies,
+                                  const SiteForCookies& site_for_cookies,
                                   const base::Optional<url::Origin>& initiator,
                                   bool attach_same_site_cookies);
 
@@ -144,7 +145,7 @@ ComputeSameSiteContextForResponse(const GURL& url,
 // If |attach_same_site_cookies| is true, this returns SAME_SITE_LAX.
 NET_EXPORT CookieOptions::SameSiteCookieContext
 ComputeSameSiteContextForScriptSet(const GURL& url,
-                                   const GURL& site_for_cookies,
+                                   const SiteForCookies& site_for_cookies,
                                    bool attach_same_site_cookies);
 
 // Determines which of the cookies for |url| can be accessed when fetching a
@@ -153,12 +154,27 @@ ComputeSameSiteContextForScriptSet(const GURL& url,
 NET_EXPORT CookieOptions::SameSiteCookieContext
 // If |attach_same_site_cookies| is true, this returns SAME_SITE_STRICT.
 ComputeSameSiteContextForSubresource(const GURL& url,
-                                     const GURL& site_for_cookies,
+                                     const SiteForCookies& site_for_cookies,
                                      bool attach_same_site_cookies);
 
 // Returns whether the respective SameSite feature is enabled.
 NET_EXPORT bool IsSameSiteByDefaultCookiesEnabled();
 NET_EXPORT bool IsCookiesWithoutSameSiteMustBeSecureEnabled();
+bool IsRecentHttpSameSiteAccessGrantsLegacyCookieSemanticsEnabled();
+bool IsRecentCreationTimeGrantsLegacyCookieSemanticsEnabled();
+
+// Determines whether the last same-site access to a cookie should grant legacy
+// access semantics to the current attempted cookies access, based on the state
+// of the feature kRecentSameSiteAccessGrantsLegacyCookieSemantics, the value of
+// the feature param, and the time since the last eligible same-site access.
+bool DoesLastHttpSameSiteAccessGrantLegacySemantics(
+    base::TimeTicks last_http_same_site_access);
+
+// Determines whether the creation time of a cookie should grant legacy
+// access semantics to the current attempted cookies access, based on the state
+// of the feature kRecentCreationTimeGrantsLegacyCookieSemantics, the value of
+// the feature param, and the creation time of the cookie.
+bool DoesCreationTimeGrantLegacySemantics(base::Time creation_date);
 
 // Takes a callback accepting a CookieInclusionStatus and returns a callback
 // that accepts a bool, setting the bool to true if the CookieInclusionStatus

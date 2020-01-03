@@ -60,7 +60,6 @@
 #include "third_party/blink/renderer/core/editing/forward.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
-#include "third_party/blink/renderer/core/frame/dom_timer_coordinator.h"
 #include "third_party/blink/renderer/core/frame/hosts_using_features.h"
 #include "third_party/blink/renderer/core/html/custom/v0_custom_element.h"
 #include "third_party/blink/renderer/core/html/parser/parser_synchronization_policy.h"
@@ -93,6 +92,7 @@ class ChromeClient;
 class Comment;
 class ComputedAccessibleNode;
 class WindowAgent;
+class WindowAgentFactory;
 class ComputedStyle;
 class ConsoleMessage;
 class ContextFeatures;
@@ -110,6 +110,7 @@ class DocumentOutliveTimeReporter;
 class DocumentParser;
 class DocumentResourceCoordinator;
 class DocumentState;
+class DocumentAnimations;
 class DocumentTimeline;
 class DocumentType;
 class DOMFeaturePolicy;
@@ -124,6 +125,7 @@ template <typename EventType>
 class EventWithHitTestResults;
 class FloatQuad;
 class FloatRect;
+class FontMatchingMetrics;
 class FormController;
 class HTMLAllCollection;
 class HTMLBodyElement;
@@ -235,8 +237,6 @@ enum ShadowCascadeOrder {
   kShadowCascadeV1
 };
 
-enum class SecureContextState { kUnknown, kNonSecure, kSecure };
-
 using DocumentClassFlags = unsigned char;
 
 // A map of IDL attribute name to Element value, for one particular element.
@@ -259,7 +259,6 @@ using ExplicitlySetAttrElementsMap =
 // the user in a frame and an execution context for JavaScript code.
 class CORE_EXPORT Document : public ContainerNode,
                              public TreeScope,
-                             public SecurityContext,
                              public ExecutionContext,
                              public DocumentShutdownNotifier,
                              public SynchronousMutationNotifier,
@@ -291,9 +290,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void MediaQueryAffectingValueChanged();
 
-  using SecurityContext::GetContentSecurityPolicy;
-  using SecurityContext::GetMutableSecurityOrigin;
-  using SecurityContext::GetSecurityOrigin;
   using TreeScope::getElementById;
 
   // ExecutionContext overrides:
@@ -1127,10 +1123,6 @@ class CORE_EXPORT Document : public ContainerNode,
   bool IsDNSPrefetchEnabled() const { return is_dns_prefetch_enabled_; }
   void ParseDNSPrefetchControlHeader(const String&);
 
-  void TasksWerePaused() final;
-  void TasksWereUnpaused() final;
-  bool TasksNeedPause() final;
-
   void FinishedParsing();
 
   void SetEncodingData(const DocumentEncodingData& new_data);
@@ -1198,6 +1190,7 @@ class CORE_EXPORT Document : public ContainerNode,
   void EnqueueOverscrollEventForNode(Node* target,
                                      double delta_x,
                                      double delta_y);
+  void EnqueueDisplayLockActivationTask(base::OnceClosure);
   void EnqueueAnimationFrameTask(base::OnceClosure);
   void EnqueueAnimationFrameEvent(Event*);
   // Only one event for a target/event type combination will be dispatched per
@@ -1297,6 +1290,9 @@ class CORE_EXPORT Document : public ContainerNode,
 
   AnimationClock& GetAnimationClock();
   const AnimationClock& GetAnimationClock() const;
+  DocumentAnimations& GetDocumentAnimations() const {
+    return *document_animations_;
+  }
   DocumentTimeline& Timeline() const { return *timeline_; }
   PendingAnimations& GetPendingAnimations() { return *pending_animations_; }
   WorkletAnimationController& GetWorkletAnimationController() {
@@ -1352,19 +1348,11 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void PlatformColorsChanged();
 
-  DOMTimerCoordinator* Timers() final;
-
   HostsUsingFeatures::Value& HostsUsingFeaturesValue() {
     return hosts_using_features_value_;
   }
 
   NthIndexCache* GetNthIndexCache() const { return nth_index_cache_; }
-
-  bool IsSecureContext(String& error_message) const override;
-  bool IsSecureContext() const override;
-  void SetSecureContextStateForTesting(SecureContextState state) {
-    secure_context_state_ = state;
-  }
 
   CanvasFontCache* GetCanvasFontCache();
 
@@ -1384,24 +1372,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void DidEnforceInsecureRequestPolicy();
   void DidEnforceInsecureNavigationsSet();
-
-  // Temporary flag for some UseCounter items. crbug.com/859391.
-  enum class InDOMNodeRemovedHandlerState {
-    kNone,
-    kDOMNodeRemoved,
-    kDOMNodeRemovedFromDocument
-  };
-  void SetInDOMNodeRemovedHandlerState(InDOMNodeRemovedHandlerState state) {
-    in_dom_node_removed_handler_state_ = state;
-  }
-  InDOMNodeRemovedHandlerState GetInDOMNodeRemovedHandlerState() const {
-    return in_dom_node_removed_handler_state_;
-  }
-  bool InDOMNodeRemovedHandler() const {
-    return in_dom_node_removed_handler_state_ !=
-           InDOMNodeRemovedHandlerState::kNone;
-  }
-  void CountDetachingNodeAccessInDOMNodeRemovedHandler();
 
   bool MayContainV0Shadow() const { return may_contain_v0_shadow_; }
 
@@ -1465,6 +1435,10 @@ class CORE_EXPORT Document : public ContainerNode,
   ukm::UkmRecorder* UkmRecorder();
   ukm::SourceId UkmSourceID() const;
 
+  // Tracks and reports UKM metrics of the number of attempted font family match
+  // attempts (both successful and not successful) by the page.
+  FontMatchingMetrics* GetFontMatchingMetrics();
+
   // May return nullptr.
   FrameOrWorkerScheduler* GetScheduler() override;
 
@@ -1523,6 +1497,7 @@ class CORE_EXPORT Document : public ContainerNode,
   LazyLoadImageObserver& EnsureLazyLoadImageObserver();
 
   WindowAgent& GetWindowAgent();
+  WindowAgentFactory* GetWindowAgentFactory() { return window_agent_factory_; }
 
   void CountPotentialFeaturePolicyViolation(
       mojom::FeaturePolicyFeature) const override;
@@ -1607,7 +1582,6 @@ class CORE_EXPORT Document : public ContainerNode,
   // NOTE: only for use in testing.
   bool IsAnimatedPropertyCounted(CSSPropertyID property) const;
   void ClearUseCounterForTesting(mojom::WebFeature);
-  void SetSecurityOrigin(scoped_refptr<SecurityOrigin>) final;
 
   // Bind Content Security Policy to this document. This will cause the
   // CSP to resolve the 'self' attribute and all policies will then be
@@ -1616,12 +1590,24 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool InForcedColorsMode() const;
 
+  // Returns true if the subframe document is cross-site to the main frame. If
+  // we can't tell whether the document was ever cross-site or not (e.g. it is
+  // not the active Document in a browsing context), return false.
+  bool IsCrossSiteSubframe() const;
+
   // Capture the toggle event during parsing either by HTML parser or XML
   // parser.
   void SetToggleDuringParsing(bool toggle_during_parsing) {
     toggle_during_parsing_ = toggle_during_parsing;
   }
   bool ToggleDuringParsing() { return toggle_during_parsing_; }
+
+  // We setup a dummy document to sanitize clipboard markup before pasting.
+  // Sets and indicates whether this is the dummy document.
+  void SetIsForMarkupSanitization(bool is_for_sanitization) {
+    is_for_markup_sanitization_ = is_for_sanitization;
+  }
+  bool IsForMarkupSanitization() const { return is_for_markup_sanitization_; }
 
   bool HasPendingJavaScriptUrlsForTest() {
     return !pending_javascript_urls_.IsEmpty();
@@ -1640,6 +1626,8 @@ class CORE_EXPORT Document : public ContainerNode,
     allow_dirty_shadow_v0_traversal_ = allow;
   }
 #endif
+
+  void ApplyScrollRestorationLogic();
 
  protected:
   void ClearXMLVersion() { xml_version_ = String(); }
@@ -1681,13 +1669,9 @@ class CORE_EXPORT Document : public ContainerNode,
   bool IsElementNode() const =
       delete;  // This will catch anyone doing an unnecessary check.
 
-  ScriptedAnimationController& EnsureScriptedAnimationController();
   ScriptedIdleTaskController& EnsureScriptedIdleTaskController();
   void InitSecurityContext(const DocumentInit&,
                            const SecurityContextInit& security_initializer);
-  void InitSecureContextState();
-  SecurityContext& GetSecurityContext() final { return *this; }
-  const SecurityContext& GetSecurityContext() const final { return *this; }
 
   bool HasPendingVisualUpdate() const {
     return lifecycle_.GetState() == DocumentLifecycle::kVisualUpdatePending;
@@ -1808,6 +1792,7 @@ class CORE_EXPORT Document : public ContainerNode,
   // stylesheets do eventually load.
   PendingSheetLayout pending_sheet_layout_;
 
+  Member<WindowAgentFactory> window_agent_factory_;
   Member<LocalFrame> frame_;
   Member<LocalDOMWindow> dom_window_;
   Member<HTMLImportsController> imports_controller_;
@@ -2026,6 +2011,7 @@ class CORE_EXPORT Document : public ContainerNode,
       HashMap<AtomicString, std::unique_ptr<Locale>>;
   LocaleIdentifierToLocaleMap locale_cache_;
 
+  Member<DocumentAnimations> document_animations_;
   Member<DocumentTimeline> timeline_;
   Member<PendingAnimations> pending_animations_;
   Member<WorkletAnimationController> worklet_animation_controller_;
@@ -2036,8 +2022,6 @@ class CORE_EXPORT Document : public ContainerNode,
   TaskRunnerTimer<Document> did_associate_form_controls_timer_;
 
   HeapHashSet<Member<SVGUseElement>> use_elements_needing_update_;
-
-  DOMTimerCoordinator timers_;
 
   bool has_viewport_units_;
 
@@ -2052,9 +2036,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   int node_count_;
 
-  // Temporary flag for some UseCounter items. crbug.com/859391.
-  InDOMNodeRemovedHandlerState in_dom_node_removed_handler_state_ =
-      InDOMNodeRemovedHandlerState::kNone;
   bool may_contain_v0_shadow_ = false;
 
   Member<SnapCoordinator> snap_coordinator_;
@@ -2065,17 +2046,19 @@ class CORE_EXPORT Document : public ContainerNode,
 
   TaskHandle sensitive_input_edited_task_;
 
-  SecureContextState secure_context_state_;
-
   Member<NetworkStateObserver> network_state_observer_;
 
   std::unique_ptr<DocumentOutliveTimeReporter> document_outlive_time_reporter_;
 
   // |ukm_recorder_| and |source_id_| will allow objects that are part of
-  // the document to recorde UKM.
+  // the document to record UKM.
   std::unique_ptr<ukm::UkmRecorder> ukm_recorder_;
   int64_t ukm_source_id_;
   bool needs_to_record_ukm_outlive_time_;
+
+  // Tracks and reports UKM metrics of the number of attempted font family match
+  // attempts (both successful and not successful) by the page.
+  std::unique_ptr<FontMatchingMetrics> font_matching_metrics_;
 
 #if DCHECK_IS_ON()
   unsigned slot_assignment_recalc_forbidden_recursion_depth_ = 0;
@@ -2160,6 +2143,8 @@ class CORE_EXPORT Document : public ContainerNode,
   std::unique_ptr<FrameOrWorkerScheduler> detached_scheduler_;
 
   bool toggle_during_parsing_ = false;
+
+  bool is_for_markup_sanitization_ = false;
 
   String fragment_directive_;
 

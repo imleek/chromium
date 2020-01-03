@@ -5,13 +5,16 @@
 #include "gpu/command_buffer/service/shared_image_backing_factory_gl_texture.h"
 
 #include <algorithm>
+#include <list>
 #include <string>
 #include <utility>
 
 #include "base/feature_list.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
@@ -36,6 +39,10 @@
 #include "ui/gl/gl_image_shared_memory.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/trace_util.h"
+
+#if defined(OS_ANDROID)
+#include "gpu/command_buffer/service/shared_image_backing_egl_image.h"
+#endif
 
 namespace gpu {
 
@@ -330,6 +337,8 @@ class SharedImageRepresentationSkiaImpl : public SharedImageRepresentationSkia {
     // TODO(ericrk): Handle begin/end correctness checks.
   }
 
+  bool SupportsMultipleConcurrentReadAccess() override { return true; }
+
   sk_sp<SkPromiseImageTexture> promise_texture() { return promise_texture_; }
 
  private:
@@ -372,16 +381,22 @@ class SharedImageBackingGLTexture : public SharedImageBackingWithReadAccess {
   }
 
   ~SharedImageBackingGLTexture() override {
-    DCHECK(!texture_);
-    DCHECK(!rgb_emulation_texture_);
+    DCHECK(texture_);
+    texture_->RemoveLightweightRef(have_context());
+    texture_ = nullptr;
+
+    if (rgb_emulation_texture_) {
+      rgb_emulation_texture_->RemoveLightweightRef(have_context());
+      rgb_emulation_texture_ = nullptr;
+    }
   }
 
-  bool IsCleared() const override {
-    return texture_->IsLevelCleared(texture_->target(), 0);
+  gfx::Rect ClearedRect() const override {
+    return texture_->GetLevelClearedRect(texture_->target(), 0);
   }
 
-  void SetCleared() override {
-    texture_->SetLevelCleared(texture_->target(), 0, true);
+  void SetClearedRect(const gfx::Rect& cleared_rect) override {
+    texture_->SetLevelClearedRect(texture_->target(), 0, cleared_rect);
   }
 
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override {
@@ -419,17 +434,6 @@ class SharedImageBackingGLTexture : public SharedImageBackingWithReadAccess {
     DCHECK(texture_);
     mailbox_manager->ProduceTexture(mailbox(), texture_);
     return true;
-  }
-
-  void Destroy() override {
-    DCHECK(texture_);
-    texture_->RemoveLightweightRef(have_context());
-    texture_ = nullptr;
-
-    if (rgb_emulation_texture_) {
-      rgb_emulation_texture_->RemoveLightweightRef(have_context());
-      rgb_emulation_texture_ = nullptr;
-    }
   }
 
   void OnMemoryDump(const std::string& dump_name,
@@ -567,8 +571,7 @@ class SharedImageBackingPassthroughGLTexture
       const gfx::Size& size,
       const gfx::ColorSpace& color_space,
       uint32_t usage,
-      scoped_refptr<gles2::TexturePassthrough> passthrough_texture,
-      bool is_cleared)
+      scoped_refptr<gles2::TexturePassthrough> passthrough_texture)
       : SharedImageBackingWithReadAccess(mailbox,
                                          format,
                                          size,
@@ -576,17 +579,24 @@ class SharedImageBackingPassthroughGLTexture
                                          usage,
                                          passthrough_texture->estimated_size(),
                                          false /* is_thread_safe */),
-        texture_passthrough_(std::move(passthrough_texture)),
-        is_cleared_(is_cleared) {
+        texture_passthrough_(std::move(passthrough_texture)) {
     DCHECK(texture_passthrough_);
   }
 
   ~SharedImageBackingPassthroughGLTexture() override {
-    DCHECK(!texture_passthrough_);
+    DCHECK(texture_passthrough_);
+    if (!have_context())
+      texture_passthrough_->MarkContextLost();
+    texture_passthrough_.reset();
   }
 
-  bool IsCleared() const override { return is_cleared_; }
-  void SetCleared() override { is_cleared_ = true; }
+  gfx::Rect ClearedRect() const override {
+    // This backing is used exclusively with ANGLE which handles clear tracking
+    // internally. Act as though the texture is always cleared.
+    return gfx::Rect(size());
+  }
+
+  void SetClearedRect(const gfx::Rect& cleared_rect) override {}
 
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override {
     GLenum target = texture_passthrough_->target();
@@ -608,13 +618,6 @@ class SharedImageBackingPassthroughGLTexture
     DCHECK(texture_passthrough_);
     mailbox_manager->ProduceTexture(mailbox(), texture_passthrough_.get());
     return true;
-  }
-
-  void Destroy() override {
-    DCHECK(texture_passthrough_);
-    if (!have_context())
-      texture_passthrough_->MarkContextLost();
-    texture_passthrough_.reset();
   }
 
   void OnMemoryDump(const std::string& dump_name,
@@ -661,8 +664,6 @@ class SharedImageBackingPassthroughGLTexture
  private:
   scoped_refptr<gles2::TexturePassthrough> texture_passthrough_;
   sk_sp<SkPromiseImageTexture> cached_promise_texture_;
-
-  bool is_cleared_ = false;
 };
 
 SharedImageBackingFactoryGLTexture::SharedImageBackingFactoryGLTexture(
@@ -782,9 +783,12 @@ SharedImageBackingFactoryGLTexture::CreateSharedImage(
     const gfx::ColorSpace& color_space,
     uint32_t usage,
     bool is_thread_safe) {
-  DCHECK(!is_thread_safe);
-  return CreateSharedImage(mailbox, format, size, color_space, usage,
-                           base::span<const uint8_t>());
+  if (is_thread_safe) {
+    return MakeEglImageBacking(mailbox, format, size, color_space, usage);
+  } else {
+    return CreateSharedImage(mailbox, format, size, color_space, usage,
+                             base::span<const uint8_t>());
+  }
 }
 
 std::unique_ptr<SharedImageBacking>
@@ -883,9 +887,18 @@ SharedImageBackingFactoryGLTexture::CreateSharedImage(
     image = image_factory_->CreateAnonymousImage(
         size, format_info.buffer_format, gfx::BufferUsage::SCANOUT,
         &is_cleared);
-    // A SCANOUT image should not require copy.
-    DCHECK(!image || image->ShouldBindOrCopy() == gl::GLImage::BIND);
-    if (!image || !image->BindTexImage(target)) {
+    // Scanout images have different constraints than GL images and might fail
+    // to allocate even if GL images can be created.
+    if (!image) {
+      // TODO(dcastagna): Use BufferUsage::GPU_READ_WRITE instead
+      // BufferUsage::GPU_READ once we add it.
+      image = image_factory_->CreateAnonymousImage(
+          size, format_info.buffer_format, gfx::BufferUsage::GPU_READ,
+          &is_cleared);
+    }
+    // The allocated image should not require copy.
+    if (!image || image->ShouldBindOrCopy() != gl::GLImage::BIND ||
+        !image->BindTexImage(target)) {
       LOG(ERROR) << "CreateSharedImage: Failed to "
                  << (image ? "bind" : "create") << " image";
       api->glDeleteTexturesFn(1, &service_id);
@@ -1105,7 +1118,7 @@ SharedImageBackingFactoryGLTexture::MakeBacking(
 
     return std::make_unique<SharedImageBackingPassthroughGLTexture>(
         mailbox, format, size, color_space, usage,
-        std::move(passthrough_texture), is_cleared);
+        std::move(passthrough_texture));
   } else {
     gles2::Texture* texture = new gles2::Texture(service_id);
     texture->SetLightweightRef();
@@ -1126,6 +1139,42 @@ SharedImageBackingFactoryGLTexture::MakeBacking(
     return std::make_unique<SharedImageBackingGLTexture>(
         mailbox, format, size, color_space, usage, texture, attribs);
   }
+}
+
+std::unique_ptr<SharedImageBacking>
+SharedImageBackingFactoryGLTexture::MakeEglImageBacking(
+    const Mailbox& mailbox,
+    viz::ResourceFormat format,
+    const gfx::Size& size,
+    const gfx::ColorSpace& color_space,
+    uint32_t usage) {
+#if defined(OS_ANDROID)
+  const FormatInfo& format_info = format_info_[format];
+  if (!format_info.enabled) {
+    DLOG(ERROR) << "MakeEglImageBacking: invalid format";
+    return nullptr;
+  }
+
+  DCHECK(!(usage & SHARED_IMAGE_USAGE_SCANOUT));
+
+  if (size.width() < 1 || size.height() < 1 ||
+      size.width() > max_texture_size_ || size.height() > max_texture_size_) {
+    DLOG(ERROR) << "MakeEglImageBacking: Invalid size";
+    return nullptr;
+  }
+
+  // Calculate SharedImage size in bytes.
+  size_t estimated_size;
+  if (!viz::ResourceSizes::MaybeSizeInBytes(size, format, &estimated_size)) {
+    DLOG(ERROR) << "MakeEglImageBacking: Failed to calculate SharedImage size";
+    return nullptr;
+  }
+  return std::make_unique<SharedImageBackingEglImage>(
+      mailbox, format, size, color_space, usage, estimated_size,
+      format_info.gl_format, format_info.gl_type);
+#else
+  return nullptr;
+#endif
 }
 
 SharedImageBackingFactoryGLTexture::FormatInfo::FormatInfo() = default;

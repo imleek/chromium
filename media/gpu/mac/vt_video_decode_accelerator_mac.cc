@@ -438,8 +438,10 @@ gfx::ColorSpace GetImageBufferColorSpace(CVImageBufferRef image_buffer) {
   // the kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange.
   gfx::ColorSpace::RangeID range_id = gfx::ColorSpace::RangeID::LIMITED;
 
-  if (transfer_id == gfx::ColorSpace::TransferID::CUSTOM)
-    return gfx::ColorSpace(primary_id, custom_tr_fn, matrix_id, range_id);
+  if (transfer_id == gfx::ColorSpace::TransferID::CUSTOM) {
+    return gfx::ColorSpace(primary_id, gfx::ColorSpace::TransferID::CUSTOM,
+                           matrix_id, range_id, nullptr, &custom_tr_fn);
+  }
   return gfx::ColorSpace(primary_id, transfer_id, matrix_id, range_id);
 }
 
@@ -865,10 +867,10 @@ void VTVideoDecodeAccelerator::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
           // Record the configuration.
           DCHECK(seen_pps_.count(slice_hdr.pic_parameter_set_id));
           DCHECK(seen_sps_.count(pps->seq_parameter_set_id));
-          active_sps_ = seen_sps_[slice_hdr.pic_parameter_set_id];
+          active_sps_ = seen_sps_[pps->seq_parameter_set_id];
           // Note: SPS extension lookup may create an empty entry.
-          active_spsext_ = seen_spsext_[slice_hdr.pic_parameter_set_id];
-          active_pps_ = seen_pps_[pps->seq_parameter_set_id];
+          active_spsext_ = seen_spsext_[pps->seq_parameter_set_id];
+          active_pps_ = seen_pps_[slice_hdr.pic_parameter_set_id];
 
           // Compute and store frame properties. |image_size| gets filled in
           // later, since it comes from the decoder configuration.

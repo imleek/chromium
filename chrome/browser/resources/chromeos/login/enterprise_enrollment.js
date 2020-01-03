@@ -17,7 +17,6 @@ var INJECTED_WEBVIEW_SCRIPT = String.raw`
 /** @const */ var ENROLLMENT_STEP = {
   SIGNIN: 'signin',
   AD_JOIN: 'ad-join',
-  LICENSE_TYPE: 'license',
   WORKING: 'working',
   ATTRIBUTE_PROMPT: 'attribute-prompt',
   ERROR: 'error',
@@ -32,7 +31,7 @@ var INJECTED_WEBVIEW_SCRIPT = String.raw`
 Polymer({
   is: 'enterprise-enrollment',
 
-  behaviors: [I18nBehavior, OobeDialogHostBehavior],
+  behaviors: [OobeI18nBehavior, OobeDialogHostBehavior],
 
   properties: {
     /**
@@ -42,7 +41,6 @@ Polymer({
      *     onAuthCompleted_: function(string),
      *     onAdCompleteLogin_: function(string, string, string, string, string),
      *     onAdUnlockConfiguration_: function(string),
-     *     onLicenseTypeSelected_: function(string),
      *     closeEnrollment_: function(string),
      *     onAttributesEntered_: function(string, string),
      * }}
@@ -98,6 +96,22 @@ Polymer({
       type: Boolean,
       value: true,
     },
+
+    /**
+     * Device attribute : Asset ID.
+     */
+    assetId_: {
+      type: String,
+      value: '',
+    },
+
+    /**
+     * Device attribute : Location.
+     */
+    deviceLocation_: {
+      type: String,
+      value: '',
+    },
   },
 
   /**
@@ -121,13 +135,6 @@ Polymer({
   isManualEnrollment_: undefined,
 
   /**
-   * An element containing UI for picking license type.
-   * @type {EnrollmentLicenseCard}
-   * @private
-   */
-  licenseUi_: undefined,
-
-  /**
    * An element containing navigation buttons.
    */
   navigation_: undefined,
@@ -149,7 +156,6 @@ Polymer({
   ready: function() {
     this.navigation_ = this.$['oauth-enroll-navigation'];
     this.offlineAdUi_ = this.$['oauth-enroll-ad-join-ui'];
-    this.licenseUi_ = this.$['oauth-enroll-license-ui'];
 
     let authView = this.$['oauth-enroll-auth-view'];
     this.authenticator_ = new cr.login.Authenticator(authView);
@@ -256,11 +262,6 @@ Polymer({
         .addEventListener('click', function(event) {
           chrome.send('oauthEnrollOnLearnMore');
         });
-
-
-    this.licenseUi_.addEventListener('buttonclick', function() {
-      this.screen.onLicenseTypeSelected_(this.licenseUi_.selected);
-    }.bind(this));
   },
 
   /**
@@ -328,8 +329,8 @@ Polymer({
    * location.
    */
   showAttributePromptStep: function(annotatedAssetId, annotatedLocation) {
-    this.$['oauth-enroll-asset-id'].value = annotatedAssetId;
-    this.$['oauth-enroll-location'].value = annotatedLocation;
+    this.assetId_ = annotatedAssetId;
+    this.deviceLocation_ = annotatedLocation;
     this.showStep(ENROLLMENT_STEP.ATTRIBUTE_PROMPT);
   },
 
@@ -356,39 +357,6 @@ Polymer({
   },
 
   /**
-   * Updates the list of available license types in license selection dialog.
-   */
-  setAvailableLicenseTypes: function(licenseTypes) {
-    var licenses = [
-      {
-        id: 'perpetual',
-        label: 'perpetualLicenseTypeTitle',
-      },
-      {
-        id: 'annual',
-        label: 'annualLicenseTypeTitle',
-      },
-      {
-        id: 'kiosk',
-        label: 'kioskLicenseTypeTitle',
-      }
-    ];
-    for (var i = 0, item; item = licenses[i]; ++i) {
-      if (item.id in licenseTypes) {
-        item.count = parseInt(licenseTypes[item.id]);
-        item.disabled = item.count == 0;
-        item.hidden = false;
-      } else {
-        item.count = 0;
-        item.disabled = true;
-        item.hidden = true;
-      }
-    }
-    this.licenseUi_.disabled = false;
-    this.licenseUi_.licenses = licenses;
-  },
-
-  /**
    * Switches between the different steps in the enrollment flow.
    * @param {string} step the steps to show, one of "signin", "working",
    * "attribute-prompt", "error", "success".
@@ -404,8 +372,6 @@ Polymer({
       this.$['oauth-enroll-error-card'].submitButton.focus();
     } else if (step == ENROLLMENT_STEP.SIGNIN) {
       this.$['oauth-enroll-auth-view'].focus();
-    } else if (step == ENROLLMENT_STEP.LICENSE_TYPE) {
-      this.$['oauth-enroll-license-ui'].show();
     } else if (step == ENROLLMENT_STEP.SUCCESS) {
       this.$['oauth-enroll-success-card'].show();
     } else if (step == ENROLLMENT_STEP.ATTRIBUTE_PROMPT) {
@@ -494,8 +460,7 @@ Polymer({
    * |chrome| and launches the device attribute update negotiation.
    */
   submitAttributes_: function() {
-    this.screen.onAttributesEntered_(this.$['oauth-enroll-asset-id'].value,
-        this.$['oauth-enroll-location'].value);
+    this.screen.onAttributesEntered_(this.assetId_, this.deviceLocation_);
   },
 
   /**
@@ -531,9 +496,8 @@ Polymer({
     this.navigation_.refreshVisible = this.isAtTheBeginning() &&
         this.isManualEnrollment_ === false;
     this.navigation_.closeVisible =
-        (this.currentStep_ == ENROLLMENT_STEP.ERROR
-            && !this.navigation_.refreshVisible) ||
-        this.currentStep_ == ENROLLMENT_STEP.LICENSE_TYPE;
+        (this.currentStep_ == ENROLLMENT_STEP.ERROR &&
+         !this.navigation_.refreshVisible);
   },
 
   /**
@@ -543,8 +507,12 @@ Polymer({
     this.screen.closeEnrollment_('done');
   },
 
+  /*
+   * Executed on language change.
+   */
   updateLocalizedContent: function() {
     this.offlineAdUi_.i18nUpdateLocale();
+    this.i18nUpdateLocale();
   },
 
   onErrorButtonPressed_: function () {

@@ -8,15 +8,15 @@
 #include "base/strings/string_piece.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/ssl/certificate_error_report.h"
 #include "components/encrypted_messages/encrypted_message.pb.h"
 #include "components/encrypted_messages/message_encrypter.h"
+#include "components/security_interstitials/content/certificate_error_report.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/http/http_response_headers.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "services/network/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/boringssl/src/include/openssl/curve25519.h"
@@ -290,11 +290,11 @@ void CertificateReportingServiceTestHelper::SendResponse(
     return;
   }
 
-  network::ResourceResponseHead head;
-  head.headers = new net::HttpResponseHeaders(
+  auto head = network::mojom::URLResponseHead::New();
+  head->headers = new net::HttpResponseHeaders(
       "HTTP/1.1 200 OK\nContent-type: text/html\n\n");
-  head.mime_type = "text/html";
-  client_remote->OnReceiveResponse(head);
+  head->mime_type = "text/html";
+  client_remote->OnReceiveResponse(std::move(head));
   client_remote->OnComplete(network::URLLoaderCompletionStatus());
 }
 
@@ -336,7 +336,7 @@ void CertificateReportingServiceTestHelper::Clone(
   NOTREACHED();
 }
 
-std::unique_ptr<network::SharedURLLoaderFactoryInfo>
+std::unique_ptr<network::PendingSharedURLLoaderFactory>
 CertificateReportingServiceTestHelper::Clone() {
   NOTREACHED();
   return nullptr;

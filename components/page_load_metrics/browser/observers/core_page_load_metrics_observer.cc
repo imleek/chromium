@@ -14,8 +14,8 @@
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "content/public/common/process_type.h"
 #include "net/http/http_response_headers.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/events/blink/blink_features.h"
 
@@ -230,6 +230,10 @@ const char kHistogramPageLoadNetworkBytesIncludingHeaders[] =
     "PageLoad.Experimental.Bytes.NetworkIncludingHeaders";
 const char kHistogramPageLoadUnfinishedBytes[] =
     "PageLoad.Experimental.Bytes.Unfinished";
+
+const char kHistogramPageLoadCpuTotalUsage[] = "PageLoad.Cpu.TotalUsage";
+const char kHistogramPageLoadCpuTotalUsageForegrounded[] =
+    "PageLoad.Cpu.TotalUsageForegrounded";
 
 const char kHistogramLoadTypeTotalBytesForwardBack[] =
     "PageLoad.Experimental.Bytes.Total2.LoadType.ForwardBackNavigation";
@@ -685,6 +689,7 @@ void CorePageLoadMetricsObserver::OnComplete(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
   RecordTimingHistograms(timing);
   RecordByteAndResourceHistograms(timing);
+  RecordCpuUsageHistograms();
   RecordForegroundDurationHistograms(timing, base::TimeTicks());
 }
 
@@ -698,6 +703,7 @@ CorePageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
   if (GetDelegate().DidCommit()) {
     RecordTimingHistograms(timing);
     RecordByteAndResourceHistograms(timing);
+    RecordCpuUsageHistograms();
   }
   RecordForegroundDurationHistograms(timing, base::TimeTicks::Now());
   return STOP_OBSERVING;
@@ -905,6 +911,16 @@ void CorePageLoadMetricsObserver::RecordForegroundDurationHistograms(
   }
 }
 
+void CorePageLoadMetricsObserver::OnCpuTimingUpdate(
+    content::RenderFrameHost* subframe_rfh,
+    const page_load_metrics::mojom::CpuTiming& timing) {
+  total_cpu_usage_ += timing.task_time;
+
+  if (GetDelegate().GetVisibilityTracker().currently_in_foreground()) {
+    foreground_cpu_usage_ += timing.task_time;
+  }
+}
+
 void CorePageLoadMetricsObserver::RecordByteAndResourceHistograms(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
   DCHECK_GE(network_bytes_, 0);
@@ -964,6 +980,13 @@ void CorePageLoadMetricsObserver::RecordByteAndResourceHistograms(
                                 num_cache_resources_ + num_network_resources_);
 
   click_tracker_.RecordClickBurst(GetDelegate().GetSourceId());
+}
+
+void CorePageLoadMetricsObserver::RecordCpuUsageHistograms() {
+  PAGE_LOAD_HISTOGRAM(internal::kHistogramPageLoadCpuTotalUsage,
+                      total_cpu_usage_);
+  PAGE_LOAD_HISTOGRAM(internal::kHistogramPageLoadCpuTotalUsageForegrounded,
+                      foreground_cpu_usage_);
 }
 
 void CorePageLoadMetricsObserver::OnTimingUpdate(

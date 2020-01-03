@@ -23,6 +23,7 @@ class FakeLocalFrame : public blink::mojom::LocalFrame {
 
   void Init(blink::AssociatedInterfaceProvider* provider);
 
+  // blink::mojom::LocalFrame:
   void GetTextSurroundingSelection(
       uint32_t max_length,
       GetTextSurroundingSelectionCallback callback) override;
@@ -33,6 +34,10 @@ class FakeLocalFrame : public blink::mojom::LocalFrame {
                            const std::string& message,
                            bool discard_duplicates) override;
   void CheckCompleted() override;
+  void Collapse(bool collapsed) override;
+  void EnableViewSourceMode() override;
+  void Focus() override;
+  void ClearFocusedElement() override;
 
  private:
   void BindFrameHostReceiver(mojo::ScopedInterfaceEndpointHandle handle);

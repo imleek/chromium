@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "components/security_state/content/content_utils.h"
@@ -190,8 +191,8 @@ class HeadlessWebContentsImpl::PendingFrame
       : sequence_number_(sequence_number), callback_(std::move(callback)) {}
 
   void OnFrameComplete(const viz::BeginFrameAck& ack) {
-    DCHECK_EQ(kBeginFrameSourceId, ack.source_id);
-    DCHECK_EQ(sequence_number_, ack.sequence_number);
+    DCHECK_EQ(kBeginFrameSourceId, ack.frame_id.source_id);
+    DCHECK_EQ(sequence_number_, ack.frame_id.sequence_number);
     has_damage_ = ack.has_damage;
   }
 
@@ -304,6 +305,10 @@ HeadlessWebContentsImpl::~HeadlessWebContentsImpl() {
   agent_host_->RemoveObserver(this);
   if (render_process_host_)
     render_process_host_->RemoveObserver(this);
+  // Defer destruction of WindowTreeHost, as it does sync mojo calls
+  // in the destructor of ui::Compositor.
+  base::SequencedTaskRunnerHandle::Get()->DeleteSoon(
+      FROM_HERE, std::move(window_tree_host_));
 }
 
 void HeadlessWebContentsImpl::RenderFrameCreated(

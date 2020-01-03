@@ -166,8 +166,8 @@ class PowerManagerClientImpl : public PowerManagerClient {
         dbus::ObjectPath(power_manager::kPowerManagerServicePath));
 
     power_manager_proxy_->SetNameOwnerChangedCallback(
-        base::Bind(&PowerManagerClientImpl::NameOwnerChangedReceived,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindRepeating(&PowerManagerClientImpl::NameOwnerChangedReceived,
+                            weak_ptr_factory_.GetWeakPtr()));
 
     power_manager_proxy_->WaitForServiceToBeAvailable(
         base::BindOnce(&PowerManagerClientImpl::NotifyServiceBecameAvailable,
@@ -346,6 +346,8 @@ class PowerManagerClientImpl : public PowerManagerClient {
                        const std::string& description) override {
     POWER_LOG(USER) << "RequestShutdown: " << reason << " (" << description
                     << ")";
+    for (auto& observer : observers_)
+      observer.ShutdownRequested(reason);
     dbus::MethodCall method_call(power_manager::kPowerManagerInterface,
                                  power_manager::kRequestShutdownMethod);
     dbus::MessageWriter writer(&method_call);

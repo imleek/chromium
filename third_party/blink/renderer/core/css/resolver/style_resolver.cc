@@ -977,6 +977,26 @@ bool StyleResolver::PseudoStyleForElementInternal(
                                    state.Style());
     collector.SetPseudoElementStyleRequest(pseudo_style_request);
 
+    // The UA sheet is supposed to set some styles to ::marker pseudo-elements,
+    // but that would use a slow universal element selector. So instead we apply
+    // the styles here as an optimization.
+    if (pseudo_style_request.pseudo_id == kPseudoIdMarker) {
+      // Set 'unicode-bidi: isolate'
+      state.Style()->SetUnicodeBidi(UnicodeBidi::kIsolate);
+
+      // Set 'font-variant-numeric: tabular-nums'
+      FontVariantNumeric variant_numeric;
+      variant_numeric.SetNumericSpacing(FontVariantNumeric::kTabularNums);
+      state.GetFontBuilder().SetVariantNumeric(variant_numeric);
+      UpdateFont(state);
+
+      // Don't bother matching rules if there is no style for ::marker
+      if (!state.ParentStyle()->HasPseudoElementStyle(kPseudoIdMarker)) {
+        StyleAdjuster::AdjustComputedStyle(state, nullptr);
+        return true;
+      }
+    }
+
     MatchUARules(collector);
     MatchUserRules(collector);
     MatchAuthorRules(state.GetElement(), collector);
@@ -985,8 +1005,10 @@ bool StyleResolver::PseudoStyleForElementInternal(
     if (tracker_)
       AddMatchedRulesToTracker(collector);
 
-    if (!collector.MatchedResult().HasMatchedProperties())
+    if (!collector.MatchedResult().HasMatchedProperties()) {
+      StyleAdjuster::AdjustComputedStyle(state, nullptr);
       return false;
+    }
 
     ApplyMatchedProperties(state, collector.MatchedResult());
     ApplyCallbackSelectors(state);
@@ -1251,6 +1273,8 @@ bool StyleResolver::ApplyAnimatedStandardProperties(StyleResolverState& state) {
     StyleAnimator animator(state, cascade);
     CascadeInterpolations(cascade, animations_map, Origin::kAnimation);
     CascadeInterpolations(cascade, transitions_map, Origin::kTransition);
+    if (IsForcedColorsModeEnabled(state))
+      cascade.Exclude(CSSProperty::kIsAffectedByForcedColors, true);
     cascade.Apply(animator);
   } else {
     ApplyAnimatedStandardProperties<kHighPropertyPriority>(state,
@@ -1320,13 +1344,13 @@ void StyleResolver::ApplyAnimatedStandardProperties(
         state.Style()->ForcedColorAdjust() != EForcedColorAdjust::kNone)
       continue;
     const Interpolation& interpolation = *entry.value.front();
-    if (interpolation.IsInvalidatableInterpolation()) {
+    if (IsA<InvalidatableInterpolation>(interpolation)) {
       CSSInterpolationTypesMap map(state.GetDocument().GetPropertyRegistry(),
                                    state.GetDocument());
       CSSInterpolationEnvironment environment(map, state, nullptr);
       InvalidatableInterpolation::ApplyStack(entry.value, environment);
     } else {
-      ToTransitionInterpolation(interpolation).Apply(state);
+      To<TransitionInterpolation>(interpolation).Apply(state);
     }
   }
 }
@@ -1482,11 +1506,6 @@ static inline bool IsValidFirstLetterStyleProperty(CSSPropertyID id) {
     case CSSPropertyID::kWebkitBorderImage:
     case CSSPropertyID::kWebkitBorderVerticalSpacing:
     case CSSPropertyID::kWebkitFontSmoothing:
-    case CSSPropertyID::kWebkitMarginAfterCollapse:
-    case CSSPropertyID::kWebkitMarginBeforeCollapse:
-    case CSSPropertyID::kWebkitMarginBottomCollapse:
-    case CSSPropertyID::kWebkitMarginCollapse:
-    case CSSPropertyID::kWebkitMarginTopCollapse:
     case CSSPropertyID::kWordSpacing:
       return true;
 
@@ -1527,6 +1546,7 @@ static inline bool IsValidMarkerStyleProperty(CSSPropertyID id) {
     case CSSPropertyID::kFontWeight:
     case CSSPropertyID::kTextCombineUpright:
     case CSSPropertyID::kUnicodeBidi:
+    case CSSPropertyID::kWhiteSpace:
       return true;
 
     // Not directly specified in spec, but variables should be supported nearly
@@ -1893,6 +1913,21 @@ StyleResolver::CacheSuccess StyleResolver::ApplyMatchedCache(
                       cache_hash, cached_matched_properties);
 }
 
+void StyleResolver::MaybeAddToMatchedPropertiesCache(
+    StyleResolverState& state,
+    const CacheSuccess& cache_success,
+    const MatchResult& match_result) {
+  if (!state.IsAnimatingCustomProperties() &&
+      !cache_success.cached_matched_properties && cache_success.cache_hash &&
+      MatchedPropertiesCache::IsCacheable(state)) {
+    INCREMENT_STYLE_STATS_COUNTER(GetDocument().GetStyleEngine(),
+                                  matched_property_cache_added, 1);
+    matched_properties_cache_.Add(*state.Style(), *state.ParentStyle(),
+                                  cache_success.cache_hash,
+                                  match_result.GetMatchedProperties());
+  }
+}
+
 void StyleResolver::ApplyCustomProperties(StyleResolverState& state,
                                           const MatchResult& match_result,
                                           const CacheSuccess& cache_success,
@@ -2065,16 +2100,7 @@ void StyleResolver::ApplyMatchedLowPriorityProperties(
   }
 
   LoadPendingResources(state);
-
-  if (!state.IsAnimatingCustomProperties() &&
-      !cache_success.cached_matched_properties && cache_success.cache_hash &&
-      MatchedPropertiesCache::IsCacheable(state)) {
-    INCREMENT_STYLE_STATS_COUNTER(GetDocument().GetStyleEngine(),
-                                  matched_property_cache_added, 1);
-    matched_properties_cache_.Add(*state.Style(), *state.ParentStyle(),
-                                  cache_success.cache_hash,
-                                  match_result.GetMatchedProperties());
-  }
+  MaybeAddToMatchedPropertiesCache(state, cache_success, match_result);
 
   DCHECK(!state.GetFontBuilder().FontDirty());
 }
@@ -2167,23 +2193,27 @@ void StyleResolver::CascadeAndApplyMatchedProperties(
     }
   }
 
+  // TODO(crbug.com/985025): We only support full cache hits for now.
+  //
+  // The matched properties cache supports partial hits (see
+  // CacheSuccess::ShouldApplyInheritedOnly), but the StyleCascade path does
+  // not support this yet.
   if (cache_success.IsFullCacheHit())
     return;
 
-  // TODO(crbug.com/985025): We only support full cache hits for now.
-  bool apply_inherited_only = false;
+  CascadeAndApplyForcedColors(state, match_result);
 
-  // TODO(crbug.com/985027): Cascade kLowPropertyPriority.
-  //
-  // Ultimately NeedsApplyPass will be removed, so we don't bother fixing
-  // that for this codepath. For now, just always go through the low-priority
-  // properties.
-  const bool important = true;
-  NeedsApplyPass needs_apply_pass;
-  needs_apply_pass.Set(kLowPropertyPriority, important);
-  needs_apply_pass.Set(kLowPropertyPriority, !important);
-  ApplyMatchedLowPriorityProperties(state, match_result, cache_success,
-                                    apply_inherited_only, needs_apply_pass);
+  if (const UAStyle* ua_style = state.GetUAStyle()) {
+    state.Style()->SetHasAuthorBackground(
+        ua_style->HasDifferentBackground(state.StyleRef()));
+    state.Style()->SetHasAuthorBorder(
+        ua_style->HasDifferentBorder(state.StyleRef()));
+  }
+
+  LoadPendingResources(state);
+  MaybeAddToMatchedPropertiesCache(state, cache_success, match_result);
+
+  DCHECK(!state.GetFontBuilder().FontDirty());
 }
 
 static void CascadeDeclaration(StyleCascade& cascade,
@@ -2199,6 +2229,10 @@ static void CascadeDeclaration(StyleCascade& cascade,
     if (visited)
       cascade.Add(visited->GetCSSPropertyName(), &value, priority);
   }
+  if (priority.HasUAOrigin()) {
+    if (const CSSProperty* ua = CSSProperty::Get(name.Id()).GetUAProperty())
+      cascade.Add(ua->GetCSSPropertyName(), &value, priority);
+  }
 }
 
 // https://drafts.csswg.org/css-cascade/#all-shorthand
@@ -2209,10 +2243,6 @@ static void CascadeAll(StyleResolverState& state,
                        ValidPropertyFilter filter,
                        const CSSValue& value) {
   for (CSSPropertyID property_id : CSSPropertyIDList()) {
-    using LowPrioData = CSSPropertyPriorityData<kLowPropertyPriority>;
-    if (LowPrioData::PropertyHasPriority(property_id))
-      continue;
-
     const CSSProperty& property = CSSProperty::Get(property_id);
 
     if (property.IsShorthand())
@@ -2271,10 +2301,6 @@ void StyleResolver::CascadeRange(StyleResolverState& state,
         continue;
       }
 
-      using LowPrioData = CSSPropertyPriorityData<kLowPropertyPriority>;
-      if (LowPrioData::PropertyHasPriority(property_id))
-        continue;
-
       if (!PassesPropertyFilter(filter, property_id, state.GetDocument()))
         continue;
 
@@ -2312,6 +2338,58 @@ void StyleResolver::CascadeInterpolations(StyleCascade& cascade,
     auto* v = cssvalue::CSSPendingInterpolationValue::Create(type);
     cascade.Add(name, v, origin);
   }
+}
+
+void StyleResolver::CascadeAndApplyForcedColors(StyleResolverState& state,
+                                                const MatchResult& result) {
+  if (!IsForcedColorsModeEnabled())
+    return;
+  if (state.Style()->ForcedColorAdjust() == EForcedColorAdjust::kNone)
+    return;
+
+  unsigned apply_mask = kApplyMaskRegular | kApplyMaskVisited;
+  const CSSValue* unset = cssvalue::CSSUnsetValue::Create();
+  auto origin = StyleCascade::Origin::kUserAgent;
+
+  static const CSSProperty* properties[] = {
+      &GetCSSPropertyColor(),
+      &GetCSSPropertyBorderBottomColor(),
+      &GetCSSPropertyBorderLeftColor(),
+      &GetCSSPropertyBorderRightColor(),
+      &GetCSSPropertyBorderTopColor(),
+      &GetCSSPropertyBoxShadow(),
+      &GetCSSPropertyColumnRuleColor(),
+      &GetCSSPropertyFill(),
+      &GetCSSPropertyOutlineColor(),
+      &GetCSSPropertyStroke(),
+      &GetCSSPropertyTextDecorationColor(),
+      &GetCSSPropertyTextShadow(),
+      &GetCSSPropertyWebkitTapHighlightColor(),
+      &GetCSSPropertyWebkitTextEmphasisColor(),
+  };
+
+  StyleCascade cascade(state);
+
+  for (const CSSProperty* property : properties) {
+    CascadeDeclaration(cascade, property->GetCSSPropertyName(), *unset, origin,
+                       apply_mask);
+  }
+
+  const CSSValue* window = CSSIdentifierValue::Create(CSSValueID::kWindow);
+  CascadeDeclaration(cascade,
+                     GetCSSPropertyBackgroundColor().GetCSSPropertyName(),
+                     *window, origin, apply_mask);
+
+  Color prev_bg_color = state.Style()->BackgroundColor().GetColor();
+
+  CascadeRange(state, cascade, result.UaRules(), origin);
+  cascade.Exclude(CSSProperty::kIsAffectedByForcedColors, false);
+  cascade.Apply();
+
+  Color current_bg_color = state.Style()->BackgroundColor().GetColor();
+  Color bg_color(current_bg_color.Red(), current_bg_color.Green(),
+                 current_bg_color.Blue(), prev_bg_color.Alpha());
+  state.Style()->SetBackgroundColor(bg_color);
 }
 
 bool StyleResolver::HasAuthorBackground(const StyleResolverState& state) {
@@ -2411,6 +2489,12 @@ void StyleResolver::Trace(blink::Visitor* visitor) {
 
 bool StyleResolver::IsForcedColorsModeEnabled() const {
   return GetDocument().InForcedColorsMode();
+}
+
+bool StyleResolver::IsForcedColorsModeEnabled(
+    const StyleResolverState& state) const {
+  return IsForcedColorsModeEnabled() &&
+         state.Style()->ForcedColorAdjust() != EForcedColorAdjust::kNone;
 }
 
 void StyleResolver::ApplyCascadedColorValue(StyleResolverState& state) {

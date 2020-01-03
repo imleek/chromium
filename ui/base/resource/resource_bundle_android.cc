@@ -108,10 +108,6 @@ std::string ResourceBundle::LoadLocaleResources(
   DCHECK(!locale_resources_data_.get() &&
          !secondary_locale_resources_data_.get())
              << "locale.pak already loaded";
-  if (g_locale_pack_fd != -1) {
-    LOG(WARNING)
-        << "Unexpected (outside of tests): Loading a second locale pak file.";
-  }
   std::string app_locale = l10n_util::GetApplicationLocale(pref_locale);
 
   // Some Chromium apps have two sets of .pak files for their UI strings, i.e.:
@@ -273,6 +269,11 @@ std::string GetPathForAndroidLocalePakWithinApk(const std::string& locale,
     return std::string();
   }
   return base::android::ConvertJavaStringToUTF8(env, ret.obj());
+}
+
+void SetNoAvailableLocalePaksForTest() {
+  Java_ResourceBundle_setNoAvailableLocalePaks(
+      base::android::AttachCurrentThread());
 }
 
 }  // namespace ui

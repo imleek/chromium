@@ -13,8 +13,39 @@ group("closure_compile") {
 
 js_type_check("compile_resources") {
   deps = [
+    ":camera",
+    ":camera_intent",
+    ":dialog",
     ":settings",
     ":view",
+    ":warning",
+  ]
+}
+
+js_library("camera") {
+  deps = [
+    "..:background_ops",
+    "..:chrome_util",
+    "..:metrics",
+    "..:type",
+    "../models:result_saver",
+    "camera:layout",
+    "camera:modes",
+    "camera:options",
+    "camera:preview",
+    "camera:timertick",
+  ]
+}
+
+js_library("dialog") {
+}
+
+js_library("camera_intent") {
+  deps = [
+    ":camera",
+    "..:chrome_util",
+    "../models:video_saver",
+    "camera:review_result",
   ]
 }
 
@@ -34,4 +65,7 @@ js_library("view") {
   ]
 
   externs_list = [ "../externs/chrome.js" ]
+}
+
+js_library("warning") {
 }

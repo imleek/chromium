@@ -4,14 +4,17 @@
 
 #include "ash/home_screen/window_scale_animation.h"
 
-#include "ash/home_screen/home_screen_controller.h"
-#include "ash/home_screen/home_screen_delegate.h"
+#include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/scoped_animation_disabler.h"
 #include "ash/screen_util.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
+#include "ash/wm/workspace/backdrop_controller.h"
+#include "ash/wm/workspace/workspace_layout_manager.h"
+#include "ash/wm/workspace_controller.h"
 #include "base/time/time.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
@@ -46,7 +49,11 @@ WindowScaleAnimation::WindowScaleAnimation(
     : window_(window),
       original_backdrop_mode_(original_backdrop_mode),
       opt_callback_(std::move(opt_callback)),
-      scale_type_(scale_type) {
+      scale_type_(scale_type),
+      scoped_backdrop_update_pause_(GetWorkspaceControllerForContext(window)
+                                        ->layout_manager()
+                                        ->backdrop_controller()
+                                        ->PauseUpdates()) {
   window_observer_.Add(window);
 
   ui::ScopedLayerAnimationSettings settings(window_->layer()->GetAnimator());
@@ -55,10 +62,10 @@ WindowScaleAnimation::WindowScaleAnimation(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
   settings.SetTweenType(gfx::Tween::FAST_OUT_SLOW_IN);
   settings.AddObserver(this);
-  if (scale_type_ == WindowScaleType::kScaleDownToHomeScreen) {
+  if (scale_type_ == WindowScaleType::kScaleDownToShelf) {
     window_->layer()->GetAnimator()->SchedulePauseForProperties(
         kWindowFadeOutDelay, ui::LayerAnimationElement::OPACITY);
-    window_->layer()->SetTransform(GetWindowTransformToHomeScreen());
+    window_->layer()->SetTransform(GetWindowTransformToShelf());
     window_->layer()->SetOpacity(0.f);
   } else {
     window_->layer()->SetTransform(gfx::Transform());
@@ -71,7 +78,7 @@ WindowScaleAnimation::~WindowScaleAnimation() {
 }
 
 void WindowScaleAnimation::OnImplicitAnimationsCompleted() {
-  if (scale_type_ == WindowScaleType::kScaleDownToHomeScreen) {
+  if (scale_type_ == WindowScaleType::kScaleDownToShelf) {
     // Minimize the dragged window after transform animation is completed.
     window_util::HideAndMaybeMinimizeWithoutAnimation({window_},
                                                       /*minimize=*/true);
@@ -91,36 +98,35 @@ void WindowScaleAnimation::OnWindowDestroying(aura::Window* window) {
   delete this;
 }
 
-gfx::Transform WindowScaleAnimation::GetWindowTransformToHomeScreen() {
-  gfx::Transform transform;
-  HomeScreenDelegate* home_screen_delegate =
-      Shell::Get()->home_screen_controller()->delegate();
-  DCHECK(home_screen_delegate);
-  const gfx::Rect window_bounds = window_->GetBoundsInScreen();
-
+gfx::Transform WindowScaleAnimation::GetWindowTransformToShelf() {
   // The origin of bounds returned by GetBoundsInScreen() is transformed using
   // the window's transform. The transform that should be applied to the window
   // is calculated relative to the window bounds with no transforms applied, and
   // thus need the un-transformed window origin.
+  const gfx::Rect window_bounds = window_->GetBoundsInScreen();
   gfx::Point origin_without_transform = window_bounds.origin();
   window_->transform().TransformPointReverse(&origin_without_transform);
 
-  const gfx::Rect app_list_item_bounds =
-      home_screen_delegate->GetInitialAppListItemScreenBoundsForWindow(window_);
+  gfx::Transform transform;
+  Shelf* shelf = Shelf::ForWindow(window_);
+  gfx::Rect shelf_item_bounds =
+      shelf->GetScreenBoundsOfItemIconForWindow(window_);
+  // |shelf_item_bounds| is the item bounds in a extended hotseat (i.e., the
+  // hotseat state during dragging). Adjust it to the bounds in a shown
+  // hotseat (i.e., the hotseat state after dragging).
+  shelf_item_bounds.Offset(0, ShelfConfig::Get()->shelf_size());
 
-  if (!app_list_item_bounds.IsEmpty()) {
-    transform.Translate(
-        app_list_item_bounds.x() - origin_without_transform.x(),
-        app_list_item_bounds.y() - origin_without_transform.y());
+  if (!shelf_item_bounds.IsEmpty()) {
+    transform.Translate(shelf_item_bounds.x() - origin_without_transform.x(),
+                        shelf_item_bounds.y() - origin_without_transform.y());
     transform.Scale(
-        float(app_list_item_bounds.width()) / float(window_bounds.width()),
-        float(app_list_item_bounds.height()) / float(window_bounds.height()));
+        float(shelf_item_bounds.width()) / float(window_bounds.width()),
+        float(shelf_item_bounds.height()) / float(window_bounds.height()));
   } else {
-    const gfx::Rect work_area =
-        screen_util::GetDisplayWorkAreaBoundsInScreenForActiveDeskContainer(
-            window_);
-    transform.Translate(work_area.width() / 2 - origin_without_transform.x(),
-                        work_area.height() / 2 - origin_without_transform.y());
+    const gfx::Rect shelf_bounds = shelf->GetIdealBounds();
+    transform.Translate(
+        shelf_bounds.CenterPoint().x() - origin_without_transform.x(),
+        shelf_bounds.CenterPoint().y() - origin_without_transform.y());
     transform.Scale(kWindowScaleDownFactor, kWindowScaleDownFactor);
   }
   return transform;

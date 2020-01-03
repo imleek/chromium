@@ -30,11 +30,6 @@ luci.console_view(
             category = 'week1|linux|cfi',
         ),
         luci.console_view_entry(
-            builder = 'ci/CFI Linux CF',
-            category = 'week1|linux|cfi',
-            short_name = 'cf',
-        ),
-        luci.console_view_entry(
             builder = 'ci/Linux MSan Builder',
             category = 'week1|linux',
             short_name = 'msan',
@@ -792,6 +787,50 @@ luci.console_view(
             short_name = 'dbg',
         ),
         luci.console_view_entry(
+            builder = 'ci/android-marshmallow-x86-fyi-rel',
+            category = 'week16b',
+            short_name = 'marsh',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Android FYI 64 Perf (Pixel 2)',
+            category = 'week16b',
+            short_name = 'pxl2',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/linux-swangle-tot-angle-x64',
+            category = 'week17|swangle|angle',
+            short_name = 'x64',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/linux-swangle-tot-angle-x86',
+            category = 'week17|swangle|angle',
+            short_name = 'x86',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/linux-swangle-tot-swiftshader-x64',
+            category = 'week17|swangle|swift',
+            short_name = 'x64',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/linux-swangle-tot-swiftshader-x86',
+            category = 'week17|swangle|swift',
+            short_name = 'x86',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/linux-swangle-x64',
+            category = 'week17|swangle',
+            short_name = 'x64',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/linux-swangle-x86',
+            category = 'week17|swangle',
+            short_name = 'x86',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/android-code-coverage-native',
+            category = 'misc|android',
+        ),
+        luci.console_view_entry(
             builder = 'ci/Win ASan Release',
             category = 'win|week1|asan',
         ),
@@ -804,6 +843,289 @@ luci.console_view(
             builder = 'ci/win10-code-coverage',
             category = 'win|week1.1',
             short_name = 'code',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Win x64 Builder (dbg)',
+            category = 'win|week1.5',
+            short_name = 'dbg',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win-archive-dbg',
+            category = 'win|week1.5|archive',
+            short_name = 'dbg',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win-archive-rel',
+            category = 'win|week1.5|archive',
+            short_name = 'rel',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Dawn Win10 x64 Builder',
+            category = 'win|week2|dawn',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Dawn Win10 x64 DEPS Builder',
+            category = 'win|week2|dawn',
+            short_name = 'deps',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/GPU Win x64 Builder (dbg)',
+            category = 'win|week2|gpu',
+            short_name = 'dbg',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/GPU FYI XR Win x64 Builder',
+            category = 'win|week2|gpu|fyi',
+            short_name = 'xr',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/GPU FYI Win x64 dEQP Builder',
+            category = 'win|week2|gpu|fyi',
+            short_name = 'deqp',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/GPU FYI Win x64 DX12 Vulkan Builder',
+            category = 'win|week2|gpu|fyi|dx12',
+            short_name = 'rel',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/GPU FYI Win x64 DX12 Vulkan Builder (dbg)',
+            category = 'win|week2|gpu|fyi|dx12',
+            short_name = 'dbg',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/GPU FYI Win x64 Builder',
+            category = 'win|week2|gpu|fyi',
+            short_name = 'rel',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/GPU FYI Win x64 Builder (dbg)',
+            category = 'win|week2|gpu|fyi',
+            short_name = 'dbg',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Win Builder',
+            category = 'win|week3',
+            short_name = 'rel',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Win Builder (dbg)',
+            category = 'win|week3',
+            short_name = 'dbg',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/GPU FYI Win Builder',
+            category = 'win|week3|gpu|fyi',
+            short_name = 'rel',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/GPU FYI Win Builder (dbg)',
+            category = 'win|week3|gpu|fyi',
+            short_name = 'dbg',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/GPU FYI Win dEQP Builder',
+            category = 'win|week3|gpu|fyi',
+            short_name = 'deqp',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Dawn Win10 x86 Builder',
+            category = 'win|week3|dawn',
+            short_name = 'rel',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Dawn Win10 x86 DEPS Builder',
+            category = 'win|week3|dawn',
+            short_name = 'deps',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win32-archive-rel',
+            category = 'win|week4|win32',
+            short_name = 'rel',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win32-archive-dbg',
+            category = 'win|week4|win32',
+            short_name = 'dbg',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win32-arm64-rel',
+            category = 'win|week4|win32',
+            short_name = 'arm',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Libfuzzer Upload Windows ASan',
+            category = 'win|week4',
+            short_name = 'libfuzzer',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Windows deterministic',
+            category = 'win|week4',
+            short_name = 'det',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Mojo Windows',
+            category = 'win|week4',
+            short_name = 'mojo',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win-celab-builder-rel',
+            category = 'win|week4',
+            short_name = 'celab',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win-asan',
+            category = 'win|week4',
+            short_name = 'asan',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Win 10 Fast Ring',
+            category = 'win|week4',
+            short_name = 'fastring',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win-annotator-rel',
+            category = 'win|week4',
+            short_name = 'anno',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win-pixel-builder-rel',
+            category = 'win|week4',
+            short_name = 'pixel',
+        ),
+        luci.console_view_entry(
+            builder = 'webrtc/WebRTC Chromium Win Builder',
+            category = 'win|week4|webrtc',
+        ),
+        luci.console_view_entry(
+            builder = 'webrtc.fyi/WebRTC Chromium FYI Win Builder',
+            category = 'win|week4|webrtc|fyi',
+            short_name = 'rel',
+        ),
+        luci.console_view_entry(
+            builder = 'webrtc.fyi/WebRTC Chromium FYI Win Builder (dbg)',
+            category = 'win|week4|webrtc|fyi',
+            short_name = 'dbg',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win-swangle-x86',
+            category = 'win|week4|swangle',
+            short_name = 'x86',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win-swangle-x64',
+            category = 'win|week4|swangle',
+            short_name = 'x64',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win-swangle-tot-angle-x86',
+            category = 'win|week4|swangle|angle',
+            short_name = 'x86',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win-swangle-tot-angle-x64',
+            category = 'win|week4|swangle|angle',
+            short_name = 'x64',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win-swangle-tot-swiftshader-x86',
+            category = 'win|week4|swangle|swift',
+            short_name = 'x86',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/win-swangle-tot-swiftshader-x64',
+            category = 'win|week4|swangle|swift',
+            short_name = 'x64',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/linux-chromeos-dbg',
+            category = 'cros|week1',
+            short_name = 'dbg',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/linux-chromeos-rel',
+            category = 'cros|week1',
+            short_name = 'rel',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/linux-chromeos-code-coverage',
+            category = 'cros|week1',
+            short_name = 'code',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Linux ChromiumOS Full',
+            category = 'cros|week2',
+            short_name = 'full',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/ChromiumOS ASAN Release',
+            category = 'cros|week2',
+            short_name = 'asan',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Linux Chromium OS ASan LSan Builder',
+            category = 'cros|week2',
+            short_name = 'asan lsan',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Linux ChromiumOS MSan Builder',
+            category = 'cros|week2',
+            short_name = 'msan',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Mojo ChromiumOS',
+            category = 'cros|week2',
+            short_name = 'mojo',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/Libfuzzer Upload Chrome OS ASan',
+            category = 'cros|week2',
+            short_name = 'fuzz',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/chromeos-amd64-generic-rel',
+            category = 'cros|week3|amd64',
+            short_name = 'rel',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/chromeos-amd64-generic-dbg',
+            category = 'cros|week3|amd64',
+            short_name = 'dbg',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/chromeos-amd64-generic-rel-vm-tests',
+            category = 'cros|week3|amd64',
+            short_name = 'vmtests',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/chromeos-amd64-generic-asan-rel',
+            category = 'cros|week3|amd64',
+            short_name = 'asan',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/chromeos-amd64-generic-cfi-thin-lto-rel',
+            category = 'cros|week3|amd64',
+            short_name = 'thinlto',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/chromeos-arm-generic-rel',
+            category = 'cros|week3|arm',
+            short_name = 'rel',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/chromeos-arm-generic-dbg',
+            category = 'cros|week3|arm',
+            short_name = 'dbg',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/chromeos-kevin-rel',
+            category = 'cros|week3|kevin',
+            short_name = 'rel',
+        ),
+        luci.console_view_entry(
+            builder = 'ci/chromeos-kevin-rel-hw-tests',
+            category = 'cros|week3|kevin',
+            short_name = 'hwtests',
         ),
     ],
 )

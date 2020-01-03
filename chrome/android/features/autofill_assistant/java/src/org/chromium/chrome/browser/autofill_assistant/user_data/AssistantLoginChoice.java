@@ -6,7 +6,8 @@ package org.chromium.chrome.browser.autofill_assistant.user_data;
 
 import android.support.annotation.Nullable;
 
-import org.chromium.chrome.browser.widget.prefeditor.EditableOption;
+import org.chromium.chrome.browser.autofill.prefeditor.EditableOption;
+import org.chromium.chrome.browser.autofill_assistant.AssistantInfoPopup;
 
 /**
  * Represents a single login choice.

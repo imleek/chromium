@@ -34,7 +34,6 @@
 #include "chrome/browser/push_messaging/push_messaging_app_identifier.h"
 #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
 #include "chrome/browser/push_messaging/push_messaging_service_impl.h"
-#include "chrome/browser/ui/extensions/browser_action_test_util.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/api/web_navigation.h"
@@ -400,13 +399,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsExecuteScript) {
 }
 
 // Tests chrome.webRequest APIs.
-// Times out on Mac/Win only.  https://crbug.com/997686
-#if defined(OS_WIN) || defined(OS_MACOSX)
-#define MAYBE_WebRequest DISABLED_WebRequest
-#else
-#define MAYBE_WebRequest WebRequest
-#endif
-IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, MAYBE_WebRequest) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, WebRequest) {
   ASSERT_TRUE(
       RunExtensionTest("service_worker/worker_based_background/web_request"))
       << message_;
@@ -599,8 +592,6 @@ class EarlyWorkerMessageSender : public EventRouter::Observer {
   bool SendAndWait() { return listener_.WaitUntilSatisfied(); }
 
  private:
-  static constexpr const char* const kTestOnMessageEventName = "test.onMessage";
-
   void DispatchEvent(std::unique_ptr<Event> event) {
     EventRouter::Get(browser_context_)
         ->DispatchEventToExtension(extension_id_, std::move(event));
@@ -1190,9 +1181,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, MAYBE_WebAccessibleResourcesFetch) {
 // Tests that updating a packed extension with modified scripts works
 // properly -- we expect that the new script will execute, rather than the
 // previous one.
-// Flaky on all platforms: https://crbug.com/1003244
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
-                       DISABLED_UpdatePackedExtension) {
+                       UpdatePackedExtension) {
   constexpr char kManifest1[] =
       R"({
            "name": "Test Extension",
@@ -2017,7 +2007,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, EventsAfterRestart) {
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest, TabsOnCreated) {
   ASSERT_TRUE(RunExtensionTestWithFlags("tabs/lazy_background_on_created",
-                                        kFlagRunAsServiceWorkerBasedExtension))
+                                        kFlagRunAsServiceWorkerBasedExtension,
+                                        kFlagNone))
       << message_;
 }
 

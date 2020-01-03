@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/i18n/rtl.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -33,7 +34,6 @@
 #include "net/ssl/client_cert_identity.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/service_manager/sandbox/switches.h"
-#include "storage/browser/quota/quota_settings.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/switches.h"
 
@@ -148,15 +148,6 @@ HeadlessContentBrowserClient::CreateQuotaPermissionContext() {
   return new HeadlessQuotaPermissionContext();
 }
 
-void HeadlessContentBrowserClient::GetQuotaSettings(
-    content::BrowserContext* context,
-    content::StoragePartition* partition,
-    ::storage::OptionalQuotaSettingsCallback callback) {
-  ::storage::GetNominalDynamicSettings(
-      partition->GetPath(), context->IsOffTheRecord(),
-      ::storage::GetDefaultDeviceInfoHelper(), std::move(callback));
-}
-
 content::GeneratedCodeCacheSettings
 HeadlessContentBrowserClient::GetGeneratedCodeCacheSettings(
     content::BrowserContext* context) {
@@ -246,6 +237,10 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
 #endif
 }
 
+std::string HeadlessContentBrowserClient::GetApplicationLocale() {
+  return base::i18n::GetConfiguredLocale();
+}
+
 std::string HeadlessContentBrowserClient::GetAcceptLangs(
     content::BrowserContext* context) {
   return browser_->options()->accept_language;
@@ -258,19 +253,19 @@ void HeadlessContentBrowserClient::AllowCertificateError(
     const GURL& request_url,
     bool is_main_frame_request,
     bool strict_enforcement,
-    const base::Callback<void(content::CertificateRequestResultType)>&
-        callback) {
+    base::OnceCallback<void(content::CertificateRequestResultType)> callback) {
   if (!callback.is_null()) {
     // If --allow-insecure-localhost is specified, and the request
     // was for localhost, then the error was not fatal.
     bool allow_localhost = base::CommandLine::ForCurrentProcess()->HasSwitch(
         ::switches::kAllowInsecureLocalhost);
     if (allow_localhost && net::IsLocalhost(request_url)) {
-      callback.Run(content::CERTIFICATE_REQUEST_RESULT_TYPE_CONTINUE);
+      std::move(callback).Run(
+          content::CERTIFICATE_REQUEST_RESULT_TYPE_CONTINUE);
       return;
     }
 
-    callback.Run(content::CERTIFICATE_REQUEST_RESULT_TYPE_DENY);
+    std::move(callback).Run(content::CERTIFICATE_REQUEST_RESULT_TYPE_DENY);
   }
 }
 

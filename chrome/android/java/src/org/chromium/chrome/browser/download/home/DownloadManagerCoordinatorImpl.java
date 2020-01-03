@@ -22,8 +22,8 @@ import org.chromium.chrome.browser.download.home.toolbar.ToolbarCoordinator;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
 import org.chromium.chrome.browser.gesturenav.HistoryNavigationDelegate;
 import org.chromium.chrome.browser.gesturenav.HistoryNavigationLayout;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.download.DownloadPreferences;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.download.DownloadSettings;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
 import org.chromium.chrome.download.R;
@@ -54,17 +54,17 @@ class DownloadManagerCoordinatorImpl
 
     /** Builds a {@link DownloadManagerCoordinatorImpl} instance. */
     public DownloadManagerCoordinatorImpl(Activity activity, DownloadManagerUiConfig config,
-            SnackbarManager snackbarManager, ModalDialogManager modalDialogManager,
-            Tracker tracker) {
+            SnackbarManager snackbarManager, ModalDialogManager modalDialogManager, Tracker tracker,
+            FaviconProvider faviconProvider) {
         mActivity = activity;
         mDeleteCoordinator = new DeleteUndoCoordinator(snackbarManager);
         mSelectionDelegate = new SelectionDelegate<ListItem>();
         mListCoordinator = new DateOrderedListCoordinator(mActivity, config,
                 OfflineContentAggregatorFactory.get(), mDeleteCoordinator::showSnackbar,
                 mSelectionDelegate, this::notifyFilterChanged, createDateOrderedListObserver(),
-                modalDialogManager);
+                modalDialogManager, faviconProvider);
         mToolbarCoordinator = new ToolbarCoordinator(mActivity, this, mListCoordinator,
-                mSelectionDelegate, config.showOfflineHome, config.isSeparateActivity, tracker);
+                mSelectionDelegate, config.isSeparateActivity, tracker);
 
         initializeView();
         RecordUserAction.record("Android.DownloadManager.Open");
@@ -164,7 +164,7 @@ class DownloadManagerCoordinatorImpl
     @Override
     public void openSettings() {
         RecordUserAction.record("Android.DownloadManager.Settings");
-        PreferencesLauncher.launchSettingsPage(mActivity, DownloadPreferences.class);
+        SettingsLauncher.launchSettingsPage(mActivity, DownloadSettings.class);
     }
 
     private void notifyFilterChanged(@FilterType int filter) {

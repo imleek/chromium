@@ -104,10 +104,10 @@
 #include "url/url_constants.h"
 
 #if defined(OS_ANDROID)
+#include "third_party/blink/public/common/input/web_gesture_device.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
-#include "third_party/blink/public/platform/web_gesture_device.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_input_event.h"
 #endif
 
 #if defined(OS_WIN)
@@ -1073,7 +1073,7 @@ TEST_F(RenderViewImplTest, OriginReplicationForSwapOut) {
   child_frame2->SwapOut(kProxyRoutingId + 1, true, replication_state);
   EXPECT_TRUE(web_frame->FirstChild()->NextSibling()->IsWebRemoteFrame());
   EXPECT_TRUE(
-      web_frame->FirstChild()->NextSibling()->GetSecurityOrigin().IsUnique());
+      web_frame->FirstChild()->NextSibling()->GetSecurityOrigin().IsOpaque());
 }
 
 // When we enable --use-zoom-for-dsf, visiting the first web page after opening
@@ -1102,8 +1102,9 @@ TEST_F(RenderViewImplEnableZoomForDSFTest, UpdateDSFAfterSwapIn) {
   // Do the remote-to-local transition for the proxy, which is to create a
   // provisional local frame.
   int routing_id = kProxyRoutingId + 1;
-  service_manager::mojom::InterfaceProviderPtr stub_interface_provider;
-  mojo::MakeRequest(&stub_interface_provider);
+  mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
+      stub_interface_provider;
+  ignore_result(stub_interface_provider.InitWithNewPipeAndPassReceiver());
   mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
       stub_browser_interface_broker;
   ignore_result(stub_browser_interface_broker.InitWithNewPipeAndPassReceiver());
@@ -1170,8 +1171,9 @@ TEST_F(RenderViewImplTest, DetachingProxyAlsoDestroysProvisionalFrame) {
   // Do the first step of a remote-to-local transition for the child proxy,
   // which is to create a provisional local frame.
   int routing_id = kProxyRoutingId + 1;
-  service_manager::mojom::InterfaceProviderPtr stub_interface_provider;
-  mojo::MakeRequest(&stub_interface_provider);
+  mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
+      stub_interface_provider;
+  ignore_result(stub_interface_provider.InitWithNewPipeAndPassReceiver());
   mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
       stub_browser_interface_broker;
   ignore_result(stub_browser_interface_broker.InitWithNewPipeAndPassReceiver());
@@ -1385,6 +1387,36 @@ TEST_F(RenderViewImplTest, ShouldSuppressKeyboardIsPropagated) {
   // Explicitly clean-up the autofill client, as otherwise a use-after-free
   // happens.
   GetMainFrame()->SetAutofillClient(nullptr);
+}
+
+TEST_F(RenderViewImplTest, EditContextGetLayoutBoundsAndInputPanelPolicy) {
+  // Load an HTML page consisting of one input fields.
+  LoadHTML(
+      "<html>"
+      "<head>"
+      "</head>"
+      "<body>"
+      "</body>"
+      "</html>");
+  render_thread_->sink().ClearMessages();
+  // Create an EditContext with control and selection bounds and set input
+  // panel policy to auto.
+  ExecuteJavaScriptForTests(
+      "const editContext = new EditContext(); "
+      "editContext.focus();editContext.inputPanelPolicy=\"auto\";editContext."
+      "updateLayout(new DOMRect(10, 20, 30, 40), new DOMRect(10,20, 1, 5));");
+  base::RunLoop().RunUntilIdle();
+  // Update the IME status and verify if our IME backend sends an IPC message
+  // to notify layout bounds of the EditContext.
+  view()->GetWidget()->UpdateTextInputState();
+  auto params = ProcessAndReadIPC<WidgetHostMsg_TextInputStateChanged>();
+  EXPECT_EQ(true, std::get<0>(params).show_ime_if_needed);
+  gfx::Rect edit_context_control_bounds_expected(10, 20, 30, 40);
+  gfx::Rect edit_context_selection_bounds_expected(10, 20, 1, 5);
+  EXPECT_EQ(edit_context_control_bounds_expected,
+            std::get<0>(params).edit_context_control_bounds.value());
+  EXPECT_EQ(edit_context_selection_bounds_expected,
+            std::get<0>(params).edit_context_selection_bounds.value());
 }
 
 // Test that our IME backend can compose CJK words.
@@ -2128,14 +2160,14 @@ TEST_F(RendererErrorPageTest, MAYBE_HttpStatusCodeErrorWithEmptyBody) {
   common_params->url = GURL("data:text/html,test data");
 
   // Emulate a 503 main resource response with an empty body.
-  network::ResourceResponseHead head;
+  auto head = network::mojom::URLResponseHead::New();
   std::string headers(
       "HTTP/1.1 503 SERVICE UNAVAILABLE\nContent-type: text/html\n\n");
-  head.headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+  head->headers = base::MakeRefCounted<net::HttpResponseHeaders>(
       net::HttpUtil::AssembleRawHeaders(headers));
 
   TestRenderFrame* main_frame = static_cast<TestRenderFrame*>(frame());
-  main_frame->Navigate(head, std::move(common_params),
+  main_frame->Navigate(std::move(head), std::move(common_params),
                        CreateCommitNavigationParams());
   main_frame->DidFinishDocumentLoad();
   main_frame->RunScriptsAtDocumentReady(true);
@@ -2193,7 +2225,7 @@ TEST_F(RenderViewImplTest, FocusElementCallsFocusedNodeChanged) {
   EXPECT_TRUE(std::get<0>(params));
   render_thread_->sink().ClearMessages();
 
-  view()->webview()->ClearFocusedElement();
+  ExecuteJavaScriptForTests("document.getElementById('test2').blur();");
   const IPC::Message* msg3 = render_thread_->sink().GetFirstMessageMatching(
       FrameHostMsg_FocusedNodeChanged::ID);
   EXPECT_TRUE(msg3);
@@ -2783,25 +2815,37 @@ TEST_F(RenderViewImplTest, ZoomLevelUpdate) {
 
 #endif
 
+namespace {
+
+// This is the public key which the test below will use to enable origin
+// trial features. Trial tokens for use in tests can be created with the
+// tool in /tools/origin_trials/generate_token.py, using the private key
+// contained in /tools/origin_trials/eftest.key.
+static const uint8_t kOriginTrialPublicKey[] = {
+    0x75, 0x10, 0xac, 0xf9, 0x3a, 0x1c, 0xb8, 0xa9, 0x28, 0x70, 0xd2,
+    0x9a, 0xd0, 0x0b, 0x59, 0xe1, 0xac, 0x2b, 0xb7, 0xd5, 0xca, 0x1f,
+    0x64, 0x90, 0x08, 0x8e, 0xa8, 0xe0, 0x56, 0x3a, 0x04, 0xd0,
+};
+
+}  // anonymous namespace
+
 // Origin Trial Policy which vends the test public key so that the token
 // can be validated.
 class TestOriginTrialPolicy : public blink::OriginTrialPolicy {
-  bool IsOriginTrialsSupported() const override { return true; }
-  base::StringPiece GetPublicKey() const override {
-    // This is the public key which the test below will use to enable origin
-    // trial features. Trial tokens for use in tests can be created with the
-    // tool in /tools/origin_trials/generate_token.py, using the private key
-    // contained in /tools/origin_trials/eftest.key.
-    static const uint8_t kOriginTrialPublicKey[] = {
-        0x75, 0x10, 0xac, 0xf9, 0x3a, 0x1c, 0xb8, 0xa9, 0x28, 0x70, 0xd2,
-        0x9a, 0xd0, 0x0b, 0x59, 0xe1, 0xac, 0x2b, 0xb7, 0xd5, 0xca, 0x1f,
-        0x64, 0x90, 0x08, 0x8e, 0xa8, 0xe0, 0x56, 0x3a, 0x04, 0xd0,
-    };
-    return base::StringPiece(
+ public:
+  TestOriginTrialPolicy() {
+    public_keys_.push_back(base::StringPiece(
         reinterpret_cast<const char*>(kOriginTrialPublicKey),
-        base::size(kOriginTrialPublicKey));
+        base::size(kOriginTrialPublicKey)));
+  }
+  bool IsOriginTrialsSupported() const override { return true; }
+  std::vector<base::StringPiece> GetPublicKeys() const override {
+    return public_keys_;
   }
   bool IsOriginSecure(const GURL& url) const override { return true; }
+
+ private:
+  std::vector<base::StringPiece> public_keys_;
 };
 
 TEST_F(RenderViewImplTest, OriginTrialDisabled) {

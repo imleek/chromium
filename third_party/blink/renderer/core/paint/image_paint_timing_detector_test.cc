@@ -22,7 +22,7 @@
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/performance_timing.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
-#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
@@ -208,7 +208,7 @@ class ImagePaintTimingDetectorTest : public testing::Test {
     Element* element = GetDocument().getElementById(id);
     // Set image and make it loaded.
     ImageResourceContent* content = CreateImageForTest(width, height);
-    ToHTMLImageElement(element)->SetImageForTest(content);
+    To<HTMLImageElement>(element)->SetImageForTest(content);
   }
 
   void SetChildFrameImageAndPaint(AtomicString id, int width, int height) {
@@ -217,7 +217,7 @@ class ImagePaintTimingDetectorTest : public testing::Test {
     DCHECK(element);
     // Set image and make it loaded.
     ImageResourceContent* content = CreateImageForTest(width, height);
-    ToHTMLImageElement(element)->SetImageForTest(content);
+    To<HTMLImageElement>(element)->SetImageForTest(content);
   }
 
   void SetVideoImageAndPaint(AtomicString id, int width, int height) {
@@ -225,17 +225,21 @@ class ImagePaintTimingDetectorTest : public testing::Test {
     DCHECK(element);
     // Set image and make it loaded.
     ImageResourceContent* content = CreateImageForTest(width, height);
-    ToHTMLVideoElement(element)->SetImageForTest(content);
+    To<HTMLVideoElement>(element)->SetImageForTest(content);
   }
 
   void SetSVGImageAndPaint(AtomicString id, int width, int height) {
     Element* element = GetDocument().getElementById(id);
     // Set image and make it loaded.
     ImageResourceContent* content = CreateImageForTest(width, height);
-    ToSVGImageElement(element)->SetImageForTest(content);
+    To<SVGImageElement>(element)->SetImageForTest(content);
   }
 
   void SimulateScroll() { GetPaintTimingDetector().NotifyScroll(kUserScroll); }
+
+  void SimulateKeyUp() {
+    GetPaintTimingDetector().NotifyInputEvent(WebInputEvent::kKeyUp);
+  }
 
   scoped_refptr<base::TestMockTimeTaskRunner> test_task_runner_;
   frame_test_helpers::WebViewHelper web_view_helper_;
@@ -255,7 +259,7 @@ class ImagePaintTimingDetectorTest : public testing::Test {
     sk_sp<SkImage> image = surface->makeImageSnapshot();
     ImageResourceContent* original_image_resource =
         ImageResourceContent::CreateLoaded(
-            StaticBitmapImage::Create(image).get());
+            UnacceleratedStaticBitmapImage::Create(image).get());
     return original_image_resource;
   }
 
@@ -982,6 +986,18 @@ TEST_F(ImagePaintTimingDetectorTest, DeactivateAfterUserInput) {
   SetImageAndPaint("target", 5, 5);
   UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
   EXPECT_FALSE(GetPaintTimingDetector().GetImagePaintTimingDetector());
+}
+
+TEST_F(ImagePaintTimingDetectorTest, ContinueAfterKeyUp) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="parent">
+      <img id="target"></img>
+    </div>
+  )HTML");
+  SimulateKeyUp();
+  SetImageAndPaint("target", 5, 5);
+  UpdateAllLifecyclePhasesAndInvokeCallbackIfAny();
+  EXPECT_TRUE(GetPaintTimingDetector().GetImagePaintTimingDetector());
 }
 
 TEST_F(ImagePaintTimingDetectorTest, NullTimeNoCrash) {

@@ -28,6 +28,8 @@ if (enable_vr) {
       "util/sample_queue.h",
       "util/sliding_average.cc",
       "util/sliding_average.h",
+      "util/stage_utils.cc",
+      "util/stage_utils.h",
       "util/transform_utils.cc",
       "util/transform_utils.h",
       "util/xr_standard_gamepad_builder.cc",
@@ -48,7 +50,6 @@ if (enable_vr) {
       "//mojo/public/cpp/bindings",
       "//services/device/public/cpp/generic_sensor",
       "//services/metrics/public/cpp:ukm_builders",
-      "//services/service_manager/public/cpp",
       "//ui/display",
       "//ui/gfx",
       "//ui/gfx/mojom",
@@ -86,6 +87,10 @@ if (enable_vr) {
     }
 
     if (enable_openvr) {
+      if (!is_component_build) {
+        defines += [ "OPENVR_BUILD_STATIC" ]
+      }
+
       deps += [ "//third_party/openvr:openvr" ]
       sources += [
         "openvr/openvr_api_wrapper.cc",
@@ -212,7 +217,10 @@ if (enable_vr) {
     }
 
     if (enable_openxr) {
-      deps += [ "//third_party/openxr" ]
+      deps += [
+        "//components/version_info",
+        "//third_party/openxr",
+      ]
 
       sources += [
         "openxr/openxr_api_wrapper.cc",
@@ -223,6 +231,9 @@ if (enable_vr) {
         "openxr/openxr_device.h",
         "openxr/openxr_input_helper.cc",
         "openxr/openxr_input_helper.h",
+        "openxr/openxr_interaction_profiles.h",
+        "openxr/openxr_path_helper.cc",
+        "openxr/openxr_path_helper.h",
         "openxr/openxr_render_loop.cc",
         "openxr/openxr_render_loop.h",
         "openxr/openxr_statics.cc",
@@ -359,6 +370,7 @@ if (enable_openxr) {
 
     deps = [
       "//base",
+      "//components/version_info",
       "//device/vr/public/mojom:test_mojom",
       "//third_party/openxr:openxr_headers",
     ]
@@ -378,7 +390,7 @@ if (enable_gvr_services) {
   }
 
   android_library("java") {
-    java_files = java_sources_needing_jni
+    sources = java_sources_needing_jni
     deps = [
       "//base:base_java",
       "//base:jni_java",

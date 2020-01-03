@@ -882,7 +882,8 @@ const int kRecentlyClosedTabsSectionIndex = 0;
     base::RecordAction(base::UserMetricsAction(
         "MobileRecentTabManagerTabFromOtherDeviceOpened"));
     new_tab_page_uma::RecordAction(
-        self.browserState, new_tab_page_uma::ACTION_OPENED_FOREIGN_SESSION);
+        self.browserState, self.webStateList->GetActiveWebState(),
+        new_tab_page_uma::ACTION_OPENED_FOREIGN_SESSION);
     std::unique_ptr<web::WebState> web_state =
         session_util::CreateWebStateWithNavigationEntries(
             self.browserState, toLoad->current_navigation_index,
@@ -920,7 +921,8 @@ const int kRecentlyClosedTabsSectionIndex = 0;
   base::RecordAction(
       base::UserMetricsAction("MobileRecentTabManagerRecentTabOpened"));
   new_tab_page_uma::RecordAction(
-      self.browserState, new_tab_page_uma::ACTION_OPENED_RECENTLY_CLOSED_ENTRY);
+      self.browserState, self.webStateList->GetActiveWebState(),
+      new_tab_page_uma::ACTION_OPENED_RECENTLY_CLOSED_ENTRY);
 
   // If RecentTabs is being displayed from incognito, the resulting tab will
   // open in the corresponding normal BVC. Change the disposition to avoid
@@ -1139,27 +1141,26 @@ const int kRecentlyClosedTabsSectionIndex = 0;
 #pragma mark - SyncPresenter
 
 - (void)showReauthenticateSignin {
-  [self.dispatcher
-              showSignin:
-                  [[ShowSigninCommand alloc]
-                      initWithOperation:AUTHENTICATION_OPERATION_REAUTHENTICATE
-                            accessPoint:signin_metrics::AccessPoint::
-                                            ACCESS_POINT_UNKNOWN]
-      baseViewController:self];
+  [self.handler showSignin:[[ShowSigninCommand alloc]
+                               initWithOperation:
+                                   AUTHENTICATION_OPERATION_REAUTHENTICATE
+                                     accessPoint:signin_metrics::AccessPoint::
+                                                     ACCESS_POINT_UNKNOWN]
+        baseViewController:self];
 }
 
 - (void)showSyncPassphraseSettings {
-  [self.dispatcher showSyncPassphraseSettingsFromViewController:self];
+  [self.handler showSyncPassphraseSettingsFromViewController:self];
 }
 
 - (void)showGoogleServicesSettings {
-  [self.dispatcher showGoogleServicesSettingsFromViewController:self];
+  [self.handler showGoogleServicesSettingsFromViewController:self];
 }
 
 #pragma mark - SigninPresenter
 
 - (void)showSignin:(ShowSigninCommand*)command {
-  [self.dispatcher showSignin:command baseViewController:self];
+  [self.handler showSignin:command baseViewController:self];
 }
 
 #pragma mark - UIAdaptivePresentationControllerDelegate

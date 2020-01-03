@@ -17,9 +17,14 @@
 #include "components/omnibox/browser/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 
-PwaInstallView::PwaInstallView(CommandUpdater* command_updater,
-                               PageActionIconView::Delegate* delegate)
-    : PageActionIconView(nullptr, 0, delegate) {
+PwaInstallView::PwaInstallView(
+    CommandUpdater* command_updater,
+    IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+    PageActionIconView::Delegate* page_action_icon_delegate)
+    : PageActionIconView(nullptr,
+                         0,
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate) {
   SetVisible(false);
   SetLabel(l10n_util::GetStringUTF16(IDS_OMNIBOX_PWA_INSTALL_ICON_LABEL));
   SetUpForInOutAnimation();
@@ -27,15 +32,15 @@ PwaInstallView::PwaInstallView(CommandUpdater* command_updater,
 
 PwaInstallView::~PwaInstallView() {}
 
-bool PwaInstallView::Update() {
+void PwaInstallView::UpdateImpl() {
   content::WebContents* web_contents = GetWebContents();
   if (!web_contents)
-    return false;
+    return;
 
   auto* manager = banners::AppBannerManager::FromWebContents(web_contents);
   // May not be present e.g. in incognito mode.
   if (!manager)
-    return false;
+    return;
 
   bool is_probably_promotable = manager->IsProbablyPromotableWebApp();
   if (is_probably_promotable && manager->MaybeConsumeInstallAnimation())
@@ -43,9 +48,7 @@ bool PwaInstallView::Update() {
   else
     ResetSlideAnimation(false);
 
-  bool was_visible = GetVisible();
   SetVisible(is_probably_promotable || PWAConfirmationBubbleView::IsShowing());
-  return GetVisible() != was_visible;
 }
 
 void PwaInstallView::OnExecuting(PageActionIconView::ExecuteSource source) {
@@ -71,4 +74,8 @@ base::string16 PwaInstallView::GetTextForTooltipAndAccessibleName() const {
   return l10n_util::GetStringFUTF16(
       IDS_OMNIBOX_PWA_INSTALL_ICON_TOOLTIP,
       banners::AppBannerManager::GetInstallableWebAppName(web_contents));
+}
+
+const char* PwaInstallView::GetClassName() const {
+  return "PwaInstallView";
 }

@@ -1281,11 +1281,24 @@ gfx::ICCProfile GetICCProfileForMonitor(int monitor) {
 }
 
 bool IsSyncExtensionAvailable() {
+// Chrome for ChromeOS can be run with X11 on a Linux desktop. In this case,
+// NotifySwapAfterResize is never called as the compositor does not notify about
+// swaps after resize. Thus, simply disable usage of XSyncCounter on ChromeOS
+// builds.
+//
+// TODO(https://crbug.com/1036285): Also, disable sync extension for all ozone
+// builds as long as our EGL impl for Ozone/X11 is not mature enough and we do
+// not receive swap completions on time, which results in weird resize behaviour
+// as X Server waits for the XSyncCounter changes.
+#if defined(OS_CHROMEOS) || defined(USE_OZONE)
+  return false;
+#else
   auto* display = gfx::GetXDisplay();
   int unused;
   static bool result = XSyncQueryExtension(display, &unused, &unused) &&
                        XSyncInitialize(display, &unused, &unused);
   return result;
+#endif
 }
 
 SkColorType ColorTypeForVisual(void* visual) {
@@ -1295,8 +1308,8 @@ SkColorType ColorTypeForVisual(void* visual) {
     unsigned long green_mask;
     unsigned long blue_mask;
   } color_infos[] = {
-      {kRGB_565_SkColorType, 0x1f, 0x7e0, 0xf800},
-      {kARGB_4444_SkColorType, 0xf0, 0xf00, 0xf000},
+      {kRGB_565_SkColorType, 0xf800, 0x7e0, 0x1f},
+      {kARGB_4444_SkColorType, 0xf000, 0xf00, 0xf0},
       {kRGBA_8888_SkColorType, 0xff, 0xff00, 0xff0000},
       {kBGRA_8888_SkColorType, 0xff0000, 0xff00, 0xff},
       {kRGBA_1010102_SkColorType, 0x3ff, 0xffc00, 0x3ff00000},
@@ -1309,7 +1322,10 @@ SkColorType ColorTypeForVisual(void* visual) {
       return color_info.color_type;
     }
   }
-  LOG(FATAL) << "Unsupported visual: " << XVisualIDFromVisual(vis);
+  LOG(FATAL) << "Unsupported visual with rgb mask 0x" << std::hex
+             << vis->red_mask << ", 0x" << vis->green_mask << ", 0x"
+             << vis->blue_mask
+             << ".  Please report this to https://crbug.com/1025266";
   return kUnknown_SkColorType;
 }
 

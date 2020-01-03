@@ -146,7 +146,7 @@ bool BrowserAccessibilityPosition::IsEmbeddedObjectInParent() const {
   // Not all objects in the internal accessibility tree are exposed to platform
   // APIs.
   return !IsNullPosition() && !GetAnchor()->IsTextOnlyObject() &&
-         !GetAnchor()->PlatformIsChildOfLeaf();
+         !GetAnchor()->IsChildOfLeaf();
 #else
   return false;
 #endif
@@ -157,7 +157,8 @@ bool BrowserAccessibilityPosition::IsInLineBreakingObject() const {
     return false;
   DCHECK(GetAnchor());
   return GetAnchor()->GetBoolAttribute(
-      ax::mojom::BoolAttribute::kIsLineBreakingObject);
+             ax::mojom::BoolAttribute::kIsLineBreakingObject) &&
+         !GetAnchor()->IsInListMarker();
 }
 
 ax::mojom::Role BrowserAccessibilityPosition::GetRole() const {

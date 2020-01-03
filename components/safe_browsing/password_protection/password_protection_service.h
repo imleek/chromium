@@ -255,6 +255,16 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   }
 #endif
 
+  const std::vector<std::string>& saved_passwords_matching_domains() const {
+    return saved_passwords_matching_domains_;
+  }
+#if defined(UNIT_TEST)
+  void set_saved_passwords_matching_domains(
+      const std::vector<std::string>& matching_domains) {
+    saved_passwords_matching_domains_ = matching_domains;
+  }
+#endif
+
   virtual AccountInfo GetAccountInfo() const = 0;
 
  protected:
@@ -381,6 +391,10 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   virtual LoginReputationClientRequest::PasswordReuseEvent::SyncAccountType
   GetSyncAccountType() const = 0;
 
+  const std::list<std::string>& common_spoofed_domains() const {
+    return common_spoofed_domains_;
+  }
+
  private:
   friend class PasswordProtectionServiceTest;
   friend class TestPasswordProtectionService;
@@ -439,6 +453,8 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   ReusedPasswordAccountType
       reused_password_account_type_for_last_shown_warning_;
 
+  std::vector<std::string> saved_passwords_matching_domains_;
+
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager_;
 
   // The context we use to issue network requests. This request_context_getter
@@ -452,6 +468,10 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
 
   // Set of PasswordProtectionRequests that are triggering modal warnings.
   std::set<scoped_refptr<PasswordProtectionRequest>> warning_requests_;
+
+  // List of most commonly spoofed domains to default to on the password warning
+  // dialog.
+  std::list<std::string> common_spoofed_domains_;
 
   ScopedObserver<history::HistoryService, history::HistoryServiceObserver>
       history_service_observer_{this};

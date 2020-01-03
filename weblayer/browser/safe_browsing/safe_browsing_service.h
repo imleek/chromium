@@ -8,10 +8,13 @@
 #include "components/safe_browsing/base_ui_manager.h"
 
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "weblayer/browser/safe_browsing/safe_browsing_ui_manager.h"
 
 namespace content {
+class RenderProcessHost;
 class ResourceContext;
 }
 
@@ -46,6 +49,8 @@ class SafeBrowsingService {
       content::ResourceContext* resource_context,
       const base::RepeatingCallback<content::WebContents*()>& wc_getter,
       int frame_tree_node_id);
+  void AddInterface(service_manager::BinderRegistry* registry,
+                    content::RenderProcessHost* render_process_host);
 
  private:
   SafeBrowsingUIManager* GetSafeBrowsingUIManager();
@@ -66,16 +71,16 @@ class SafeBrowsingService {
   // thread.
   scoped_refptr<SafeBrowsingUIManager> ui_manager_;
 
-  // This is what owns the URLRequestContext inside the network service. This is
-  // used by SimpleURLLoader for Safe Browsing requests.
+  // This is what owns the URLRequestContext inside the network service. This
+  // is used by SimpleURLLoader for Safe Browsing requests.
   std::unique_ptr<safe_browsing::SafeBrowsingNetworkContext> network_context_;
 
   // Accessed on IO thread only.
   scoped_refptr<safe_browsing::RemoteSafeBrowsingDatabaseManager>
       safe_browsing_db_manager_;
 
-  // A SharedURLLoaderFactory and its interfaceptr used on the IO thread.
-  network::mojom::URLLoaderFactoryPtr url_loader_factory_on_io_;
+  // A SharedURLLoaderFactory and its remote used on the IO thread.
+  mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory_on_io_;
   scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
       shared_url_loader_factory_on_io_;
 

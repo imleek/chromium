@@ -19,8 +19,7 @@ namespace {
 
 bool ShouldShowExtensionsCheckup(content::BrowserContext* context) {
   // Don't show the promo if the extensions checkup experiment isn't enabled.
-  if (!base::FeatureList::IsEnabled(
-          extensions_features::kExtensionsCheckupTool)) {
+  if (!base::FeatureList::IsEnabled(extensions_features::kExtensionsCheckup)) {
     return false;
   }
 
@@ -41,7 +40,11 @@ bool ShouldShowExtensionsCheckup(content::BrowserContext* context) {
   // are policy-installed (even if they can be disabled), then do not show the
   // extensions checkup experiment.
   for (const auto& extension : *extension_set) {
-    if (!extensions::Manifest::IsPolicyLocation(extension->location())) {
+    if (extension->is_extension() &&
+        !extensions::Manifest::IsPolicyLocation(extension->location()) &&
+        !extensions::Manifest::IsComponentLocation(extension->location()) &&
+        !(extension->creation_flags() &
+          extensions::Extension::WAS_INSTALLED_BY_DEFAULT)) {
       return true;
     }
   }
@@ -56,13 +59,10 @@ bool ShouldShowExtensionsCheckupOnStartup(content::BrowserContext* context) {
   ExtensionPrefs* prefs = ExtensionPrefs::Get(context);
   if (ShouldShowExtensionsCheckup(context) &&
       base::GetFieldTrialParamValueByFeature(
-          extensions_features::kExtensionsCheckupTool,
-          extensions_features::kExtensionsCheckupToolEntryPointParameter) ==
-          "startup" &&
+          extensions_features::kExtensionsCheckup,
+          extensions_features::kExtensionsCheckupEntryPointParameter) ==
+          extensions_features::kStartupEntryPoint &&
       !prefs->HasUserSeenExtensionsCheckupOnStartup()) {
-    // Stores a boolean in ExtensionPrefs so we can make sure that the user is
-    // redirected to the extensions page upon startup once.
-    prefs->SetUserHasSeenExtensionsCheckupOnStartup(true);
     return true;
   }
   return false;
@@ -71,9 +71,15 @@ bool ShouldShowExtensionsCheckupOnStartup(content::BrowserContext* context) {
 bool ShouldShowExtensionsCheckupPromo(content::BrowserContext* context) {
   return ShouldShowExtensionsCheckup(context) &&
          base::GetFieldTrialParamValueByFeature(
-             extensions_features::kExtensionsCheckupTool,
-             extensions_features::kExtensionsCheckupToolEntryPointParameter) ==
-             "promo";
+             extensions_features::kExtensionsCheckup,
+             extensions_features::kExtensionsCheckupEntryPointParameter) ==
+             extensions_features::kNtpPromoEntryPoint;
+}
+
+CheckupMessage GetCheckupMessageFocus() {
+  return static_cast<CheckupMessage>(base::GetFieldTrialParamByFeatureAsInt(
+      extensions_features::kExtensionsCheckup,
+      extensions_features::kExtensionsCheckupBannerMessageParameter, 2));
 }
 
 }  // namespace extensions

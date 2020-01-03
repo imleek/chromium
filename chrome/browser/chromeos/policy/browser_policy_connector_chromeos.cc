@@ -44,6 +44,7 @@
 #include "chrome/browser/chromeos/policy/scheduled_update_checker/device_scheduled_update_checker.h"
 #include "chrome/browser/chromeos/policy/server_backed_state_keys_broker.h"
 #include "chrome/browser/chromeos/policy/tpm_auto_update_mode_policy_handler.h"
+#include "chrome/browser/chromeos/printing/bulk_printers_calculator_factory.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/chromeos/system/timezone_util.h"
@@ -74,7 +75,6 @@
 #include "components/policy/policy_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_registry_simple.h"
-#include "content/public/common/service_manager_connection.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -248,12 +248,16 @@ void BrowserPolicyConnectorChromeOS::Init(
   device_scheduled_update_checker_ =
       std::make_unique<DeviceScheduledUpdateChecker>(
           chromeos::CrosSettings::Get(),
-          chromeos::NetworkHandler::Get()->network_state_handler(),
-          content::ServiceManagerConnection::GetForProcess()->GetConnector());
+          chromeos::NetworkHandler::Get()->network_state_handler());
 
+  chromeos::BulkPrintersCalculatorFactory* calculator_factory =
+      chromeos::BulkPrintersCalculatorFactory::Get();
+  DCHECK(calculator_factory)
+      << "Policy connector initialized before the bulk printers factory";
   device_cloud_external_data_policy_handlers_.push_back(
       std::make_unique<policy::DeviceNativePrintersExternalDataHandler>(
-          GetPolicyService()));
+          GetPolicyService(), calculator_factory->GetForDevice()));
+
   device_cloud_external_data_policy_handlers_.push_back(
       std::make_unique<policy::DeviceWallpaperImageExternalDataHandler>(
           local_state, GetPolicyService()));

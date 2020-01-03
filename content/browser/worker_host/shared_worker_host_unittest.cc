@@ -44,15 +44,10 @@ class SharedWorkerHostTest : public testing::Test {
   }
 
   SharedWorkerHostTest()
-      : default_mock_url_loader_factory_(
-            std::make_unique<NotImplementedNetworkURLLoaderFactory>()),
-        mock_render_process_host_(&browser_context_),
+      : mock_render_process_host_(&browser_context_),
         service_(nullptr /* storage_partition */,
                  nullptr /* service_worker_context */,
-                 nullptr /* appcache_service */) {
-    mock_render_process_host_.OverrideURLLoaderFactory(
-        default_mock_url_loader_factory_.get());
-  }
+                 nullptr /* appcache_service */) {}
 
   base::WeakPtr<SharedWorkerHost> CreateHost() {
     GURL url("http://www.example.com/w.js");
@@ -70,8 +65,8 @@ class SharedWorkerHostTest : public testing::Test {
         service_.next_shared_worker_instance_id_++, url, name, origin,
         content_security_policy, content_security_policy_type,
         creation_address_space, creation_context_type);
-    auto host = std::make_unique<SharedWorkerHost>(
-        &service_, instance, mock_render_process_host_.GetID());
+    auto host = std::make_unique<SharedWorkerHost>(&service_, instance,
+                                                   &mock_render_process_host_);
     auto weak_host = host->AsWeakPtr();
     service_.worker_hosts_.insert(std::move(host));
     return weak_host;
@@ -91,7 +86,7 @@ class SharedWorkerHostTest : public testing::Test {
     ASSERT_EQ(MOJO_RESULT_OK, rv);
     main_script_load_params->response_body = std::move(consumer_handle);
     auto subresource_loader_factories =
-        std::make_unique<blink::URLLoaderFactoryBundleInfo>();
+        std::make_unique<blink::PendingURLLoaderFactoryBundle>();
 
     base::Optional<SubresourceLoaderParams> subresource_loader_params =
         SubresourceLoaderParams();
@@ -144,8 +139,6 @@ class SharedWorkerHostTest : public testing::Test {
  protected:
   BrowserTaskEnvironment task_environment_;
   TestBrowserContext browser_context_;
-  std::unique_ptr<network::mojom::URLLoaderFactory>
-      default_mock_url_loader_factory_;
   MockRenderProcessHost mock_render_process_host_;
   std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
 

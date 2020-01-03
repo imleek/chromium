@@ -73,35 +73,6 @@
       },
     },
 
-    'android_instrumentation_tests': {
-      'chrome_public_test_apk': {
-        'swarming': {
-          'shards': 20,
-        },
-      },
-      'chrome_public_test_vr_apk': {
-        'args': [
-          '--shared-prefs-file=//chrome/android/shared_preference_files/test/vr_cardboard_skipdon_setupcomplete.json',
-          '--additional-apk=//third_party/gvr-android-sdk/test-apks/vr_services/vr_services_current.apk',
-        ],
-        'swarming': {
-          'shards': 2,
-        },
-      },
-      'content_shell_test_apk': {
-        'swarming': {
-          'shards': 3,
-        },
-      },
-      'mojo_test_apk': {},
-      'weblayer_instrumentation_test_apk': {},
-      'webview_instrumentation_test_apk': {
-        'swarming': {
-          'shards': 7,
-        },
-      },
-    },
-
     'android_isolated_scripts': {
       'content_shell_crash_test': {
         'args': [
@@ -117,11 +88,7 @@
     },
 
     'android_monochrome_smoke_tests': {
-      'monochrome_public_bundle_fake_modules_smoke_test': {
-        # TODO(https://crbug.com/1025316): Make non-experimental when these work
-        # properly with component builds.
-        'experiment_percentage': 100
-      },
+      'monochrome_public_bundle_fake_modules_smoke_test': {},
       'monochrome_public_bundle_smoke_test': {},
       'monochrome_public_smoke_test': {},
     },
@@ -355,7 +322,7 @@
             {
               "cipd_package": 'chromium/chrome/test/chromedriver/cipd',
               'location': 'chrome/test/chromedriver/cipd',
-              'revision': 'PCCG9OmVmpDaf9oaKhJ3sSxXgINilZ9qpl4oaRU0R60C',
+              'revision': 'tLMjWvOcbQX4nMo5WnMsKWn0aaVludzuSX9yiVFUCoUC',
             }
           ]
         },
@@ -506,7 +473,7 @@
       'jingle_unittests': {},
       'latency_unittests': {},
       'libcups_unittests': {
-	'experiment_percentage': 100,
+        'experiment_percentage': 100,
       },
       'media_unittests': {
         'args': [
@@ -612,1717 +579,6 @@
       },
     },
 
-    'chromium_code_coverage_isolated_fuzzers': {
-      # Fuzzer targets are temporarily to be run locally on the builder
-      # rather than on swarming avoid placing the corpus on the public
-      # isolate or making a swarming job depend on external data.
-      # see crbug.com/910235
-      'agc_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'android_crazy_linker_zip_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'angle_translator_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'apdu_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'appcache_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'appcache_manifest_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'audio_decoder_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'audio_decoder_ilbc_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'audio_decoder_isac_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'audio_decoder_isac_incoming_packet_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'audio_decoder_isacfix_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'audio_decoder_opus_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'audio_decoder_opus_redundant_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'audio_encoder_opus_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'audio_processing_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'autofill_phone_number_i18n_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'ax_table_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'ax_tree_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'base64_decode_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'base64_encode_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'base_json_correctness_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'base_json_reader_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'base_json_string_escape_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'bdict_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'blink_harfbuzz_shaper_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'blink_html_tokenizer_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'blink_http_parsers_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'blink_json_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'blink_png_decoder_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'blink_text_codec_UTF_8_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'blink_text_codec_WINDOWS_1252_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_arm_cpuinfo_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_bn_div_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_bn_mod_exp_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_cert_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_client_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_client_no_fuzzer_mode_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_dtls_client_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_dtls_server_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_pkcs12_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_pkcs8_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_privkey_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_read_pem_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_server_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_server_no_fuzzer_mode_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_session_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_spki_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'boringssl_ssl_ctx_api_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'brotli_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'cast_message_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'cbcs_decryptor_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'cenc_decryptor_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'color_transform_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'comfort_noise_decoder_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'compact_enc_det_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'congestion_controller_feedback_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'content_security_policy_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'convert_woff2ttf_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'courgette_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'css_parser_fast_paths_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'css_parser_proto_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'csv_reader_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'ctap_response_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'dawn_spirv_cross_glsl_fast_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'dawn_spirv_cross_glsl_full_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'dawn_spirv_cross_hlsl_fast_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'dawn_spirv_cross_hlsl_full_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'dawn_spirv_cross_msl_fast_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'dawn_spirv_cross_msl_full_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'dawn_wire_server_and_frontend_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'edid_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'empty_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'expat_xml_parse_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'feature_policy_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'fido_ble_frames_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'fido_cable_handshake_handler_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'fido_hid_message_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'fingerprint_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'flatbuffers_verifier_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'flexfec_header_reader_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'flexfec_receiver_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'flexfec_sender_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'form_structure_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'form_structure_process_query_response_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'forward_error_correction_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'frame_buffer2_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'gfx_png_image_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'gpu_angle_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'gpu_angle_passthrough_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'gpu_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'gpu_raster_angle_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'gpu_raster_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'gpu_raster_swiftshader_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'gpu_swiftshader_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'gurl_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'h264_bitstream_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'h264_depacketizer_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'harfbuzz_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'hash_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'hid_report_descriptor_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'hit_test_manager_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'hit_test_query_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'html_preload_scanner_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'http_structured_header_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'hunspell_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'icu_break_iterator_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'icu_break_iterator_utf32_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'icu_converter_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'icu_number_format_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'icu_ucasemap_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'icu_unicode_string_codepage_create_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'icu_uregex_open_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'indexed_ruleset_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'javascript_parser_proto_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'json_web_key_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'language_detection_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'leveldb_put_get_delete_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'libaddressinput_parse_address_fields_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'libaddressinput_parse_format_rule_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'libpng_progressive_read_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'libpng_read_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'libsrtp_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'libwebp_advanced_api_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'libwebp_animation_api_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'libwebp_demux_api_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'libwebp_enc_dec_api_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'libwebp_simple_api_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'libxml_xml_read_memory_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'lookup_affiliation_response_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mdns_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'media_bit_reader_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'media_container_names_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'media_h264_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'media_pipeline_integration_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'media_vp8_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'media_vp9_parser_encrypted_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'media_vp9_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'media_vpx_video_decoder_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'media_webm_muxer_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mediasource_MP3_pipeline_integration_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mediasource_MP4_AV1_pipeline_integration_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mediasource_MP4_FLAC_pipeline_integration_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mediasource_MP4_OPUS_pipeline_integration_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mediasource_WEBM_OPUS_VP9_pipeline_integration_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mediasource_WEBM_OPUS_pipeline_integration_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mediasource_WEBM_VORBIS_pipeline_integration_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mediasource_WEBM_VP8_pipeline_integration_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mediasource_WEBM_VP9_pipeline_integration_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'merkle_integrity_source_stream_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mhtml_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'midi_message_queue_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'midi_webmidi_data_validator_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'minidump_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'minizip_compress_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'minizip_uncompress_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mojo_core_channel_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mojo_core_node_channel_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mojo_core_port_event_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mojo_core_user_message_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mojo_parse_message_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'mojo_parse_message_proto_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_auth_challenge_tokenizer_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_brotli_source_stream_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_cert_normalize_name_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_cert_parse_certificate_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_cert_verify_name_in_subtree_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_cert_verify_name_match_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_data_job_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_dns_hosts_parse_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_dns_query_parse_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_dns_record_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_dns_response_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_ftp_ctrl_response_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_ftp_directory_listing_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_get_domain_and_registry_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_gzip_source_stream_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_host_resolver_manager_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_hpack_decoder_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_http2_frame_decoder_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_http_chunked_decoder_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_http_proxy_client_socket_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_http_security_headers_expect_ct_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_http_security_headers_hsts_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_http_server_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_http_stream_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_http_transport_security_state_static_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_mime_sniffer_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_ntlm_ntlm_client_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_parse_cookie_line_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_parse_data_url_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_parse_ip_pattern_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_parse_proxy_bypass_rules_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_parse_proxy_list_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_parse_proxy_list_pac_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_parse_proxy_rules_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_parse_url_hostname_to_address_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_quic_crypto_framer_parse_message_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_quic_stream_factory_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_quic_transport_parameters_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_reporting_header_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_socks5_client_socket_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_socks_client_socket_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_spdy_session_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_unescape_url_component_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_uri_template_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_url_request_ftp_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_url_request_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_websocket_deflate_stream_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_websocket_extension_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'net_websocket_frame_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'neteq_rtp_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'neteq_signal_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'origin_policy_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'origin_trial_token_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'ots_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'override_lite_runtime_plugin_test_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'packet_buffer_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'paint_op_buffer_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'password_generator_proto_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'password_manager_form_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'password_manager_form_parser_proto_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'payment_method_manifest_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'payment_web_app_manifest_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_cjs_util_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_cmap_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_codec_a85_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_codec_fax_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_codec_icc_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_codec_jbig2_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_codec_rle_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_font_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_fx_date_helpers_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_hint_table_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_jpx_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_psengine_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_streamparser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdf_xml_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pdfium_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pickle_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'preg_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'prtime_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'pseudotcp_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'qcms_color_space_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'reader_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'renderer_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'renderer_proto_tree_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'renderer_tree_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'residual_echo_detector_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'rtcp_receiver_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'rtp_frame_reference_finder_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'rtp_header_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'rtp_packet_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'sandbox_ipc_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'sdp_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'sequence_manager_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'sfntly_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'sha1_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'signed_exchange_certificate_chain_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'signed_exchange_envelope_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'skia_image_filter_proto_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'skia_path_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'skia_pathop_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'snappy_compress_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'snappy_uncompress_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'spvtools_binary_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'spvtools_opt_legalization_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'spvtools_opt_performance_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'spvtools_opt_size_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'spvtools_val_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'sqlite3_fts3_lpm_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'sqlite3_lpm_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'sqlite3_ossfuzz_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'sqlite3_select_expr_lpm_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'sqlite3_select_printf_lpm_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'sqlite3_select_strftime_lpm_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'string_number_conversions_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'string_tokenizer_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'stun_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'stun_validator_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'stylesheet_contents_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'swiftshader_vertex_routine_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'template_url_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'test_config_and_dict': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'test_config_and_seed_corpus': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'test_config_and_seed_corpuses': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'test_config_only': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'test_dict_from_subdir': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'test_dict_only': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'text_resource_decoder_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'third_party_re2_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'transfer_cache_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'transport_feedback_packet_loss_tracker_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'turn_unwrap_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'ulpfec_generator_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'ulpfec_header_reader_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'ulpfec_receiver_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'url_parse_proto_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'usb_descriptors_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'usb_string_read_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'usrsctp_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'utf_string_conversions_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'v4_get_hash_protocol_manager_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'v8_fully_instrumented_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'v8_json_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'v8_multi_return_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'v8_regexp_builtins_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'v8_regexp_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'v8_script_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'v8_serialized_script_value_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'v8_wasm_async_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'v8_wasm_code_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'v8_wasm_compile_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'v8_wasm_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'vp8_depacketizer_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'vp8_qp_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'vp9_depacketizer_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'vp9_qp_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'web_icon_sizes_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'webcrypto_ec_import_key_pkcs8_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'webcrypto_ec_import_key_raw_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'webcrypto_ec_import_key_spki_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'webcrypto_rsa_import_key_pkcs8_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'webcrypto_rsa_import_key_spki_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'webusb_descriptors_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'xml_parser_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'zlib_deflate_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'zlib_deflate_set_dictionary_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'zlib_inflate_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'zlib_uncompress_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'zucchini_apply_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'zucchini_disassembler_dex_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'zucchini_disassembler_win32_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'zucchini_imposed_ensemble_matcher_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'zucchini_patch_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'zucchini_raw_gen_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-      'zucchini_ztf_gen_fuzzer': {
-        'swarming': {
-          'can_use_on_swarming_builders': False,
-        },
-      },
-    },
-
-    'chromium_code_coverage_isolated_scripts': {
-      'webkit_layout_tests': {
-        # layout test failures are retried 3 times when '--test-list' is not
-        # passed, but 0 times when '--test-list' is passed. We want to always
-        # retry 3 times, so we explicitly specify it.
-        'args': [
-          '--num-retries=3',
-          '--additional-driver-flag=--no-sandbox',
-          '--additional-env-var=LLVM_PROFILE_FILE=${ISOLATED_OUTDIR}/profraw/default-%2m.profraw',
-        ],
-        'isolate_name': 'blink_web_tests_exparchive',
-        'merge': {
-          'args': [
-            '--verbose',
-          ],
-          'script': '//third_party/blink/tools/merge_web_test_results.py',
-        },
-        'results_handler': 'layout tests',
-        'swarming': {
-          'shards': 12,
-        }
-      },
-    },
-
     'chromium_gtests': {
       'angle_unittests': {},
       'base_unittests': {},
@@ -2404,7 +660,7 @@
       'gfx_unittests': {},
       'unit_tests': {
         'android_swarming': {
-          'shards': 10,
+          'shards': 2,
         },
       },
       'viz_unittests': {},
@@ -2616,7 +872,8 @@
         'args': [
           '--num-retries=3',
         ],
-        'isolate_name': 'blink_web_tests_exparchive',
+        'linux_args': [ '--fuzzy-diff', ],
+        'isolate_name': 'blink_web_tests',
         'merge': {
           'args': [
             '--verbose',
@@ -2650,7 +907,8 @@
         'args': [
           '--num-retries=3',
         ],
-        'isolate_name': 'blink_web_tests_exparchive',
+        'linux_args': [ '--fuzzy-diff', ],
+        'isolate_name': 'blink_web_tests',
         'merge': {
           'args': [
             '--verbose',
@@ -2836,7 +1094,8 @@
         'args': [
           '--num-retries=3',
         ],
-        'isolate_name': 'blink_web_tests_exparchive',
+        'linux_args': [ '--fuzzy-diff', ],
+        'isolate_name': 'blink_web_tests',
         'merge': {
           'args': [
             '--verbose',
@@ -2851,6 +1110,49 @@
       'blink_python_tests': {},
     },
 
+    'devtools_webkit_isolated_scripts': {
+      'webkit_layout_tests': {
+        # layout test failures are retried 3 times when '--test-list' is not
+        # passed, but 0 times when '--test-list' is passed. We want to always
+        # retry 3 times, so we explicitly specify it.
+        'args': [
+          '--num-retries=3',
+        ],
+        'isolate_name': 'blink_web_tests',
+        'merge': {
+          'args': [
+            '--verbose',
+          ],
+          'script': '//third_party/blink/tools/merge_web_test_results.py',
+        },
+        'results_handler': 'layout tests',
+        'swarming': {
+          'shards': 12,
+        }
+      },
+      'webkit_layout_from_devtools': {
+        # layout test failures are retried 3 times when '--test-list' is not
+        # passed, but 0 times when '--test-list' is passed. We want to always
+        # retry 3 times, so we explicitly specify it.
+        'args': [
+          '--num-retries=3',
+          '--layout-tests-directory=../../third_party/devtools-frontend/src/test/webtests/',
+          'http/tests/devtools',
+        ],
+        'isolate_name': 'devtools_web_tests',
+        'merge': {
+          'args': [
+            '--verbose',
+          ],
+          'script': '//third_party/blink/tools/merge_web_test_results.py',
+        },
+        'results_handler': 'layout tests',
+        'swarming': {
+          'shards': 4,
+        }
+      },
+    },
+
     'fieldtrial_browser_tests': {
       'no_fieldtrial_browser_tests': {
         'args': [
@@ -2861,6 +1163,9 @@
         },
         'test': 'browser_tests',
       },
+      # TODO(crbug.com/1025244): Move Open Screen unit tests from fieldtrial
+      # to linux, mac bots once we have ensured the tests are stable.
+      'openscreen_unittests': {}
     },
 
     'fuchsia_gtests': {
@@ -3296,7 +1601,7 @@
           '-v',
         ],
         'android_args': [
-          '--shard-timeout=600',
+          '--shard-timeout=800',
         ],
         'merge': {
           'script': '//tools/perf/process_perf_results.py',
@@ -3315,7 +1620,7 @@
           '--one-frame-only',
         ],
         'android_args': [
-          '--shard-timeout=500',
+          '--shard-timeout=800',
         ],
         'merge': {
           'script': '//tools/perf/process_perf_results.py',
@@ -3376,7 +1681,7 @@
           '--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/enable-gpu-rasterization',
           '--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/use-gl=any',
         ],
-        'isolate_name': 'blink_web_tests_exparchive',
+        'isolate_name': 'blink_web_tests',
         'merge': {
           'args': [
             '--verbose',
@@ -3413,7 +1718,7 @@
           '--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/enable-gpu-rasterization',
           '--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/use-vulkan=native',
         ],
-        'isolate_name': 'blink_web_tests_exparchive',
+        'isolate_name': 'blink_web_tests',
         'merge': {
           'args': [
             '--verbose',
@@ -3446,26 +1751,6 @@
       },
     },
 
-    'gpu_command_buffer_perf_validating_isolated_scripts': {
-      'validating_command_buffer_perftests': {
-        'args': [
-          '--gtest-benchmark-name=validating_command_buffer_perftests',
-          '-v',
-          '--use-cmd-decoder=validating',
-          '--use-stub',
-          '--fast-run',
-        ],
-        'isolate_name': 'command_buffer_perftests',
-        'merge': {
-          'script': '//tools/perf/process_perf_results.py',
-          'args': [
-            '--smoke-test-mode',
-          ],
-        },
-        'should_retry_with_patch': False,
-      },
-    },
-
     'gpu_common_and_optional_telemetry_tests': {
       'info_collection': {
         'args': [
@@ -3485,7 +1770,6 @@
       'gl_tests': {
         'desktop_args': [
           '--use-gpu-in-tests',
-          '--use-cmd-decoder=validating',
         ],
       },
       'gl_unittests': {
@@ -3521,6 +1805,24 @@
         ],
         'test': 'dawn_end2end_tests',
       },
+      'dawn_end2end_skip_validation_tests': {
+        'desktop_args': [
+          '--use-gpu-in-tests',
+          # Dawn test retries deliberately disabled to prevent flakiness.
+          '--test-launcher-retry-limit=0',
+          '--skip-validation',
+        ],
+        'test': 'dawn_end2end_tests',
+      },
+      'dawn_end2end_use_spvc_tests': {
+        'desktop_args': [
+          '--use-gpu-in-tests',
+          # Dawn test retries deliberately disabled to prevent flakiness.
+          '--test-launcher-retry-limit=0',
+          '--use-spvc',
+        ],
+        'test': 'dawn_end2end_tests',
+      },
     },
 
     # GPU gtests that test Dawn and integration with Chromium
@@ -3551,10 +1853,27 @@
         ],
         'test': 'dawn_end2end_tests',
       },
+      'dawn_end2end_skip_validation_tests': {
+        'desktop_args': [
+          '--use-gpu-in-tests',
+          # Dawn test retries deliberately disabled to prevent flakiness.
+          '--test-launcher-retry-limit=0',
+          '--skip-validation',
+        ],
+        'test': 'dawn_end2end_tests',
+      },
+      'dawn_end2end_use_spvc_tests': {
+        'desktop_args': [
+          '--use-gpu-in-tests',
+          # Dawn test retries deliberately disabled to prevent flakiness.
+          '--test-launcher-retry-limit=0',
+          '--use-spvc',
+        ],
+        'test': 'dawn_end2end_tests',
+      },
       'gl_tests': {
         'desktop_args': [
           '--use-gpu-in-tests',
-          '--use-cmd-decoder=validating',
         ],
       },
       'gl_unittests': {
@@ -3617,13 +1936,6 @@
     'gpu_fyi_and_optional_win_specific_gtests': {
       'angle_gles1_conformance_tests': {
         'args': ['--use-gpu-in-tests']
-      },
-      'gl_tests_passthrough': {
-        'test': 'gl_tests',
-        'args': [
-          '--use-gpu-in-tests',
-          '--use-cmd-decoder=passthrough',
-        ],
       },
       'gles2_conform_d3d9_test': {
         'args': [
@@ -3694,15 +2006,6 @@
         ],
         'linux_args': [ '--no-xvfb' ],
         'test': 'content_browsertests',
-      },
-    },
-
-    'gpu_gl_tests_validating': {
-      'gl_tests': {
-        'desktop_args': [
-          '--use-gpu-in-tests',
-          '--use-cmd-decoder=validating',
-        ],
       },
     },
 
@@ -3859,11 +2162,6 @@
       },
     },
 
-    'gpu_skia_renderer_telemetry_tests': [
-      'gpu_skia_renderer_non_vulkan_telemetry_tests',
-      'gpu_skia_renderer_vulkan_telemetry_tests',
-    ],
-
     'gpu_skia_renderer_vulkan_gtests': {
       'vulkan_content_browsertests': {
         'args': [
@@ -3956,6 +2254,8 @@
           '${got_revision}',
           '--test-machine-name',
           '${buildername}',
+          # On dual-GPU devices we want the high-performance GPU to be active
+          '--extra-browser-args=--force_high_performance_gpu',
         ],
         'precommit_args': [
           # Gerrit issue ID
@@ -4001,7 +2301,7 @@
     },
 
     'gpu_webgl2_conformance_gles_passthrough_telemetry_tests': {
-      'webgl2_conformance_gl_passthrough_tests': {
+      'webgl2_conformance_gles_passthrough_tests': {
         'telemetry_test_name': 'webgl_conformance',
         'args': [
           '--webgl-conformance-version=2.0.1',
@@ -4030,7 +2330,27 @@
           # it.
           '--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl2_conformance_tests_output.json',
           # On dual-GPU devices we want the high-performance GPU to be active
-          '--extra-browser-args=--force_high_performance_gpu --use-cmd-decoder=validating',
+          '--extra-browser-args=--force_high_performance_gpu',
+        ],
+        'swarming': {
+          # These tests currently take about an hour and fifteen minutes
+          # to run. Split them into roughly 5-minute shards.
+          'shards': 20,
+        },
+      },
+    },
+
+    'gpu_webgl2_conformance_validating_telemetry_tests': {
+      'webgl2_conformance_validating_tests': {
+        'telemetry_test_name': 'webgl_conformance',
+        'args': [
+          '--webgl-conformance-version=2.0.1',
+          # The current working directory when run via isolate is
+          # out/Debug or out/Release. Reference this file relatively to
+          # it.
+          '--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl2_conformance_tests_output.json',
+          # On dual-GPU devices we want the high-performance GPU to be active
+          '--extra-browser-args=--use-cmd-decoder=validating --force_high_performance_gpu',
         ],
         'swarming': {
           # These tests currently take about an hour and fifteen minutes
@@ -4069,15 +2389,13 @@
     'gpu_webgl_conformance_gles_passthrough_telemetry_tests': {
       'webgl_conformance_gles_passthrough': {
         'telemetry_test_name': 'webgl_conformance',
-        'android_args': [
+        'args': [
+          # On dual-GPU devices we want the high-performance GPU to be active
+          '--extra-browser-args=--use-gl=angle --use-angle=gles --use-cmd-decoder=passthrough --force_high_performance_gpu',
           # The current working directory when run via isolate is
           # out/Debug or out/Release. Reference this file relatively to
           # it.
           '--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl_conformance_tests_output.json',
-        ],
-        'args': [
-          # On dual-GPU devices we want the high-performance GPU to be active
-          '--extra-browser-args=--use-gl=angle --use-angle=gles --use-cmd-decoder=passthrough --force_high_performance_gpu',
         ],
         'swarming': {
           'shards': 6,
@@ -4087,12 +2405,6 @@
 
     'gpu_webgl_conformance_telemetry_tests': {
       'webgl_conformance': {
-        'android_args': [
-          # The current working directory when run via isolate is
-          # out/Debug or out/Release. Reference this file relatively to
-          # it.
-          '--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl_conformance_tests_output.json',
-        ],
         'chromeos_args': [
           # If we're testing on CrOS, assume we're running on VMs. So point
           # telemetry to the default SSH port of the VM. Note that this won't
@@ -4103,7 +2415,39 @@
         ],
         'args': [
           # On dual-GPU devices we want the high-performance GPU to be active
-          '--extra-browser-args=--force_high_performance_gpu --use-cmd-decoder=validating',
+          '--extra-browser-args=--force_high_performance_gpu',
+          # The current working directory when run via isolate is
+          # out/Debug or out/Release. Reference this file relatively to
+          # it.
+          '--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl_conformance_tests_output.json',
+        ],
+        'swarming': {
+          'shards': 2,
+        },
+        'android_swarming': {
+          'shards': 6,
+        },
+      },
+    },
+
+    'gpu_webgl_conformance_validating_telemetry_tests': {
+      'webgl_conformance_validating': {
+        'telemetry_test_name': 'webgl_conformance',
+        'chromeos_args': [
+          # If we're testing on CrOS, assume we're running on VMs. So point
+          # telemetry to the default SSH port of the VM. Note that this won't
+          # work for hardware tests.
+          # TODO(bpastene): Make this work for hardware tests.
+          '--remote=127.0.0.1',
+          '--remote-ssh-port=9222',
+        ],
+        'args': [
+          # On dual-GPU devices we want the high-performance GPU to be active
+          '--extra-browser-args=--use-cmd-decoder=validating --force_high_performance_gpu',
+          # The current working directory when run via isolate is
+          # out/Debug or out/Release. Reference this file relatively to
+          # it.
+          '--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl_conformance_tests_output.json',
         ],
         'swarming': {
           'shards': 2,
@@ -4147,6 +2491,7 @@
         'linux_args': [
           '--no-xvfb',
           '--additional-driver-flag=--disable-gpu-sandbox',
+          '--fuzzy-diff',
         ],
         'merge': {
           'args': [
@@ -4154,7 +2499,7 @@
           ],
           'script': '//third_party/blink/tools/merge_web_test_results.py',
         },
-        'isolate_name': 'blink_web_tests_exparchive',
+        'isolate_name': 'blink_web_tests',
       },
     },
 
@@ -4164,18 +2509,40 @@
       },
     },
 
-    'gpu_win_specific_gtests': {
-      'gl_tests_passthrough': {
-        'test': 'gl_tests',
-        'args': [
-          '--use-gpu-in-tests',
-          '--use-cmd-decoder=passthrough',
-        ],
-      },
-    },
-
     'ios_code_coverage_gtests': {
       'ios_components_unittests': {},
+    },
+
+    'ios_eg2_tests': {
+      'ios_chrome_integration_eg2tests_module': {
+        'app': 'ios_chrome_integration_eg2tests_module',
+        'host': 'ios_chrome_eg2tests',
+      },
+      'ios_chrome_smoke_eg2tests_module': {
+        'app': 'ios_chrome_smoke_eg2tests_module',
+        'host': 'ios_chrome_eg2tests',
+      },
+      'ios_chrome_settings_eg2tests_module': {
+        'app': 'ios_chrome_settings_eg2tests_module',
+        'host': 'ios_chrome_eg2tests',
+      },
+      'ios_chrome_ui_eg2tests_module': {
+        'app': 'ios_chrome_ui_eg2tests_module',
+        'host': 'ios_chrome_eg2tests',
+        'shards': 2,
+      },
+      'ios_chrome_web_eg2tests_module': {
+        'app': 'ios_chrome_web_eg2tests_module',
+        'host': 'ios_chrome_eg2tests',
+      },
+      'ios_web_shell_eg2tests_module': {
+        'app': 'ios_web_shell_eg2tests_module',
+        'host': 'ios_web_shell_eg2tests',
+      },
+      'ios_showcase_eg2tests_module': {
+        'app': 'ios_showcase_eg2tests_module',
+        'host': 'ios_showcase_eg2tests',
+      },
     },
 
     # END tests which run on the GPU bots
@@ -4267,8 +2634,9 @@
           # passed, but 0 times when '--test-list' is passed. We want to always
           # retry 3 times, so we explicitly specify it.
           '--num-retries=3',
+          '--fuzzy-diff',
         ],
-        'isolate_name': 'blink_web_tests_exparchive',
+        'isolate_name': 'blink_web_tests',
         'merge': {
           'args': [
             '--verbose',
@@ -4310,25 +2678,6 @@
 
     'mac_specific_isolated_scripts': {
       'mac_signing_tests': {},
-    },
-
-    'memory_infra_isolated_scripts': {
-      'heap_profiling.mobile': {
-        'args': [
-          '--pageset-repeat=1',
-          '--benchmarks=heap_profiling.mobile.disabled,heap_profiling.mobile.native,heap_profiling.mobile.pseudo',
-          '-v',
-          '--output-format=chartjson',
-          '--browser=android-chromium',
-        ],
-        'isolate_name': 'performance_test_suite',
-        'merge': {
-          'args': [
-            '--smoke-test-mode',
-          ],
-          'script': '//tools/perf/process_perf_results.py',
-        },
-      },
     },
 
     'mojo_chromiumos_specific_gtests': {
@@ -4490,7 +2839,6 @@
       },
       'chrome_app_unittests': {},
       'chromedriver_unittests': {},
-      'color_unittests': {},
       'extensions_browsertests': {},
       'extensions_unittests': {},
       'filesystem_service_unittests': {},  # https://crbug.com/862712
@@ -4572,6 +2920,9 @@
     'ozone_linux_gtests': {
       'services_unittests': {},
       'ozone_unittests': {},
+      'events_unittests': {
+	'experiment_percentage': 100,
+      },
       'ozone_x11_unittests': {},
       'headless_content_unittests': {
         'args': [
@@ -4651,6 +3002,17 @@
           "--benchmarks=rendering.desktop",
         ],
         'swarming': {},
+      }
+    },
+
+    'rendering_desktop_representative_perf_tests_isolated_scripts_experimental': {
+      'rendering_representative_perf_tests': {
+        'isolate_name': 'rendering_representative_perf_tests',
+        'args': [
+          "../../tools/perf/run_benchmark",
+          "--benchmarks=rendering.desktop",
+        ],
+        'swarming': {},
         'experiment_percentage': 100,
       }
     },
@@ -4664,7 +3026,19 @@
           "--browser=android-chromium"
         ],
         'swarming': {},
-        'experiment_percentage': 100,
+      }
+    },
+
+    'rendering_mobile_representative_perf_tests_isolated_scripts_experimental': {
+      'rendering_representative_perf_tests': {
+        'isolate_name': 'rendering_representative_perf_tests',
+        'args': [
+          "../../tools/perf/run_benchmark",
+          "--benchmarks=rendering.mobile",
+          "--browser=android-chromium"
+        ],
+        'swarming': {},
+        'experiment_percentage': 10,
       }
     },
 
@@ -4758,25 +3132,17 @@
     },
 
     'skia_renderer_isolated_scripts': {
-      'skia_renderer_swiftshader_blink_web_tests': {
+      'non_skia_renderer_swiftshader_blink_web_tests': {
         # layout test failures are retried 3 times when '--test-list' is not
         # passed, but 0 times when '--test-list' is passed. We want to always
         # retry 3 times, so we explicitly specify it.
         'args': [
           '--num-retries=3',
-          '--additional-driver-flag=--enable-gpu-rasterization',
-          '--additional-driver-flag=--enable-features=UseSkiaRenderer',
-          '--additional-driver-flag=--use-gl=swiftshader',
-          '--additional-driver-flag=--force-gpu-rasterization',
-          '--additional-driver-flag=--enable-oop-rasterization',
-          '--fuzzy-diff',
+          '--additional-driver-flag=--disable-features=UseSkiaRenderer',
           '--skipped=always',
           '--test-list=../../testing/buildbot/filters/gpu.skiarenderer_vulkan_blink_web_tests.filter',
-          '--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/enable-features=UseSkiaRenderer',
-          '--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/enable-gpu-rasterization',
-          '--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/use-gl=swiftshader',
         ],
-        'isolate_name': 'blink_web_tests_exparchive',
+        'isolate_name': 'blink_web_tests',
         'merge': {
           'args': [
             '--verbose',
@@ -4805,7 +3171,7 @@
           '--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/enable-gpu-rasterization',
           '--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/use-vulkan=swiftshader',
         ],
-        'isolate_name': 'blink_web_tests_exparchive',
+        'isolate_name': 'blink_web_tests',
         'merge': {
           'args': [
             '--verbose',
@@ -4839,7 +3205,7 @@
             {
               "cipd_package": 'chromium/chrome/test/chromedriver/cipd',
               'location': 'chrome/test/chromedriver/cipd',
-              'revision': 'PCCG9OmVmpDaf9oaKhJ3sSxXgINilZ9qpl4oaRU0R60C',
+              'revision': 'tLMjWvOcbQX4nMo5WnMsKWn0aaVludzuSX9yiVFUCoUC',
             }
           ]
         },
@@ -4864,44 +3230,6 @@
         'hard_timeout': 14400,
         'io_timeout': 14400,
         'script': 'test_traffic_annotation_auditor.py',
-      },
-    },
-
-    'viz_chromeos_fyi_gtests': {
-       'non_viz_interactive_ui_tests': {
-         'args': [
-          '--disable-features=VizDisplayCompositor',
-        ],
-         'test': 'interactive_ui_tests',
-       },
-    },
-
-    'viz_chromeos_gtests': {
-      # TODO(kylechar): Remove once VizDisplayCompositor is lauched on CrOS.
-      # https://crbug.com/732805
-      'non_viz_browser_tests': {
-        'args': [
-          '--disable-features=VizDisplayCompositor',
-        ],
-        'swarming': {
-          'shards': 20,
-        },
-        'test': 'browser_tests',
-      },
-      'non_viz_content_browsertests': {
-        'args': [
-          '--disable-features=VizDisplayCompositor',
-        ],
-        'swarming': {
-          'shards': 4,
-        },
-        'test': 'content_browsertests',
-      },
-      'non_viz_content_unittests': {
-        'args': [
-          '--disable-features=VizDisplayCompositor',
-        ],
-        'test': 'content_unittests',
       },
     },
 
@@ -5016,7 +3344,7 @@
     'webview_cts_tests_gtest': {
       'webview_cts_tests': {
         'swarming': {
-          'shards': 3,
+          'shards': 2,
           'cipd_packages': [
             {
               "cipd_package": 'chromium/android_webview/tools/cts_archive',
@@ -5034,7 +3362,7 @@
           '--disable-field-trial-config',
         ],
         'swarming': {
-          'shards': 3,
+          'shards': 2,
           'cipd_packages': [
             {
               "cipd_package": 'chromium/android_webview/tools/cts_archive',
@@ -5274,11 +3602,6 @@
       'network_service_android_gtests',
     ],
 
-    'chromium_code_coverage_isolated_scripts_and_fuzzers': [
-      'chromium_code_coverage_isolated_fuzzers',
-      'chromium_code_coverage_isolated_scripts',
-    ],
-
     'chromium_dbg_isolated_scripts': [
       'desktop_chromium_isolated_scripts',
       'telemetry_perf_unittests_isolated_scripts',
@@ -5327,18 +3650,6 @@
       'cast_video_specific_chromium_gtests',
       'chromium_gtests',
       'linux_flavor_specific_chromium_gtests',
-    ],
-
-    'chromium_linux_coverage_gtests': [
-      'aura_gtests',
-      'chromium_gtests',
-      'chromium_gtests_for_devices_with_graphical_output',
-      'chromium_gtests_for_linux_and_chromeos_only',
-      'chromium_gtests_for_win_and_linux_only',
-      'linux_flavor_specific_chromium_gtests',
-      'non_android_chromium_gtests',
-      'non_android_and_cast_and_chromeos_chromium_gtests',
-      'vr_platform_specific_chromium_gtests',
     ],
 
     'chromium_linux_dbg_isolated_scripts': [
@@ -5497,14 +3808,12 @@
     'gpu_angle_fyi_win_optional_and_representative_perf_isolated_scripts': [
       'gpu_angle_perf_smoke_isolated_scripts',
       'gpu_command_buffer_perf_passthrough_isolated_scripts',
-      'gpu_command_buffer_perf_validating_isolated_scripts',
       'rendering_desktop_representative_perf_tests_isolated_scripts',
     ],
 
     'gpu_angle_fyi_win_optional_isolated_scripts': [
       'gpu_angle_perf_smoke_isolated_scripts',
       'gpu_command_buffer_perf_passthrough_isolated_scripts',
-      'gpu_command_buffer_perf_validating_isolated_scripts',
     ],
 
     'gpu_angle_gtests': [
@@ -5523,9 +3832,9 @@
     'gpu_angle_linux_telemetry_tests': [
       'gpu_common_and_optional_telemetry_tests',
       'gpu_webgl2_conformance_gl_passthrough_telemetry_tests',
-      'gpu_webgl2_conformance_telemetry_tests',
+      'gpu_webgl2_conformance_validating_telemetry_tests',
       'gpu_webgl_conformance_gl_passthrough_telemetry_tests',
-      'gpu_webgl_conformance_telemetry_tests',
+      'gpu_webgl_conformance_validating_telemetry_tests',
     ],
 
     'gpu_angle_mac_gtests': [
@@ -5552,9 +3861,7 @@
       'gpu_angle_unit_gtests',
       'gpu_angle_white_box_gtests',
       'gpu_fyi_and_optional_win_specific_gtests',
-      'gpu_gl_tests_validating',
       'gpu_gles2_conform_d3d11_test',
-      'gpu_win_specific_gtests',
     ],
 
     'gpu_angle_win_intel_nvidia_telemetry_tests': [
@@ -5613,7 +3920,7 @@
 
     'gpu_fyi_android_webgl2_and_gold_telemetry_tests': [
       'gpu_telemetry_tests',
-      'gpu_webgl2_conformance_telemetry_tests',
+      'gpu_webgl2_conformance_validating_telemetry_tests',
       'gpu_webgl2_conformance_gles_passthrough_telemetry_tests',
     ],
 
@@ -5630,9 +3937,9 @@
       'gpu_common_and_optional_telemetry_tests',
       'gpu_telemetry_tests',
       'gpu_webgl2_conformance_gl_passthrough_telemetry_tests',
-      'gpu_webgl2_conformance_telemetry_tests',
+      'gpu_webgl2_conformance_validating_telemetry_tests',
       'gpu_webgl_conformance_gl_passthrough_telemetry_tests',
-      'gpu_webgl_conformance_telemetry_tests',
+      'gpu_webgl_conformance_validating_telemetry_tests',
     ],
 
     'gpu_fyi_linux_optional_gtests': [
@@ -5650,6 +3957,21 @@
       'gpu_desktop_specific_gtests',
       'gpu_gles2_conform_gtests',
       'gpu_swiftshader_gtests',
+    ],
+
+    'gpu_fyi_linux_release_telemetry_tests': [
+      'gpu_common_and_optional_telemetry_tests',
+      'gpu_telemetry_tests',
+      'gpu_webgl2_conformance_validating_telemetry_tests',
+      'gpu_webgl_conformance_gl_passthrough_telemetry_tests',
+      'gpu_webgl_conformance_validating_telemetry_tests',
+    ],
+
+    'gpu_fyi_linux_telemetry_tests': [
+      'gpu_common_and_optional_telemetry_tests',
+      'gpu_telemetry_tests',
+      'gpu_webgl_conformance_gl_passthrough_telemetry_tests',
+      'gpu_webgl_conformance_validating_telemetry_tests',
     ],
 
     'gpu_fyi_mac_debug_gtests': [
@@ -5684,21 +4006,21 @@
     'gpu_fyi_mac_release_telemetry_tests': [
       'gpu_common_and_optional_telemetry_tests',
       'gpu_telemetry_tests',
-      'gpu_webgl2_conformance_telemetry_tests',
-      'gpu_webgl_conformance_telemetry_tests',
       'gpu_webgl2_conformance_gl_passthrough_telemetry_tests',
+      'gpu_webgl2_conformance_validating_telemetry_tests',
       'gpu_webgl_conformance_gl_passthrough_telemetry_tests',
+      'gpu_webgl_conformance_validating_telemetry_tests',
     ],
 
     'gpu_fyi_optional_linux_telemetry_tests': [
       'gpu_common_and_optional_telemetry_tests',
-      'gpu_webgl2_conformance_telemetry_tests',
+      'gpu_webgl2_conformance_validating_telemetry_tests',
       'gpu_webgl_conformance_gl_passthrough_telemetry_tests',
     ],
 
     'gpu_fyi_optional_telemetry_tests': [
       'gpu_common_and_optional_telemetry_tests',
-      'gpu_webgl2_conformance_telemetry_tests',
+      'gpu_webgl2_conformance_validating_telemetry_tests',
     ],
 
     'gpu_fyi_win7_gtests': [
@@ -5711,37 +4033,6 @@
       'gpu_fyi_and_optional_win_specific_gtests',
       'gpu_gles2_conform_gtests',
       'gpu_swiftshader_gtests',
-      'gpu_win_specific_gtests',
-    ],
-
-    'gpu_fyi_win_and_dawn_gtests': [
-      'gpu_angle_end2end_gtests',
-      'gpu_angle_unit_gtests',
-      'gpu_angle_white_box_gtests',
-      'gpu_common_gtests',
-      'gpu_dawn_gtests',
-      'gpu_default_and_optional_win_specific_gtests',
-      'gpu_desktop_specific_gtests',
-      'gpu_fyi_and_optional_non_linux_gtests',
-      'gpu_fyi_and_optional_win_specific_gtests',
-      'gpu_gles2_conform_gtests',
-      'gpu_swiftshader_gtests',
-      'gpu_win_specific_gtests',
-    ],
-
-    'gpu_fyi_win_and_linux_release_telemetry_tests': [
-      'gpu_common_and_optional_telemetry_tests',
-      'gpu_telemetry_tests',
-      'gpu_webgl2_conformance_telemetry_tests',
-      'gpu_webgl_conformance_gl_passthrough_telemetry_tests',
-      'gpu_webgl_conformance_telemetry_tests',
-    ],
-
-    'gpu_fyi_win_and_linux_telemetry_tests': [
-      'gpu_common_and_optional_telemetry_tests',
-      'gpu_telemetry_tests',
-      'gpu_webgl_conformance_gl_passthrough_telemetry_tests',
-      'gpu_webgl_conformance_telemetry_tests',
     ],
 
     'gpu_fyi_win_debug_telemetry_tests': [
@@ -5764,7 +4055,6 @@
       'gpu_fyi_and_optional_win_specific_gtests',
       'gpu_gles2_conform_gtests',
       'gpu_swiftshader_gtests',
-      'gpu_win_specific_gtests',
     ],
 
     'gpu_fyi_win_intel_release_telemetry_tests': [
@@ -5814,14 +4104,14 @@
       'gpu_common_and_optional_telemetry_tests',
       'gpu_telemetry_tests',
       'gpu_webgl_conformance_gles_passthrough_telemetry_tests',
-      'gpu_webgl_conformance_telemetry_tests',
+      'gpu_webgl_conformance_validating_telemetry_tests',
     ],
 
     'gpu_nexus5x_telemetry_tests_v8': [
       'gpu_common_and_optional_telemetry_tests',
       'gpu_telemetry_tests',
       'gpu_webgl_conformance_gles_passthrough_telemetry_tests',
-      'gpu_webgl_conformance_telemetry_tests',
+      'gpu_webgl_conformance_validating_telemetry_tests',
     ],
 
     'gpu_optional_win_intel_telemetry_tests': [
@@ -5841,6 +4131,11 @@
       'gpu_webgl_conformance_gl_passthrough_telemetry_tests',
       'gpu_webgl_conformance_telemetry_tests',
       'gpu_webgl_conformance_vulkan_passthrough_telemetry_tests',
+    ],
+
+    'gpu_skia_renderer_telemetry_tests': [
+      'gpu_skia_renderer_non_vulkan_telemetry_tests',
+      'gpu_skia_renderer_vulkan_telemetry_tests',
     ],
 
     'gpu_v8_desktop_telemetry_tests': [
@@ -5867,7 +4162,6 @@
       'gpu_common_gtests',
       'gpu_default_and_optional_win_specific_gtests',
       'gpu_desktop_specific_gtests',
-      'gpu_win_specific_gtests',
     ],
 
     # END composition test suites used by the GPU bots
@@ -5885,7 +4179,6 @@
       'linux_chromeos_specific_gtests',
       'linux_flavor_specific_chromium_gtests',
       'non_android_chromium_gtests',
-      'viz_chromeos_gtests',
     ],
 
     'linux_viz_gtests': [
@@ -5896,35 +4189,35 @@
     'marshmallow_pie_isolated_scripts': [
       'android_isolated_scripts',
       'components_perftests_isolated_scripts',
+      'telemetry_perf_unittests_isolated_scripts',
+    ],
+
+    'marshmallow_pie_isolated_scripts_with_proguard': [
+      'android_isolated_scripts',
+      'components_perftests_isolated_scripts',
       'monochrome_apk_checker_isolated_script',
       'telemetry_perf_unittests_isolated_scripts',
     ],
 
     'mojo_android_gtests': [
       'network_service_android_gtests',
-      'weblayer_android_gtests',
-      'weblayer_gtests',
     ],
 
     'mojo_chromiumos_fyi_gtests': [
       'aura_gtests',
       'mojo_chromiumos_specific_gtests',
       'network_service_gtests',
-      'viz_chromeos_fyi_gtests',
-      'viz_chromeos_gtests',
     ],
 
     'mojo_linux_gtests': [
       'network_service_fyi_gtests',
       'network_service_in_process_gtests',
-      'weblayer_gtests',
     ],
 
     'mojo_windows_gtests': [
       'mojo_windows_specific_gtests',
       'network_service_fyi_gtests',
       'network_service_in_process_gtests',
-      'weblayer_gtests',
     ],
 
     'sandboxed_chromium_memory_linux_gtests': [
@@ -5971,5 +4264,39 @@
       'webview_ui_instrumentation_tests',
       'webview_ui_instrumentation_tests_no_field_trial',
     ],
+  },
+
+  ##############################################################################
+  # Matrix compound test suites.                                               #
+  ##############################################################################
+
+  'matrix_compound_suites': {
+
+    # This is a sample and is not functional
+    'ios_simulator_cr_recipe_gtests': {
+      'ios_eg2_tests': {
+        'swarming': {
+          'dimension_sets': [
+            {
+              'device type': 'iPhone X',
+              'os': '13.2',
+            },
+            {
+              'device type': 'iPhone 7',
+              'os': '13.2',
+            },
+            {
+              'device type': 'iPhone X',
+              'os': '12.4',
+            },
+            {
+              'device type': 'iPad (6th generation)',
+              'os': '12.4',
+            },
+          ],
+        },
+      },
+    },
+
   }
 }

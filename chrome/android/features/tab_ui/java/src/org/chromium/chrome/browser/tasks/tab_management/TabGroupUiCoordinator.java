@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import static org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvider.SYNTHETIC_TRIAL_POSTFIX;
 
 import android.content.Context;
+import android.view.View;
 import android.view.ViewGroup;
 
 import org.chromium.base.metrics.RecordHistogram;
@@ -34,8 +35,9 @@ import java.util.List;
  * {@link TabListCoordinator} and {@link TabStripToolbarCoordinator}, as well as the life-cycle of
  * shared component objects.
  */
-public class TabGroupUiCoordinator
-        implements TabGroupUiMediator.ResetHandler, TabGroupUi, PauseResumeWithNativeObserver {
+public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, TabGroupUi,
+                                              PauseResumeWithNativeObserver,
+                                              TabGroupUiMediator.TabGroupUiController {
     static final String COMPONENT_NAME = "TabStrip";
     private final Context mContext;
     private final PropertyModel mTabStripToolbarModel;
@@ -186,4 +188,15 @@ public class TabGroupUiCoordinator
 
     @Override
     public void onPauseWithNative() {}
+
+    // TabGroupUiController implementation.
+    @Override
+    public void setupLeftButtonDrawable(int drawableId) {
+        mMediator.setupLeftButtonDrawable(drawableId);
+    }
+
+    @Override
+    public void setupLeftButtonOnClickListener(View.OnClickListener listener) {
+        mMediator.setupLeftButtonOnClickListener(listener);
+    }
 }

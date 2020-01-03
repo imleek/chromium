@@ -107,19 +107,6 @@ enum class ConnectionStateAfterDNS {
   kMaxValue = kCryptoFinishedDnsNoMatch,
 };
 
-// The maximum receive window sizes for QUIC sessions and streams.
-const int32_t kQuicSessionMaxRecvWindowSize = 15 * 1024 * 1024;  // 15 MB
-const int32_t kQuicStreamMaxRecvWindowSize = 6 * 1024 * 1024;    // 6 MB
-
-// QUIC's socket receive buffer size.
-// We should adaptively set this buffer size, but for now, we'll use a size
-// that seems large enough to receive data at line rate for most connections,
-// and does not consume "too much" memory.
-const int32_t kQuicSocketReceiveBufferSize = 1024 * 1024;  // 1MB
-
-// Set the maximum number of undecryptable packets the connection will store.
-const int32_t kMaxUndecryptablePackets = 100;
-
 base::Value NetLogQuicStreamFactoryJobParams(
     const quic::QuicServerId* server_id) {
   base::DictionaryValue dict;
@@ -196,29 +183,6 @@ void SetInitialRttEstimate(base::TimeDelta estimate,
     config->SetInitialRoundTripTimeUsToSend(estimate.InMicroseconds());
 }
 
-quic::QuicConfig InitializeQuicConfig(
-    const quic::QuicTagVector& connection_options,
-    const quic::QuicTagVector& client_connection_options,
-    base::TimeDelta idle_connection_timeout,
-    base::TimeDelta max_time_before_crypto_handshake,
-    base::TimeDelta max_idle_time_before_crypto_handshake) {
-  DCHECK_GT(idle_connection_timeout, base::TimeDelta());
-  quic::QuicConfig config;
-  config.SetIdleNetworkTimeout(quic::QuicTime::Delta::FromMicroseconds(
-                                   idle_connection_timeout.InMicroseconds()),
-                               quic::QuicTime::Delta::FromMicroseconds(
-                                   idle_connection_timeout.InMicroseconds()));
-  config.set_max_time_before_crypto_handshake(
-      quic::QuicTime::Delta::FromMicroseconds(
-          max_time_before_crypto_handshake.InMicroseconds()));
-  config.set_max_idle_time_before_crypto_handshake(
-      quic::QuicTime::Delta::FromMicroseconds(
-          max_idle_time_before_crypto_handshake.InMicroseconds()));
-  config.SetConnectionOptionsToSend(connection_options);
-  config.SetClientConnectionOptions(client_connection_options);
-  return config;
-}
-
 // An implementation of quic::QuicCryptoClientConfig::ServerIdFilter that wraps
 // an |origin_filter|.
 class ServerIdOriginFilter
@@ -252,22 +216,6 @@ std::set<std::string> HostsFromOrigins(std::set<HostPortPair> origins) {
 }
 
 }  // namespace
-
-QuicParams::QuicParams()
-    : max_packet_length(quic::kDefaultMaxPacketSize),
-      reduced_ping_timeout(
-          base::TimeDelta::FromSeconds(quic::kPingTimeoutSecs)),
-      max_time_before_crypto_handshake(
-          base::TimeDelta::FromSeconds(quic::kMaxTimeForCryptoHandshakeSecs)),
-      max_idle_time_before_crypto_handshake(
-          base::TimeDelta::FromSeconds(quic::kInitialIdleTimeoutSecs)) {
-  supported_versions.push_back(quic::ParsedQuicVersion(
-      quic::PROTOCOL_QUIC_CRYPTO, quic::QUIC_VERSION_46));
-}
-
-QuicParams::QuicParams(const QuicParams& other) = default;
-
-QuicParams::~QuicParams() = default;
 
 // Responsible for verifying the certificates saved in
 // quic::QuicCryptoClientConfig, and for notifying any associated requests when
@@ -1223,8 +1171,7 @@ QuicStreamFactory::QuicStreamFactory(
     CTVerifier* cert_transparency_verifier,
     SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
     QuicCryptoClientStreamFactory* quic_crypto_client_stream_factory,
-    QuicContext* quic_context,
-    const QuicParams& params)
+    QuicContext* quic_context)
     : is_quic_known_to_work_on_current_network_(false),
       net_log_(net_log),
       host_resolver_(host_resolver),
@@ -1238,21 +1185,19 @@ QuicStreamFactory::QuicStreamFactory(
       quic_crypto_client_stream_factory_(quic_crypto_client_stream_factory),
       random_generator_(quic_context->random_generator()),
       clock_(quic_context->clock()),
-      params_(params),
+      // TODO(vasilvv): figure out how to avoid having multiple copies of
+      // QuicParams.
+      params_(*quic_context->params()),
       clock_skew_detector_(base::TimeTicks::Now(), base::Time::Now()),
       socket_performance_watcher_factory_(socket_performance_watcher_factory),
       recent_crypto_config_map_(kMaxRecentCryptoConfigs),
-      config_(
-          InitializeQuicConfig(params.connection_options,
-                               params.client_connection_options,
-                               params.idle_connection_timeout,
-                               params.max_time_before_crypto_handshake,
-                               params.max_idle_time_before_crypto_handshake)),
+      config_(InitializeQuicConfig(*quic_context->params())),
       ping_timeout_(quic::QuicTime::Delta::FromSeconds(quic::kPingTimeoutSecs)),
       reduced_ping_timeout_(quic::QuicTime::Delta::FromMicroseconds(
-          params.reduced_ping_timeout.InMicroseconds())),
+          quic_context->params()->reduced_ping_timeout.InMicroseconds())),
       retransmittable_on_wire_timeout_(quic::QuicTime::Delta::FromMicroseconds(
-          params.retransmittable_on_wire_timeout.InMicroseconds())),
+          quic_context->params()
+              ->retransmittable_on_wire_timeout.InMicroseconds())),
       yield_after_packets_(kQuicYieldAfterPacketsRead),
       yield_after_duration_(quic::QuicTime::Delta::FromMilliseconds(
           kQuicYieldAfterDurationMilliseconds)),
@@ -1954,11 +1899,6 @@ int QuicStreamFactory::CreateSession(
   connection->SetMaxPacketLength(params_.max_packet_length);
 
   quic::QuicConfig config = config_;
-  config.set_max_undecryptable_packets(kMaxUndecryptablePackets);
-  config.SetInitialSessionFlowControlWindowToSend(
-      kQuicSessionMaxRecvWindowSize);
-  config.SetInitialStreamFlowControlWindowToSend(kQuicStreamMaxRecvWindowSize);
-  config.SetBytesForConnectionIdToSend(0);
   ConfigureInitialRttEstimate(
       server_id, key.session_key().network_isolation_key(), &config);
   if (quic_version.transport_version <= quic::QUIC_VERSION_43 &&
@@ -2016,11 +1956,6 @@ int QuicStreamFactory::CreateSession(
     DLOG(DFATAL) << "Session closed during initialize";
     *session = nullptr;
     return ERR_CONNECTION_CLOSED;
-  }
-  if (connection->version().KnowsWhichDecrypterToUse()) {
-    connection->InstallDecrypter(
-        quic::ENCRYPTION_FORWARD_SECURE,
-        std::make_unique<quic::NullDecrypter>(quic::Perspective::IS_CLIENT));
   }
   return OK;
 }

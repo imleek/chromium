@@ -157,7 +157,7 @@ const char* RequestContextName(mojom::RequestContextType context) {
 // TODO(hiroshige): Consider merging them once FetchClientSettingsObject
 // becomes the source of CSP/InsecureRequestPolicy also in frames.
 bool IsWebSocketAllowedInFrame(const BaseFetchContext& fetch_context,
-                               SecurityContext* security_context,
+                               const SecurityContext* security_context,
                                Settings* settings,
                                const KURL& url) {
   fetch_context.CountUsage(WebFeature::kMixedContentPresent);
@@ -380,6 +380,25 @@ bool MixedContentChecker::ShouldBlockFetch(
   if (!mixed_frame)
     return false;
 
+  // Exempt non-webby schemes from mixed content treatment. For subresources,
+  // these will be blocked anyway as net::ERR_UNKNOWN_URL_SCHEME, so there's no
+  // need to present a security warning. Non-webby main resources (including
+  // subframes) are handled in the browser process's mixed content checking,
+  // where the URL will be allowed to load, but not treated as mixed content
+  // because it can't return data to the browser. See https://crbug.com/621131.
+  //
+  // TODO(https://crbug.com/1030307): decide whether CORS-enabled is really the
+  // right way to draw this distinction.
+  if (!SchemeRegistry::ShouldTreatURLSchemeAsCorsEnabled(url.Protocol())) {
+    // Record non-webby mixed content to see if it is rare enough that it can be
+    // gated behind an enterprise policy. This excludes URLs that are considered
+    // potentially-secure such as blob: and filesystem:, which are special-cased
+    // in IsInsecureUrl() and cause an early-return because of the
+    // InWhichFrameIsContentMixed() check above.
+    UseCounter::Count(frame->GetDocument(), WebFeature::kNonWebbyMixedContent);
+    return false;
+  }
+
   MixedContentChecker::Count(mixed_frame, request_context, frame);
   if (ContentSecurityPolicy* policy =
           frame->GetSecurityContext()->GetContentSecurityPolicy())
@@ -408,10 +427,6 @@ bool MixedContentChecker::ShouldBlockFetch(
       WebMixedContent::ContextTypeFromRequestContext(
           request_context, settings->GetStrictMixedContentCheckingForPlugin());
 
-  // If we're loading the main resource of a subframe, we need to take a close
-  // look at the loaded URL. If we're dealing with a CORS-enabled scheme, then
-  // block mixed frames as active content. Otherwise, treat frames as passive
-  // content.
   switch (context_type) {
     case WebMixedContentContextType::kOptionallyBlockable:
       allowed = !strict_mode;
@@ -574,7 +589,7 @@ bool MixedContentChecker::IsWebSocketAllowed(
   // mixed content signals from different frames on the same page.
   WebContentSettingsClient* content_settings_client =
       frame->GetContentSettingsClient();
-  SecurityContext* security_context = mixed_frame->GetSecurityContext();
+  const SecurityContext* security_context = mixed_frame->GetSecurityContext();
   const SecurityOrigin* security_origin = security_context->GetSecurityOrigin();
 
   bool allowed = IsWebSocketAllowedInFrame(frame_fetch_context,
@@ -659,12 +674,21 @@ bool MixedContentChecker::IsMixedFormAction(
   return true;
 }
 
-bool MixedContentChecker::ShouldAutoupgrade(HttpsState context_https_state,
-                                            WebMixedContentContextType type) {
+bool MixedContentChecker::ShouldAutoupgrade(
+    HttpsState context_https_state,
+    mojom::RequestContextType type,
+    WebContentSettingsClient* settings_client,
+    const KURL& url) {
+  // We are currently not autoupgrading plugin loaded content, which is why
+  // strict_mixed_content_for_plugin is hardcoded to true.
   if (!base::FeatureList::IsEnabled(
           blink::features::kMixedContentAutoupgrade) ||
       context_https_state == HttpsState::kNone ||
-      type == WebMixedContentContextType::kNotMixedContent) {
+      WebMixedContent::ContextTypeFromRequestContext(type, true) !=
+          WebMixedContentContextType::kOptionallyBlockable) {
+    return false;
+  }
+  if (settings_client && !settings_client->ShouldAutoupgradeMixedContent()) {
     return false;
   }
 
@@ -673,13 +697,8 @@ bool MixedContentChecker::ShouldAutoupgrade(HttpsState context_https_state,
       blink::features::kMixedContentAutoupgradeModeParamName);
 
   if (autoupgrade_mode ==
-      blink::features::kMixedContentAutoupgradeModeBlockable) {
-    return type == WebMixedContentContextType::kBlockable ||
-           type == WebMixedContentContextType::kShouldBeBlockable;
-  }
-  if (autoupgrade_mode ==
-      blink::features::kMixedContentAutoupgradeModeOptionallyBlockable) {
-    return type == WebMixedContentContextType::kOptionallyBlockable;
+      blink::features::kMixedContentAutoupgradeModeNoImages) {
+    return type != mojom::RequestContextType::IMAGE;
   }
 
   // Otherwise we default to autoupgrading all mixed content.
@@ -694,7 +713,7 @@ void MixedContentChecker::CheckMixedPrivatePublic(
 
   // Just count these for the moment, don't block them.
   if (network_utils::IsReservedIPAddress(resource_ip_address) &&
-      frame->GetDocument()->AddressSpace() ==
+      frame->GetDocument()->GetSecurityContext().AddressSpace() ==
           network::mojom::IPAddressSpace::kPublic) {
     UseCounter::Count(frame->GetDocument(),
                       WebFeature::kMixedContentPrivateHostnameInPublicHostname);
@@ -766,26 +785,8 @@ ConsoleMessage* MixedContentChecker::CreateConsoleMessageAboutFetchAutoupgrade(
       "Mixed Content: The page at '%s' was loaded over HTTPS, but requested an "
       "insecure element '%s'. This request was "
       "automatically upgraded to HTTPS, For more information see "
-      "https://chromium.googlesource.com/chromium/src/+/master/docs/security/"
-      "autoupgrade-mixed.md",
-      main_resource_url.ElidedString().Utf8().c_str(),
-      mixed_content_url.ElidedString().Utf8().c_str());
-  return ConsoleMessage::Create(mojom::ConsoleMessageSource::kSecurity,
-                                mojom::ConsoleMessageLevel::kWarning, message);
-}
-
-// static
-ConsoleMessage*
-MixedContentChecker::CreateConsoleMessageAboutWebSocketAutoupgrade(
-    const KURL& main_resource_url,
-    const KURL& mixed_content_url) {
-  String message = String::Format(
-      "Mixed Content: The page at '%s' was loaded over HTTPS, but attempted "
-      "to connect to the insecure WebSocket endpoint '%s'. "
-      "This request was automatically upgraded to HTTPS, For more "
-      "information see "
-      "https://chromium.googlesource.com/chromium/src/+/master/docs/security/"
-      "autoupgrade-mixed.md",
+      "https://blog.chromium.org/2019/10/"
+      "no-more-mixed-messages-about-https.html",
       main_resource_url.ElidedString().Utf8().c_str(),
       mixed_content_url.ElidedString().Utf8().c_str());
   return ConsoleMessage::Create(mojom::ConsoleMessageSource::kSecurity,
@@ -811,7 +812,8 @@ void MixedContentChecker::UpgradeInsecureRequest(
     ResourceRequest& resource_request,
     const FetchClientSettingsObject* fetch_client_settings_object,
     ExecutionContext* execution_context_for_logging,
-    network::mojom::RequestContextFrameType frame_type) {
+    network::mojom::RequestContextFrameType frame_type,
+    WebContentSettingsClient* settings_client) {
   // We always upgrade requests that meet any of the following criteria:
   //  1. Are for subresources.
   //  2. Are for nested frames.
@@ -831,14 +833,11 @@ void MixedContentChecker::UpgradeInsecureRequest(
   if (!(fetch_client_settings_object->GetInsecureRequestsPolicy() &
         kUpgradeInsecureRequests)) {
     mojom::RequestContextType context = resource_request.GetRequestContext();
-    // TODO(carlosil): Handle strict_mixed_content_checking_for_plugin
-    // correctly.
     if (context != mojom::RequestContextType::UNSPECIFIED &&
         resource_request.Url().ProtocolIs("http") &&
-        !fetch_client_settings_object->GetMixedAutoUpgradeOptOut() &&
         MixedContentChecker::ShouldAutoupgrade(
-            fetch_client_settings_object->GetHttpsState(),
-            WebMixedContent::ContextTypeFromRequestContext(context, false))) {
+            fetch_client_settings_object->GetHttpsState(), context,
+            settings_client, fetch_client_settings_object->GlobalObjectUrl())) {
       if (execution_context_for_logging->IsDocument()) {
         Document* document =
             static_cast<Document*>(execution_context_for_logging);

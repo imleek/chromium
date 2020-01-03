@@ -30,6 +30,13 @@ const base::Feature kAssistantProactiveSuggestions{
 const base::FeatureParam<int> kAssistantProactiveSuggestionsMaxWidth{
     &kAssistantProactiveSuggestions, "max-width", 280};
 
+// The desired corner radius (in dip) for the rich proactive suggestions entry
+// point. As the rich UI has yet to be defined, corner radius may need to be
+// dynamically modified later.
+const base::FeatureParam<int>
+    kAssistantProactiveSuggestionsRichEntryPointCornerRadius{
+        &kAssistantProactiveSuggestions, "rich-entry-point-corner-radius", 4};
+
 const base::FeatureParam<std::string>
     kAssistantProactiveSuggestionsServerExperimentIds{
         &kAssistantProactiveSuggestions, "server-experiment-ids", ""};
@@ -39,6 +46,11 @@ const base::FeatureParam<std::string>
 // immediately once the set of proactive suggestions are available.
 const base::FeatureParam<bool> kAssistantProactiveSuggestionsShowOnScroll{
     &kAssistantProactiveSuggestions, "show-on-scroll", true};
+
+// When enabled, we will use the rich, content-forward entry point for the
+// proactive suggestions feature in lieu of the simple entry point affordance.
+const base::FeatureParam<bool> kAssistantProactiveSuggestionsShowRichEntryPoint{
+    &kAssistantProactiveSuggestions, "show-rich-entry-point", false};
 
 const base::FeatureParam<bool> kAssistantProactiveSuggestionsSuppressDuplicates{
     &kAssistantProactiveSuggestions, "suppress-duplicates", false};
@@ -85,6 +97,10 @@ const base::Feature kDisableVoiceMatch{"DisableVoiceMatch",
 
 int GetProactiveSuggestionsMaxWidth() {
   return kAssistantProactiveSuggestionsMaxWidth.Get();
+}
+
+int GetProactiveSuggestionsRichEntryPointCornerRadius() {
+  return kAssistantProactiveSuggestionsRichEntryPointCornerRadius.Get();
 }
 
 std::string GetProactiveSuggestionsServerExperimentIds() {
@@ -135,6 +151,10 @@ bool IsProactiveSuggestionsEnabled() {
 
 bool IsProactiveSuggestionsShowOnScrollEnabled() {
   return kAssistantProactiveSuggestionsShowOnScroll.Get();
+}
+
+bool IsProactiveSuggestionsShowRichEntryPointEnabled() {
+  return kAssistantProactiveSuggestionsShowRichEntryPoint.Get();
 }
 
 bool IsProactiveSuggestionsSuppressDuplicatesEnabled() {

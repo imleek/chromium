@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
-#include "base/memory/shared_memory.h"
 #include "base/task/post_task.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -149,7 +148,7 @@ GpuServiceImpl::GpuServiceImpl(
         gpu_feature_info_for_hardware_gpu,
     const gpu::GpuExtraInfo& gpu_extra_info,
     gpu::VulkanImplementation* vulkan_implementation,
-    base::OnceClosure exit_callback)
+    base::OnceCallback<void(bool /*immediately*/)> exit_callback)
     : main_runner_(base::ThreadTaskRunnerHandle::Get()),
       io_runner_(std::move(io_runner)),
       watchdog_thread_(std::move(watchdog_thread)),
@@ -336,8 +335,8 @@ void GpuServiceImpl::InitializeWithHost(
     shutdown_event_ = owned_shutdown_event_.get();
   }
 
-  scheduler_ =
-      std::make_unique<gpu::Scheduler>(main_runner_, sync_point_manager);
+  scheduler_ = std::make_unique<gpu::Scheduler>(
+      main_runner_, sync_point_manager, gpu_preferences_);
 
   // Defer creation of the render thread. This is to prevent it from handling
   // IPC messages before the sandbox has been enabled and all other necessary
@@ -884,6 +883,14 @@ void GpuServiceImpl::OnForegrounded() {
     watchdog_thread_->OnForegrounded();
 }
 
+#if !defined(OS_ANDROID)
+void GpuServiceImpl::OnMemoryPressure(
+    ::base::MemoryPressureListener::MemoryPressureLevel level) {
+  // Forward the notification to the registry of MemoryPressureListeners.
+  base::MemoryPressureListener::NotifyMemoryPressure(level);
+}
+#endif
+
 #if defined(OS_MACOSX)
 void GpuServiceImpl::BeginCATransaction() {
   DCHECK(io_runner_->BelongsToCurrentThread());
@@ -951,7 +958,10 @@ void GpuServiceImpl::MaybeExit(bool for_context_loss) {
                   "from errors. GPU process will restart shortly.";
   }
   is_exiting_.Set();
-  std::move(exit_callback_).Run();
+  // For the unsandboxed GPU process used for info collection, if we exit
+  // immediately, then the reply message could be lost. That's why the
+  // |exit_callback_| takes the boolean argument.
+  std::move(exit_callback_).Run(/*immediately=*/for_context_loss);
 }
 
 gpu::Scheduler* GpuServiceImpl::GetGpuScheduler() {

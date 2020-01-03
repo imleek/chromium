@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/strcat.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/url_data_source.h"
@@ -49,15 +50,15 @@ class TestDevToolsDataSource : public DevToolsDataSource {
       const GURL& url,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       int load_flags,
-      const GotDataCallback& callback) override {
+      GotDataCallback callback) override {
     std::string result = "url: " + url.spec();
-    callback.Run(base::RefCountedString::TakeString(&result));
+    std::move(callback).Run(base::RefCountedString::TakeString(&result));
   }
 
   void StartFileRequest(const std::string& path,
-                        const GotDataCallback& callback) override {
+                        GotDataCallback callback) override {
     std::string result = "file: " + path;
-    callback.Run(base::RefCountedString::TakeString(&result));
+    std::move(callback).Run(base::RefCountedString::TakeString(&result));
   }
 };
 
@@ -128,8 +129,13 @@ TEST_F(DevToolsUIDataSourceTest, TestDevToolsBundledURLWithQueryParam) {
 }
 
 TEST_F(DevToolsUIDataSourceTest, TestDevToolsBundledURLWithSwitch) {
+#if defined(OS_WIN)
+  const char* flag_value = "file://C:/tmp/";
+#else
+  const char* flag_value = "file://tmp/";
+#endif
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kCustomDevtoolsFrontend, "file://tmp/");
+      switches::kCustomDevtoolsFrontend, flag_value);
   const GURL path =
       DevToolsUrl().Resolve(DevToolsBundledPath(kDevToolsUITestFrontEndUrl));
   StartRequest(path.path());

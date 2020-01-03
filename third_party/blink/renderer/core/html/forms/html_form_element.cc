@@ -38,7 +38,6 @@
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
 #include "third_party/blink/renderer/core/dom/node_lists_node_data.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -363,7 +362,7 @@ void HTMLFormElement::requestSubmit(HTMLElement* submitter,
   // 1. If submitter was given, then:
   if (submitter) {
     // 1.1. If submitter is not a submit button, then throw a TypeError.
-    control = ToHTMLFormControlElementOrNull(submitter);
+    control = DynamicTo<HTMLFormControlElement>(submitter);
     // button[type] is a subset of input[type]. So it's ok to compare button's
     // type and input_type_names.
     if (!control || (control->type() != input_type_names::kSubmit &&
@@ -484,7 +483,7 @@ FormData* HTMLFormElement::ConstructEntryList(
     HTMLElement& element = control->ToHTMLElement();
     if (!element.IsDisabledFormControl())
       control->AppendToFormData(form_data);
-    if (auto* input = ToHTMLInputElementOrNull(element)) {
+    if (auto* input = DynamicTo<HTMLInputElement>(element)) {
       if (input->type() == input_type_names::kPassword &&
           !input->value().IsEmpty())
         form_data.SetContainsPasswordData(true);
@@ -574,7 +573,8 @@ void HTMLFormElement::ParseAttribute(
     // If we're not upgrading insecure requests, and the new action attribute is
     // pointing to an insecure "action" location from a secure page it is marked
     // as "passive" mixed content.
-    if (GetDocument().GetInsecureRequestPolicy() & kUpgradeInsecureRequests)
+    if (GetDocument().GetSecurityContext().GetInsecureRequestPolicy() &
+        kUpgradeInsecureRequests)
       return;
     KURL action_url = GetDocument().CompleteURL(
         attributes_.Action().IsEmpty() ? GetDocument().Url().GetString()
@@ -787,11 +787,10 @@ Element* HTMLFormElement::ElementFromPastNamesMap(
   if (!element)
     return nullptr;
   SECURITY_DCHECK(To<HTMLElement>(element)->formOwner() == this);
-  if (IsHTMLImageElement(*element)) {
+  if (IsA<HTMLImageElement>(*element)) {
     SECURITY_DCHECK(ImageElements().Find(element) != kNotFound);
-  } else if (IsHTMLObjectElement(*element)) {
-    SECURITY_DCHECK(ListedElements().Find(ToHTMLObjectElement(element)) !=
-                    kNotFound);
+  } else if (auto* html_image_element = DynamicTo<HTMLObjectElement>(element)) {
+    SECURITY_DCHECK(ListedElements().Find(html_image_element) != kNotFound);
   } else {
     SECURITY_DCHECK(ListedElements().Find(
                         To<HTMLFormControlElement>(element)) != kNotFound);
@@ -867,14 +866,14 @@ void HTMLFormElement::AnonymousNamedGetter(
   DCHECK(!elements.IsEmpty());
 
   bool only_match_img =
-      !elements.IsEmpty() && IsHTMLImageElement(*elements.front());
+      !elements.IsEmpty() && IsA<HTMLImageElement>(*elements.front());
   if (only_match_img) {
     UseCounter::Count(GetDocument(),
                       WebFeature::kFormNameAccessForImageElement);
     // The following code has performance impact, but it should be small
     // because <img> access via <form> name getter is rarely used.
     for (auto& element : elements) {
-      if (IsHTMLImageElement(*element) && !element->IsDescendantOf(this)) {
+      if (IsA<HTMLImageElement>(*element) && !element->IsDescendantOf(this)) {
         UseCounter::Count(
             GetDocument(),
             WebFeature::kFormNameAccessForNonDescendantImageElement);

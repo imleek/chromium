@@ -26,13 +26,18 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.payments.PaymentHandlerHost;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.payments.mojom.PaymentAddress;
+import org.chromium.payments.mojom.PaymentCurrencyAmount;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentEventResponseType;
 import org.chromium.payments.mojom.PaymentItem;
 import org.chromium.payments.mojom.PaymentMethodData;
+import org.chromium.payments.mojom.PaymentOptions;
+import org.chromium.payments.mojom.PaymentShippingOption;
 
 import java.net.URI;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -196,50 +201,59 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
     public static void invokePaymentApp(WebContents webContents, long registrationId,
             String swScope, String origin, String iframeOrigin, String paymentRequestId,
             Set<PaymentMethodData> methodData, PaymentItem total,
-            Set<PaymentDetailsModifier> modifiers, PaymentHandlerHost host, boolean isMicrotrans,
-            PaymentInstrument.InstrumentDetailsCallback callback) {
+            Set<PaymentDetailsModifier> modifiers, PaymentOptions paymentOptions,
+            List<PaymentShippingOption> shippingOptions, PaymentHandlerHost host,
+            boolean isMicrotrans, PaymentInstrument.InstrumentDetailsCallback callback) {
         ThreadUtils.assertOnUiThread();
 
         ServiceWorkerPaymentAppBridgeJni.get().invokePaymentApp(webContents, registrationId,
                 swScope, origin, iframeOrigin, paymentRequestId,
                 methodData.toArray(new PaymentMethodData[0]), total,
-                modifiers.toArray(new PaymentDetailsModifier[0]),
+                modifiers.toArray(new PaymentDetailsModifier[0]), paymentOptions,
+                shippingOptions.toArray(new PaymentShippingOption[0]),
                 host.getNativePaymentHandlerHost(), isMicrotrans, callback);
     }
 
     /**
      * Install and invoke a payment app with a given option and matching method data.
      *
-     * @param webContents      The web contents that invoked PaymentRequest.
-     * @param origin           The origin of this merchant.
-     * @param iframeOrigin     The origin of the iframe that invoked PaymentRequest. Same as origin
-     *                         if PaymentRequest was not invoked from inside an iframe.
-     * @param paymentRequestId The unique identifier of the PaymentRequest.
-     * @param methodData       The PaymentMethodData objects that are relevant for this payment
-     *                         app.
-     * @param total            The PaymentItem that represents the total cost of the payment.
-     * @param modifiers        Payment method specific modifiers to the payment items and the total.
-     * @param host             The host of the payment handler.
-     * @param callback         Called after the payment app is finished running.
-     * @param appName          The installable app name.
-     * @param icon             The installable app icon.
-     * @param swUri            The URI to get the app's service worker js script.
-     * @param scope            The scope of the service worker that should be registered.
-     * @param useCache         Whether to use cache when registering the service worker.
-     * @param method           Supported method name of the app.
+     * @param webContents           The web contents that invoked PaymentRequest.
+     * @param origin                The origin of this merchant.
+     * @param iframeOrigin          The origin of the iframe that invoked PaymentRequest. Same as
+     *                              origin if PaymentRequest was not invoked from inside an iframe.
+     * @param paymentRequestId      The unique identifier of the PaymentRequest.
+     * @param methodData            The PaymentMethodData objects that are relevant for this payment
+     *                              app.
+     * @param total                 The PaymentItem that represents the total cost of the payment.
+     * @param modifiers             Payment method specific modifiers to the payment items and the
+     *                              total.
+     * @param host                  The host of the payment handler.
+     * @param callback              Called after the payment app is finished running.
+     * @param appName               The installable app name.
+     * @param icon                  The installable app icon.
+     * @param swUri                 The URI to get the app's service worker js script.
+     * @param scope                 The scope of the service worker that should be registered.
+     * @param useCache              Whether to use cache when registering the service worker.
+     * @param method                Supported method name of the app.
+     * @param supportedDelegations  Supported delegations of the app.
      */
     public static void installAndInvokePaymentApp(WebContents webContents, String origin,
             String iframeOrigin, String paymentRequestId, Set<PaymentMethodData> methodData,
-            PaymentItem total, Set<PaymentDetailsModifier> modifiers, PaymentHandlerHost host,
+            PaymentItem total, Set<PaymentDetailsModifier> modifiers, PaymentOptions paymentOptions,
+            List<PaymentShippingOption> shippingOptions, PaymentHandlerHost host,
             PaymentInstrument.InstrumentDetailsCallback callback, String appName,
-            @Nullable Bitmap icon, URI swUri, URI scope, boolean useCache, String method) {
+            @Nullable Bitmap icon, URI swUri, URI scope, boolean useCache, String method,
+            SupportedDelegations supportedDelegations) {
         ThreadUtils.assertOnUiThread();
 
         ServiceWorkerPaymentAppBridgeJni.get().installAndInvokePaymentApp(webContents, origin,
                 iframeOrigin, paymentRequestId, methodData.toArray(new PaymentMethodData[0]), total,
-                modifiers.toArray(new PaymentDetailsModifier[0]),
+                modifiers.toArray(new PaymentDetailsModifier[0]), paymentOptions,
+                shippingOptions.toArray(new PaymentShippingOption[0]),
                 host.getNativePaymentHandlerHost(), callback, appName, icon, swUri.toString(),
-                scope.toString(), useCache, method);
+                scope.toString(), useCache, method, supportedDelegations.getShippingAddress(),
+                supportedDelegations.getPayerName(), supportedDelegations.getPayerEmail(),
+                supportedDelegations.getPayerPhone());
     }
 
     /**
@@ -349,6 +363,62 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
     }
 
     @CalledByNative
+    private static boolean getRequestShippingFromPaymentOptions(PaymentOptions options) {
+        return options.requestShipping;
+    }
+
+    @CalledByNative
+    private static boolean getRequestPayerNameFromPaymentOptions(PaymentOptions options) {
+        return options.requestPayerName;
+    }
+
+    @CalledByNative
+    private static boolean getRequestPayerPhoneFromPaymentOptions(PaymentOptions options) {
+        return options.requestPayerPhone;
+    }
+
+    @CalledByNative
+    private static boolean getRequestPayerEmailFromPaymentOptions(PaymentOptions options) {
+        return options.requestPayerEmail;
+    }
+
+    @CalledByNative
+    private static String getIdFromPaymentShippingOption(PaymentShippingOption option) {
+        return option.id;
+    }
+
+    @CalledByNative
+    private static String getLabelFromPaymentShippingOption(PaymentShippingOption option) {
+        return option.label;
+    }
+
+    @CalledByNative
+    private static PaymentCurrencyAmount getAmountFromPaymentShippingOption(
+            PaymentShippingOption option) {
+        return option.amount;
+    }
+
+    @CalledByNative
+    private static boolean getSelectedFromPaymentShippingOption(PaymentShippingOption option) {
+        return option.selected;
+    }
+
+    @CalledByNative
+    private static String getCurrencyFromPaymentCurrencyAmount(PaymentCurrencyAmount amount) {
+        return amount.currency;
+    }
+
+    @CalledByNative
+    private static String getValueFromPaymentCurrencyAmount(PaymentCurrencyAmount amount) {
+        return amount.value;
+    }
+
+    @CalledByNative
+    private static int getShippingTypeFromPaymentOptions(PaymentOptions options) {
+        return options.shippingType;
+    }
+
+    @CalledByNative
     private static Object[] createCapabilities(int count) {
         return new ServiceWorkerPaymentApp.Capabilities[count];
     }
@@ -356,8 +426,7 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
     @CalledByNative
     private static Object createSupportedDelegations(
             boolean shippingAddress, boolean payerName, boolean payerPhone, boolean payerEmail) {
-        return new ServiceWorkerPaymentApp.SupportedDelegations(
-                shippingAddress, payerName, payerPhone, payerEmail);
+        return new SupportedDelegations(shippingAddress, payerName, payerPhone, payerEmail);
     }
 
     @CalledByNative
@@ -388,7 +457,7 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
                 icon == null ? null : new BitmapDrawable(context.getResources(), icon),
                 methodNameArray, explicitlyVerified,
                 (ServiceWorkerPaymentApp.Capabilities[]) capabilities, preferredRelatedApplications,
-                (ServiceWorkerPaymentApp.SupportedDelegations) supportedDelegations));
+                (SupportedDelegations) supportedDelegations));
     }
 
     @CalledByNative
@@ -413,8 +482,7 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
         callback.onPaymentAppCreated(new ServiceWorkerPaymentApp(webContents, name,
                 scopeUri.getHost(), swUri, scopeUri, useCache,
                 icon == null ? null : new BitmapDrawable(context.getResources(), icon), methodName,
-                preferredRelatedApplications,
-                (ServiceWorkerPaymentApp.SupportedDelegations) supportedDelegations));
+                preferredRelatedApplications, (SupportedDelegations) supportedDelegations));
     }
 
     @CalledByNative
@@ -463,8 +531,33 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
     }
 
     @CalledByNative
+    private static Object createPayerData(String payerName, String payerPhone, String payerEmail,
+            Object shippingAddress, String selectedShippingOptionId) {
+        return new PayerData(payerName, payerPhone, payerEmail, (PaymentAddress) shippingAddress,
+                selectedShippingOptionId);
+    }
+
+    @CalledByNative
+    private static Object createShippingAddress(String country, String[] addressLine, String region,
+            String city, String dependentLocality, String postalCode, String sortingCode,
+            String organization, String recipient, String phone) {
+        PaymentAddress result = new PaymentAddress();
+        result.country = country;
+        result.addressLine = addressLine;
+        result.region = region;
+        result.city = city;
+        result.dependentLocality = dependentLocality;
+        result.postalCode = postalCode;
+        result.sortingCode = sortingCode;
+        result.organization = organization;
+        result.recipient = recipient;
+        result.phone = phone;
+        return result;
+    }
+
+    @CalledByNative
     private static void onPaymentAppInvoked(PaymentInstrument.InstrumentDetailsCallback callback,
-            String methodName, String stringifiedDetails, String errorMessage) {
+            String methodName, String stringifiedDetails, Object payerData, String errorMessage) {
         ThreadUtils.assertOnUiThread();
 
         if (!TextUtils.isEmpty(errorMessage)) {
@@ -474,7 +567,8 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
         } else {
             assert !TextUtils.isEmpty(methodName);
             assert !TextUtils.isEmpty(stringifiedDetails);
-            callback.onInstrumentDetailsReady(methodName, stringifiedDetails);
+            callback.onInstrumentDetailsReady(
+                    methodName, stringifiedDetails, (PayerData) payerData);
         }
     }
 
@@ -503,14 +597,18 @@ public class ServiceWorkerPaymentAppBridge implements PaymentAppFactory.PaymentA
         void invokePaymentApp(WebContents webContents, long registrationId,
                 String serviceWorkerScope, String topOrigin, String paymentRequestOrigin,
                 String paymentRequestId, PaymentMethodData[] methodData, PaymentItem total,
-                PaymentDetailsModifier[] modifiers, long nativePaymentHandlerObject,
+                PaymentDetailsModifier[] modifiers, PaymentOptions paymentOptions,
+                PaymentShippingOption[] shippingOptions, long nativePaymentHandlerObject,
                 boolean isMicrotrans, PaymentInstrument.InstrumentDetailsCallback callback);
         void installAndInvokePaymentApp(WebContents webContents, String topOrigin,
                 String paymentRequestOrigin, String paymentRequestId,
                 PaymentMethodData[] methodData, PaymentItem total,
-                PaymentDetailsModifier[] modifiers, long nativePaymentHandlerObject,
+                PaymentDetailsModifier[] modifiers, PaymentOptions paymentOptions,
+                PaymentShippingOption[] shippingOptions, long nativePaymentHandlerObject,
                 PaymentInstrument.InstrumentDetailsCallback callback, String appName,
-                @Nullable Bitmap icon, String swUrl, String scope, boolean useCache, String method);
+                @Nullable Bitmap icon, String swUrl, String scope, boolean useCache, String method,
+                boolean supportedDelegationsShippingAddress, boolean supportedDelegationsPayerName,
+                boolean supportedDelegationsPayerEmail, boolean supportedDelegationsPayerPhone);
         void abortPaymentApp(WebContents webContents, long registrationId,
                 String serviceWorkerScope, String paymentRequestId,
                 PaymentInstrument.AbortCallback callback);

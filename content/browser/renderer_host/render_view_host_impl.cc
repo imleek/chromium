@@ -46,11 +46,11 @@
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/scoped_active_url.h"
-#include "content/common/browser_plugin/browser_plugin_messages.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
 #include "content/common/inter_process_time_ticks_converter.h"
+#include "content/common/page_messages.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/renderer.mojom.h"
 #include "content/common/swapped_out_messages.h"
@@ -228,7 +228,7 @@ RenderViewHostImpl::RenderViewHostImpl(
       routing_id_(routing_id),
       main_frame_routing_id_(main_frame_routing_id) {
   DCHECK(instance_.get());
-  CHECK(delegate_);  // http://crbug.com/82827
+  DCHECK(delegate_);
   DCHECK_NE(GetRoutingID(), render_widget_host_->GetRoutingID());
 
   std::pair<RoutingIDViewMap::iterator, bool> result =
@@ -249,10 +249,11 @@ RenderViewHostImpl::RenderViewHostImpl(
   if (!is_active())
     GetWidget()->UpdatePriority();
 
-  close_timeout_.reset(new TimeoutMonitor(base::Bind(
-      &RenderViewHostImpl::ClosePageTimeout, weak_factory_.GetWeakPtr())));
+  close_timeout_ = std::make_unique<TimeoutMonitor>(base::BindRepeating(
+      &RenderViewHostImpl::ClosePageTimeout, weak_factory_.GetWeakPtr()));
 
-  input_device_change_observer_.reset(new InputDeviceChangeObserver(this));
+  input_device_change_observer_ =
+      std::make_unique<InputDeviceChangeObserver>(this);
 
   GetWidget()->set_owner_delegate(this);
 }
@@ -347,8 +348,9 @@ bool RenderViewHostImpl::CreateRenderView(
   if (main_rfh) {
     params->main_frame_interface_bundle =
         mojom::DocumentScopedInterfaceBundle::New();
-    main_rfh->BindInterfaceProviderRequest(mojo::MakeRequest(
-        &params->main_frame_interface_bundle->interface_provider));
+    main_rfh->BindInterfaceProviderReceiver(
+        params->main_frame_interface_bundle->interface_provider
+            .InitWithNewPipeAndPassReceiver());
     main_rfh->BindBrowserInterfaceBrokerReceiver(
         params->main_frame_interface_bundle->browser_interface_broker
             .InitWithNewPipeAndPassReceiver());
@@ -370,8 +372,7 @@ bool RenderViewHostImpl::CreateRenderView(
   }
   params->devtools_main_frame_token = devtools_frame_token;
   // GuestViews in the same StoragePartition need to find each other's frames.
-  params->renderer_wide_named_frame_lookup =
-      GetSiteInstance()->GetSiteURL().SchemeIs(kGuestScheme);
+  params->renderer_wide_named_frame_lookup = GetSiteInstance()->IsGuest();
   params->inside_portal = delegate_->IsPortal();
 
   // TODO(danakj): Make the visual_properties optional in the message.
@@ -404,17 +405,27 @@ void RenderViewHostImpl::SetMainFrameRoutingId(int routing_id) {
 }
 
 void RenderViewHostImpl::EnterBackForwardCache() {
+  if (!will_enter_back_forward_cache_callback_for_testing_.is_null())
+    will_enter_back_forward_cache_callback_for_testing_.Run();
+
+  TRACE_EVENT0("navigation", "RenderViewHostImpl::EnterBackForwardCache");
   FrameTree* frame_tree = GetDelegate()->GetFrameTree();
   frame_tree->UnregisterRenderViewHost(this);
   is_in_back_forward_cache_ = true;
+  // TODO(altimin, dcheng): This should be a ViewMsg.
+  Send(new PageMsg_PutPageIntoBackForwardCache(GetRoutingID()));
 }
 
-void RenderViewHostImpl::LeaveBackForwardCache() {
+void RenderViewHostImpl::LeaveBackForwardCache(
+    base::TimeTicks navigation_start) {
+  TRACE_EVENT0("navigation", "RenderViewHostImpl::LeaveBackForwardCache");
   FrameTree* frame_tree = GetDelegate()->GetFrameTree();
   // At this point, the frames |this| RenderViewHostImpl belongs to are
   // guaranteed to be committed, so it should be reused going forward.
   frame_tree->RegisterRenderViewHost(this);
   is_in_back_forward_cache_ = false;
+  Send(new PageMsg_RestorePageFromBackForwardCache(GetRoutingID(),
+                                                   navigation_start));
 }
 
 bool RenderViewHostImpl::IsRenderViewLive() {
@@ -544,7 +555,7 @@ const WebPreferences RenderViewHostImpl::ComputeWebPreferences() {
 
   prefs.viewport_enabled = command_line.HasSwitch(switches::kEnableViewport);
 
-  if (delegate_ && delegate_->IsOverridingUserAgent())
+  if (delegate_->IsOverridingUserAgent())
     prefs.viewport_meta_enabled = false;
 
   prefs.main_frame_resizes_are_orientation_changes =
@@ -553,7 +564,7 @@ const WebPreferences RenderViewHostImpl::ComputeWebPreferences() {
   prefs.spatial_navigation_enabled = command_line.HasSwitch(
       switches::kEnableSpatialNavigation);
 
-  if (delegate_ && delegate_->IsSpatialNavigationDisabled())
+  if (delegate_->IsSpatialNavigationDisabled())
     prefs.spatial_navigation_enabled = false;
 
   prefs.caret_browsing_enabled =
@@ -583,11 +594,11 @@ const WebPreferences RenderViewHostImpl::ComputeWebPreferences() {
   prefs.user_gesture_required_for_presentation = !command_line.HasSwitch(
       switches::kDisableGestureRequirementForPresentation);
 
-  if (delegate_ && delegate_->HideDownloadUI())
+  if (delegate_->HideDownloadUI())
     prefs.hide_download_ui = true;
 
   // `media_controls_enabled` is `true` by default.
-  if (delegate_ && delegate_->HasPersistentVideo())
+  if (delegate_->HasPersistentVideo())
     prefs.media_controls_enabled = false;
 
   GetContentClient()->browser()->OverrideWebkitPrefs(this, &prefs);
@@ -1082,6 +1093,11 @@ bool RenderViewHostImpl::IsDocumentOnLoadCompletedInMainFrame() {
 
 bool RenderViewHostImpl::IsTestRenderViewHost() const {
   return false;
+}
+
+void RenderViewHostImpl::SetWillEnterBackForwardCacheCallbackForTesting(
+    const WillEnterBackForwardCacheCallbackForTesting& callback) {
+  will_enter_back_forward_cache_callback_for_testing_ = callback;
 }
 
 }  // namespace content

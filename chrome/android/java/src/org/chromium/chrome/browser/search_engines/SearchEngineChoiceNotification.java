@@ -13,8 +13,8 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.omaha.VersionNumber;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.SearchEnginePreference;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.search_engine.SearchEngineSettings;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
@@ -58,7 +58,7 @@ public final class SearchEngineChoiceNotification {
 
         @Override
         public void onAction(Object actionData) {
-            PreferencesLauncher.launchSettingsPage(mContext, SearchEnginePreference.class);
+            SettingsLauncher.launchSettingsPage(mContext, SearchEngineSettings.class);
             SearchEngineChoiceMetrics.recordEvent(SearchEngineChoiceMetrics.Events.PROMPT_FOLLOWED);
             SearchEngineChoiceMetrics.recordSearchEngineTypeBeforeChoice();
         }
@@ -109,7 +109,7 @@ public final class SearchEngineChoiceNotification {
                 .make(context.getString(R.string.search_engine_choice_prompt),
                         new NotificationSnackbarController(context), Snackbar.TYPE_NOTIFICATION,
                         Snackbar.UMA_SEARCH_ENGINE_CHOICE_NOTIFICATION)
-                .setAction(context.getString(R.string.preferences), null)
+                .setAction(context.getString(R.string.settings), null)
                 .setDuration((int) TimeUnit.SECONDS.toMillis(durationSeconds))
                 .setSingleLine(false)
                 .setTheme(Snackbar.Theme.GOOGLE);

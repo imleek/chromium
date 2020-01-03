@@ -6,7 +6,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_NFC_NDEF_RECORD_H_
 
 #include "services/device/public/mojom/nfc.mojom-blink-forward.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -36,29 +35,39 @@ class MODULES_EXPORT NDEFRecord final : public ScriptWrappable {
   explicit NDEFRecord(WTF::Vector<uint8_t> /* payload_data */,
                       const String& /* media_type */);
 
-  NDEFRecord(const String& /* record_type */, WTF::Vector<uint8_t> /* data */);
-  NDEFRecord(const String& /* record_type */,
-             const String& /* encoding */,
-             const String& /* lang */,
-             WTF::Vector<uint8_t> /* data */);
+  explicit NDEFRecord(const String& /* record_type */,
+                      WTF::Vector<uint8_t> /* data */);
+  explicit NDEFRecord(const String& /* record_type */,
+                      const String& /* encoding */,
+                      const String& /* lang */,
+                      WTF::Vector<uint8_t> /* data */);
+
+  // All above Ctors by default set the type category to
+  // device::mojom::NDEFRecordTypeCategory::kStandardized.
+
+  explicit NDEFRecord(device::mojom::NDEFRecordTypeCategory /* category */,
+                      const String& /* record_type */,
+                      WTF::Vector<uint8_t> /* data */);
   explicit NDEFRecord(const device::mojom::blink::NDEFRecord&);
 
-  const String& recordType() const;
+  const String& recordType() const { return record_type_; }
   const String& mediaType() const;
-  const String& id() const;
-  const String& encoding() const;
-  const String& lang() const;
+  const String& id() const { return id_; }
+  const String& encoding() const { return encoding_; }
+  const String& lang() const { return lang_; }
   DOMDataView* data() const;
   base::Optional<HeapVector<Member<NDEFRecord>>> toRecords(
       ExceptionState& exception_state) const;
 
-  const WTF::Vector<uint8_t>& payloadData() const;
-  const NDEFMessage* payload_message() const;
+  device::mojom::NDEFRecordTypeCategory category() const { return category_; }
+  const WTF::Vector<uint8_t>& payloadData() const { return payload_data_; }
+  const NDEFMessage* payload_message() const { return payload_message_.Get(); }
 
   void Trace(blink::Visitor*) override;
 
  private:
-  String record_type_;
+  const device::mojom::NDEFRecordTypeCategory category_;
+  const String record_type_;
   String media_type_;
   String id_;
   String encoding_;

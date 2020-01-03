@@ -7,7 +7,7 @@
 enum XRSessionMode {
   "inline",
   "immersive-vr",
-  /* [RuntimeEnabled=WebXRARModule] */ "immersive-ar",
+  "immersive-ar",
 };
 
 enum XREnvironmentBlendMode {
@@ -50,13 +50,17 @@ enum XRVisibilityState {
   [RuntimeEnabled=WebXRHitTest, CallWith=ScriptState, RaisesException] Promise<FrozenArray<XRHitResult>> requestHitTest(XRRay ray, XRSpace space);
 
   // https://github.com/immersive-web/real-world-geometry/blob/master/plane-detection-explainer.md
-  [RuntimeEnabled=WebXRPlaneDetection] readonly attribute XRWorldTrackingState worldTrackingState;
-  [RuntimeEnabled=WebXRPlaneDetection, RaisesException] void updateWorldTrackingState(optional XRWorldTrackingStateInit state);
+  [RuntimeEnabled=WebXRIncubations] readonly attribute XRWorldTrackingState worldTrackingState;
+  [RuntimeEnabled=WebXRIncubations, RaisesException] void updateWorldTrackingState(optional XRWorldTrackingStateInit state);
 
-  [RuntimeEnabled=WebXRAnchors] readonly attribute XRAnchorSet trackedAnchors;
-  [RuntimeEnabled=WebXRAnchors, CallWith=ScriptState, RaisesException] Promise<XRAnchor> createAnchor(XRRigidTransform initial_pose, XRSpace space);
+  [RuntimeEnabled=WebXRIncubations] readonly attribute XRAnchorSet trackedAnchors;
+  [RuntimeEnabled=WebXRIncubations, CallWith=ScriptState, RaisesException] Promise<XRAnchor> createAnchor(XRRigidTransform initial_pose, XRSpace space);
 
   [CallWith=ScriptState, Measure, RaisesException] Promise<void> end();
 
-  [RuntimeEnabled=WebXRHitTest, CallWith=ScriptState, RaisesException] Promise<XRHitTestSource> requestHitTestSource(XRHitTestOptionsInit options);
+  // https://github.com/immersive-web/hit-test/blob/master/hit-testing-explainer.md
+  [RuntimeEnabled=WebXRHitTest, CallWith=ScriptState, RaisesException]
+  Promise<XRHitTestSource> requestHitTestSource(XRHitTestOptionsInit options);
+  [RuntimeEnabled=WebXRHitTest, CallWith=ScriptState, RaisesException]
+  Promise<XRTransientInputHitTestSource> requestHitTestSourceForTransientInput(XRTransientInputHitTestOptionsInit options);
 };

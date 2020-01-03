@@ -60,8 +60,8 @@ WebRemoteFrame* WebRemoteFrame::Create(
     WebRemoteFrameClient* client,
     InterfaceRegistry* interface_registry,
     AssociatedInterfaceProvider* associated_interface_provider) {
-  return WebRemoteFrameImpl::Create(scope, client, interface_registry,
-                                    associated_interface_provider);
+  return MakeGarbageCollected<WebRemoteFrameImpl>(
+      scope, client, interface_registry, associated_interface_provider);
 }
 
 WebRemoteFrame* WebRemoteFrame::CreateMainFrame(
@@ -84,16 +84,6 @@ WebRemoteFrame* WebRemoteFrame::CreateForPortal(
   return WebRemoteFrameImpl::CreateForPortal(scope, client, interface_registry,
                                              associated_interface_provider,
                                              portal_element);
-}
-
-WebRemoteFrameImpl* WebRemoteFrameImpl::Create(
-    WebTreeScopeType scope,
-    WebRemoteFrameClient* client,
-    InterfaceRegistry* interface_registry,
-    AssociatedInterfaceProvider* associated_interface_provider) {
-  WebRemoteFrameImpl* frame = MakeGarbageCollected<WebRemoteFrameImpl>(
-      scope, client, interface_registry, associated_interface_provider);
-  return frame;
 }
 
 WebRemoteFrameImpl* WebRemoteFrameImpl::CreateMainFrame(
@@ -127,7 +117,7 @@ WebRemoteFrameImpl* WebRemoteFrameImpl::CreateForPortal(
     InterfaceRegistry* interface_registry,
     AssociatedInterfaceProvider* associated_interface_provider,
     const WebElement& portal_element) {
-  WebRemoteFrameImpl* frame = MakeGarbageCollected<WebRemoteFrameImpl>(
+  auto* frame = MakeGarbageCollected<WebRemoteFrameImpl>(
       scope, client, interface_registry, associated_interface_provider);
 
   Element* element = portal_element;
@@ -195,8 +185,8 @@ WebLocalFrame* WebRemoteFrameImpl::CreateLocalChild(
     const WebFrameOwnerProperties& frame_owner_properties,
     FrameOwnerElementType frame_owner_element_type,
     WebFrame* opener) {
-  auto* child = MakeGarbageCollected<WebLocalFrameImpl>(scope, client,
-                                                        interface_registry);
+  auto* child = MakeGarbageCollected<WebLocalFrameImpl>(
+      util::PassKey<WebRemoteFrameImpl>(), scope, client, interface_registry);
   child->SetOpener(opener);
   InsertAfter(child, previous_sibling);
   auto* owner = MakeGarbageCollected<RemoteFrameOwner>(
@@ -230,7 +220,7 @@ WebRemoteFrame* WebRemoteFrameImpl::CreateRemoteChild(
     blink::InterfaceRegistry* interface_registry,
     AssociatedInterfaceProvider* associated_interface_provider,
     WebFrame* opener) {
-  WebRemoteFrameImpl* child = WebRemoteFrameImpl::Create(
+  auto* child = MakeGarbageCollected<WebRemoteFrameImpl>(
       scope, client, interface_registry, associated_interface_provider);
   child->SetOpener(opener);
   AppendChild(child);
@@ -272,8 +262,7 @@ void WebRemoteFrameImpl::SetReplicatedOrigin(
 
 void WebRemoteFrameImpl::SetReplicatedSandboxFlags(WebSandboxFlags flags) {
   DCHECK(GetFrame());
-  GetFrame()->GetSecurityContext()->ResetAndEnforceSandboxFlags(
-      static_cast<SandboxFlags>(flags));
+  GetFrame()->SetReplicatedSandboxFlags(flags);
 }
 
 void WebRemoteFrameImpl::SetReplicatedName(const WebString& name) {
@@ -292,7 +281,7 @@ void WebRemoteFrameImpl::SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
 void WebRemoteFrameImpl::AddReplicatedContentSecurityPolicyHeader(
     const WebString& header_value,
     network::mojom::ContentSecurityPolicyType type,
-    WebContentSecurityPolicySource source) {
+    network::mojom::ContentSecurityPolicySource source) {
   GetFrame()
       ->GetSecurityContext()
       ->GetContentSecurityPolicy()
@@ -302,19 +291,19 @@ void WebRemoteFrameImpl::AddReplicatedContentSecurityPolicyHeader(
 }
 
 void WebRemoteFrameImpl::ResetReplicatedContentSecurityPolicy() {
-  GetFrame()->GetSecurityContext()->ResetReplicatedContentSecurityPolicy();
+  GetFrame()->ResetReplicatedContentSecurityPolicy();
 }
 
 void WebRemoteFrameImpl::SetReplicatedInsecureRequestPolicy(
     WebInsecureRequestPolicy policy) {
   DCHECK(GetFrame());
-  GetFrame()->GetSecurityContext()->SetInsecureRequestPolicy(policy);
+  GetFrame()->SetInsecureRequestPolicy(policy);
 }
 
 void WebRemoteFrameImpl::SetReplicatedInsecureNavigationsSet(
     const WebVector<unsigned>& set) {
   DCHECK(GetFrame());
-  GetFrame()->GetSecurityContext()->SetInsecureNavigationsSet(set);
+  GetFrame()->SetInsecureNavigationsSet(set);
 }
 
 void WebRemoteFrameImpl::ForwardResourceTimingToParent(
@@ -323,8 +312,11 @@ void WebRemoteFrameImpl::ForwardResourceTimingToParent(
   HTMLFrameOwnerElement* owner_element =
       To<HTMLFrameOwnerElement>(frame_->Owner());
   DCHECK(owner_element);
+  // TODO(https://crbug.com/900700): Take a Mojo pending receiver for
+  // WorkerTimingContainer for navigation from the calling function.
   DOMWindowPerformance::performance(*parent_frame->GetFrame()->DomWindow())
-      ->AddResourceTiming(info, owner_element->localName());
+      ->AddResourceTiming(info, owner_element->localName(),
+                          mojo::NullReceiver() /* worker_timing_receiver */);
 }
 
 void WebRemoteFrameImpl::SetNeedsOcclusionTracking(bool needs_tracking) {
@@ -449,8 +441,9 @@ void WebRemoteFrameImpl::IntrinsicSizingInfoChanged(
   owner->IntrinsicSizingInfoChanged();
 }
 
-void WebRemoteFrameImpl::SetHasReceivedUserGestureBeforeNavigation(bool value) {
-  GetFrame()->SetDocumentHasReceivedUserGestureBeforeNavigation(value);
+void WebRemoteFrameImpl::SetHadStickyUserActivationBeforeNavigation(
+    bool value) {
+  GetFrame()->SetHadStickyUserActivationBeforeNavigation(value);
 }
 
 v8::Local<v8::Object> WebRemoteFrameImpl::GlobalProxy() const {
@@ -468,7 +461,7 @@ void WebRemoteFrameImpl::RenderFallbackContent() const {
   // ContentFrame() should detach and free-up the OOPIF process (see
   // https://crbug.com/850223).
   auto* owner = frame_->DeprecatedLocalOwner();
-  DCHECK(IsHTMLObjectElement(owner));
+  DCHECK(IsA<HTMLObjectElement>(owner));
   owner->RenderFallbackContent(frame_);
 }
 

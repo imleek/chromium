@@ -11,12 +11,13 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_util.h"
-#include "base/task/task_features.h"
 #include "build/build_config.h"
 #include "content/common/content_switches_internal.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/navigation_policy.h"
+#include "content/public/common/referrer.h"
+#include "device/fido/features.h"
 #include "gpu/config/gpu_switches.h"
 #include "media/base/media_switches.h"
 #include "net/base/features.h"
@@ -114,6 +115,9 @@ void SetRuntimeFeatureDefaultsForPlatform(
       base::FeatureList::IsEnabled(features::kWebAuth));
 #endif
 
+  WebRuntimeFeatures::EnableWebAuthenticationFeaturePolicy(
+      base::FeatureList::IsEnabled(device::kWebAuthFeaturePolicy));
+
 #if defined(OS_ANDROID)
   WebRuntimeFeatures::EnablePictureInPictureAPI(
       base::FeatureList::IsEnabled(media::kPictureInPictureAPI));
@@ -175,20 +179,13 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            blink::features::kBlockingFocusWithoutUserActivation, kEnableOnly},
           {wf::EnableNotificationContentImage,
            features::kNotificationContentImage, kDisableOnly},
-          {wf::EnableReducedReferrerGranularity,
-           features::kReducedReferrerGranularity, kUseFeatureState},
           {wf::EnablePeriodicBackgroundSync, features::kPeriodicBackgroundSync,
            kEnableOnly},
           {wf::EnableWebXR, features::kWebXr, kUseFeatureState},
-          {wf::EnableWebXRARDOMOverlay, features::kWebXrArDOMOverlay,
-           kEnableOnly},
           {wf::EnableWebXRARModule, features::kWebXrArModule, kEnableOnly},
           {wf::EnableWebXRHitTest, features::kWebXrHitTest, kEnableOnly},
-          {wf::EnableWebXRAnchors, features::kWebXrAnchors, kEnableOnly},
-          {wf::EnableWebXRPlaneDetection, features::kWebXrPlaneDetection,
+          {wf::EnableWebXRIncubations, features::kWebXrIncubations,
            kEnableOnly},
-          {wf::EnableWebXrGamepadModule, features::kWebXrGamepadModule,
-           kUseFeatureState},
           {wf::EnableFetchMetadata, network::features::kFetchMetadata,
            kUseFeatureState},
           {wf::EnableFetchMetadataDestination,
@@ -232,8 +229,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            features::kAllowActivationDelegationAttr, kUseFeatureState},
           {wf::EnableScriptStreamingOnPreload,
            features::kScriptStreamingOnPreload, kUseFeatureState},
-          {wf::EnableMergeBlockingNonBlockingPools,
-           base::kMergeBlockingNonBlockingPools, kUseFeatureState},
           {wf::EnableLazyFrameLoading, features::kLazyFrameLoading,
            kUseFeatureState},
           {wf::EnableLazyFrameVisibleLoadTimeMetrics,
@@ -253,15 +248,14 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           {wf::EnableFeaturePolicyForSandbox,
            features::kFeaturePolicyForSandbox, kEnableOnly},
           {wf::EnableAccessibilityExposeARIAAnnotations,
-           features::kEnableAccessibilityExposeARIAAnnotations,
-           kUseFeatureState},
+           features::kEnableAccessibilityExposeARIAAnnotations, kEnableOnly},
           {wf::EnableAccessibilityExposeDisplayNone,
-           features::kEnableAccessibilityExposeDisplayNone, kUseFeatureState},
+           features::kEnableAccessibilityExposeDisplayNone, kEnableOnly},
           {wf::EnableAllowSyncXHRInPageDismissal,
            blink::features::kAllowSyncXHRInPageDismissal, kEnableOnly},
           {wf::EnableAutoplayIgnoresWebAudio, media::kAutoplayIgnoreWebAudio,
            kUseFeatureState},
-          {wf::EnablePortals, blink::features::kPortals, kUseFeatureState},
+          {wf::EnablePortals, blink::features::kPortals, kEnableOnly},
           {wf::EnableImplicitRootScroller,
            blink::features::kImplicitRootScroller, kUseFeatureState},
           {wf::EnableCSSOMViewScrollCoordinates,
@@ -276,8 +270,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            features::kFractionalScrollOffsets, kUseFeatureState},
           {wf::EnableGetDisplayMedia, blink::features::kRTCGetDisplayMedia,
            kUseFeatureState},
-          {wf::EnableMimeHandlerViewInCrossProcessFrame,
-           features::kMimeHandlerViewInCrossProcessFrame, kUseFeatureState},
           {wf::EnableFallbackCursorMode, features::kFallbackCursorMode,
            kUseFeatureState},
           {wf::EnableSignedExchangePrefetchCacheForNavigations,
@@ -314,6 +306,12 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            kEnableOnly},
           {wf::EnableHTMLImports, blink::features::kWebComponentsV0Enabled,
            kEnableOnly},
+          {wf::EnableVideoPlaybackQuality, features::kVideoPlaybackQuality,
+           kUseFeatureState},
+          {wf::EnableBrowserVerifiedUserActivationKeyboard,
+           features::kBrowserVerifiedUserActivationKeyboard, kEnableOnly},
+          {wf::EnableBrowserVerifiedUserActivationMouse,
+           features::kBrowserVerifiedUserActivationMouse, kEnableOnly},
       };
   for (const auto& mapping : blinkFeatureToBaseFeatureMapping) {
     const bool featureEnabled =
@@ -336,8 +334,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
   // function and using feature string name with EnableFeatureFromString.
   const RuntimeFeatureToChromiumFeatureMap<const char*>
       runtimeFeatureNameToChromiumFeatureMapping[] = {
-          {"FastBorderRadius", blink::features::kFastBorderRadius,
-           kUseFeatureState},
           {"FontSrcLocalMatching", features::kFontSrcLocalMatching,
            kUseFeatureState},
           {"LegacyWindowsDWriteFontFallback",
@@ -523,9 +519,6 @@ void SetCustomizedRuntimeFeaturesFromCombinedArgs(
   // They're moved here to distinguish them from actual base checks
   WebRuntimeFeatures::EnableOverlayScrollbars(ui::IsOverlayScrollbarEnabled());
 
-  WebRuntimeFeatures::EnableFormControlsRefresh(
-      features::IsFormControlsRefreshEnabled());
-
   if (base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
           blink::features::kNativeFileSystemAPI.name,
           base::FeatureList::OVERRIDE_ENABLE_FEATURE)) {
@@ -552,12 +545,19 @@ void SetCustomizedRuntimeFeaturesFromCombinedArgs(
     WebRuntimeFeatures::EnableNetInfoDownlinkMax(true);
     WebRuntimeFeatures::EnableFetchMetadata(true);
     WebRuntimeFeatures::EnableFetchMetadataDestination(true);
-    WebRuntimeFeatures::EnableFeatureFromString("FastBorderRadius", true);
     WebRuntimeFeatures::EnableDisplayLocking(true);
   }
 
   WebRuntimeFeatures::EnableBackForwardCache(
       content::IsBackForwardCacheEnabled());
+
+  // Gate the ReducedReferrerGranularity runtime feature depending on whether
+  // content is configured to force a no-referrer-when-downgrade default policy.
+  // TODO(crbug.com/1016541): After M82, remove when the corresponding
+  // enterprise policy has been deleted.
+  WebRuntimeFeatures::EnableReducedReferrerGranularity(
+      base::FeatureList::IsEnabled(features::kReducedReferrerGranularity) &&
+      !content::Referrer::ShouldForceLegacyDefaultReferrerPolicy());
 }
 
 }  // namespace

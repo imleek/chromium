@@ -53,7 +53,7 @@
 #include "chrome/browser/ui/ash/launcher/browser_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_test_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
-#include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
+#include "chrome/browser/ui/ash/launcher/shelf_context_menu.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -75,7 +75,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chromeos/constants/chromeos_switches.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
@@ -107,10 +107,12 @@ using content::WebContents;
 
 namespace {
 
-ash::ShelfAction SelectItem(const ash::ShelfID& id,
-                            ui::EventType event_type = ui::ET_MOUSE_PRESSED,
-                            int64_t display_id = display::kInvalidDisplayId) {
-  return SelectShelfItem(id, event_type, display_id);
+ash::ShelfAction SelectItem(
+    const ash::ShelfID& id,
+    ui::EventType event_type = ui::ET_MOUSE_PRESSED,
+    int64_t display_id = display::kInvalidDisplayId,
+    ash::ShelfLaunchSource source = ash::LAUNCH_FROM_UNKNOWN) {
+  return SelectShelfItem(id, event_type, display_id, source);
 }
 
 // Find the browser that associated with |app_name|.
@@ -132,7 +134,7 @@ void CloseAppBrowserWindow(Browser* app_browser) {
 
 // Close browsers from context menu
 void CloseBrowserWindow(Browser* browser,
-                        LauncherContextMenu* menu,
+                        ShelfContextMenu* menu,
                         int close_command) {
   // Note that event_flag is never used inside function ExecuteCommand.
   menu->ExecuteCommand(close_command, ui::EventFlags::EF_NONE);
@@ -274,19 +276,19 @@ class ShelfAppBrowserTest : public extensions::ExtensionBrowserTest {
   }
 
   // Creates a context menu for the existing browser shortcut item.
-  std::unique_ptr<LauncherContextMenu> CreateBrowserItemContextMenu() {
+  std::unique_ptr<ShelfContextMenu> CreateBrowserItemContextMenu() {
     int index = shelf_model()->GetItemIndexForType(ash::TYPE_BROWSER_SHORTCUT);
     DCHECK_GE(index, 0);
     ash::ShelfItem item = shelf_model()->items()[index];
     int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
-    return LauncherContextMenu::Create(controller_, &item, display_id);
+    return ShelfContextMenu::Create(controller_, &item, display_id);
   }
 
-  bool IsItemPresentInMenu(LauncherContextMenu* launcher_context_menu,
+  bool IsItemPresentInMenu(ShelfContextMenu* shelf_context_menu,
                            int command_id) {
     base::RunLoop run_loop;
     std::unique_ptr<ui::SimpleMenuModel> menu;
-    launcher_context_menu->GetMenuModel(base::BindLambdaForTesting(
+    shelf_context_menu->GetMenuModel(base::BindLambdaForTesting(
         [&](std::unique_ptr<ui::SimpleMenuModel> created_menu) {
           menu = std::move(created_menu);
           run_loop.Quit();
@@ -336,8 +338,10 @@ class ShelfAppBrowserTest : public extensions::ExtensionBrowserTest {
   ash::ShelfAction SelectItemAndFlushMojoCallsForAppService(
       const ash::ShelfID& id,
       ui::EventType event_type = ui::ET_MOUSE_PRESSED,
-      int64_t display_id = display::kInvalidDisplayId) {
-    const ash::ShelfAction action = SelectItem(id, event_type, display_id);
+      int64_t display_id = display::kInvalidDisplayId,
+      ash::ShelfLaunchSource source = ash::LAUNCH_FROM_UNKNOWN) {
+    const ash::ShelfAction action =
+        SelectItem(id, event_type, display_id, source);
     FlushMojoCallsForAppService();
     return action;
   }
@@ -650,6 +654,37 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, WindowActivation) {
   CloseAppWindow(window1);
   --item_count;
   EXPECT_EQ(item_count, shelf_model()->item_count());
+}
+
+IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, MultipleBrowsers) {
+  EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
+  Browser* const browser1 = chrome::FindLastActive();
+  ASSERT_TRUE(browser1);
+
+  Browser* const browser2 = CreateBrowser(profile());
+  ASSERT_TRUE(browser2);
+  EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
+  EXPECT_NE(browser1->window(), browser2->window());
+  EXPECT_TRUE(browser2->window()->IsActive());
+
+  const Extension* app = LoadAndLaunchPlatformApp("launch", "Launched");
+  ui::BaseWindow* const app_window =
+      CreateAppWindow(browser()->profile(), app)->GetBaseWindow();
+
+  const ash::ShelfItem item = GetLastLauncherItem();
+  EXPECT_EQ(app->id(), item.id.app_id);
+  EXPECT_EQ(ash::TYPE_APP, item.type);
+  EXPECT_EQ(ash::STATUS_RUNNING, item.status);
+
+  EXPECT_TRUE(app_window->IsActive());
+  EXPECT_FALSE(browser2->window()->IsActive());
+
+  controller_->ActivateApp(extension_misc::kChromeAppId,
+                           ash::LAUNCH_FROM_APP_LIST, 0,
+                           display::kInvalidDisplayId);
+
+  EXPECT_FALSE(app_window->IsActive());
+  EXPECT_TRUE(browser2->window()->IsActive());
 }
 
 // Confirm the minimizing click behavior for apps.
@@ -2101,7 +2136,7 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest,
   chrome::SetAutoAcceptPWAInstallConfirmationForTesting(false);
 
   ash::ShelfID shelf_id(app_id);
-  EXPECT_TRUE(ChromeLauncherController::instance()->IsPinned(shelf_id));
+  EXPECT_FALSE(ChromeLauncherController::instance()->IsPinned(shelf_id));
   EXPECT_EQ(
       shelf_id,
       ChromeLauncherController::instance()->shelf_model()->active_shelf_id());
@@ -2118,14 +2153,14 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest,
       GURL(embedded_test_server()->GetURL("/banners/manifest_test_page.html")),
       ui::PAGE_TRANSITION_LINK);
   // Install shortcut app.
-  chrome::SetAutoAcceptBookmarkAppDialogForTesting(true);
+  chrome::SetAutoAcceptBookmarkAppDialogForTesting(true, true);
   web_app::WebAppInstallObserver observer(profile());
   chrome::ExecuteCommand(browser(), IDC_CREATE_SHORTCUT);
   web_app::AppId app_id = observer.AwaitNextInstall();
-  chrome::SetAutoAcceptBookmarkAppDialogForTesting(false);
+  chrome::SetAutoAcceptBookmarkAppDialogForTesting(false, false);
 
   ash::ShelfID shelf_id(app_id);
-  EXPECT_TRUE(ChromeLauncherController::instance()->IsPinned(shelf_id));
+  EXPECT_FALSE(ChromeLauncherController::instance()->IsPinned(shelf_id));
   EXPECT_EQ(
       shelf_id,
       ChromeLauncherController::instance()->shelf_model()->active_shelf_id());
@@ -2134,9 +2169,9 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest,
 // Test that "Close" is shown in the context menu when there are opened browsers
 // windows.
 IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest,
-                       LauncherContextMenuVerifyCloseItemAppearance) {
+                       ShelfContextMenuVerifyCloseItemAppearance) {
   // Open a context menu for the existing browser window.
-  std::unique_ptr<LauncherContextMenu> menu1 = CreateBrowserItemContextMenu();
+  std::unique_ptr<ShelfContextMenu> menu1 = CreateBrowserItemContextMenu();
   // Check if "Close" is added to in the context menu.
   ASSERT_TRUE(IsItemPresentInMenu(menu1.get(), ash::MENU_CLOSE));
 
@@ -2145,7 +2180,7 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest,
   EXPECT_EQ(0u, BrowserList::GetInstance()->size());
 
   // Check if "Close" is removed from the context menu.
-  std::unique_ptr<LauncherContextMenu> menu2 = CreateBrowserItemContextMenu();
+  std::unique_ptr<ShelfContextMenu> menu2 = CreateBrowserItemContextMenu();
   ASSERT_FALSE(IsItemPresentInMenu(menu2.get(), ash::MENU_CLOSE));
 }
 
@@ -2164,12 +2199,14 @@ class HotseatShelfAppBrowserTest : public ShelfAppBrowserTest {
 
   // ShelfAppBrowserTest:
   void SetUp() override {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        chromeos::switches::kShelfHotseat);
+    scoped_feature_list_.InitAndEnableFeature(
+        chromeos::features::kShelfHotseat);
     ShelfAppBrowserTest::SetUp();
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(HotseatShelfAppBrowserTest);
 };
 
@@ -2326,7 +2363,9 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTestWithDesks, MultipleDesks) {
   // The shelf context menu should show 2 items for both browsers. No new items
   // should be created and existing window should not be minimized.
   EXPECT_EQ(ash::ShelfAction::SHELF_ACTION_NONE,
-            SelectItemAndFlushMojoCallsForAppService(browser_id));
+            SelectItemAndFlushMojoCallsForAppService(
+                browser_id, ui::ET_MOUSE_PRESSED, display::kInvalidDisplayId,
+                ash::LAUNCH_FROM_SHELF));
   EXPECT_EQ(
       2u, controller_
               ->GetAppMenuItemsForTesting(shelf_model()->items()[browser_index])

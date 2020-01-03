@@ -8,14 +8,14 @@
     },
     {
       "name": "HorizontalScrollbar",
-      "bounds": [202, 202],
-      "paintInvalidations": [
-        {
-          "object": "VerticalScrollbar",
-          "rect": [186, 1, 15, 185],
-          "reason": "scroll control"
-        }
-      ],
+      "position": [1, 186],
+      "bounds": [200, 15],
+      "transform": 1
+    },
+    {
+      "name": "VerticalScrollbar",
+      "position": [186, 1],
+      "bounds": [15, 185],
       "transform": 1
     }
   ],

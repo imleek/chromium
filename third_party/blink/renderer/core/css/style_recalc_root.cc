@@ -6,6 +6,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
+#include "third_party/blink/renderer/core/dom/shadow_root_v0.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
 
@@ -62,8 +63,15 @@ base::Optional<Member<Element>> FirstFlatTreeAncestorForChildDirty(
   if (!root)
     return To<Element>(&parent);
   if (root->IsV0()) {
-    // Fall back to use the parent as the new style recalc root for Shadow DOM
-    // V0. It is too complicated to try to find the closest flat tree parent.
+    // The child has already been removed, so we cannot look up its insertion
+    // point directly. Find the insertion point which was part of the ancestor
+    // chain before the removal by checking the child-dirty bits. Since the
+    // recalc root was removed, there is at most one such child-dirty insertion
+    // point.
+    for (const auto insertion_point : root->V0().DescendantInsertionPoints()) {
+      if (insertion_point->ChildNeedsStyleRecalc())
+        return insertion_point;
+    }
     return base::nullopt;
   }
   if (!root->HasSlotAssignment())
@@ -108,6 +116,27 @@ void StyleRecalcRoot::RootRemoved(ContainerNode& parent) {
     ancestor->ClearChildNeedsStyleRecalc();
   }
   Clear();
+}
+
+void StyleRecalcRoot::RemovedFromFlatTree(const Node& node) {
+  if (!RuntimeEnabledFeatures::FlatTreeStyleRecalcEnabled())
+    return;
+  if (!GetRootNode())
+    return;
+  if (GetRootNode()->IsDocumentNode())
+    return;
+  // If the recalc root is the removed node, or if it's a descendant of the root
+  // node, the recalc flags will be cleared in DetachLayoutTree() since
+  // performing_reattach=false. If that's the case, call RootRemoved() below to
+  // make sure we don't have a recalc root outside the flat tree, which is not
+  // allowed with FlatTreeStyleRecalc enabled.
+  if (GetRootNode()->NeedsStyleRecalc() ||
+      GetRootNode()->GetForceReattachLayoutTree() ||
+      GetRootNode()->ChildNeedsStyleRecalc()) {
+    return;
+  }
+  DCHECK(node.parentElement());
+  RootRemoved(*node.parentElement());
 }
 
 }  // namespace blink

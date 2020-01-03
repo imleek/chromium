@@ -48,6 +48,23 @@ void SharedContextState::compileError(const char* shader, const char* errors) {
   }
 }
 
+SharedContextState::MemoryTracker::MemoryTracker(
+    gpu::MemoryTracker::Observer* peak_memory_monitor)
+    : peak_memory_monitor_(peak_memory_monitor) {}
+
+SharedContextState::MemoryTracker::~MemoryTracker() {
+  DCHECK(!size_);
+}
+
+void SharedContextState::MemoryTracker::OnMemoryAllocatedChange(
+    CommandBufferId id,
+    uint64_t old_size,
+    uint64_t new_size) {
+  size_ += new_size - old_size;
+  if (peak_memory_monitor_)
+    peak_memory_monitor_->OnMemoryAllocatedChange(id, old_size, new_size);
+}
+
 SharedContextState::SharedContextState(
     scoped_refptr<gl::GLShareGroup> share_group,
     scoped_refptr<gl::GLSurface> surface,
@@ -57,10 +74,12 @@ SharedContextState::SharedContextState(
     GrContextType gr_context_type,
     viz::VulkanContextProvider* vulkan_context_provider,
     viz::MetalContextProvider* metal_context_provider,
-    viz::DawnContextProvider* dawn_context_provider)
+    viz::DawnContextProvider* dawn_context_provider,
+    gpu::MemoryTracker::Observer* peak_memory_monitor)
     : use_virtualized_gl_contexts_(use_virtualized_gl_contexts),
       context_lost_callback_(std::move(context_lost_callback)),
       gr_context_type_(gr_context_type),
+      memory_tracker_(peak_memory_monitor),
       vk_context_provider_(vulkan_context_provider),
       metal_context_provider_(metal_context_provider),
       dawn_context_provider_(dawn_context_provider),
@@ -116,6 +135,15 @@ SharedContextState::~SharedContextState() {
   // initialized.
   DCHECK(!owned_gr_context_ || owned_gr_context_->unique());
 
+  // GPU memory allocations except skia_gr_cache_size_ tracked by this
+  // memory_tracker_ should have been released.
+  DCHECK_EQ(skia_gr_cache_size_, memory_tracker_.GetMemoryUsage());
+  // gr_context_ and all resources owned by it will be released soon, so set it
+  // to null, and UpdateSkiaOwnedMemorySize() will update skia memory usage to
+  // 0, to ensure that PeakGpuMemoryMonitor sees 0 allocated memory.
+  gr_context_ = nullptr;
+  UpdateSkiaOwnedMemorySize();
+
   // Delete the GrContext. This will either do cleanup if the context is
   // current, or the GrContext was already abandoned if the GLContext was lost.
   owned_gr_context_.reset();
@@ -127,6 +155,7 @@ SharedContextState::~SharedContextState() {
 }
 
 void SharedContextState::InitializeGrContext(
+    const GpuPreferences& gpu_preferences,
     const GpuDriverBugWorkarounds& workarounds,
     GrContextOptions::PersistentCache* cache,
     GpuProcessActivityFlags* activity_flags,
@@ -192,7 +221,7 @@ void SharedContextState::InitializeGrContext(
   } else {
     gr_context_->setResourceCacheLimit(max_resource_cache_bytes_);
   }
-  transfer_cache_ = std::make_unique<ServiceTransferCache>();
+  transfer_cache_ = std::make_unique<ServiceTransferCache>(gpu_preferences);
 }
 
 bool SharedContextState::InitializeGL(
@@ -290,11 +319,29 @@ bool SharedContextState::MakeCurrent(gl::GLSurface* surface, bool needs_gl) {
   if (context_lost_)
     return false;
 
-  if (!context_->MakeCurrent(surface ? surface : surface_.get())) {
+  gl::GLSurface* dont_care_surface =
+      last_current_surface_ ? last_current_surface_ : surface_.get();
+  surface = surface ? surface : dont_care_surface;
+
+  if (!context_->MakeCurrent(surface)) {
     MarkContextLost();
     return false;
   }
+  last_current_surface_ = surface;
+
   return true;
+}
+
+void SharedContextState::ReleaseCurrent(gl::GLSurface* surface) {
+  if (!surface)
+    surface = last_current_surface_;
+
+  if (surface != last_current_surface_)
+    return;
+
+  last_current_surface_ = nullptr;
+  if (!context_lost_)
+    context_->ReleaseCurrent(surface);
 }
 
 void SharedContextState::MarkContextLost() {
@@ -307,6 +354,7 @@ void SharedContextState::MarkContextLost() {
       context_state_->MarkContextLost();
     if (gr_context_)
       gr_context_->abandonContext();
+    UpdateSkiaOwnedMemorySize();
     std::move(context_lost_callback_).Run();
     for (auto& observer : context_lost_observers_)
       observer.OnContextLost();
@@ -363,6 +411,7 @@ void SharedContextState::PurgeMemory(
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE:
       // With moderate pressure, clear any unlocked resources.
       gr_context_->purgeUnlockedResources(true /* scratchResourcesOnly */);
+      UpdateSkiaOwnedMemorySize();
       scratch_deserialization_buffer_.resize(
           kInitialScratchDeserializationBufferSize);
       scratch_deserialization_buffer_.shrink_to_fit();
@@ -370,12 +419,37 @@ void SharedContextState::PurgeMemory(
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL:
       // With critical pressure, purge as much as possible.
       gr_context_->freeGpuResources();
+      UpdateSkiaOwnedMemorySize();
       scratch_deserialization_buffer_.resize(0u);
       scratch_deserialization_buffer_.shrink_to_fit();
       break;
   }
 
-  transfer_cache_->PurgeMemory(memory_pressure_level);
+  if (transfer_cache_)
+    transfer_cache_->PurgeMemory(memory_pressure_level);
+}
+
+uint64_t SharedContextState::GetMemoryUsage() {
+  UpdateSkiaOwnedMemorySize();
+  return memory_tracker_.GetMemoryUsage();
+}
+
+void SharedContextState::UpdateSkiaOwnedMemorySize() {
+  if (!gr_context_) {
+    memory_tracker_.OnMemoryAllocatedChange(
+        CommandBufferId::FromUnsafeValue(0u), skia_gr_cache_size_, 0u);
+    skia_gr_cache_size_ = 0u;
+    return;
+  }
+  size_t new_size;
+  gr_context_->getResourceCacheUsage(nullptr /* resourceCount */, &new_size);
+  // Skia does not have a CommandBufferId. PeakMemoryMonitor currently does not
+  // use CommandBufferId to identify source, so use zero here to separate
+  // prevent confusion.
+  memory_tracker_.OnMemoryAllocatedChange(CommandBufferId::FromUnsafeValue(0u),
+                                          skia_gr_cache_size_,
+                                          static_cast<uint64_t>(new_size));
+  skia_gr_cache_size_ = static_cast<uint64_t>(new_size);
 }
 
 void SharedContextState::PessimisticallyResetGrContext() const {

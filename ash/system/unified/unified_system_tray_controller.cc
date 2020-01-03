@@ -170,12 +170,7 @@ void UnifiedSystemTrayController::ToggleExpanded() {
   } else {
     // Collapse the message center if screen height is limited after expanding
     // the quick settings to its full height.
-    // Note: This calculaton should be the same as
-    // UnifiedMessageCenterBubble::CalculateAvailableHeight().
-    if (bubble_ && bubble_->CalculateMaxHeight() -
-                           unified_view_->GetExpandedSystemTrayHeight() -
-                           kUnifiedMessageCenterBubbleSpacing <
-                       kMessageCenterCollapseThreshold) {
+    if (IsMessageCenterCollapseRequired()) {
       bubble_->CollapseMessageCenter();
     }
     animation_->Show();
@@ -199,8 +194,17 @@ void UnifiedSystemTrayController::UpdateDrag(const gfx::Point& location) {
   // Ignore swipe collapsing when a detailed view is shown as it's confusing.
   if (detailed_view_controller_)
     return;
-  animation_->Reset(GetDragExpandedAmount(location));
+  double drag_expanded_amount = GetDragExpandedAmount(location);
+  animation_->Reset(drag_expanded_amount);
   UpdateExpandedAmount();
+
+  if (was_expanded_ &&
+      drag_expanded_amount < kNotificationCenterDragExpandThreshold) {
+    bubble_->ExpandMessageCenter();
+  } else if (drag_expanded_amount >= kNotificationCenterDragExpandThreshold &&
+             IsMessageCenterCollapseRequired()) {
+    bubble_->CollapseMessageCenter();
+  }
 }
 
 void UnifiedSystemTrayController::StartAnimation(bool expand) {
@@ -229,6 +233,11 @@ void UnifiedSystemTrayController::EndDrag(const gfx::Point& location) {
                               TOGGLE_EXPANDED_TYPE_COUNT);
   }
 
+  if (expanded && IsMessageCenterCollapseRequired())
+    bubble_->CollapseMessageCenter();
+  else
+    bubble_->ExpandMessageCenter();
+
   // If dragging is finished, animate to closer state.
   StartAnimation(expanded);
 }
@@ -238,7 +247,14 @@ void UnifiedSystemTrayController::Fling(int velocity) {
   if (detailed_view_controller_)
     return;
   // Expand when flinging up. Collapse otherwise.
-  StartAnimation(velocity < 0);
+  bool expand = (velocity < 0);
+
+  if (expand && IsMessageCenterCollapseRequired())
+    bubble_->CollapseMessageCenter();
+  else
+    bubble_->ExpandMessageCenter();
+
+  StartAnimation(expand);
 }
 
 void UnifiedSystemTrayController::ShowUserChooserView() {
@@ -453,6 +469,15 @@ double UnifiedSystemTrayController::GetDragExpandedAmount(
 
 bool UnifiedSystemTrayController::IsExpanded() const {
   return animation_->IsShowing();
+}
+
+bool UnifiedSystemTrayController::IsMessageCenterCollapseRequired() const {
+  // Note: This calculaton should be the same as
+  // UnifiedMessageCenterBubble::CalculateAvailableHeight().
+  return (bubble_ && bubble_->CalculateMaxHeight() -
+                             unified_view_->GetExpandedSystemTrayHeight() -
+                             kUnifiedMessageCenterBubbleSpacing <
+                         kMessageCenterCollapseThreshold);
 }
 
 }  // namespace ash

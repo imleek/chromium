@@ -18,8 +18,8 @@
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom-blink.h"
 #include "services/viz/public/mojom/hit_test/hit_test_region_list.mojom-blink.h"
+#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/frame_sinks/embedded_frame_sink.mojom-blink.h"
-#include "third_party/blink/public/platform/interface_provider.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource.h"
 #include "ui/gfx/presentation_feedback.h"
@@ -207,6 +207,10 @@ void VideoFrameSubmitter::OnBeginFrame(
 
   frame_trackers_.NotifyBeginImplFrame(args);
 
+  base::ScopedClosureRunner end_frame(
+      base::BindOnce(&cc::FrameSequenceTrackerCollection::NotifyFrameEnd,
+                     base::Unretained(&frame_trackers_), args));
+
   // Don't call UpdateCurrentFrame() for MISSED BeginFrames. Also don't call it
   // after StopRendering() has been called (forbidden by API contract).
   viz::BeginFrameAck current_begin_frame_ack(args, false);
@@ -317,7 +321,7 @@ void VideoFrameSubmitter::StartSubmitting() {
   DCHECK(frame_sink_id_.is_valid());
 
   mojo::Remote<mojom::blink::EmbeddedFrameSinkProvider> provider;
-  Platform::Current()->GetInterfaceProvider()->GetInterface(
+  Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
       provider.BindNewPipeAndPassReceiver());
 
   provider->CreateCompositorFrameSink(
@@ -422,6 +426,15 @@ bool VideoFrameSubmitter::SubmitFrame(
       rotation_ == media::VIDEO_ROTATION_270) {
     frame_size = gfx::Size(frame_size.height(), frame_size.width());
   }
+
+  if (frame_size.IsEmpty()) {
+    // We're not supposed to get 0x0 frames.  For now, just ignore it until we
+    // track down where they're coming from.  Creating a CompositorFrame with an
+    // empty output rectangle isn't allowed.
+    // crbug.com/979564
+    return false;
+  }
+
   if (frame_size_ != frame_size) {
     if (!frame_size_.IsEmpty())
       GenerateNewSurfaceId();
@@ -533,7 +546,8 @@ viz::CompositorFrame VideoFrameSubmitter::CreateCompositorFrame(
 
     frame_token_to_timestamp_map_[*next_frame_token_] = value;
 
-    if (begin_frame_ack.source_id == viz::BeginFrameArgs::kManualSourceId)
+    if (begin_frame_ack.frame_id.source_id ==
+        viz::BeginFrameArgs::kManualSourceId)
       ignorable_submitted_frames_.insert(*next_frame_token_);
 
     UMA_HISTOGRAM_TIMES("Media.VideoFrameSubmitter.PreSubmitBuffering",

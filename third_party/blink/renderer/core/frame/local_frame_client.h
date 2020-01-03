@@ -40,7 +40,6 @@
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/common/navigation/triggering_event_info.h"
-#include "third_party/blink/public/common/sudden_termination_disabler_type.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/frame/navigation_initiator.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/portal/portal.mojom-blink-forward.h"
@@ -87,6 +86,7 @@ enum class WebFeature : int32_t;
 }  // namespace mojom
 
 class AssociatedInterfaceProvider;
+class ContentSecurityPolicy;
 class Document;
 class DocumentLoader;
 class HTMLFormElement;
@@ -241,6 +241,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual DocumentLoader* CreateDocumentLoader(
       LocalFrame*,
       WebNavigationType,
+      base::Optional<ContentSecurityPolicy*>,
       std::unique_ptr<WebNavigationParams> navigation_params,
       std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) = 0;
 
@@ -345,10 +346,6 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual bool IsLocalFrameClientImpl() const { return false; }
 
-  virtual void SuddenTerminationDisablerChanged(bool present,
-                                                SuddenTerminationDisablerType) {
-  }
-
   // Overwrites the given URL to use an HTML5 embed if possible. An empty URL is
   // returned if the URL is not overriden.
   virtual KURL OverrideFlashEmbedWithHTML(const KURL&) { return KURL(); }
@@ -371,9 +368,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   // Tell the embedder that the associated frame has consumed user activation so
   // that the replicated states in the browser and other renderers can be
   // updated.
-  virtual void ConsumeUserActivation() {}
-
-  virtual void SetHasReceivedUserGestureBeforeNavigation(bool value) {}
+  virtual void ConsumeTransientUserActivation() {}
 
   virtual void AbortClientNavigation() {}
 
@@ -457,7 +452,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   // AppCache ------------------------------------------------------------
   virtual void UpdateSubresourceFactory(
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo> info) {}
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> pending_factory) {}
 };
 
 }  // namespace blink

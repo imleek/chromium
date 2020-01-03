@@ -543,23 +543,7 @@ bool FrameSelection::ComputeAbsoluteBounds(IntRect& anchor,
     return false;
   }
 
-  DocumentLifecycle::DisallowTransitionScope disallow_transition(
-      frame_->GetDocument()->Lifecycle());
-
-  if (ComputeVisibleSelectionInDOMTree().IsCaret()) {
-    anchor = focus = AbsoluteCaretBounds();
-  } else {
-    const EphemeralRange selected_range =
-        ComputeVisibleSelectionInDOMTree().ToNormalizedEphemeralRange();
-    if (selected_range.IsNull())
-      return false;
-    anchor = FirstRectForRange(EphemeralRange(selected_range.StartPosition()));
-    focus = FirstRectForRange(EphemeralRange(selected_range.EndPosition()));
-  }
-
-  if (!ComputeVisibleSelectionInDOMTree().IsBaseFirst())
-    std::swap(anchor, focus);
-  return true;
+  return selection_editor_->ComputeAbsoluteBounds(anchor, focus);
 }
 
 void FrameSelection::PaintCaret(GraphicsContext& context,
@@ -951,9 +935,11 @@ static String ExtractSelectedText(const FrameSelection& selection,
 String FrameSelection::SelectedHTMLForClipboard() const {
   const EphemeralRangeInFlatTree& range =
       ComputeRangeForSerialization(GetSelectionInDOMTree());
-  return CreateMarkup(
-      range.StartPosition(), range.EndPosition(), kAnnotateForInterchange,
-      ConvertBlocksToInlines::kNotConvert, kResolveNonLocalURLs);
+  return CreateMarkup(range.StartPosition(), range.EndPosition(),
+                      CreateMarkupOptions::Builder()
+                          .SetShouldAnnotateForInterchange(true)
+                          .SetShouldResolveURLs(kResolveNonLocalURLs)
+                          .Build());
 }
 
 String FrameSelection::SelectedText(
@@ -1256,6 +1242,10 @@ LayoutSelectionStatus FrameSelection::ComputeLayoutSelectionStatus(
 
 bool FrameSelection::IsDirectional() const {
   return is_directional_;
+}
+
+void FrameSelection::MarkCacheDirty() {
+  selection_editor_->MarkCacheDirty();
 }
 
 }  // namespace blink

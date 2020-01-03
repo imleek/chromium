@@ -27,10 +27,10 @@ import org.chromium.chrome.browser.infobar.InfoBarContainerLayout.Item;
 import org.chromium.chrome.browser.infobar.InfoBarIdentifier;
 import org.chromium.chrome.browser.infobar.SurveyInfoBar;
 import org.chromium.chrome.browser.infobar.SurveyInfoBarDelegate;
-import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager;
+import org.chromium.chrome.browser.settings.privacy.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -230,7 +230,7 @@ public class ChromeSurveyController implements InfoBarContainer.InfoBarAnimation
     private TabObserver createTabObserver(Tab tab, String siteId) {
         return new EmptyTabObserver() {
             @Override
-            public void onInteractabilityChanged(boolean isInteractable) {
+            public void onInteractabilityChanged(Tab tab, boolean isInteractable) {
                 showInfoBarIfApplicable(tab, siteId, this);
             }
 

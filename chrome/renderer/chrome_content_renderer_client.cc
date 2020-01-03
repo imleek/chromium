@@ -13,6 +13,7 @@
 #include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/no_destructor.h"
@@ -32,12 +33,11 @@
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/pdf_util.h"
 #include "chrome/common/pepper_permission_util.h"
-#include "chrome/common/plugin.mojom.h"
 #include "chrome/common/prerender_types.h"
 #include "chrome/common/prerender_url_loader_throttle.h"
+#include "chrome/common/profiler/thread_profiler.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/common/secure_origin_whitelist.h"
-#include "chrome/common/thread_profiler.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -73,7 +73,6 @@
 #include "components/content_capture/renderer/content_capture_sender.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/contextual_search/content/renderer/overlay_js_render_frame_observer.h"
-#include "components/data_reduction_proxy/content/renderer/content_previews_render_frame_observer.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/dom_distiller/content/renderer/distillability_agent.h"
 #include "components/dom_distiller/content/renderer/distiller_js_render_frame_observer.h"
@@ -84,6 +83,7 @@
 #include "components/error_page/common/localized_error.h"
 #include "components/network_hints/renderer/web_prescient_networking_impl.h"
 #include "components/page_load_metrics/renderer/metrics_render_frame_observer.h"
+#include "components/paint_preview/buildflags/buildflags.h"
 #include "components/pdf/renderer/pepper_pdf_host.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/renderer/threat_dom_details.h"
@@ -95,12 +95,11 @@
 #include "components/variations/net/variations_http_headers.h"
 #include "components/variations/variations_switches.h"
 #include "components/version_info/version_info.h"
-#include "components/visitedlink/renderer/visitedlink_slave.h"
+#include "components/visitedlink/renderer/visitedlink_reader.h"
 #include "components/web_cache/renderer/web_cache_impl.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/mime_handler_view_mode.h"
 #include "content/public/common/page_visibility_state.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
@@ -194,6 +193,10 @@
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/renderer/pepper/chrome_pdf_print_client.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PAINT_PREVIEW)
+#include "components/paint_preview/renderer/paint_preview_recorder_impl.h"
 #endif
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
@@ -394,6 +397,18 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   if (command_line->HasSwitch(switches::kEnableNetBenchmarking))
     thread->RegisterExtension(extensions_v8::NetBenchmarkingExtension::Get());
 
+  // chrome-native: is a scheme used for placeholder navigations that allow
+  // UIs to be drawn with platform native widgets instead of HTML.  These pages
+  // should not be accessible.  No code should be runnable in these pages,
+  // so it should not need to access anything nor should it allow javascript
+  // URLs since it should never be visible to the user.
+  // See also ChromeContentClient::AddAdditionalSchemes that adds it as an
+  // empty document scheme.
+  WebString native_scheme(WebString::FromASCII(chrome::kChromeNativeScheme));
+  WebSecurityPolicy::RegisterURLSchemeAsDisplayIsolated(native_scheme);
+  WebSecurityPolicy::RegisterURLSchemeAsNotAllowingJavascriptURLs(
+      native_scheme);
+
   // chrome-search: and chrome-distiller: pages  should not be accessible by
   // normal content, and should also be unable to script anything but themselves
   // (to help limit the damage that a corrupt page could cause).
@@ -498,6 +513,10 @@ void ChromeContentRendererClient::RenderFrameCreated(
       render_frame, std::make_unique<ChromePrintRenderFrameHelperDelegate>());
 #endif
 
+#if BUILDFLAG(ENABLE_PAINT_PREVIEW)
+  new paint_preview::PaintPreviewRecorderImpl(render_frame);
+#endif
+
 #if defined(OS_ANDROID)
   SandboxStatusExtension::Create(render_frame);
 #endif
@@ -555,11 +574,9 @@ void ChromeContentRendererClient::RenderFrameCreated(
   }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  if (content::MimeHandlerViewMode::UsesCrossProcessFrame()) {
-    associated_interfaces->AddInterface(base::BindRepeating(
-        &extensions::MimeHandlerViewContainerManager::BindReceiver,
-        render_frame->GetRoutingID()));
-  }
+  associated_interfaces->AddInterface(base::BindRepeating(
+      &extensions::MimeHandlerViewContainerManager::BindReceiver,
+      render_frame->GetRoutingID()));
 #endif
 
   // Owned by |render_frame|.
@@ -598,9 +615,6 @@ void ChromeContentRendererClient::RenderFrameCreated(
   new SpellCheckPanel(render_frame, registry, this);
 #endif  // BUILDFLAG(HAS_SPELLCHECK_PANEL)
 #endif
-
-  if (render_frame->IsMainFrame())
-    new data_reduction_proxy::ContentPreviewsRenderFrameObserver(render_frame);
 }
 
 void ChromeContentRendererClient::RenderViewCreated(
@@ -625,11 +639,9 @@ bool ChromeContentRendererClient::IsPluginHandledExternally(
     const blink::WebElement& plugin_element,
     const GURL& original_url,
     const std::string& mime_type) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS) && BUILDFLAG(ENABLE_PLUGINS)
   DCHECK(plugin_element.HasHTMLTagName("object") ||
          plugin_element.HasHTMLTagName("embed"));
-  if (!content::MimeHandlerViewMode::UsesCrossProcessFrame())
-    return false;
   // Blink will next try to load a WebPlugin which would end up in
   // OverrideCreatePlugin, sending another IPC only to find out the plugin is
   // not supported. Here it suffices to return false but there should perhaps be
@@ -888,6 +900,8 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
 #endif
             break;
           }
+          ReportNaClAppType(is_pnacl_mime_type, extension,
+                            extension ? extension->is_hosted_app() : false);
         }
 #endif  // BUILDFLAG(ENABLE_NACL) && BUILDFLAG(ENABLE_EXTENSIONS)
 
@@ -1138,6 +1152,39 @@ bool ChromeContentRendererClient::IsNativeNaClAllowed(
   bool is_nacl_allowed = is_nacl_allowed_by_location || is_nacl_unrestricted;
   return is_nacl_allowed;
 }
+
+// static
+void ChromeContentRendererClient::ReportNaClAppType(bool is_pnacl,
+                                                    bool is_extension_or_app,
+                                                    bool is_hosted_app) {
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class NaClAppType {
+    kPNaClOpenWeb = 0,
+    kPNaClHostedApp = 1,
+    kPNaClPackagedApp = 2,
+    kNaClOpenWeb = 3,
+    kNaClHostedApp = 4,
+    kNaClPackagedApp = 5,
+    kMaxValue = kNaClPackagedApp
+  };
+  // If it's not an extension/app, it can't be hosted.
+  DCHECK(!is_hosted_app || is_extension_or_app);
+  // Not all of the remaining combinations are allowed by default (e.g.
+  // kNaClOpenWeb) but they can be used with the --enable-nacl flag.
+  NaClAppType app_type =
+      is_pnacl ? NaClAppType::kPNaClOpenWeb : NaClAppType::kNaClOpenWeb;
+  if (is_extension_or_app) {
+    if (is_pnacl) {
+      app_type = is_hosted_app ? NaClAppType::kPNaClHostedApp
+                               : NaClAppType::kPNaClPackagedApp;
+    } else {
+      app_type = is_hosted_app ? NaClAppType::kNaClHostedApp
+                               : NaClAppType::kNaClPackagedApp;
+    }
+  }
+  base::UmaHistogramEnumeration("NaCl.AppType", app_type);
+}
 #endif  // BUILDFLAG(ENABLE_NACL)
 
 bool ChromeContentRendererClient::HasErrorPage(int http_status_code) {
@@ -1241,10 +1288,36 @@ bool ChromeContentRendererClient::AllowPopup() {
 #endif
 }
 
+bool ChromeContentRendererClient::ShouldFork(WebLocalFrame* frame,
+                                             const GURL& url,
+                                             const std::string& http_method,
+                                             bool is_initial_navigation,
+                                             bool is_server_redirect) {
+  // TODO(lukasza): https://crbug.com/650694: For now, we skip the rest for POST
+  // submissions.  This is because 1) in M54 there are some remaining issues
+  // with POST in OpenURL path (e.g. https://crbug.com/648648) and 2) OpenURL
+  // path regresses (blocks) navigations that result in downloads
+  // (https://crbug.com/646261).  In the long-term we should avoid forking for
+  // extensions (not hosted apps though) altogether and rely on transfers logic
+  // instead.
+  if (http_method != "GET")
+    return false;
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  bool should_fork = ChromeExtensionsRendererClient::ShouldFork(
+      frame, url, is_initial_navigation, is_server_redirect);
+  if (should_fork)
+    return true;
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+  return false;
+}
+
 void ChromeContentRendererClient::WillSendRequest(
     WebLocalFrame* frame,
     ui::PageTransition transition_type,
     const blink::WebURL& url,
+    const blink::WebURL& site_for_cookies,
     const url::Origin* initiator_origin,
     GURL* new_url,
     bool* attach_same_site_cookies) {
@@ -1252,7 +1325,7 @@ void ChromeContentRendererClient::WillSendRequest(
 // URL to something invalid to prevent the request and cause an error.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   ChromeExtensionsRendererClient::GetInstance()->WillSendRequest(
-      frame, transition_type, url, initiator_origin, new_url,
+      frame, transition_type, url, site_for_cookies, initiator_origin, new_url,
       attach_same_site_cookies);
   if (!new_url->is_empty())
     return;
@@ -1282,21 +1355,19 @@ bool ChromeContentRendererClient::IsPrefetchOnly(
 
 uint64_t ChromeContentRendererClient::VisitedLinkHash(const char* canonical_url,
                                                       size_t length) {
-  return chrome_observer_->visited_link_slave()->ComputeURLFingerprint(
+  return chrome_observer_->visited_link_reader()->ComputeURLFingerprint(
       canonical_url, length);
 }
 
 bool ChromeContentRendererClient::IsLinkVisited(uint64_t link_hash) {
-  return chrome_observer_->visited_link_slave()->IsVisited(link_hash);
+  return chrome_observer_->visited_link_reader()->IsVisited(link_hash);
 }
 
-blink::WebPrescientNetworking*
-ChromeContentRendererClient::GetPrescientNetworking() {
-  if (!web_prescient_networking_impl_) {
-    web_prescient_networking_impl_ =
-        std::make_unique<network_hints::WebPrescientNetworkingImpl>();
-  }
-  return web_prescient_networking_impl_.get();
+std::unique_ptr<blink::WebPrescientNetworking>
+ChromeContentRendererClient::CreatePrescientNetworking(
+    content::RenderFrame* render_frame) {
+  return std::make_unique<network_hints::WebPrescientNetworkingImpl>(
+      render_frame);
 }
 
 bool ChromeContentRendererClient::IsExternalPepperPlugin(

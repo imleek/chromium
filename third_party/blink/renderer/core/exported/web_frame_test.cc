@@ -41,7 +41,6 @@
 #include "cc/layers/picture_layer.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/scroll_and_scale_set.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "skia/public/mojom/skcolor.mojom-blink.h"
@@ -49,13 +48,13 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/page/launching_process_state.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom-blink.h"
 #include "third_party/blink/public/platform/web_cache.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
-#include "third_party/blink/public/platform/web_keyboard_event.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_loader_client.h"
@@ -70,6 +69,7 @@
 #include "third_party/blink/public/web/web_frame_content_dumper.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_history_item.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_navigation_timings.h"
 #include "third_party/blink/public/web/web_print_params.h"
@@ -83,7 +83,6 @@
 #include "third_party/blink/public/web/web_text_check_client.h"
 #include "third_party/blink/public/web/web_text_checking_completion.h"
 #include "third_party/blink/public/web/web_text_checking_result.h"
-#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value_factory.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/v8_script_value_serializer.h"
@@ -182,14 +181,6 @@ using testing::Mock;
 using testing::_;
 
 namespace blink {
-
-::std::ostream& operator<<(::std::ostream& os, const WebFloatSize& size) {
-  return os << "WebFloatSize: [" << size.width << ", " << size.height << "]";
-}
-
-::std::ostream& operator<<(::std::ostream& os, const WebFloatPoint& point) {
-  return os << "WebFloatPoint: [" << point.x << ", " << point.y << "]";
-}
 
 namespace {
 
@@ -1918,7 +1909,6 @@ TEST_F(WebFrameTest, SetForceZeroLayoutHeightWorksWithWrapContentMode) {
             scroll_node->ContainerRect());
   EXPECT_EQ(IntSize(viewport_width, viewport_height),
             scroll_node->ContentsSize());
-  EXPECT_FALSE(scroll_container->CcLayer()->masks_to_bounds());
 }
 
 TEST_F(WebFrameTest, SetForceZeroLayoutHeight) {
@@ -4155,7 +4145,7 @@ TEST_F(WebFrameTest, CharacterIndexAtPointWithPinchZoom) {
   // Move the visual viewport to the start of the target div containing the
   // text.
   web_view_helper.GetWebView()->SetPageScaleFactor(2);
-  web_view_helper.GetWebView()->SetVisualViewportOffset(WebFloatPoint(100, 50));
+  web_view_helper.GetWebView()->SetVisualViewportOffset(gfx::PointF(100, 50));
 
   WebLocalFrame* main_frame =
       web_view_helper.GetWebView()->MainFrame()->ToWebLocalFrame();
@@ -4180,7 +4170,7 @@ TEST_F(WebFrameTest, FirstRectForCharacterRangeWithPinchZoom) {
   WebRect old_rect;
   main_frame->FirstRectForCharacterRange(0, 5, old_rect);
 
-  WebFloatPoint visual_offset(100, 130);
+  gfx::PointF visual_offset(100, 130);
   float scale = 2;
   web_view_helper.GetWebView()->SetPageScaleFactor(scale);
   web_view_helper.GetWebView()->SetVisualViewportOffset(visual_offset);
@@ -4188,8 +4178,8 @@ TEST_F(WebFrameTest, FirstRectForCharacterRangeWithPinchZoom) {
   WebRect rect;
   main_frame->FirstRectForCharacterRange(0, 5, rect);
 
-  EXPECT_EQ((old_rect.x - visual_offset.x) * scale, rect.x);
-  EXPECT_EQ((old_rect.y - visual_offset.y) * scale, rect.y);
+  EXPECT_EQ((old_rect.x - visual_offset.x()) * scale, rect.x);
+  EXPECT_EQ((old_rect.y - visual_offset.y()) * scale, rect.y);
   EXPECT_EQ(old_rect.width * scale, rect.width);
   EXPECT_EQ(old_rect.height * scale, rect.height);
 }
@@ -4332,7 +4322,7 @@ TEST_F(WebFrameTest, ClearFocusedNodeTest) {
                                     "iframe_clear_focused_node_test.html");
 
   // Clear the focused node.
-  web_view_helper.GetWebView()->ClearFocusedElement();
+  web_view_helper.GetWebView()->FocusedElement()->blur();
 
   // Now retrieve the FocusedNode and test it should be null.
   EXPECT_EQ(nullptr, web_view_helper.GetWebView()->FocusedElement());
@@ -5924,8 +5914,7 @@ TEST_F(WebFrameTest, SmartClipDataWithPinchZoom) {
   web_view_helper.Resize(WebSize(500, 500));
   UpdateAllLifecyclePhases(web_view_helper.GetWebView());
   web_view_helper.GetWebView()->SetPageScaleFactor(1.5);
-  web_view_helper.GetWebView()->SetVisualViewportOffset(
-      WebFloatPoint(167, 100));
+  web_view_helper.GetWebView()->SetVisualViewportOffset(gfx::PointF(167, 100));
   WebRect crop_rect(200, 38, 228, 75);
   frame->ExtractSmartClipData(crop_rect, clip_text, clip_html, clip_rect);
   EXPECT_EQ(kExpectedClipText, clip_text);
@@ -6999,8 +6988,7 @@ TEST_F(WebFrameTest, SiteForCookiesForRedirect) {
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "first_party_redirect.html");
-  EXPECT_TRUE(
-      SecurityOrigin::AreSameSchemeHostPort(web_view_helper.GetWebView()
+  EXPECT_TRUE(SecurityOrigin::AreSameOrigin(web_view_helper.GetWebView()
                                                 ->MainFrameImpl()
                                                 ->GetDocument()
                                                 .SiteForCookies(),
@@ -7077,8 +7065,7 @@ TEST_F(WebFrameTest, ModifiedClickNewWindow) {
   FrameLoadRequest frame_request(document, ResourceRequest(destination));
   frame_request.SetNavigationPolicy(NavigationPolicyFromEvent(event));
   frame_request.SetTriggeringEventInfo(TriggeringEventInfo::kFromTrustedEvent);
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(frame);
+  LocalFrame::NotifyUserActivation(frame);
   web_frame_client.IgnoreNavigations();
   frame->Loader().StartNavigation(frame_request, WebFrameLoadType::kStandard);
   frame_test_helpers::PumpPendingRequestsForFrameToLoad(
@@ -7859,8 +7846,7 @@ TEST_F(WebFrameTest, FullscreenLayerSize) {
 
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
   Document* document = frame->GetDocument();
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(frame);
+  LocalFrame::NotifyUserActivation(frame);
   Element* div_fullscreen = document->getElementById("div1");
   Fullscreen::RequestFullscreen(*div_fullscreen);
   EXPECT_EQ(nullptr, Fullscreen::FullscreenElementFrom(*document));
@@ -7898,8 +7884,7 @@ TEST_F(WebFrameTest, FullscreenLayerNonScrollable) {
 
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
   Document* document = frame->GetDocument();
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(frame);
+  LocalFrame::NotifyUserActivation(frame);
   Element* div_fullscreen = document->getElementById("div1");
   Fullscreen::RequestFullscreen(*div_fullscreen);
   EXPECT_EQ(nullptr, Fullscreen::FullscreenElementFrom(*document));
@@ -7959,8 +7944,7 @@ TEST_F(WebFrameTest, FullscreenMainFrame) {
 
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
   Document* document = frame->GetDocument();
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(frame);
+  LocalFrame::NotifyUserActivation(frame);
   Fullscreen::RequestFullscreen(*document->documentElement());
   EXPECT_EQ(nullptr, Fullscreen::FullscreenElementFrom(*document));
   web_view_impl->MainFrameWidget()->DidEnterFullscreen();
@@ -8008,8 +7992,7 @@ TEST_F(WebFrameTest, FullscreenSubframe) {
           web_view_helper.GetWebView()->MainFrame()->FirstChild())
           ->GetFrame();
   Document* document = frame->GetDocument();
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(frame);
+  LocalFrame::NotifyUserActivation(frame);
   Element* div_fullscreen = document->getElementById("div1");
   Fullscreen::RequestFullscreen(*div_fullscreen);
   web_view_impl->MainFrameWidget()->DidEnterFullscreen();
@@ -8048,19 +8031,15 @@ TEST_F(WebFrameTest, FullscreenNestedExit) {
   Document* iframe_doc = iframe->contentDocument();
   Element* iframe_body = iframe_doc->body();
 
-  {
-    std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::NotifyUserActivation(top_doc->GetFrame());
-    Fullscreen::RequestFullscreen(*top_body);
-  }
+  LocalFrame::NotifyUserActivation(top_doc->GetFrame());
+  Fullscreen::RequestFullscreen(*top_body);
+
   web_view_impl->MainFrameWidget()->DidEnterFullscreen();
   UpdateAllLifecyclePhases(web_view_impl);
 
-  {
-    std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::NotifyUserActivation(iframe_doc->GetFrame());
-    Fullscreen::RequestFullscreen(*iframe_body);
-  }
+  LocalFrame::NotifyUserActivation(iframe_doc->GetFrame());
+  Fullscreen::RequestFullscreen(*iframe_body);
+
   web_view_impl->MainFrameWidget()->DidEnterFullscreen();
   Microtask::PerformCheckpoint(V8PerIsolateData::MainThreadIsolate());
   UpdateAllLifecyclePhases(web_view_impl);
@@ -8103,8 +8082,7 @@ TEST_F(WebFrameTest, FullscreenWithTinyViewport) {
   EXPECT_FLOAT_EQ(5.0, web_view_impl->MaximumPageScaleFactor());
 
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(frame);
+  LocalFrame::NotifyUserActivation(frame);
   Fullscreen::RequestFullscreen(*frame->GetDocument()->documentElement());
   web_view_impl->MainFrameWidget()->DidEnterFullscreen();
   UpdateAllLifecyclePhases(web_view_impl);
@@ -8142,8 +8120,7 @@ TEST_F(WebFrameTest, FullscreenResizeWithTinyViewport) {
                           ->GetFrameView()
                           ->GetLayoutView();
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(frame);
+  LocalFrame::NotifyUserActivation(frame);
   Fullscreen::RequestFullscreen(*frame->GetDocument()->documentElement());
   web_view_impl->MainFrameWidget()->DidEnterFullscreen();
   UpdateAllLifecyclePhases(web_view_impl);
@@ -8208,8 +8185,7 @@ TEST_F(WebFrameTest, FullscreenRestoreScaleFactorUponExiting) {
 
   {
     LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
-    std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::NotifyUserActivation(frame);
+    LocalFrame::NotifyUserActivation(frame);
     Fullscreen::RequestFullscreen(*frame->GetDocument()->body());
   }
 
@@ -8271,8 +8247,7 @@ TEST_F(WebFrameTest, ClearFullscreenConstraintsOnNavigation) {
   EXPECT_FLOAT_EQ(5.0, web_view_impl->MaximumPageScaleFactor());
 
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(frame);
+  LocalFrame::NotifyUserActivation(frame);
   Fullscreen::RequestFullscreen(*frame->GetDocument()->documentElement());
   web_view_impl->MainFrameWidget()->DidEnterFullscreen();
   UpdateAllLifecyclePhases(web_view_impl);
@@ -8321,10 +8296,9 @@ TEST_F(WebFrameTest, OverlayFullscreenVideo) {
       web_widget_client.layer_tree_host();
 
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(frame);
-  HTMLVideoElement* video =
-      ToHTMLVideoElement(frame->GetDocument()->getElementById("video"));
+  LocalFrame::NotifyUserActivation(frame);
+  auto* video =
+      To<HTMLVideoElement>(frame->GetDocument()->getElementById("video"));
   EXPECT_TRUE(video->UsesOverlayFullscreenVideo());
   EXPECT_FALSE(video->IsFullscreen());
   EXPECT_EQ(SkColorGetA(layer_tree_host->background_color()), SK_AlphaOPAQUE);
@@ -8394,10 +8368,9 @@ TEST_F(WebFrameTest, OverlayFullscreenVideoInIframe) {
       To<WebLocalFrameImpl>(
           web_view_helper.GetWebView()->MainFrame()->FirstChild())
           ->GetFrame();
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(iframe);
-  HTMLVideoElement* video =
-      ToHTMLVideoElement(iframe->GetDocument()->getElementById("video"));
+  LocalFrame::NotifyUserActivation(iframe);
+  auto* video =
+      To<HTMLVideoElement>(iframe->GetDocument()->getElementById("video"));
   EXPECT_TRUE(video->UsesOverlayFullscreenVideo());
   EXPECT_FALSE(video->IsFullscreen());
   EXPECT_EQ(SkColorGetA(layer_tree_host->background_color()), SK_AlphaOPAQUE);
@@ -9506,14 +9479,13 @@ class RemoteNavigationClient
   ~RemoteNavigationClient() override = default;
 
   // frame_test_helpers::TestWebRemoteFrameClient:
-  void Navigate(
-      const WebURLRequest& request,
-      bool should_replace_current_entry,
-      bool is_opener_navigation,
-      bool has_download_sandbox_flag,
-      bool blocking_downloads_in_sandbox_without_user_activation_enabled,
-      bool initiator_frame_is_ad,
-      mojo::ScopedMessagePipeHandle) override {
+  void Navigate(const WebURLRequest& request,
+                bool should_replace_current_entry,
+                bool is_opener_navigation,
+                bool has_download_sandbox_flag,
+                bool blocking_downloads_in_sandbox_enabled,
+                bool initiator_frame_is_ad,
+                mojo::ScopedMessagePipeHandle) override {
     last_request_ = request;
   }
 
@@ -9625,10 +9597,9 @@ TEST_F(WebFrameTest, NavigateRemoteToLocalWithOpener) {
 
   // Create a popup with a remote frame and set its opener to the main frame.
   frame_test_helpers::WebViewHelper popup_helper;
-  popup_helper.InitializeRemote(
-      nullptr, SecurityOrigin::CreateFromString("http://foo.com"));
+  popup_helper.InitializeRemoteWithOpener(
+      main_frame, nullptr, SecurityOrigin::CreateFromString("http://foo.com"));
   WebRemoteFrame* popup_remote_frame = popup_helper.RemoteMainFrame();
-  popup_remote_frame->SetOpener(main_frame);
   EXPECT_FALSE(main_frame->GetSecurityOrigin().CanAccess(
       popup_remote_frame->GetSecurityOrigin()));
 
@@ -9728,7 +9699,7 @@ TEST_F(WebFrameTest, FrameWidgetTest) {
   WebGestureEvent event(WebInputEvent::kGestureTap, WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(20, 20));
+  event.SetPositionInWidget(gfx::PointF(20, 20));
   child_frame->FrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
   EXPECT_TRUE(child_widget_client.DidHandleGestureEvent());
 
@@ -10044,10 +10015,10 @@ class OverscrollWebWidgetClient
     : public frame_test_helpers::TestWebWidgetClient {
  public:
   MOCK_METHOD4(DidOverscroll,
-               void(const WebFloatSize&,
-                    const WebFloatSize&,
-                    const WebFloatPoint&,
-                    const WebFloatSize&));
+               void(const gfx::Vector2dF&,
+                    const gfx::Vector2dF&,
+                    const gfx::PointF&,
+                    const gfx::Vector2dF&));
   MOCK_METHOD1(SetOverscrollBehavior, void(const cc::OverscrollBehavior&));
 };
 
@@ -10066,7 +10037,7 @@ class WebFrameOverscrollTest
                           GetParam());
     // TODO(wjmaclean): Make sure that touchpad device is only ever used for
     // gesture scrolling event types.
-    event.SetPositionInWidget(WebFloatPoint(100, 100));
+    event.SetPositionInWidget(gfx::PointF(100, 100));
     if (type == WebInputEvent::kGestureScrollUpdate) {
       event.data.scroll_update.delta_x = delta_x;
       event.data.scroll_update.delta_y = delta_y;
@@ -10118,18 +10089,21 @@ TEST_P(WebFrameOverscrollTest,
   // Calculation of accumulatedRootOverscroll and unusedDelta on multiple
   // scrollUpdate.
   ScrollBegin(&web_view_helper, -300, -316);
-  EXPECT_CALL(client, DidOverscroll(WebFloatSize(8, 16), WebFloatSize(8, 16),
-                                    WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client,
+              DidOverscroll(gfx::Vector2dF(8, 16), gfx::Vector2dF(8, 16),
+                            gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, -308, -316);
   Mock::VerifyAndClearExpectations(&client);
 
-  EXPECT_CALL(client, DidOverscroll(WebFloatSize(0, 13), WebFloatSize(8, 29),
-                                    WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client,
+              DidOverscroll(gfx::Vector2dF(0, 13), gfx::Vector2dF(8, 29),
+                            gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 0, -13);
   Mock::VerifyAndClearExpectations(&client);
 
-  EXPECT_CALL(client, DidOverscroll(WebFloatSize(20, 13), WebFloatSize(28, 42),
-                                    WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client,
+              DidOverscroll(gfx::Vector2dF(20, 13), gfx::Vector2dF(28, 42),
+                            gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, -20, -13);
   Mock::VerifyAndClearExpectations(&client);
 
@@ -10144,8 +10118,8 @@ TEST_P(WebFrameOverscrollTest,
 
   // Overscroll is reported.
   EXPECT_CALL(client,
-              DidOverscroll(WebFloatSize(0, -701), WebFloatSize(0, -701),
-                            WebFloatPoint(100, 100), WebFloatSize()));
+              DidOverscroll(gfx::Vector2dF(0, -701), gfx::Vector2dF(0, -701),
+                            gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 0, 1000);
   Mock::VerifyAndClearExpectations(&client);
 
@@ -10178,8 +10152,9 @@ TEST_P(WebFrameOverscrollTest,
   ScrollBegin(&web_view_helper, 0, -100);
 
   // Now On Scrolling DIV, scroll is bubbled and root layer is over-scrolled.
-  EXPECT_CALL(client, DidOverscroll(WebFloatSize(0, 100), WebFloatSize(0, 100),
-                                    WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client,
+              DidOverscroll(gfx::Vector2dF(0, 100), gfx::Vector2dF(0, 100),
+                            gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 0, -100);
   ScrollUpdate(&web_view_helper, 0, -100);
   Mock::VerifyAndClearExpectations(&client);
@@ -10188,8 +10163,8 @@ TEST_P(WebFrameOverscrollTest,
   // being run in a WebView without a size. This test should be fixed along with
   // the bug, crbug.com/589320.
   // Page scrolls vertically, but over-scrolls horizontally.
-  // EXPECT_CALL(client, didOverscroll(WebFloatSize(-100, 0), WebFloatSize(-100,
-  // 0), WebFloatPoint(100, 100), WebFloatSize()));
+  // EXPECT_CALL(client, didOverscroll(gfx::Vector2dF(-100, 0),
+  // gfx::Vector2dF(-100, 0), gfx::PointF(100, 100), gfx::Vector2dF()));
   // ScrollUpdate(&webViewHelper, 100, 50);
   // Mock::VerifyAndClearExpectations(&client);
 
@@ -10199,8 +10174,8 @@ TEST_P(WebFrameOverscrollTest,
   // Mock::VerifyAndClearExpectations(&client);
 
   // Page scrolls horizontally, but over-scrolls vertically.
-  // EXPECT_CALL(client, didOverscroll(WebFloatSize(0, 100), WebFloatSize(0,
-  // 100), WebFloatPoint(100, 100), WebFloatSize()));
+  // EXPECT_CALL(client, didOverscroll(gfx::Vector2dF(0, 100), gfx::Vector2dF(0,
+  // 100), gfx::PointF(100, 100), gfx::Vector2dF()));
   // ScrollUpdate(&webViewHelper, -100, -100);
   // Mock::VerifyAndClearExpectations(&client);
 }
@@ -10227,8 +10202,9 @@ TEST_P(WebFrameOverscrollTest, RootLayerOverscrolledOnInnerDivOverScroll) {
   ScrollBegin(&web_view_helper, 0, -150);
 
   // Now On Scrolling DIV, scroll is bubbled and root layer is over-scrolled.
-  EXPECT_CALL(client, DidOverscroll(WebFloatSize(0, 50), WebFloatSize(0, 50),
-                                    WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client,
+              DidOverscroll(gfx::Vector2dF(0, 50), gfx::Vector2dF(0, 50),
+                            gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 0, -150);
   Mock::VerifyAndClearExpectations(&client);
 }
@@ -10262,8 +10238,9 @@ TEST_P(WebFrameOverscrollTest, RootLayerOverscrolledOnInnerIFrameOverScroll) {
   ScrollBegin(&web_view_helper, 0, -150);
 
   // Now On Scrolling IFrame, scroll is bubbled and root layer is over-scrolled.
-  EXPECT_CALL(client, DidOverscroll(WebFloatSize(0, 50), WebFloatSize(0, 50),
-                                    WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client,
+              DidOverscroll(gfx::Vector2dF(0, 50), gfx::Vector2dF(0, 50),
+                            gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 0, -150);
   Mock::VerifyAndClearExpectations(&client);
 
@@ -10286,25 +10263,27 @@ TEST_P(WebFrameOverscrollTest, ScaledPageRootLayerOverscrolled) {
   // The point is (99, 99) because we clamp in the division by 3 to 33 so when
   // we go back to viewport coordinates it becomes (99, 99).
   ScrollBegin(&web_view_helper, 0, 30);
-  EXPECT_CALL(client, DidOverscroll(WebFloatSize(0, -30), WebFloatSize(0, -30),
-                                    WebFloatPoint(99, 99), WebFloatSize()));
-  ScrollUpdate(&web_view_helper, 0, 30);
-  Mock::VerifyAndClearExpectations(&client);
-
-  EXPECT_CALL(client, DidOverscroll(WebFloatSize(0, -30), WebFloatSize(0, -60),
-                                    WebFloatPoint(99, 99), WebFloatSize()));
+  EXPECT_CALL(client,
+              DidOverscroll(gfx::Vector2dF(0, -30), gfx::Vector2dF(0, -30),
+                            gfx::PointF(99, 99), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 0, 30);
   Mock::VerifyAndClearExpectations(&client);
 
   EXPECT_CALL(client,
-              DidOverscroll(WebFloatSize(-30, -30), WebFloatSize(-30, -90),
-                            WebFloatPoint(99, 99), WebFloatSize()));
+              DidOverscroll(gfx::Vector2dF(0, -30), gfx::Vector2dF(0, -60),
+                            gfx::PointF(99, 99), gfx::Vector2dF()));
+  ScrollUpdate(&web_view_helper, 0, 30);
+  Mock::VerifyAndClearExpectations(&client);
+
+  EXPECT_CALL(client,
+              DidOverscroll(gfx::Vector2dF(-30, -30), gfx::Vector2dF(-30, -90),
+                            gfx::PointF(99, 99), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 30, 30);
   Mock::VerifyAndClearExpectations(&client);
 
   EXPECT_CALL(client,
-              DidOverscroll(WebFloatSize(-30, 0), WebFloatSize(-60, -90),
-                            WebFloatPoint(99, 99), WebFloatSize()));
+              DidOverscroll(gfx::Vector2dF(-30, 0), gfx::Vector2dF(-60, -90),
+                            gfx::PointF(99, 99), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 30, 0);
   Mock::VerifyAndClearExpectations(&client);
 
@@ -10327,20 +10306,20 @@ TEST_P(WebFrameOverscrollTest, NoOverscrollForSmallvalues) {
 
   ScrollBegin(&web_view_helper, 10, 10);
   EXPECT_CALL(client,
-              DidOverscroll(WebFloatSize(-10, -10), WebFloatSize(-10, -10),
-                            WebFloatPoint(100, 100), WebFloatSize()));
+              DidOverscroll(gfx::Vector2dF(-10, -10), gfx::Vector2dF(-10, -10),
+                            gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 10, 10);
   Mock::VerifyAndClearExpectations(&client);
 
-  EXPECT_CALL(client,
-              DidOverscroll(WebFloatSize(0, -0.10), WebFloatSize(-10, -10.10),
-                            WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client, DidOverscroll(gfx::Vector2dF(0, -0.10),
+                                    gfx::Vector2dF(-10, -10.10),
+                                    gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 0, 0.10);
   Mock::VerifyAndClearExpectations(&client);
 
-  EXPECT_CALL(client, DidOverscroll(WebFloatSize(-0.10, 0),
-                                    WebFloatSize(-10.10, -10.10),
-                                    WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client, DidOverscroll(gfx::Vector2dF(-0.10, 0),
+                                    gfx::Vector2dF(-10.10, -10.10),
+                                    gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 0.10, 0);
   Mock::VerifyAndClearExpectations(&client);
 
@@ -10396,9 +10375,9 @@ TEST_P(WebFrameOverscrollTest, OverscrollBehaviorGoesToCompositor) {
                                 "'overscroll-behavior: auto;'")));
 
   ScrollBegin(&web_view_helper, 100, 116);
-  EXPECT_CALL(client,
-              DidOverscroll(WebFloatSize(-100, -100), WebFloatSize(-100, -100),
-                            WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client, DidOverscroll(gfx::Vector2dF(-100, -100),
+                                    gfx::Vector2dF(-100, -100),
+                                    gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 100, 100);
   Mock::VerifyAndClearExpectations(&client);
 
@@ -10410,9 +10389,9 @@ TEST_P(WebFrameOverscrollTest, OverscrollBehaviorGoesToCompositor) {
                                 "'overscroll-behavior: contain;'")));
 
   ScrollBegin(&web_view_helper, 100, 116);
-  EXPECT_CALL(client,
-              DidOverscroll(WebFloatSize(-100, -100), WebFloatSize(-200, -200),
-                            WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client, DidOverscroll(gfx::Vector2dF(-100, -100),
+                                    gfx::Vector2dF(-200, -200),
+                                    gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 100, 100);
   Mock::VerifyAndClearExpectations(&client);
 
@@ -10424,9 +10403,9 @@ TEST_P(WebFrameOverscrollTest, OverscrollBehaviorGoesToCompositor) {
                                 "'overscroll-behavior: none;'")));
 
   ScrollBegin(&web_view_helper, 100, 116);
-  EXPECT_CALL(client,
-              DidOverscroll(WebFloatSize(-100, -100), WebFloatSize(-300, -300),
-                            WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client, DidOverscroll(gfx::Vector2dF(-100, -100),
+                                    gfx::Vector2dF(-300, -300),
+                                    gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 100, 100);
   Mock::VerifyAndClearExpectations(&client);
 }
@@ -10460,9 +10439,9 @@ TEST_P(WebFrameOverscrollTest, OnlyMainFrameOverscrollBehaviorHasEffect) {
                                 "'overscroll-behavior: none;'")));
 
   ScrollBegin(&web_view_helper, 100, 116);
-  EXPECT_CALL(client,
-              DidOverscroll(WebFloatSize(-100, -100), WebFloatSize(-100, -100),
-                            WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client, DidOverscroll(gfx::Vector2dF(-100, -100),
+                                    gfx::Vector2dF(-100, -100),
+                                    gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 100, 100);
   Mock::VerifyAndClearExpectations(&client);
 
@@ -10473,9 +10452,9 @@ TEST_P(WebFrameOverscrollTest, OnlyMainFrameOverscrollBehaviorHasEffect) {
       WebScriptSource(WebString("document.body.style="
                                 "'overscroll-behavior: contain;'")));
 
-  EXPECT_CALL(client,
-              DidOverscroll(WebFloatSize(-100, -100), WebFloatSize(-200, -200),
-                            WebFloatPoint(100, 100), WebFloatSize()));
+  EXPECT_CALL(client, DidOverscroll(gfx::Vector2dF(-100, -100),
+                                    gfx::Vector2dF(-200, -200),
+                                    gfx::PointF(100, 100), gfx::Vector2dF()));
   ScrollUpdate(&web_view_helper, 100, 100);
   Mock::VerifyAndClearExpectations(&client);
 }
@@ -10514,18 +10493,19 @@ TEST_F(WebFrameTest, ImageDocumentLoadResponseEnd) {
   Document* document = web_view->MainFrameImpl()->GetFrame()->GetDocument();
 
   EXPECT_TRUE(document);
-  EXPECT_TRUE(document->IsImageDocument());
+  EXPECT_TRUE(IsA<ImageDocument>(document));
 
-  ImageDocument* img_document = ToImageDocument(document);
-  ImageResource* resource = img_document->CachedImageResourceDeprecated();
+  auto* img_document = To<ImageDocument>(document);
+  ImageResourceContent* image_content = img_document->CachedImage();
 
-  EXPECT_TRUE(resource);
-  EXPECT_NE(base::TimeTicks(), resource->LoadResponseEnd());
+  EXPECT_TRUE(image_content);
+  EXPECT_NE(base::TimeTicks(), image_content->LoadResponseEnd());
 
   DocumentLoader* loader = document->Loader();
 
   EXPECT_TRUE(loader);
-  EXPECT_EQ(loader->GetTiming().ResponseEnd(), resource->LoadResponseEnd());
+  EXPECT_EQ(loader->GetTiming().ResponseEnd(),
+            image_content->LoadResponseEnd());
 }
 
 TEST_F(WebFrameTest, CopyImageDocument) {
@@ -10539,7 +10519,7 @@ TEST_F(WebFrameTest, CopyImageDocument) {
   Document* document = web_frame->GetFrame()->GetDocument();
 
   ASSERT_TRUE(document);
-  EXPECT_TRUE(document->IsImageDocument());
+  EXPECT_TRUE(IsA<ImageDocument>(document));
   EXPECT_TRUE(SystemClipboard::GetInstance().ReadAvailableTypes().IsEmpty());
 
   bool result = web_frame->ExecuteCommand("Copy");
@@ -10915,7 +10895,7 @@ TEST_F(WebFrameTest, SaveImageAt) {
   EXPECT_EQ(WebString(), client.Result());
 
   web_view->SetPageScaleFactor(4);
-  web_view->SetVisualViewportOffset(WebFloatPoint(1, 1));
+  web_view->SetVisualViewportOffset(gfx::PointF(1, 1));
 
   client.Reset();
   local_frame->SaveImageAt(WebPoint(3, 3));
@@ -11164,9 +11144,9 @@ TEST_F(WebFrameTest, ImageDocumentDecodeError) {
   Document* document =
       To<LocalFrame>(helper.GetWebView()->GetPage()->MainFrame())
           ->GetDocument();
-  EXPECT_TRUE(document->IsImageDocument());
+  EXPECT_TRUE(IsA<ImageDocument>(document));
   EXPECT_EQ(ResourceStatus::kDecodeError,
-            ToImageDocument(document)->CachedImage()->GetContentStatus());
+            To<ImageDocument>(document)->CachedImage()->GetContentStatus());
 }
 
 // Ensure that the root layer -- whose size is ordinarily derived from the
@@ -11209,7 +11189,7 @@ TEST_F(WebFrameTest, RootLayerMinimumHeight) {
   EXPECT_EQ(kViewportHeight - kBrowserControlsHeight,
             compositor->RootLayer()->BoundingBoxForCompositing().Height());
 
-  document->View()->SetTracksPaintInvalidations(true);
+  document->View()->SetTracksRasterInvalidations(true);
 
   web_view->ResizeWithBrowserControls(WebSize(kViewportWidth, kViewportHeight),
                                       kBrowserControlsHeight, 0, false);
@@ -11232,7 +11212,7 @@ TEST_F(WebFrameTest, RootLayerMinimumHeight) {
   // scrolling contents layer whose size hasn't changed.
   EXPECT_TRUE(raster_invalidations.IsEmpty());
 
-  document->View()->SetTracksPaintInvalidations(false);
+  document->View()->SetTracksRasterInvalidations(false);
 }
 
 // Load a page with display:none set and try to scroll it. It shouldn't crash
@@ -11313,8 +11293,8 @@ TEST_F(WebFrameTest, MouseOverDifferntNodeClearsTooltip) {
   // Mouse over link. Mouse cursor should be hand.
   WebMouseEvent mouse_move_over_link_event(
       WebInputEvent::kMouseMove,
-      WebFloatPoint(div1_tag->OffsetLeft() + 5, div1_tag->OffsetTop() + 5),
-      WebFloatPoint(div1_tag->OffsetLeft() + 5, div1_tag->OffsetTop() + 5),
+      gfx::PointF(div1_tag->OffsetLeft() + 5, div1_tag->OffsetTop() + 5),
+      gfx::PointF(div1_tag->OffsetLeft() + 5, div1_tag->OffsetTop() + 5),
       WebPointerProperties::Button::kNoButton, 0, WebInputEvent::kNoModifiers,
       base::TimeTicks::Now());
   mouse_move_over_link_event.SetFrameScale(1);
@@ -11333,8 +11313,8 @@ TEST_F(WebFrameTest, MouseOverDifferntNodeClearsTooltip) {
 
   WebMouseEvent mouse_move_event(
       WebInputEvent::kMouseMove,
-      WebFloatPoint(div2_tag->OffsetLeft() + 5, div2_tag->OffsetTop() + 5),
-      WebFloatPoint(div2_tag->OffsetLeft() + 5, div2_tag->OffsetTop() + 5),
+      gfx::PointF(div2_tag->OffsetLeft() + 5, div2_tag->OffsetTop() + 5),
+      gfx::PointF(div2_tag->OffsetLeft() + 5, div2_tag->OffsetTop() + 5),
       WebPointerProperties::Button::kNoButton, 0, WebInputEvent::kNoModifiers,
       base::TimeTicks::Now());
   mouse_move_event.SetFrameScale(1);
@@ -11918,8 +11898,7 @@ TEST_F(WebFrameSimTest, ScrollFocusedSelectionIntoView) {
   Compositor().BeginFrame();
   WebView().AdvanceFocus(false);
 
-  HTMLInputElement* input =
-      ToHTMLInputElement(GetDocument().getElementById("target"));
+  auto* input = To<HTMLInputElement>(GetDocument().getElementById("target"));
   input->select();
 
   // Simulate the keyboard being shown and resizing the widget. Cause a scroll
@@ -12765,8 +12744,9 @@ TEST_F(WebFrameTest, DidScrollCallbackAfterScrollableAreaChanges) {
   // area using the DidScroll callback.
   EXPECT_EQ(ScrollOffset(), scrollable_area->GetScrollOffset());
   cc::ScrollAndScaleSet scroll_and_scale_set;
-  scroll_and_scale_set.scrolls.push_back(
-      {scrollable_area->GetCompositorElementId(), gfx::ScrollOffset(0, 1)});
+  scroll_and_scale_set.scrolls.push_back({scrollable_area->GetScrollElementId(),
+                                          gfx::ScrollOffset(0, 1),
+                                          base::nullopt});
   cc_scroll_layer->layer_tree_host()->ApplyScrollAndScale(
       &scroll_and_scale_set);
   UpdateAllLifecyclePhases(web_view);
@@ -12821,11 +12801,11 @@ TEST_F(WebFrameTest, ExecuteCommandProducesUserGesture) {
   web_view_helper.InitializeAndLoad("about:blank");
   WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
 
-  EXPECT_FALSE(frame->GetFrame()->HasBeenActivated());
+  EXPECT_FALSE(frame->GetFrame()->HasStickyUserActivation());
   frame->ExecuteScript(WebScriptSource(WebString("document.execCommand('copy');")));
-  EXPECT_FALSE(frame->GetFrame()->HasBeenActivated());
+  EXPECT_FALSE(frame->GetFrame()->HasStickyUserActivation());
   frame->ExecuteCommand(WebString::FromUTF8("Paste"));
-  EXPECT_TRUE(frame->GetFrame()->HasBeenActivated());
+  EXPECT_TRUE(frame->GetFrame()->HasStickyUserActivation());
 }
 
 TEST_F(WebFrameTest, GetCanonicalUrlForSharingNone) {
@@ -12912,17 +12892,16 @@ TEST_F(WebFrameSimTest, EnterFullscreenResetScrollAndScaleState) {
   EXPECT_EQ(0.5f, WebView().PageScaleFactor());
   WebView().SetPageScaleFactor(2.0f);
   WebView().MainFrameImpl()->SetScrollOffset(WebSize(94, 111));
-  WebView().SetVisualViewportOffset(WebFloatPoint(12, 20));
+  WebView().SetVisualViewportOffset(gfx::PointF(12, 20));
   EXPECT_EQ(2.0f, WebView().PageScaleFactor());
   EXPECT_EQ(94, WebView().MainFrameImpl()->GetScrollOffset().width);
   EXPECT_EQ(111, WebView().MainFrameImpl()->GetScrollOffset().height);
-  EXPECT_EQ(12, WebView().VisualViewportOffset().x);
-  EXPECT_EQ(20, WebView().VisualViewportOffset().y);
+  EXPECT_EQ(12, WebView().VisualViewportOffset().x());
+  EXPECT_EQ(20, WebView().VisualViewportOffset().y());
 
   auto* frame = To<LocalFrame>(WebView().GetPage()->MainFrame());
   Element* element = frame->GetDocument()->body();
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(frame);
+  LocalFrame::NotifyUserActivation(frame);
   Fullscreen::RequestFullscreen(*element);
   WebView().MainFrameWidget()->DidEnterFullscreen();
 
@@ -12938,8 +12917,8 @@ TEST_F(WebFrameSimTest, EnterFullscreenResetScrollAndScaleState) {
   EXPECT_EQ(0.5f, WebView().PageScaleFactor());
   EXPECT_EQ(94, WebView().MainFrameImpl()->GetScrollOffset().width);
   EXPECT_EQ(111, WebView().MainFrameImpl()->GetScrollOffset().height);
-  EXPECT_EQ(0, WebView().VisualViewportOffset().x);
-  EXPECT_EQ(0, WebView().VisualViewportOffset().y);
+  EXPECT_EQ(0, WebView().VisualViewportOffset().x());
+  EXPECT_EQ(0, WebView().VisualViewportOffset().y());
 }
 
 TEST_F(WebFrameTest, MediaQueriesInLocalFrameInsideRemote) {
@@ -12965,7 +12944,7 @@ TEST_F(WebFrameTest, MediaQueriesInLocalFrameInsideRemote) {
   helper.Reset();
 }
 
-TEST_F(WebFrameTest, RemoteViewportIntersection) {
+TEST_F(WebFrameTest, RemoteViewportAndMainframeIntersections) {
   frame_test_helpers::WebViewHelper helper;
   helper.InitializeRemote();
   WebLocalFrameImpl* local_frame = frame_test_helpers::CreateLocalChild(
@@ -12992,55 +12971,46 @@ TEST_F(WebFrameTest, RemoteViewportIntersection) {
 
   // Simulate the local child frame being positioned at (7, -11) in the parent's
   // viewport, indicating that the top 11px of the child's content is clipped
-  // by the parent.
+  // by the parent. Let the local child frame be at (7, 40) in the parent
+  // element.
   WebFrameWidget* widget = local_frame->FrameWidget();
   ASSERT_TRUE(widget);
   WebPoint viewport_offset(7, -11);
   WebRect viewport_intersection(0, 11, 200, 89);
+  WebRect mainframe_intersection(0, 0, 200, 140);
   FrameOcclusionState occlusion_state = FrameOcclusionState::kUnknown;
-  widget->SetRemoteViewportIntersection({viewport_offset, viewport_intersection,
-                                         viewport_intersection,
-                                         occlusion_state});
+  widget->SetRemoteViewportIntersection(
+      {viewport_offset, viewport_intersection, mainframe_intersection,
+       viewport_intersection, occlusion_state});
 
   // The viewport intersection should be applied by the layout geometry mapping
   // code when these flags are used.
-  int flags = kTraverseDocumentBoundaries | kApplyRemoteRootFrameOffset;
+  int viewport_intersection_flags =
+      kTraverseDocumentBoundaries | kApplyRemoteRootFrameOffset;
 
   // Expectation is: (target location) + (viewport offset) = (20, 10) + (7, -11)
-  PhysicalOffset offset =
-      target->GetLayoutObject()->LocalToAbsolutePoint(PhysicalOffset(), flags);
+  PhysicalOffset offset = target->GetLayoutObject()->LocalToAbsolutePoint(
+      PhysicalOffset(), viewport_intersection_flags);
   EXPECT_EQ(PhysicalOffset(27, -1), offset);
 
   PhysicalRect rect(0, 0, 25, 35);
   local_frame->GetFrame()
       ->GetDocument()
       ->GetLayoutView()
-      ->MapToVisualRectInAncestorSpace(nullptr, rect, flags,
-                                       kDefaultVisualRectFlags);
+      ->MapToVisualRectInAncestorSpace(
+          nullptr, rect, viewport_intersection_flags, kDefaultVisualRectFlags);
   EXPECT_EQ(PhysicalRect(7, 0, 25, 24), rect);
+
+  // Without the main frame overflow clip the rect should not be clipped and the
+  // coordinates returned are the rects coordinates in the viewport space.
+  PhysicalRect mainframe_rect(0, 0, 25, 35);
+  local_frame->GetFrame()
+      ->GetDocument()
+      ->GetLayoutView()
+      ->MapToVisualRectInAncestorSpace(nullptr, mainframe_rect,
+                                       viewport_intersection_flags,
+                                       kDontApplyMainFrameOverflowClip);
+  EXPECT_EQ(PhysicalRect(7, -11, 25, 35), mainframe_rect);
 }
 
-class ExternallyHandledPluginDocumentTest
-    : public WebFrameTest,
-      public testing::WithParamInterface<
-          bool /* mime_handler_view_in_cross_process_frame */> {};
-
-TEST_P(ExternallyHandledPluginDocumentTest, DocumentType) {
-  bool cross_process = GetParam();
-  ScopedMimeHandlerViewInCrossProcessFrameForTest scoped_feature(cross_process);
-  ScopedFakePluginRegistry fake_plugins;
-  RegisterMockedHttpURLLoadWithMimeType("test.pdf", "application/pdf");
-  frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.InitializeAndLoad(base_url_ + "test.pdf");
-  WebViewImpl* web_view = web_view_helper.GetWebView();
-  WebLocalFrameImpl* web_frame = web_view->MainFrameImpl();
-  Document* document = web_frame->GetFrame()->GetDocument();
-  ASSERT_TRUE(document);
-  ASSERT_TRUE(document->IsHTMLDocument());
-  EXPECT_NE(cross_process, document->IsPluginDocument());
-}
-
-INSTANTIATE_TEST_SUITE_P(P,
-                         ExternallyHandledPluginDocumentTest,
-                         testing::Bool());
 }  // namespace blink

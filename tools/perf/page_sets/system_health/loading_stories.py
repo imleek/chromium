@@ -54,6 +54,13 @@ class LoadAmazonDesktopStory2018(_LoadingStory):
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
 
 
+class LoadAmazonMobileStory2019(_LoadingStory):
+  NAME = 'load:search:amazon:2019'
+  URL = 'https://www.amazon.com/s/?field-keywords=pixel'
+  TAGS = [story_tags.YEAR_2019]
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+
+
 class LoadTaobaoDesktopStory2018(_LoadingStory):
   NAME = 'load:search:taobao:2018'
   URL = 'https://world.taobao.com/'
@@ -75,6 +82,14 @@ class LoadTaobaoMobileStory(_LoadingStory):
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
   TAGS = [story_tags.INTERNATIONAL, story_tags.HEALTH_CHECK,
           story_tags.YEAR_2016]
+
+
+class LoadTaobaoMobileStory2019(_LoadingStory):
+  NAME = 'load:search:taobao:2019'
+  URL = 'http://m.intl.taobao.com/'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  TAGS = [story_tags.INTERNATIONAL, story_tags.HEALTH_CHECK,
+          story_tags.YEAR_2019]
 
 
 class LoadYandexStory2018(_LoadingStory):
@@ -151,6 +166,12 @@ class LoadPinterestStory(_LoadingStory):
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
 
 
+class LoadPinterestStory2019(_LoadingStory):
+  NAME = 'load:social:pinterest:2019'
+  URL = 'https://uk.pinterest.com/categories/popular/'
+  TAGS = [story_tags.JAVASCRIPT_HEAVY, story_tags.YEAR_2019]
+
+
 ################################################################################
 # News, discussion and knowledge portals and blogs.
 ################################################################################
@@ -161,6 +182,13 @@ class LoadBbcDesktopStory2018(_LoadingStory):
   URL = 'https://www.bbc.co.uk/news'
   TAGS = [story_tags.YEAR_2018]
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
+
+
+class LoadBbcMobileStory2019(_LoadingStory):
+  NAME = 'load:news:bbc:2019'
+  URL = 'https://www.bbc.co.uk/news'
+  TAGS = [story_tags.YEAR_2019]
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 
 
 class LoadCnnStory2018(_LoadingStory):
@@ -322,6 +350,12 @@ class LoadDailymotionStory(_LoadingStory):
   TAGS = [story_tags.YEAR_2016]
 
 
+class LoadDailymotionStory2019(_LoadingStory):
+  NAME = 'load:media:dailymotion:2019'
+  URL = ('https://www.dailymotion.com/video/x7paozv')
+  TAGS = [story_tags.YEAR_2019]
+
+
 class LoadGoogleImagesStory2018(_LoadingStory):
   NAME = 'load:media:google_images:2018'
   URL = 'https://www.google.co.uk/search?tbm=isch&q=love'
@@ -393,6 +427,14 @@ class LoadDocsStory(_LoadingStory):
   TAGS = [story_tags.HEALTH_CHECK, story_tags.YEAR_2016]
 
 
+class LoadDocsStory2019(_LoadingStory):
+  """Load a typical google doc page (2019)."""
+  NAME = 'load:tools:docs:2019'
+  URL = (
+      'https://docs.google.com/document/d/1GvzDP-tTLmJ0myRhUAfTYWs3ZUFilUICg8psNHyccwQ/edit?usp=sharing')
+  TAGS = [story_tags.HEALTH_CHECK, story_tags.YEAR_2019]
+
+
 class _LoadGmailBaseStory(_LoadingStory):
   NAME = 'load:tools:gmail'
   URL = 'https://mail.google.com/mail/'
@@ -451,11 +493,27 @@ class LoadDropboxStory(_LoadingStory):
   def _Login(self, action_runner):
     dropbox_login.LoginAccount(action_runner, 'dropbox')
 
+class LoadDropboxStory2019(_LoadingStory):
+  NAME = 'load:tools:dropbox:2019'
+  URL = 'https://www.dropbox.com/'
+  TAGS = [story_tags.YEAR_2019]
+  # Desktop fails to log in
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  SKIP_LOGIN = False
+
+  def _Login(self, action_runner):
+    dropbox_login.LoginAccount(action_runner, 'dropbox')
 
 class LoadWeatherStory(_LoadingStory):
   NAME = 'load:tools:weather'
   URL = 'https://weather.com/en-GB/weather/today/l/USCA0286:1:US'
   TAGS = [story_tags.JAVASCRIPT_HEAVY, story_tags.YEAR_2016]
+
+
+class LoadWeatherStory2019(_LoadingStory):
+  NAME = 'load:tools:weather:2019'
+  URL = 'https://weather.com/en-GB/weather/today/l/USCA0286:1:US'
+  TAGS = [story_tags.JAVASCRIPT_HEAVY, story_tags.YEAR_2019]
 
 
 class LoadDriveStory(_LoadingStory):
@@ -465,6 +523,15 @@ class LoadDriveStory(_LoadingStory):
 
   def _Login(self, action_runner):
     google_login.LoginGoogleAccount(action_runner, 'googletest')
+
+
+class LoadDriveStory2019(_LoadingStory):
+  NAME = 'load:tools:drive:2019'
+  URL = 'https://drive.google.com/drive/my-drive'
+  TAGS = [story_tags.JAVASCRIPT_HEAVY, story_tags.YEAR_2019]
+
+  def _Login(self, action_runner):
+    google_login.NewLoginGoogleAccount(action_runner, 'googletest')
 
 
 ################################################################################

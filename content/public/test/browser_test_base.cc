@@ -38,6 +38,7 @@
 #include "content/browser/scheduler/browser_task_executor.h"
 #include "content/browser/startup_data_impl.h"
 #include "content/browser/startup_helper.h"
+#include "content/browser/storage_partition_impl.h"
 #include "content/browser/tracing/memory_instrumentation_util.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
 #include "content/public/app/content_main.h"
@@ -146,10 +147,10 @@ void RunTaskOnRendererThread(base::OnceClosure task,
   base::PostTask(FROM_HERE, {BrowserThread::UI}, std::move(quit_task));
 }
 
-void TraceStopTracingComplete(const base::Closure& quit,
-                                   const base::FilePath& file_path) {
+void TraceStopTracingComplete(base::OnceClosure quit,
+                              const base::FilePath& file_path) {
   LOG(ERROR) << "Tracing written to: " << file_path.value();
-  quit.Run();
+  std::move(quit).Run();
 }
 
 // See SetInitialWebContents comment for more information.
@@ -216,6 +217,16 @@ BrowserTestBase::~BrowserTestBase() {
 
 void BrowserTestBase::SetUp() {
   set_up_called_ = true;
+
+  if (!UseProductionQuotaSettings()) {
+    // By default use hardcoded quota settings to have a consistent testing
+    // environment.
+    const int kQuota = 5 * 1024 * 1024;
+    quota_settings_ =
+        std::make_unique<storage::QuotaSettings>(kQuota * 5, kQuota, 0, 0);
+    StoragePartitionImpl::SetDefaultQuotaSettingsForTesting(
+        quota_settings_.get());
+  }
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
@@ -322,7 +333,8 @@ void BrowserTestBase::SetUp() {
   // not affect the results.
   command_line->AppendSwitchASCII(switches::kForceDisplayColorProfile, "srgb");
 
-  test_host_resolver_ = std::make_unique<TestHostResolver>();
+  if (!allow_network_access_to_host_resolutions_)
+    test_host_resolver_ = std::make_unique<TestHostResolver>();
 
   ContentBrowserSanityChecker scoped_enable_sanity_checks;
 
@@ -377,7 +389,7 @@ void BrowserTestBase::SetUp() {
   base::FeatureList::ClearInstanceForTesting();
 
   auto created_main_parts_closure =
-      std::make_unique<CreatedMainPartsClosure>(base::Bind(
+      std::make_unique<CreatedMainPartsClosure>(base::BindOnce(
           &BrowserTestBase::CreatedBrowserMainParts, base::Unretained(this)));
 
 #if defined(OS_ANDROID)
@@ -408,7 +420,7 @@ void BrowserTestBase::SetUp() {
       SetRendererClientForTesting(delegate->CreateContentRendererClient());
 
     content::RegisterPathProvider();
-    content::RegisterContentSchemes(false);
+    content::RegisterContentSchemes();
     ui::RegisterPathProvider();
 
     delegate->PreSandboxStartup();
@@ -455,9 +467,9 @@ void BrowserTestBase::SetUp() {
     // run.
     base::RunLoop loop{base::RunLoop::Type::kNestableTasksAllowed};
 
-    auto ui_task = std::make_unique<base::Closure>(
-        base::Bind(&BrowserTestBase::WaitUntilJavaIsReady,
-                   base::Unretained(this), loop.QuitClosure()));
+    auto ui_task = std::make_unique<base::OnceClosure>(
+        base::BindOnce(&BrowserTestBase::WaitUntilJavaIsReady,
+                       base::Unretained(this), loop.QuitClosure()));
 
     // The MainFunctionParams must out-live all the startup tasks running.
     MainFunctionParams params(*command_line);
@@ -499,7 +511,7 @@ void BrowserTestBase::SetUp() {
   // for the test harness to be able to delete temp dirs.
   base::ThreadRestrictions::SetIOAllowed(true);
 #else   // defined(OS_ANDROID)
-  auto ui_task = std::make_unique<base::Closure>(base::Bind(
+  auto ui_task = std::make_unique<base::OnceClosure>(base::BindOnce(
       &BrowserTestBase::ProxyRunTestOnMainThreadLoop, base::Unretained(this)));
   GetContentMainParams()->ui_task = ui_task.release();
   GetContentMainParams()->created_main_parts_closure =
@@ -514,10 +526,16 @@ void BrowserTestBase::TearDown() {
   ui::test::EventGeneratorDelegate::SetFactoryFunction(
       ui::test::EventGeneratorDelegate::FactoryFunction());
 #endif
+
+  StoragePartitionImpl::SetDefaultQuotaSettingsForTesting(nullptr);
 }
 
 bool BrowserTestBase::AllowFileAccessFromFiles() {
   return true;
+}
+
+bool BrowserTestBase::UseProductionQuotaSettings() {
+  return false;
 }
 
 void BrowserTestBase::SimulateNetworkServiceCrash() {
@@ -681,8 +699,8 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
     base::RunLoop run_loop;
     TracingController::GetInstance()->StopTracing(
         TracingControllerImpl::CreateFileEndpoint(
-            trace_file, base::Bind(&TraceStopTracingComplete,
-                                   run_loop.QuitClosure(), trace_file)));
+            trace_file, base::BindOnce(&TraceStopTracingComplete,
+                                       run_loop.QuitClosure(), trace_file)));
     run_loop.Run();
   }
 
@@ -734,12 +752,25 @@ void BrowserTestBase::InitializeNetworkProcess() {
     return;
 
   initialized_network_process_ = true;
+
   host_resolver()->DisableModifications();
 
   // Send the host resolver rules to the network service if it's in use. No need
   // to do this if it's running in the browser process though.
   if (!IsOutOfProcessNetworkService())
     return;
+
+  mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
+  content::GetNetworkService()->BindTestInterface(
+      network_service_test.BindNewPipeAndPassReceiver());
+
+  // Do not set up host resolver rules if we allow the test to access
+  // the network.
+  if (allow_network_access_to_host_resolutions_) {
+    mojo::ScopedAllowSyncCallForTesting allow_sync_call;
+    network_service_test->SetAllowNetworkAccessToHostResolutions();
+    return;
+  }
 
   net::RuleBasedHostResolverProc::RuleList rules = host_resolver()->GetRules();
   std::vector<network::mojom::RulePtr> mojo_rules;
@@ -748,13 +779,18 @@ void BrowserTestBase::InitializeNetworkProcess() {
     // TODO(jam: expand this when we try to make browser_tests and
     // components_browsertests work.
     if (rule.resolver_type ==
-        net::RuleBasedHostResolverProc::Rule::kResolverTypeFail) {
+            net::RuleBasedHostResolverProc::Rule::kResolverTypeFail ||
+        rule.resolver_type ==
+            net::RuleBasedHostResolverProc::Rule::kResolverTypeFailTimeout) {
       // The host "wpad" is added automatically in TestHostResolver, so we don't
       // need to send it to NetworkServiceTest.
       if (rule.host_pattern != "wpad") {
         network::mojom::RulePtr mojo_rule = network::mojom::Rule::New();
         mojo_rule->resolver_type =
-            network::mojom::ResolverType::kResolverTypeFail;
+            (rule.resolver_type ==
+             net::RuleBasedHostResolverProc::Rule::kResolverTypeFail)
+                ? network::mojom::ResolverType::kResolverTypeFail
+                : network::mojom::ResolverType::kResolverTypeFailTimeout;
         mojo_rule->host_pattern = rule.host_pattern;
         mojo_rules.push_back(std::move(mojo_rule));
       }
@@ -786,10 +822,6 @@ void BrowserTestBase::InitializeNetworkProcess() {
 
   if (mojo_rules.empty())
     return;
-
-  mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
-  content::GetNetworkService()->BindTestInterface(
-      network_service_test.BindNewPipeAndPassReceiver());
 
   // Send the DNS rules to network service process. Android needs the RunLoop
   // to dispatch a Java callback that makes network process to enter native

@@ -66,6 +66,7 @@ namespace {
 
 constexpr float kShortcutIconToImageRatio = 9.0 / 16.0;
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 // Number of times the Dice sign-in promo illustration should be shown.
 constexpr int kDiceSigninPromoIllustrationShowCountMax = 10;
 
@@ -77,6 +78,7 @@ ProfileAttributesEntry* GetProfileAttributesEntry(Profile* profile) {
   return entry;
 }
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 BadgedProfilePhoto::BadgeType GetProfileBadgeType(Profile* profile) {
   if (profile->IsSupervised()) {
     return profile->IsChild() ? BadgedProfilePhoto::BADGE_TYPE_CHILD
@@ -85,7 +87,7 @@ BadgedProfilePhoto::BadgeType GetProfileBadgeType(Profile* profile) {
   // |Profile::IsSyncAllowed| is needed to check whether sync is allowed by GPO
   // policy.
   if (AccountConsistencyModeManager::IsDiceEnabledForProfile(profile) &&
-      profile->IsSyncAllowed() &&
+      ProfileSyncServiceFactory::IsSyncAllowed(profile) &&
       IdentityManagerFactory::GetForProfile(profile)->HasPrimaryAccount()) {
     return BadgedProfilePhoto::BADGE_TYPE_SYNC_COMPLETE;
   }
@@ -114,6 +116,7 @@ bool AreSigninCookiesClearedOnExit(Profile* profile) {
   return client->AreSigninCookiesDeletedOnExit();
 }
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 // Returns the Google G icon in grey and with a padding of 2. The padding is
 // needed to make the icon look smaller, otherwise it looks too big compared to
@@ -182,11 +185,13 @@ ProfileMenuView::ProfileMenuView(views::Button* anchor_button,
 ProfileMenuView::~ProfileMenuView() = default;
 
 void ProfileMenuView::BuildMenu() {
+  // TODO(crbug.com/993752): Remove after ProfileMenuRevamp.
   avatar_menu_ = std::make_unique<AvatarMenu>(
       &g_browser_process->profile_manager()->GetProfileAttributesStorage(),
       this, browser());
   avatar_menu_->RebuildMenu();
 
+  // TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
   if (!base::FeatureList::IsEnabled(features::kProfileMenuRevamp)) {
     if (dice_enabled_) {
       // Fetch DICE accounts. Note: This always includes the primary account if
@@ -215,16 +220,18 @@ void ProfileMenuView::BuildMenu() {
   BuildProfileManagementFeatureButtons();
 }
 
+// TODO(crbug.com/993752): Remove after ProfileMenuRevamp.
 void ProfileMenuView::OnAvatarMenuChanged(
     AvatarMenu* avatar_menu) {
-  // TODO(crbug.com/993752): Remove AvatarMenu observer.
 }
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 void ProfileMenuView::FocusButtonOnKeyboardOpen() {
   if (first_profile_button_)
     first_profile_button_->RequestFocus();
 }
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 void ProfileMenuView::OnWidgetClosing(views::Widget* /*widget*/) {
   // Unsubscribe from everything early so that the updates do not reach the
   // bubble and change its state.
@@ -294,6 +301,7 @@ void ProfileMenuView::OnManageProfilesButtonClicked() {
   PostActionPerformed(ProfileMetrics::PROFILE_DESKTOP_MENU_OPEN_USER_MANAGER);
 }
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 void ProfileMenuView::OnLockButtonClicked() {
   RecordClick(ActionableItem::kLockButton);
   profiles::LockProfile(browser()->profile());
@@ -349,7 +357,8 @@ void ProfileMenuView::OnSyncErrorButtonClicked(
     case sync_ui_util::UPGRADE_CLIENT_ERROR:
       chrome::OpenUpdateChromeDialog(browser());
       break;
-    case sync_ui_util::TRUSTED_VAULT_KEY_MISSING_ERROR:
+    case sync_ui_util::TRUSTED_VAULT_KEY_MISSING_FOR_EVERYTHING_ERROR:
+    case sync_ui_util::TRUSTED_VAULT_KEY_MISSING_FOR_PASSWORDS_ERROR:
       sync_ui_util::OpenTabForSyncKeyRetrieval(browser());
       break;
     case sync_ui_util::PASSPHRASE_ERROR:
@@ -362,6 +371,7 @@ void ProfileMenuView::OnSyncErrorButtonClicked(
   }
 }
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 void ProfileMenuView::OnCurrentProfileCardClicked() {
   RecordClick(ActionableItem::kCurrentProfileCard);
   if (dice_enabled_ &&
@@ -505,7 +515,8 @@ gfx::ImageSkia ProfileMenuView::GetSyncIcon() {
     case sync_ui_util::UNRECOVERABLE_ERROR:
     case sync_ui_util::UPGRADE_CLIENT_ERROR:
     case sync_ui_util::PASSPHRASE_ERROR:
-    case sync_ui_util::TRUSTED_VAULT_KEY_MISSING_ERROR:
+    case sync_ui_util::TRUSTED_VAULT_KEY_MISSING_FOR_EVERYTHING_ERROR:
+    case sync_ui_util::TRUSTED_VAULT_KEY_MISSING_FOR_PASSWORDS_ERROR:
     case sync_ui_util::SETTINGS_UNCONFIRMED_ERROR:
       icon = &kSyncPausedCircleIcon;
       color_id = ui::NativeTheme::kColorId_AlertSeverityHigh;
@@ -538,7 +549,7 @@ void ProfileMenuView::BuildSyncInfo() {
   Profile* profile = browser()->profile();
   // Only show the sync info if signin and sync are allowed.
   if (!profile->GetPrefs()->GetBoolean(prefs::kSigninAllowed) ||
-      !profile->IsSyncAllowed()) {
+      !ProfileSyncServiceFactory::IsSyncAllowed(profile)) {
     return;
   }
 
@@ -560,10 +571,17 @@ void ProfileMenuView::BuildSyncInfo() {
           base::BindRepeating(&ProfileMenuView::OnSyncSettingsButtonClicked,
                               base::Unretained(this)));
     } else {
-      bool sync_paused = (error == sync_ui_util::AUTH_ERROR);
+      const bool sync_paused = (error == sync_ui_util::AUTH_ERROR);
+      const bool passwords_only_error =
+          (error ==
+           sync_ui_util::TRUSTED_VAULT_KEY_MISSING_FOR_PASSWORDS_ERROR);
+
       // Overwrite error description with short version for the menu.
-      description_string_id = sync_paused ? IDS_PROFILES_DICE_SYNC_PAUSED_TITLE
-                                          : IDS_SYNC_ERROR_USER_MENU_TITLE;
+      description_string_id =
+          sync_paused
+              ? IDS_PROFILES_DICE_SYNC_PAUSED_TITLE
+              : passwords_only_error ? IDS_SYNC_ERROR_PASSWORDS_USER_MENU_TITLE
+                                     : IDS_SYNC_ERROR_USER_MENU_TITLE;
 
       SetSyncInfo(
           GetSyncIcon(), l10n_util::GetStringUTF16(description_string_id),
@@ -591,8 +609,7 @@ void ProfileMenuView::BuildSyncInfo() {
                             base::Unretained(this), account_info.value()));
   } else {
     SetSyncInfo(/*icon=*/gfx::ImageSkia(),
-                l10n_util::GetStringUTF16(
-                    IDS_SETTINGS_SYNC_SIGN_IN_PROMPT_WITH_NO_ACCOUNT),
+                l10n_util::GetStringUTF16(IDS_PROFILES_DICE_SYNC_PROMO),
                 l10n_util::GetStringUTF16(IDS_PROFILES_DICE_SIGNIN_BUTTON),
                 base::BindRepeating(&ProfileMenuView::OnSigninButtonClicked,
                                     base::Unretained(this)));
@@ -656,7 +673,7 @@ void ProfileMenuView::BuildProfileManagementHeading() {
 void ProfileMenuView::BuildSelectableProfiles() {
   auto profile_entries = g_browser_process->profile_manager()
                              ->GetProfileAttributesStorage()
-                             .GetAllProfilesAttributes();
+                             .GetAllProfilesAttributesSortedByName();
   for (ProfileAttributesEntry* profile_entry : profile_entries) {
     // The current profile is excluded.
     if (profile_entry->GetPath() == browser()->profile()->GetPath())
@@ -668,7 +685,10 @@ void ProfileMenuView::BuildSelectableProfiles() {
                             base::Unretained(this), profile_entry->GetPath()));
   }
 
-  if (!browser()->profile()->IsGuestSession()) {
+  PrefService* service = g_browser_process->local_state();
+  DCHECK(service);
+  if (!browser()->profile()->IsGuestSession() &&
+      service->GetBoolean(prefs::kBrowserGuestModeEnabled)) {
     AddSelectableProfile(
         profiles::GetGuestAvatar(),
         l10n_util::GetStringUTF16(IDS_GUEST_PROFILE_NAME),
@@ -684,13 +704,18 @@ void ProfileMenuView::BuildProfileManagementFeatureButtons() {
       base::BindRepeating(&ProfileMenuView::OnManageProfilesButtonClicked,
                           base::Unretained(this)));
 
-  AddProfileManagementFeatureButton(
-      ImageForMenu(kAddIcon, /*icon_to_image_ratio=*/0.75),
-      l10n_util::GetStringUTF16(IDS_ADD),
-      base::BindRepeating(&ProfileMenuView::OnAddNewProfileButtonClicked,
-                          base::Unretained(this)));
+  PrefService* service = g_browser_process->local_state();
+  DCHECK(service);
+  if (service->GetBoolean(prefs::kBrowserAddPersonEnabled)) {
+    AddProfileManagementFeatureButton(
+        ImageForMenu(kAddIcon, /*icon_to_image_ratio=*/0.75),
+        l10n_util::GetStringUTF16(IDS_ADD),
+        base::BindRepeating(&ProfileMenuView::OnAddNewProfileButtonClicked,
+                            base::Unretained(this)));
+  }
 }
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 void ProfileMenuView::AddProfileMenuView(AvatarMenu* avatar_menu) {
   // Separate items into active and alternatives.
   const AvatarMenu::Item* active_item = nullptr;
@@ -729,6 +754,7 @@ void ProfileMenuView::AddProfileMenuView(AvatarMenu* avatar_menu) {
   AddOptionsView(display_lock, avatar_menu);
 }
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 bool ProfileMenuView::AddSyncErrorViewIfNeeded(
     const AvatarMenu::Item& avatar_item) {
   int content_string_id, button_string_id;
@@ -748,20 +774,27 @@ bool ProfileMenuView::AddSyncErrorViewIfNeeded(
   return true;
 }
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 void ProfileMenuView::AddPreDiceSyncErrorView(
     const AvatarMenu::Item& avatar_item,
     sync_ui_util::AvatarSyncErrorType error,
     int button_string_id,
     int content_string_id) {
+  const bool passwords_only_error =
+      error == sync_ui_util::TRUSTED_VAULT_KEY_MISSING_FOR_PASSWORDS_ERROR;
+
   AddMenuGroup();
   auto sync_problem_icon = std::make_unique<views::ImageView>();
   sync_problem_icon->SetImage(
       gfx::CreateVectorIcon(kSyncProblemIcon, BadgedProfilePhoto::kImageSize,
                             GetNativeTheme()->GetSystemColor(
                                 ui::NativeTheme::kColorId_AlertSeverityHigh)));
+
   views::Button* button = CreateAndAddTitleCard(
       std::move(sync_problem_icon),
-      l10n_util::GetStringUTF16(IDS_SYNC_ERROR_USER_MENU_TITLE),
+      l10n_util::GetStringUTF16(passwords_only_error
+                                    ? IDS_SYNC_ERROR_PASSWORDS_USER_MENU_TITLE
+                                    : IDS_SYNC_ERROR_USER_MENU_TITLE),
       l10n_util::GetStringUTF16(content_string_id), base::RepeatingClosure());
   static_cast<HoverButton*>(button)->SetStyle(HoverButton::STYLE_ERROR);
 
@@ -774,6 +807,7 @@ void ProfileMenuView::AddPreDiceSyncErrorView(
   }
 }
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 void ProfileMenuView::AddDiceSyncErrorView(
     const AvatarMenu::Item& avatar_item,
     sync_ui_util::AvatarSyncErrorType error,
@@ -782,7 +816,10 @@ void ProfileMenuView::AddDiceSyncErrorView(
   // profile (only selectable when sync is paused or disabled) and when sync is
   // not disabled there is a blue button to resolve the error.
   const bool show_sync_paused_ui = error == sync_ui_util::AUTH_ERROR;
-  const bool sync_disabled = !browser()->profile()->IsSyncAllowed();
+  const bool sync_disabled =
+      !ProfileSyncServiceFactory::IsSyncAllowed(browser()->profile());
+  const bool passwords_only_error =
+      error == sync_ui_util::TRUSTED_VAULT_KEY_MISSING_FOR_PASSWORDS_ERROR;
 
   AddMenuGroup();
 
@@ -805,7 +842,9 @@ void ProfileMenuView::AddDiceSyncErrorView(
           show_sync_paused_ui
               ? IDS_PROFILES_DICE_SYNC_PAUSED_TITLE
               : sync_disabled ? IDS_PROFILES_DICE_SYNC_DISABLED_TITLE
-                              : IDS_SYNC_ERROR_USER_MENU_TITLE),
+                              : passwords_only_error
+                                    ? IDS_SYNC_ERROR_PASSWORDS_USER_MENU_TITLE
+                                    : IDS_SYNC_ERROR_USER_MENU_TITLE),
       avatar_item.username,
       base::BindRepeating(&ProfileMenuView::OnCurrentProfileCardClicked,
                           base::Unretained(this)));
@@ -826,6 +865,7 @@ void ProfileMenuView::AddDiceSyncErrorView(
   }
 }
 
+// TODO(crbug.com/1021587): Incorporate into ProfileMenuRevamp.
 void ProfileMenuView::AddSyncPausedReasonCookiesClearedOnExit() {
   base::string16 link_text = l10n_util::GetStringUTF16(
       IDS_SYNC_PAUSED_REASON_CLEAR_COOKIES_ON_EXIT_LINK_TEXT);
@@ -839,11 +879,12 @@ void ProfileMenuView::AddSyncPausedReasonCookiesClearedOnExit() {
                           base::Unretained(this)));
 }
 
+// TODO(crbug.com/1021587): Remove after ProfileMenuRevamp.
 void ProfileMenuView::AddCurrentProfileView(
     const AvatarMenu::Item& avatar_item,
     bool is_guest) {
   Profile* profile = browser()->profile();
-  const bool sync_disabled = !profile->IsSyncAllowed();
+  const bool sync_disabled = !ProfileSyncServiceFactory::IsSyncAllowed(profile);
   if (!is_guest && sync_disabled) {
     AddDiceSyncErrorView(avatar_item, sync_ui_util::NO_SYNC_ERROR, 0);
     return;
@@ -866,7 +907,8 @@ void ProfileMenuView::AddCurrentProfileView(
   // disabled. Otherwise, show the email attached to the profile.
   bool show_email = !is_guest && avatar_item.signed_in;
   const base::string16 hover_button_title =
-      dice_enabled_ && profile->IsSyncAllowed() && show_email
+      dice_enabled_ && ProfileSyncServiceFactory::IsSyncAllowed(profile) &&
+              show_email
           ? l10n_util::GetStringUTF16(IDS_PROFILES_SYNC_COMPLETE_TITLE)
           : profile_name;
 

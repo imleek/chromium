@@ -181,7 +181,7 @@ class TransportClientSocketPoolTest : public ::testing::Test,
   size_t completion_count() const { return test_base_.completion_count(); }
 
   bool connect_backup_jobs_enabled_;
-  TestNetLog net_log_;
+  RecordingTestNetLog net_log_;
 
   // |group_id_| and |params_| correspond to the same group.
   const ClientSocketPool::GroupId group_id_;
@@ -560,7 +560,7 @@ TEST_F(TransportClientSocketPoolTest, RequestIgnoringLimitsIsReprioritized) {
 }
 
 TEST_F(TransportClientSocketPoolTest, InitHostResolutionFailure) {
-  session_deps_.host_resolver->rules()->AddSimulatedFailure(
+  session_deps_.host_resolver->rules()->AddSimulatedTimeoutFailure(
       group_id_.destination().host());
   TestCompletionCallback callback;
   ClientSocketHandle handle;
@@ -572,6 +572,7 @@ TEST_F(TransportClientSocketPoolTest, InitHostResolutionFailure) {
                   ClientSocketPool::ProxyAuthCallback(), pool_.get(),
                   NetLogWithSource()));
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_NAME_NOT_RESOLVED));
+  EXPECT_THAT(handle.resolve_error_info().error, IsError(ERR_DNS_TIMED_OUT));
   ASSERT_EQ(1u, handle.connection_attempts().size());
   EXPECT_TRUE(handle.connection_attempts()[0].endpoint.address().empty());
   EXPECT_THAT(handle.connection_attempts()[0].result,

@@ -76,6 +76,8 @@ class PeopleHandler : public SettingsPageUIHandler,
       DisplayConfigureWithEngineDisabledAndSyncStartupCompleted);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest,
                            ShowSetupCustomPassphraseRequired);
+  FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest,
+                           ShowSetupTrustedVaultKeysRequired);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest, ShowSetupEncryptAll);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest, ShowSetupEncryptAllDisallowed);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest, ShowSetupManuallySyncAll);
@@ -87,6 +89,7 @@ class PeopleHandler : public SettingsPageUIHandler,
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest, ShowSyncSetup);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest, TestSyncEverything);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest, TestSyncAllManually);
+  FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest, NonRegisteredType);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest, TestPassphraseStillRequired);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest, TestSyncIndividualTypes);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest,
@@ -125,10 +128,8 @@ class PeopleHandler : public SettingsPageUIHandler,
       const CoreAccountInfo& primary_account_info) override;
   void OnPrimaryAccountCleared(
       const CoreAccountInfo& previous_primary_account_info) override;
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   void OnExtendedAccountInfoUpdated(const AccountInfo& info) override;
   void OnExtendedAccountInfoRemoved(const AccountInfo& info) override;
-#endif
 
   // syncer::SyncServiceObserver implementation.
   void OnStateChanged(syncer::SyncService* sync) override;
@@ -163,6 +164,7 @@ class PeopleHandler : public SettingsPageUIHandler,
   void HandleSignout(const base::ListValue* args);
   void HandlePauseSync(const base::ListValue* args);
 #endif
+  void HandleStartKeyRetrieval(const base::ListValue* args);
   void HandleGetSyncStatus(const base::ListValue* args);
 
 #if !defined(OS_CHROMEOS)
@@ -179,11 +181,9 @@ class PeopleHandler : public SettingsPageUIHandler,
   void OnPinLoginAvailable(bool is_available);
 #endif
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   void HandleGetStoredAccounts(const base::ListValue* args);
   void HandleStartSyncingWithEmail(const base::ListValue* args);
   base::Value GetStoredAccountsList();
-#endif
 
   // Pushes the updated sync prefs to JavaScript.
   void PushSyncPrefs();

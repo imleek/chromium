@@ -1,0 +1,24 @@
+<style include="cr-shared-style">
+  #customizeButton {
+    bottom: 16px;
+    position: absolute;
+  }
+
+  :host-context([dir='ltr']) #customizeButton {
+    right: 16px;
+  }
+
+  :host-context([dir='rtl']) #customizeButton {
+    left: 16px;
+  }
+</style>
+<ntp-most-visited></ntp-most-visited>
+<dom-if if="[[showCustomizeDialog_]]" restamp>
+  <template>
+    <ntp-customize-dialog on-close="onCustomizeDialogClose_">
+    </ntp-customize-dialog>
+  </template>
+</dom-if>
+<cr-button id="customizeButton" on-click="onCustomizeClick_">
+  $i18n{customizeButton}
+</cr-button>

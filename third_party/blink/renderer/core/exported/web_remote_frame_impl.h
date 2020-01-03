@@ -31,10 +31,6 @@ class CORE_EXPORT WebRemoteFrameImpl final
     : public GarbageCollected<WebRemoteFrameImpl>,
       public WebRemoteFrame {
  public:
-  static WebRemoteFrameImpl* Create(WebTreeScopeType,
-                                    WebRemoteFrameClient*,
-                                    InterfaceRegistry*,
-                                    AssociatedInterfaceProvider*);
   static WebRemoteFrameImpl* CreateMainFrame(WebView*,
                                              WebRemoteFrameClient*,
                                              InterfaceRegistry*,
@@ -89,7 +85,7 @@ class CORE_EXPORT WebRemoteFrameImpl final
   void AddReplicatedContentSecurityPolicyHeader(
       const WebString& header_value,
       network::mojom::ContentSecurityPolicyType,
-      WebContentSecurityPolicySource) override;
+      network::mojom::ContentSecurityPolicySource) override;
   void ResetReplicatedContentSecurityPolicy() override;
   void SetReplicatedInsecureRequestPolicy(WebInsecureRequestPolicy) override;
   void SetReplicatedInsecureNavigationsSet(const WebVector<unsigned>&) override;
@@ -105,7 +101,7 @@ class CORE_EXPORT WebRemoteFrameImpl final
   void BubbleLogicalScroll(WebScrollDirection direction,
                            ScrollGranularity granularity) override;
   void IntrinsicSizingInfoChanged(const WebIntrinsicSizingInfo&) override;
-  void SetHasReceivedUserGestureBeforeNavigation(bool value) override;
+  void SetHadStickyUserActivationBeforeNavigation(bool value) override;
   v8::Local<v8::Object> GlobalProxy() const override;
   WebRect GetCompositingRect() override;
   void RenderFallbackContent() const override;

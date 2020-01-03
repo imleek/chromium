@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback_forward.h"
@@ -226,7 +227,7 @@ class DeviceStatusCollector : public StatusCollector,
 
   // Callbacks from chromeos::VersionLoader.
   void OnOSVersion(const std::string& version);
-  void OnOSFirmware(const std::string& version);
+  void OnOSFirmware(std::pair<const std::string&, const std::string&> version);
   void OnTpmVersion(
       const chromeos::CryptohomeClient::TpmVersionInfo& tpm_version_info);
 
@@ -305,6 +306,10 @@ class DeviceStatusCollector : public StatusCollector,
       CrosHealthdDataReceiver callback,
       chromeos::cros_healthd::mojom::TelemetryInfoPtr reply);
 
+  // Returns true if data (e.g. CPU info, power status, etc.) should be fetched
+  // from cros_healthd.
+  bool ShouldFetchCrosHealthData() const;
+
   // Callback invoked when reporting users pref is changed.
   void ReportingUsersChanged();
 
@@ -335,6 +340,7 @@ class DeviceStatusCollector : public StatusCollector,
 
   std::string os_version_;
   std::string firmware_version_;
+  std::string firmware_fetch_error_;
   chromeos::CryptohomeClient::TpmVersionInfo tpm_version_info_;
 
   struct ResourceUsage {
@@ -396,6 +402,7 @@ class DeviceStatusCollector : public StatusCollector,
   bool report_power_status_ = false;
   bool report_storage_status_ = false;
   bool report_board_status_ = false;
+  bool report_cpu_info_ = false;
 
   std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
       activity_times_subscription_;
@@ -417,6 +424,8 @@ class DeviceStatusCollector : public StatusCollector,
       storage_status_subscription_;
   std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
       board_status_subscription_;
+  std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
+      cpu_info_subscription_;
 
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
 

@@ -41,8 +41,7 @@ class PaymentRequestWebContentsManager;
 class PaymentRequest : public mojom::PaymentRequest,
                        public PaymentHandlerHost::Delegate,
                        public PaymentRequestSpec::Observer,
-                       public PaymentRequestState::Delegate,
-                       public ServiceWorkerPaymentApp::IdentityObserver {
+                       public PaymentRequestState::Delegate {
  public:
   class ObserverForTest {
    public:
@@ -54,6 +53,7 @@ class PaymentRequest : public mojom::PaymentRequest,
     virtual void OnNotSupportedError() = 0;
     virtual void OnConnectionTerminated() = 0;
     virtual void OnAbortCalled() = 0;
+    virtual void OnCompleteCalled() {}
 
    protected:
     virtual ~ObserverForTest() {}
@@ -76,7 +76,7 @@ class PaymentRequest : public mojom::PaymentRequest,
   void Show(bool is_user_gesture, bool wait_for_updated_details) override;
   void Retry(mojom::PaymentValidationErrorsPtr errors) override;
   void UpdateWith(mojom::PaymentDetailsPtr details) override;
-  void NoUpdatedPaymentDetails() override;
+  void OnPaymentDetailsNotUpdated() override;
   void Abort() override;
   void Complete(mojom::PaymentComplete result) override;
   void CanMakePayment() override;
@@ -99,9 +99,8 @@ class PaymentRequest : public mojom::PaymentRequest,
   void OnShippingAddressSelected(mojom::PaymentAddressPtr address) override;
   void OnPayerInfoSelected(mojom::PayerDetailPtr payer_info) override;
 
-  // ServiceWorkerPaymentApp::IdentityObserver:
   void SetInvokedServiceWorkerIdentity(const url::Origin& origin,
-                                       int64_t registration_id) override;
+                                       int64_t registration_id);
 
   // Called when the user explicitly cancelled the flow. Will send a message
   // to the renderer which will indirectly destroy this object (through
@@ -147,9 +146,14 @@ class PaymentRequest : public mojom::PaymentRequest,
   // If the payment sheet is later hidden, this will return false.
   bool IsThisPaymentRequestShowing() const;
 
+  // Returns true when there is exactly one available payment app which can
+  // provide all requested information including shipping address and payer's
+  // contact information whenever needed.
+  bool OnlySingleAppCanProvideAllRequiredInformation() const;
+
   // Returns true if this payment request supports skipping the Payment Sheet.
-  // Typically, this means only one payment method is supported, it's a URL
-  // based method, and no other info is requested from the user.
+  // Typically, this means that exactly one payment app can provide requested
+  // information.
   bool SatisfiesSkipUIConstraints();
 
   // Only records the abort reason if it's the first completion for this Payment

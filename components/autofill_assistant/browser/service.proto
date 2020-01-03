@@ -10,6 +10,10 @@ option java_multiple_files = true;
 
 package autofill_assistant;
 
+import "generic_ui.proto";
+import "model.proto";
+import "view_layout.proto";
+
 // A field trial containing the name of the trial and the name of the
 // randomly selected trial group.
 message FieldTrialProto {
@@ -91,17 +95,6 @@ message SupportsScriptResponseProto {
   optional ClientSettingsProto client_settings = 3;
 }
 
-// Represents a dimension, e.g., width or height.
-message ClientDimensionProto {
-  oneof size {
-    int32 dpi = 1;
-    // Factor to multiply with the client's total width.
-    float width_factor = 2;
-    // Factor to multiply with the client's total height.
-    float height_factor = 3;
-  }
-}
-
 // Overlay image to be drawn on top of full overlays.
 message OverlayImageProto {
   // The image to display. If set, |image_size| is mandatory.
@@ -123,6 +116,10 @@ message OverlayImageProto {
 
 message ClientSettingsProto {
   reserved 10, 11;
+  message IntegrationTestSettings {
+    // Disables animations for the poodle and the progress bar.
+    optional bool disable_header_animations = 1;
+  }
 
   // Time between two periodic script precondition checks.
   optional int32 periodic_script_check_interval_ms = 1;
@@ -175,6 +172,9 @@ message ClientSettingsProto {
 
   // Optional image drawn on top of overlays.
   optional OverlayImageProto overlay_image = 16;
+
+  // Optional settings intended for integration tests.
+  optional IntegrationTestSettings integration_test_settings = 17;
 }
 
 message ScriptTimeoutError {
@@ -509,6 +509,8 @@ message CollectUserDataResultProto {
   optional DateTimeProto date_time_start = 7;
   // The end of the date/time range, if requested.
   optional DateTimeProto date_time_end = 8;
+  // The values obtained by the generic user interface.
+  optional ModelProto model = 9;
 }
 
 message ProcessedActionProto {
@@ -1193,8 +1195,13 @@ message PromptProto {
     // Map this choice to a direct action.
     optional DirectActionProto direct_action = 12;
 
-    // Auto-select this choice if the given element exist.
-    optional ElementReferenceProto auto_select_if_element_exists = 4;
+    oneof auto_select {
+      // Auto-select this choice if the given element exist.
+      ElementReferenceProto auto_select_if_element_exists = 4;
+
+      // Auto-select this choice if the given element disappears.
+      ElementReferenceProto auto_select_if_element_disappears = 14;
+    }
 
     // The chip is only visible or enabled if all the given element exists.
     repeated ElementReferenceProto show_only_if_element_exists = 6;
@@ -1213,6 +1220,10 @@ message PromptProto {
     reserved 13;
   }
   repeated Choice choices = 4;
+
+  // If true, run scripts flagged with 'interrupt=true' as soon as their
+  // preconditions match, then go back to the prompt.
+  optional bool allow_interrupt = 5;
 }
 
 message ContactDetailsProto {
@@ -1232,6 +1243,26 @@ message InfoPopupProto {
   optional string title = 1;
   // The text of the popup window.
   optional string text = 2;
+
+  message DialogButton {
+    message CloseDialog {}
+    message OpenUrlInCCT { optional string url = 1; }
+
+    // The action to be executed on click.
+    oneof click_action {
+      // Closes the popup.
+      CloseDialog close_dialog = 4;
+      // Opens the specified url into a new CCT.
+      OpenUrlInCCT open_url_in_cct = 5;
+    }
+    optional string label = 1;
+  }
+  // Optional: adds a positive button.
+  optional DialogButton positive_button = 3;
+  // Optional: adds a negative button.
+  optional DialogButton negative_button = 4;
+  // Optional: adds a neutral button.
+  optional DialogButton neutral_button = 5;
 }
 
 message LoginDetailsProto {
@@ -1378,7 +1409,7 @@ message CollectUserDataProto {
   optional string terms_require_review_text = 20;
   // Privacy notice telling users that autofill assistant will send personal
   // data to a third party’s website.
-  optional string thirdparty_privacy_notice_text = 21;
+  optional string privacy_notice_text = 21;
   // Optionally allows confiriming through the given direct actions.
   optional DirectActionProto confirm_direct_action = 10;
   // Additional actions available to the user. This can be used for instance to
@@ -1399,6 +1430,8 @@ message CollectUserDataProto {
   repeated UserFormSectionProto additional_prepended_sections = 18;
   // An optional list of additional sections, which is below all other sections.
   repeated UserFormSectionProto additional_appended_sections = 19;
+  // Backend-configured user interface to show.
+  optional GenericUserInterfaceProto generic_user_interface = 22;
 }
 
 // Resets Autofill Assistant: clears any state and server payload.
@@ -1465,6 +1498,9 @@ message DetailsProto {
     // When set to true shows placeholder in place of an image.
     bool show_image_placeholder = 10;
   }
+  // Specifies the hint for accessibility. If set to empty, the image will not
+  // be announced by accessibility.
+  optional string image_accessibility_hint = 14;
 
   // Specifies what happens when user tap on the image in the details section.
   message ImageClickthroughData {
@@ -1661,11 +1697,25 @@ message ShowFormProto {
 
 message FormProto {
   // A result associated to this form, such that |input_results[i]| is the
-  // result of |inputs[i]|.
-  message Result { repeated FormInputProto.Result input_results = 1; }
+  // result of |inputs[i]|. If the user clicks a link while in the form action,
+  // |link| will be set to the index of the clicked link and |input_results|
+  // may be incomplete.
+  message Result {
+    repeated FormInputProto.Result input_results = 1;
+    // If this is set, it contains the index of the text link that was clicked.
+    // E.g., <link4>Details</link4> will populate this field with '4' when
+    // clicked.
+    optional int32 link = 2;
+  }
 
   // The different inputs to display.
   repeated FormInputProto inputs = 1;
+
+  // Optionally adds an informational text below the form.
+  optional string info_label = 2;
+  // If set, an info icon will be shown next to the info label that prompts a
+  // popup when tapped. Ignored if info_label is not set.
+  optional InfoPopupProto info_popup = 3;
 }
 
 message FormInputProto {
@@ -1688,11 +1738,17 @@ message CounterInputProto {
   // A single counter.
   message Counter {
     // The label shown with the counter. All occurrences of the '{value}'
-    // substring will be replaced by the current counter value.
+    // substring will be replaced by the current counter value. May contain
+    // links of the form <link1>Some text</link1>.
     optional string label = 1;
 
-    // Text shown below the label. Optional.
-    optional string subtext = 5;
+    // Text shown below the label. Optional. May contain links of the form
+    // <link1>Some text</link1>.
+    optional string description_line_1 = 5;
+
+    // Text shown below |description_line_2|. Optional. May contain links of the
+    // form <link1>Some text</link1>.
+    optional string description_line_2 = 8;
 
     // The possible values this counter can have. If empty, the possible values
     // will be all integer values between |min_value| and |max_value|.
@@ -1821,8 +1877,17 @@ message CounterInputProto {
 // |min_choices|.
 message SelectionInputProto {
   message Choice {
-    // The label of this choice.
+    // The label of this choice. May contain links of the form <link1>Some
+    // text</link1>.
     optional string label = 1;
+
+    // Text shown below the label. Optional. May contain links of the form
+    // <link1>Some text</link1>.
+    optional string description_line_1 = 3;
+
+    // Text shown below |description_line_2|. Optional. May contain links of the
+    // form <link1>Some text</link1>.
+    optional string description_line_2 = 4;
 
     // Whether this choice is selected by default. If |allow_multiple| is false,
     // then maximum 1 Choice can have this set to true, otherwise the associated

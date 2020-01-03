@@ -59,7 +59,7 @@ class MockPipelineClient : public Pipeline::Client {
                void(BufferingState, BufferingStateChangeReason));
   MOCK_METHOD0(OnDurationChange, void());
   MOCK_METHOD2(OnAddTextTrack,
-               void(const TextTrackConfig&, const AddTextTrackDoneCB&));
+               void(const TextTrackConfig&, AddTextTrackDoneCB));
   MOCK_METHOD1(OnWaiting, void(WaitingReason));
   MOCK_METHOD1(OnAudioConfigChange, void(const AudioDecoderConfig&));
   MOCK_METHOD1(OnVideoConfigChange, void(const VideoDecoderConfig&));
@@ -98,6 +98,7 @@ class MockPipeline : public Pipeline {
   MOCK_METHOD1(SetPlaybackRate, void(double));
   MOCK_CONST_METHOD0(GetVolume, float());
   MOCK_METHOD1(SetVolume, void(float));
+  MOCK_METHOD1(SetLatencyHint, void(base::Optional<base::TimeDelta>));
 
   // TODO(sandersd): These should probably have setters too.
   MOCK_CONST_METHOD0(GetMediaTime, base::TimeDelta());
@@ -297,7 +298,7 @@ class MockVideoRenderer : public VideoRenderer {
                     RendererClient* client,
                     const TimeSource::WallClockTimeCB& wall_clock_time_cb,
                     const PipelineStatusCB& init_cb));
-  MOCK_METHOD1(Flush, void(const base::Closure& callback));
+  MOCK_METHOD1(Flush, void(base::OnceClosure flush_cb));
   MOCK_METHOD1(StartPlayingFrom, void(base::TimeDelta));
   MOCK_METHOD0(OnTimeProgressing, void());
   MOCK_METHOD0(OnTimeStopped, void());
@@ -318,7 +319,7 @@ class MockAudioRenderer : public AudioRenderer {
                     RendererClient* client,
                     const PipelineStatusCB& init_cb));
   MOCK_METHOD0(GetTimeSource, TimeSource*());
-  MOCK_METHOD1(Flush, void(const base::Closure& callback));
+  MOCK_METHOD1(Flush, void(base::OnceClosure flush_cb));
   MOCK_METHOD0(StartPlaying, void());
   MOCK_METHOD1(SetVolume, void(float volume));
 
@@ -341,6 +342,7 @@ class MockRenderer : public Renderer {
                void(MediaResource* media_resource,
                     RendererClient* client,
                     PipelineStatusCallback& init_cb));
+  MOCK_METHOD1(SetLatencyHint, void(base::Optional<base::TimeDelta>));
   void Flush(base::OnceClosure flush_cb) { OnFlush(flush_cb); }
   MOCK_METHOD1(OnFlush, void(base::OnceClosure& flush_cb));
   MOCK_METHOD1(StartPlayingFrom, void(base::TimeDelta timestamp));
@@ -489,6 +491,8 @@ class MockCdmContext : public CdmContext {
   ~MockCdmContext() override;
 
   MOCK_METHOD0(GetDecryptor, Decryptor*());
+  MOCK_METHOD0(RequiresMediaFoundationRenderer, bool());
+
   int GetCdmId() const override;
 
   void set_cdm_id(int cdm_id);

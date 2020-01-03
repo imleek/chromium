@@ -48,7 +48,6 @@
 #include "third_party/blink/renderer/platform/bindings/runtime_call_stats.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
-#include "third_party/blink/renderer/platform/heap/address_cache.h"
 #include "third_party/blink/renderer/platform/heap/blink_gc_memory_dump_provider.h"
 #include "third_party/blink/renderer/platform/heap/cancelable_task_scheduler.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -128,8 +127,6 @@ class WorkerPoolTaskRunner : public base::TaskRunner {
     worker_pool::PostTask(location, WTF::CrossThreadBindOnce(std::move(task)));
     return true;
   }
-
-  bool RunsTasksInCurrentSequence() const override { return false; }
 };
 
 }  // namespace
@@ -891,6 +888,8 @@ void UpdateHistograms(const ThreadHeapStatsCollector::Event& event) {
   UMA_HISTOGRAM_TIMES("BlinkGC.TimeForAtomicPhaseMarking",
                       event.atomic_marking_time());
   UMA_HISTOGRAM_TIMES("BlinkGC.TimeForGCCycle", event.gc_cycle_time());
+  UMA_HISTOGRAM_TIMES("BlinkGC.TimeForMarkingRoots",
+                      event.roots_marking_time());
   UMA_HISTOGRAM_TIMES("BlinkGC.TimeForIncrementalMarking",
                       event.incremental_marking_time());
   UMA_HISTOGRAM_TIMES("BlinkGC.TimeForMarking.Foreground",
@@ -1210,7 +1209,12 @@ void ThreadState::IncrementalMarkingStep(BlinkGC::StackState stack_state,
     Heap().FlushNotFullyConstructedObjects();
   }
 
-  bool complete = MarkPhaseAdvanceMarking(base::TimeTicks::Now() + duration);
+  bool complete = true;
+  // If duration is 0, should skip incremental marking.
+  if (!duration.is_zero()) {
+    complete =
+        complete && MarkPhaseAdvanceMarking(base::TimeTicks::Now() + duration);
+  }
 
   if (base::FeatureList::IsEnabled(
           blink::features::kBlinkHeapConcurrentMarking)) {
@@ -1445,9 +1449,6 @@ void ThreadState::AtomicPauseSweepAndCompact(
     unified_heap_controller()->IterateTracedGlobalHandles(&visitor);
   }
 
-  // Allocation is allowed during the pre-finalizers and destructors.
-  // However, they must not mutate an object graph in a way in which
-  // a dead object gets resurrected.
   InvokePreFinalizers();
 
   // Slots filtering requires liveness information which is only present before
@@ -1619,6 +1620,9 @@ void ThreadState::MarkPhasePrologue(BlinkGC::StackState stack_state,
 }
 
 void ThreadState::MarkPhaseVisitRoots() {
+  ThreadHeapStatsCollector::Scope stats_scope(
+      Heap().stats_collector(), ThreadHeapStatsCollector::kVisitRoots);
+
   Visitor* visitor = current_gc_data_.visitor.get();
 
   VisitPersistents(visitor);
@@ -1640,9 +1644,8 @@ void ThreadState::MarkPhaseVisitRoots() {
   }
 
   if (current_gc_data_.stack_state == BlinkGC::kHeapPointersOnStack) {
-    ThreadHeapStatsCollector::Scope stats_scope(
+    ThreadHeapStatsCollector::Scope stack_stats_scope(
         Heap().stats_collector(), ThreadHeapStatsCollector::kVisitStackRoots);
-    AddressCache::EnabledScope address_cache_scope(Heap().address_cache());
     PushRegistersAndVisitStack();
   }
 }

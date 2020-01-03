@@ -87,11 +87,11 @@ class HomeButtonTest : public AshTestBase,
 };
 
 // The parameter indicates whether the kShelfHotseat feature is enabled.
-INSTANTIATE_TEST_SUITE_P(, HomeButtonTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, HomeButtonTest, testing::Bool());
 
 TEST_P(HomeButtonTest, SwipeUpToOpenFullscreenAppList) {
   Shelf* shelf = GetPrimaryShelf();
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
+  EXPECT_EQ(ShelfAlignment::kBottom, shelf->alignment());
 
   // Start the drags from the center of the shelf.
   const ShelfView* shelf_view = shelf->GetShelfViewForTesting();
@@ -106,12 +106,12 @@ TEST_P(HomeButtonTest, SwipeUpToOpenFullscreenAppList) {
       start, end, base::TimeDelta::FromMilliseconds(100), 4 /* steps */);
   GetAppListTestHelper()->WaitUntilIdle();
   GetAppListTestHelper()->CheckVisibility(true);
-  GetAppListTestHelper()->CheckState(ash::AppListViewState::kPeeking);
+  GetAppListTestHelper()->CheckState(AppListViewState::kPeeking);
 
   // Closing the app list.
   GetAppListTestHelper()->DismissAndRunLoop();
   GetAppListTestHelper()->CheckVisibility(false);
-  GetAppListTestHelper()->CheckState(ash::AppListViewState::kClosed);
+  GetAppListTestHelper()->CheckState(AppListViewState::kClosed);
 
   // Swiping above the threshold should trigger a fullscreen app list.
   end.set_y(shelf->GetIdealBounds().bottom() -
@@ -121,12 +121,12 @@ TEST_P(HomeButtonTest, SwipeUpToOpenFullscreenAppList) {
   base::RunLoop().RunUntilIdle();
   GetAppListTestHelper()->WaitUntilIdle();
   GetAppListTestHelper()->CheckVisibility(true);
-  GetAppListTestHelper()->CheckState(ash::AppListViewState::kFullscreenAllApps);
+  GetAppListTestHelper()->CheckState(AppListViewState::kFullscreenAllApps);
 }
 
 TEST_P(HomeButtonTest, ClickToOpenAppList) {
   Shelf* shelf = GetPrimaryShelf();
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
+  EXPECT_EQ(ShelfAlignment::kBottom, shelf->alignment());
 
   gfx::Point center = home_button()->GetCenterPoint();
   views::View::ConvertPointToScreen(home_button(), &center);
@@ -136,11 +136,11 @@ TEST_P(HomeButtonTest, ClickToOpenAppList) {
   GetEventGenerator()->ClickLeftButton();
   GetAppListTestHelper()->WaitUntilIdle();
   GetAppListTestHelper()->CheckVisibility(true);
-  GetAppListTestHelper()->CheckState(ash::AppListViewState::kPeeking);
+  GetAppListTestHelper()->CheckState(AppListViewState::kPeeking);
   GetEventGenerator()->ClickLeftButton();
   GetAppListTestHelper()->WaitUntilIdle();
   GetAppListTestHelper()->CheckVisibility(false);
-  GetAppListTestHelper()->CheckState(ash::AppListViewState::kClosed);
+  GetAppListTestHelper()->CheckState(AppListViewState::kClosed);
 
   // Shift-click should open the app list in fullscreen.
   GetEventGenerator()->set_flags(ui::EF_SHIFT_DOWN);
@@ -148,7 +148,7 @@ TEST_P(HomeButtonTest, ClickToOpenAppList) {
   GetEventGenerator()->set_flags(0);
   GetAppListTestHelper()->WaitUntilIdle();
   GetAppListTestHelper()->CheckVisibility(true);
-  GetAppListTestHelper()->CheckState(ash::AppListViewState::kFullscreenAllApps);
+  GetAppListTestHelper()->CheckState(AppListViewState::kFullscreenAllApps);
 
   // Another shift-click should close the app list.
   GetEventGenerator()->set_flags(ui::EF_SHIFT_DOWN);
@@ -156,7 +156,7 @@ TEST_P(HomeButtonTest, ClickToOpenAppList) {
   GetEventGenerator()->set_flags(0);
   GetAppListTestHelper()->WaitUntilIdle();
   GetAppListTestHelper()->CheckVisibility(false);
-  GetAppListTestHelper()->CheckState(ash::AppListViewState::kClosed);
+  GetAppListTestHelper()->CheckState(AppListViewState::kClosed);
 }
 
 TEST_P(HomeButtonTest, ButtonPositionInTabletMode) {
@@ -172,42 +172,22 @@ TEST_P(HomeButtonTest, ButtonPositionInTabletMode) {
   // When hotseat is enabled, home button position changes between in-app shelf
   // and home shelf, so test in-app when hotseat is enabled.
   if (GetParam()) {
-    // Wait for the navigation widget's animation.
-    test_api.RunMessageLoopUntilAnimationsDone(
-        GetPrimaryShelf()
-            ->shelf_widget()
-            ->navigation_widget()
-            ->get_bounds_animator_for_testing());
-
     EXPECT_EQ(home_button()->bounds().x(), 0);
 
     // Switch to in-app shelf.
     std::unique_ptr<views::Widget> widget = CreateTestWidget();
   }
 
-  // Wait for the navigation widget's animation.
-  test_api.RunMessageLoopUntilAnimationsDone(
-      GetPrimaryShelf()
-          ->shelf_widget()
-          ->navigation_widget()
-          ->get_bounds_animator_for_testing());
   EXPECT_GT(home_button()->bounds().x(), 0);
 
   Shell::Get()->tablet_mode_controller()->SetEnabledForTest(false);
-  test_api.RunMessageLoopUntilAnimationsDone(
-      GetPrimaryShelf()
-          ->shelf_widget()
-          ->navigation_widget()
-          ->get_bounds_animator_for_testing());
 
   // Visual space around the home button is set at the widget level.
   EXPECT_EQ(0, home_button()->bounds().x());
 }
 
 TEST_P(HomeButtonTest, LongPressGesture) {
-  ui::ScopedAnimationDurationScaleMode animation_duration_mode(
-      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
-  // Simulate two user with primary user as active.
+  // Simulate two users with primary user as active.
   CreateUserSessions(2);
 
   // Enable the Assistant in system settings.

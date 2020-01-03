@@ -295,7 +295,7 @@ ParseVariants(const base::StringPiece& str) {
     // [spec text]
     if (!it->is_string() && !it->is_token())
       return base::nullopt;
-    std::string field_name = it->string();
+    std::string field_name = it->GetString();
     std::vector<std::string> available_values;
     available_values.reserve(inner_list.size() - 1);
     for (++it; it != inner_list.end(); ++it) {
@@ -304,7 +304,7 @@ ParseVariants(const base::StringPiece& str) {
       // [spec text]
       if (!it->is_string() && !it->is_token())
         return base::nullopt;
-      available_values.push_back(it->string());
+      available_values.push_back(it->GetString());
     }
     variants.push_back(std::make_pair(field_name, available_values));
   }
@@ -346,7 +346,7 @@ base::Optional<std::vector<std::vector<std::string>>> ParseVariantKey(
     for (const http_structured_header::Item& item : inner_list) {
       if (!item.is_string() && !item.is_token())
         return base::nullopt;
-      list_members.push_back(item.string());
+      list_members.push_back(item.GetString());
     }
     variant_keys.push_back(list_members);
   }
@@ -408,6 +408,11 @@ SignedExchangeRequestMatcher::FindBestMatchingVariantKey(
     const std::vector<std::string>& variant_key_list) const {
   return FindBestMatchingVariantKey(request_headers_, variants,
                                     variant_key_list);
+}
+
+base::Optional<size_t> SignedExchangeRequestMatcher::FindBestMatchingIndex(
+    const std::string& variants) const {
+  return FindBestMatchingIndex(request_headers_, variants);
 }
 
 // Implements "Cache Behaviour" [1] when "stored-responses" is a singleton list
@@ -606,6 +611,48 @@ SignedExchangeRequestMatcher::FindBestMatchingVariantKey(
     }
   }
   return found_variant_key;
+}
+
+// static
+base::Optional<size_t> SignedExchangeRequestMatcher::FindBestMatchingIndex(
+    const net::HttpRequestHeaders& request_headers,
+    const std::string& variants) {
+  auto parsed_variants = ParseVariants(variants);
+  if (!parsed_variants)
+    return base::nullopt;
+
+  size_t best_match_index = 0;
+  for (const auto& variant_axis : *parsed_variants) {
+    const std::string field_name = base::ToLowerASCII(variant_axis.first);
+    std::unique_ptr<ContentNegotiationAlgorithm> negotiation_algorithm =
+        GetContentNegotiationAlgorithm(field_name);
+    if (!negotiation_algorithm)
+      return base::nullopt;
+    base::Optional<std::string> request_value;
+    std::string header_value;
+    if (request_headers.GetHeader(field_name, &header_value))
+      request_value = header_value;
+
+    std::vector<std::string> sorted_values =
+        negotiation_algorithm->run(variant_axis.second, request_value);
+    if (sorted_values.empty())
+      return base::nullopt;
+    auto it = std::find(variant_axis.second.begin(), variant_axis.second.end(),
+                        sorted_values.front());
+    if (it == variant_axis.second.end())
+      return base::nullopt;
+    size_t best_value_index = it - variant_axis.second.begin();
+
+    if (!base::CheckMul(best_match_index, variant_axis.second.size())
+             .AssignIfValid(&best_match_index)) {
+      return base::nullopt;
+    }
+    if (!base::CheckAdd(best_match_index, best_value_index)
+             .AssignIfValid(&best_match_index)) {
+      return base::nullopt;
+    }
+  }
+  return best_match_index;
 }
 
 }  // namespace blink

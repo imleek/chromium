@@ -16,6 +16,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.MathUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -26,10 +27,9 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
-import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -87,6 +87,11 @@ public class BottomSheetControllerTest {
     /** @return The activity's BottomSheet. */
     private BottomSheet getBottomSheet() {
         return (BottomSheet) mSheetController.getBottomSheetViewForTesting();
+    }
+
+    /** @return The height of the container view. */
+    private int getContainerHeight() {
+        return mActivityTestRule.getActivity().getActivityTabProvider().get().getView().getHeight();
     }
 
     @Test
@@ -377,8 +382,7 @@ public class BottomSheetControllerTest {
     @MediumTest
     public void testCustomHalfRatio() throws TimeoutException {
         final float customHalfHeight = 0.3f;
-        int containerHeight =
-                mActivityTestRule.getActivity().getActivityTabProvider().get().getHeight();
+        int containerHeight = getContainerHeight();
         mLowPriorityContent.setHalfHeightRatio(customHalfHeight);
         requestContentInSheet(mLowPriorityContent, true);
 
@@ -393,8 +397,7 @@ public class BottomSheetControllerTest {
     @MediumTest
     public void testCustomFullRatio() throws TimeoutException {
         final float customFullHeight = 0.5f;
-        int containerHeight =
-                mActivityTestRule.getActivity().getActivityTabProvider().get().getHeight();
+        int containerHeight = getContainerHeight();
         mLowPriorityContent.setFullHeightRatio(customFullHeight);
         requestContentInSheet(mLowPriorityContent, true);
 

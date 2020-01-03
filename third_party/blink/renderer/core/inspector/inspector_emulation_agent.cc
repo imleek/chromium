@@ -4,9 +4,8 @@
 
 #include "third_party/blink/renderer/core/inspector/inspector_emulation_agent.h"
 
+#include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_float_point.h"
-#include "third_party/blink/public/platform/web_touch_event.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -145,8 +144,10 @@ void InspectorEmulationAgent::Restore() {
 }
 
 Response InspectorEmulationAgent::disable() {
-  if (enabled_)
+  if (enabled_) {
     instrumenting_agents_->RemoveInspectorEmulationAgent(this);
+    enabled_ = false;
+  }
   setUserAgentOverride(String(), protocol::Maybe<String>(),
                        protocol::Maybe<String>());
   if (!web_local_frame_)
@@ -430,7 +431,10 @@ void InspectorEmulationAgent::VirtualTimeBudgetExpired() {
   view->Scheduler()->SetVirtualTimePolicy(
       PageScheduler::VirtualTimePolicy::kPause);
   virtual_time_policy_.Set(protocol::Emulation::VirtualTimePolicyEnum::Pause);
-  GetFrontend()->virtualTimeBudgetExpired();
+  // We could have been detached while VT was still running.
+  // TODO(caseq): should we rather force-pause the time upon Disable()?
+  if (auto* frontend = GetFrontend())
+    frontend->virtualTimeBudgetExpired();
 }
 
 Response InspectorEmulationAgent::setDefaultBackgroundColorOverride(

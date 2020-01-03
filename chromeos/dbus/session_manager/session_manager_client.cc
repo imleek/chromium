@@ -343,11 +343,12 @@ class SessionManagerClientImpl : public SessionManagerClient {
                                        base::DoNothing());
   }
 
-  void StopSession() override {
-    dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
-                                 login_manager::kSessionManagerStopSession);
+  void StopSession(login_manager::SessionStopReason reason) override {
+    dbus::MethodCall method_call(
+        login_manager::kSessionManagerInterface,
+        login_manager::kSessionManagerStopSessionWithReason);
     dbus::MessageWriter writer(&method_call);
-    writer.AppendString("");  // Unique ID is deprecated
+    writer.AppendUint32(static_cast<uint32_t>(reason));
     session_manager_proxy_->CallMethod(&method_call,
                                        dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
                                        base::DoNothing());
@@ -656,36 +657,38 @@ class SessionManagerClientImpl : public SessionManagerClient {
     session_manager_proxy_->ConnectToSignal(
         login_manager::kSessionManagerInterface,
         login_manager::kOwnerKeySetSignal,
-        base::Bind(&SessionManagerClientImpl::OwnerKeySetReceived,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(&SessionManagerClientImpl::OwnerKeySetReceived,
+                            weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&SessionManagerClientImpl::SignalConnected,
                        weak_ptr_factory_.GetWeakPtr()));
     session_manager_proxy_->ConnectToSignal(
         login_manager::kSessionManagerInterface,
         login_manager::kPropertyChangeCompleteSignal,
-        base::Bind(&SessionManagerClientImpl::PropertyChangeCompleteReceived,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(
+            &SessionManagerClientImpl::PropertyChangeCompleteReceived,
+            weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&SessionManagerClientImpl::SignalConnected,
                        weak_ptr_factory_.GetWeakPtr()));
     session_manager_proxy_->ConnectToSignal(
         login_manager::kSessionManagerInterface,
         login_manager::kScreenIsLockedSignal,
-        base::Bind(&SessionManagerClientImpl::ScreenIsLockedReceived,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(&SessionManagerClientImpl::ScreenIsLockedReceived,
+                            weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&SessionManagerClientImpl::SignalConnected,
                        weak_ptr_factory_.GetWeakPtr()));
     session_manager_proxy_->ConnectToSignal(
         login_manager::kSessionManagerInterface,
         login_manager::kScreenIsUnlockedSignal,
-        base::Bind(&SessionManagerClientImpl::ScreenIsUnlockedReceived,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(&SessionManagerClientImpl::ScreenIsUnlockedReceived,
+                            weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&SessionManagerClientImpl::SignalConnected,
                        weak_ptr_factory_.GetWeakPtr()));
     session_manager_proxy_->ConnectToSignal(
         login_manager::kSessionManagerInterface,
         login_manager::kArcInstanceStopped,
-        base::Bind(&SessionManagerClientImpl::ArcInstanceStoppedReceived,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(
+            &SessionManagerClientImpl::ArcInstanceStoppedReceived,
+            weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&SessionManagerClientImpl::SignalConnected,
                        weak_ptr_factory_.GetWeakPtr()));
   }

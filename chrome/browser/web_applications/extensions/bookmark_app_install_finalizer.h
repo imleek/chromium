@@ -48,7 +48,12 @@ class BookmarkAppInstallFinalizer : public web_app::InstallFinalizer {
       UninstallWebAppCallback callback) override;
   bool CanUserUninstallFromSync(const web_app::AppId& app_id) const override;
   void UninstallWebAppFromSyncByUser(const web_app::AppId& app_id,
-                                     UninstallWebAppCallback) override;
+                                     UninstallWebAppCallback callback) override;
+  bool CanUserUninstallExternalApp(const web_app::AppId& app_id) const override;
+  void UninstallExternalAppByUser(const web_app::AppId& app_id,
+                                  UninstallWebAppCallback callback) override;
+  bool WasExternalAppUninstalledByUser(
+      const web_app::AppId& app_id) const override;
   bool CanRevealAppShim() const override;
   void RevealAppShim(const web_app::AppId& app_id) override;
 
@@ -67,6 +72,7 @@ class BookmarkAppInstallFinalizer : public web_app::InstallFinalizer {
   void OnExtensionInstalled(const GURL& app_url,
                             LaunchType launch_type,
                             bool is_locally_installed,
+                            bool is_system_app,
                             InstallFinalizedCallback callback,
                             scoped_refptr<CrxInstaller> crx_installer,
                             const base::Optional<CrxInstallError>& error);

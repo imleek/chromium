@@ -11,6 +11,12 @@
 #include "ash/ash_export.h"
 #include "base/callback.h"
 #include "base/strings/string16.h"
+#include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom-forward.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "services/content/public/mojom/navigable_contents_factory.mojom-forward.h"
+#include "services/device/public/mojom/bluetooth_system.mojom-forward.h"
+#include "services/device/public/mojom/fingerprint.mojom-forward.h"
+#include "services/media_session/public/mojom/media_session_service.mojom-forward.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace aura {
@@ -40,6 +46,28 @@ class ASH_EXPORT ShellDelegate {
 
   // Check whether the current tab of the browser window can go back.
   virtual bool CanGoBack(gfx::NativeWindow window) const = 0;
+
+  // Binds a BluetoothSystemFactory receiver if possible.
+  virtual void BindBluetoothSystemFactory(
+      mojo::PendingReceiver<device::mojom::BluetoothSystemFactory> receiver) {}
+
+  // Binds a fingerprint receiver in the Device Service if possible.
+  virtual void BindFingerprint(
+      mojo::PendingReceiver<device::mojom::Fingerprint> receiver) {}
+
+  // Binds a NavigableContentsFactory receiver for the current active user.
+  virtual void BindNavigableContentsFactory(
+      mojo::PendingReceiver<content::mojom::NavigableContentsFactory>
+          receiver) = 0;
+
+  // Binds a MultiDeviceSetup receiver for the primary profile.
+  virtual void BindMultiDeviceSetup(
+      mojo::PendingReceiver<
+          chromeos::multidevice_setup::mojom::MultiDeviceSetup> receiver) = 0;
+
+  // Returns an interface to the Media Session service, or null if not
+  // available.
+  virtual media_session::mojom::MediaSessionService* GetMediaSessionService();
 
   virtual void OpenKeyboardShortcutHelpPage() const {}
 };

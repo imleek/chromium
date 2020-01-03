@@ -63,12 +63,13 @@ scoped_refptr<const NGPhysicalBoxFragment> NGPhysicalBoxFragment::Create(
   // we pass the buffer as a constructor argument.
   void* data = ::WTF::Partitions::FastMalloc(
       byte_size, ::WTF::GetStringWithTypeName<NGPhysicalBoxFragment>());
-  new (data) NGPhysicalBoxFragment(builder, borders, padding,
+  new (data) NGPhysicalBoxFragment(PassKey(), builder, borders, padding,
                                    block_or_line_writing_mode);
   return base::AdoptRef(static_cast<NGPhysicalBoxFragment*>(data));
 }
 
 NGPhysicalBoxFragment::NGPhysicalBoxFragment(
+    PassKey key,
     NGBoxFragmentBuilder* builder,
     const NGPhysicalBoxStrut& borders,
     const NGPhysicalBoxStrut& padding,
@@ -82,7 +83,7 @@ NGPhysicalBoxFragment::NGPhysicalBoxFragment(
               : kFragmentBox,
           builder->BoxType()),
       baselines_(builder->baselines_) {
-  DCHECK(GetLayoutObject() && GetLayoutObject()->IsBoxModelObject());
+  DCHECK(layout_object_->IsBoxModelObject());
   if (NGFragmentItemsBuilder* items_builder = builder->ItemsBuilder()) {
     has_fragment_items_ = true;
     NGFragmentItems* items =
@@ -104,6 +105,8 @@ NGPhysicalBoxFragment::NGPhysicalBoxFragment(
       builder->consumed_block_size_ <= builder->size_.block_size;
   is_fieldset_container_ = builder->is_fieldset_container_;
   is_legacy_layout_root_ = builder->is_legacy_layout_root_;
+  is_painted_atomically_ =
+      builder->space_ && builder->space_->IsPaintedAtomically();
   border_edge_ = builder->border_edges_.ToPhysical(builder->GetWritingMode());
   children_inline_ =
       builder->layout_object_ && builder->layout_object_->ChildrenInline();
@@ -123,6 +126,8 @@ NGPhysicalBoxFragment::CloneAsHiddenForPaint() const {
 }
 
 bool NGPhysicalBoxFragment::HasSelfPaintingLayer() const {
+  if (!IsCSSBox())
+    return false;
   SECURITY_DCHECK(GetLayoutObject() && GetLayoutObject()->IsBoxModelObject());
   return (static_cast<const LayoutBoxModelObject*>(GetLayoutObject()))
       ->HasSelfPaintingLayer();
@@ -151,7 +156,7 @@ PhysicalRect NGPhysicalBoxFragment::ScrollableOverflow() const {
     TextDirection container_direction = Style().Direction();
     for (const auto& child_fragment : Children()) {
       PhysicalRect child_overflow =
-          child_fragment->ScrollableOverflowForPropagation(layout_object);
+          child_fragment->ScrollableOverflowForPropagation(*this);
       if (child_fragment->Style() != Style()) {
         PhysicalOffset relative_offset = ComputeRelativeOffset(
             child_fragment->Style(), container_writing_mode,
@@ -168,10 +173,90 @@ PhysicalRect NGPhysicalBoxFragment::ScrollableOverflow() const {
   return PhysicalRect({}, Size());
 }
 
-LayoutSize NGPhysicalBoxFragment::ScrolledContentOffset() const {
+PhysicalRect NGPhysicalBoxFragment::ScrollableOverflowFromChildren() const {
+  if (Children().empty())
+    return PhysicalRect();
+
+  const LayoutBox* layout_object = ToLayoutBox(GetLayoutObject());
+  const ComputedStyle& style = Style();
+  DCHECK_EQ(&style, &layout_object->StyleRef(UsesFirstLineStyle()));
+  const WritingMode writing_mode = style.GetWritingMode();
+  const TextDirection direction = style.Direction();
+  const LayoutUnit border_inline_start = LayoutUnit(style.BorderStartWidth());
+  const LayoutUnit border_block_start = LayoutUnit(style.BorderBeforeWidth());
+  const PhysicalSize& size = Size();
+
+  // End and under padding are added to scroll overflow of inline children.
+  // https://github.com/w3c/csswg-drafts/issues/129
+  base::Optional<NGPhysicalBoxStrut> padding_strut;
+  DCHECK_EQ(layout_object->HasOverflowClip(), HasOverflowClip());
+  if (HasOverflowClip()) {
+    padding_strut = NGBoxStrut(LayoutUnit(), layout_object->PaddingEnd(),
+                               LayoutUnit(), layout_object->PaddingAfter())
+                        .ConvertToPhysical(writing_mode, direction);
+  }
+
+  // Rectangles not reachable by scroll should not be added to overflow.
+  auto IsRectReachableByScroll = [&border_inline_start, &border_block_start,
+                                  &writing_mode, &direction,
+                                  &size](const PhysicalRect& rect) {
+    LogicalOffset rect_logical_end =
+        rect.offset.ConvertToLogical(writing_mode, direction, size, rect.size) +
+        rect.size.ConvertToLogical(writing_mode);
+    return (rect_logical_end.inline_offset > border_inline_start &&
+            rect_logical_end.block_offset > border_block_start);
+  };
+
+  const bool children_inline = ChildrenInline();
+  DCHECK_EQ(children_inline, layout_object->ChildrenInline());
+  PhysicalRect children_overflow;
+  base::Optional<PhysicalRect> lineboxes_enclosing_rect;
+  // Only add overflow for fragments NG has not reflected into Legacy.
+  // These fragments are:
+  // - inline fragments,
+  // - out of flow fragments whose css container is inline box.
+  // TODO(layout-dev) Transforms also need to be applied to compute overflow
+  // correctly. NG is not yet transform-aware. crbug.com/855965
+  for (const auto& child : Children()) {
+    PhysicalRect child_scrollable_overflow;
+    if (child->IsFloatingOrOutOfFlowPositioned()) {
+      child_scrollable_overflow =
+          child->ScrollableOverflowForPropagation(*this);
+      child_scrollable_overflow.offset +=
+          ComputeRelativeOffset(child->Style(), writing_mode, direction, size);
+    } else if (children_inline && child->IsLineBox()) {
+      DCHECK(child->IsLineBox());
+      child_scrollable_overflow =
+          To<NGPhysicalLineBoxFragment>(*child).ScrollableOverflow(*this,
+                                                                   style);
+      if (padding_strut) {
+        PhysicalRect linebox_rect(child.Offset(), child->Size());
+        if (lineboxes_enclosing_rect)
+          lineboxes_enclosing_rect->Unite(linebox_rect);
+        else
+          lineboxes_enclosing_rect = linebox_rect;
+      }
+    } else {
+      continue;
+    }
+    child_scrollable_overflow.offset += child.Offset();
+    // Do not add overflow if fragment is not reachable by scrolling.
+    if (IsRectReachableByScroll(child_scrollable_overflow))
+      children_overflow.Unite(child_scrollable_overflow);
+  }
+  if (lineboxes_enclosing_rect) {
+    lineboxes_enclosing_rect->Expand(*padding_strut);
+    if (IsRectReachableByScroll(*lineboxes_enclosing_rect))
+      children_overflow.Unite(*lineboxes_enclosing_rect);
+  }
+
+  return children_overflow;
+}
+
+LayoutSize NGPhysicalBoxFragment::PixelSnappedScrolledContentOffset() const {
   DCHECK(GetLayoutObject() && GetLayoutObject()->IsBox());
   const LayoutBox* box = ToLayoutBox(GetLayoutObject());
-  return box->ScrolledContentOffset();
+  return box->PixelSnappedScrolledContentOffset();
 }
 
 PhysicalSize NGPhysicalBoxFragment::ScrollSize() const {
@@ -212,9 +297,10 @@ void NGPhysicalBoxFragment::AddSelfOutlineRects(
   if (!NGOutlineUtils::ShouldPaintOutline(*this))
     return;
 
-  const LayoutObject* layout_object = GetLayoutObject();
-  DCHECK(layout_object);
-  if (layout_object->IsLayoutInline()) {
+  if (IsInlineBox()) {
+    const LayoutObject* layout_object = GetLayoutObject();
+    DCHECK(layout_object);
+    DCHECK(layout_object->IsLayoutInline());
     Vector<PhysicalRect> blockflow_outline_rects =
         layout_object->OutlineRects(PhysicalOffset(), outline_type);
     // The rectangles returned are offset from the containing block. We need the
@@ -234,12 +320,11 @@ void NGPhysicalBoxFragment::AddSelfOutlineRects(
     }
     return;
   }
-  DCHECK(layout_object->IsBox());
 
   // For anonymous blocks, the children add outline rects.
-  if (!layout_object->IsAnonymous()) {
+  if (!IsAnonymousBlock())
     outline_rects->emplace_back(additional_offset, Size().ToLayoutSize());
-  }
+
   if (outline_type == NGOutlineType::kIncludeBlockVisualOverflow &&
       !HasOverflowClip() && !HasControlClip(*this)) {
     // Tricky code ahead: we pass a 0,0 additional_offset to
@@ -319,6 +404,7 @@ void NGPhysicalBoxFragment::CheckSameForSimplifiedLayout(
   DCHECK_EQ(children_inline_, other.children_inline_);
   DCHECK_EQ(is_fieldset_container_, other.is_fieldset_container_);
   DCHECK_EQ(is_legacy_layout_root_, other.is_legacy_layout_root_);
+  DCHECK_EQ(is_painted_atomically_, other.is_painted_atomically_);
   DCHECK_EQ(border_edge_, other.border_edge_);
 
   // The oof_positioned_descendants_ vector can change during "simplified"

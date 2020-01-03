@@ -23,11 +23,13 @@
 #include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "media/base/limits.h"
 #include "media/base/video_decoder_config.h"
+#include "media/gpu/chromeos/fourcc.h"
 #include "media/gpu/chromeos/image_processor.h"
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
 #include "media/gpu/media_gpu_export.h"
@@ -104,7 +106,7 @@ class MEDIA_GPU_EXPORT V4L2VideoDecodeAccelerator
       EGLDisplay egl_display,
       const GetGLContextCallback& get_gl_context_cb,
       const MakeGLContextCurrentCallback& make_context_current_cb,
-      const scoped_refptr<V4L2Device>& device);
+      scoped_refptr<V4L2Device> device);
   ~V4L2VideoDecodeAccelerator() override;
 
   // VideoDecodeAccelerator implementation.
@@ -261,7 +263,7 @@ class MEDIA_GPU_EXPORT V4L2VideoDecodeAccelerator
                          std::vector<base::ScopedFD> dmabuf_fds,
                          GLuint texture_id,
                          const gfx::Size& size,
-                         uint32_t fourcc);
+                         const Fourcc fourcc);
 
   // Take the EGLImage |egl_image|, created for |picture_buffer_id|, and use it
   // for OutputRecord at |buffer_index|.
@@ -288,8 +290,8 @@ class MEDIA_GPU_EXPORT V4L2VideoDecodeAccelerator
   bool DequeueResolutionChangeEvent();
 
   // Enqueue a buffer on the corresponding queue.
-  bool EnqueueInputRecord();
-  bool EnqueueOutputRecord();
+  bool EnqueueInputRecord(V4L2WritableBufferRef buffer);
+  bool EnqueueOutputRecord(V4L2WritableBufferRef buffer);
 
   // Task to flag the specified picture buffer for reuse, executed on the
   // decoder_thread_. The picture buffer can only be reused after the specified
@@ -521,7 +523,7 @@ class MEDIA_GPU_EXPORT V4L2VideoDecodeAccelerator
   // them.
   //
 
-  V4L2WritableBufferRef current_input_buffer_;
+  base::Optional<V4L2WritableBufferRef> current_input_buffer_;
 
   scoped_refptr<V4L2Queue> input_queue_;
   scoped_refptr<V4L2Queue> output_queue_;
@@ -588,7 +590,7 @@ class MEDIA_GPU_EXPORT V4L2VideoDecodeAccelerator
   // Chosen input format for video_profile_.
   uint32_t input_format_fourcc_;
   // Chosen output format.
-  uint32_t output_format_fourcc_;
+  base::Optional<Fourcc> output_format_fourcc_;
 
   // Image processor device, if one is in use.
   scoped_refptr<V4L2Device> image_processor_device_;
@@ -598,7 +600,7 @@ class MEDIA_GPU_EXPORT V4L2VideoDecodeAccelerator
   // The V4L2Device EGLImage is created from.
   scoped_refptr<V4L2Device> egl_image_device_;
   // The format of EGLImage.
-  uint32_t egl_image_format_fourcc_;
+  base::Optional<Fourcc> egl_image_format_fourcc_;
   // The logical dimensions of EGLImage buffer in pixels.
   gfx::Size egl_image_size_;
   // Number of planes for EGLImage.

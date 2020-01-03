@@ -47,6 +47,7 @@ enum class RedirectMode : int32_t;
 enum class ReferrerPolicy : int32_t;
 enum class RequestMode : int32_t;
 enum class RequestContextFrameType : int32_t;
+enum class RequestDestination : int32_t;
 }  // namespace mojom
 }  // namespace network
 
@@ -209,11 +210,9 @@ class WebURLRequest {
 
   BLINK_PLATFORM_EXPORT WebString HttpHeaderField(const WebString& name) const;
   // It's not possible to set the referrer header using this method. Use
-  // SetHttpReferrer instead.
+  // SetReferrerString instead.
   BLINK_PLATFORM_EXPORT void SetHttpHeaderField(const WebString& name,
                                                 const WebString& value);
-  BLINK_PLATFORM_EXPORT void SetHttpReferrer(const WebString& referrer,
-                                             network::mojom::ReferrerPolicy);
   BLINK_PLATFORM_EXPORT void AddHttpHeaderField(const WebString& name,
                                                 const WebString& value);
   BLINK_PLATFORM_EXPORT void ClearHttpHeaderField(const WebString& name);
@@ -238,6 +237,16 @@ class WebURLRequest {
   BLINK_PLATFORM_EXPORT mojom::RequestContextType GetRequestContext() const;
   BLINK_PLATFORM_EXPORT void SetRequestContext(mojom::RequestContextType);
 
+  BLINK_PLATFORM_EXPORT network::mojom::RequestDestination
+  GetRequestDestination() const;
+  BLINK_PLATFORM_EXPORT void SetRequestDestination(
+      network::mojom::RequestDestination);
+
+  BLINK_PLATFORM_EXPORT void SetReferrerString(const WebString& referrer);
+  BLINK_PLATFORM_EXPORT void SetReferrerPolicy(
+      network::mojom::ReferrerPolicy referrer_policy);
+
+  BLINK_PLATFORM_EXPORT WebString ReferrerString() const;
   BLINK_PLATFORM_EXPORT network::mojom::ReferrerPolicy GetReferrerPolicy()
       const;
 

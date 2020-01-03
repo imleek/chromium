@@ -18,6 +18,7 @@
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_consts.h"
+#include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_job_coordinator.h"
@@ -362,10 +363,10 @@ void ServiceWorkerRegisterJob::TriggerUpdateCheckInBrowser(
             ServiceWorkerConsts::kInvalidServiceWorkerResourceId);
 
   update_checker_ = std::make_unique<ServiceWorkerUpdateChecker>(
-      std::move(resources), script_url_, script_resource_id,
-      outside_fetch_client_settings_object_->outgoing_referrer,
-      version_to_update, std::move(loader_factory), force_bypass_cache_,
-      registration()->update_via_cache(), time_since_last_check, context_);
+      std::move(resources), script_url_, script_resource_id, version_to_update,
+      std::move(loader_factory), force_bypass_cache_,
+      registration()->update_via_cache(), time_since_last_check, context_,
+      outside_fetch_client_settings_object_.Clone());
   update_checker_->Start(
       base::BindOnce(&ServiceWorkerRegisterJob::OnUpdateCheckFinished,
                      weak_factory_.GetWeakPtr()));
@@ -549,6 +550,11 @@ void ServiceWorkerRegisterJob::UpdateAndContinue() {
 
 void ServiceWorkerRegisterJob::OnStartWorkerFinished(
     blink::ServiceWorkerStatusCode status) {
+  // Bail out early if the job has already completed.
+  // See https://crbug.com/1031764 for details.
+  if (phase_ == COMPLETE)
+    return;
+
   BumpLastUpdateCheckTimeIfNeeded();
 
   if (status == blink::ServiceWorkerStatusCode::kOk) {
@@ -563,10 +569,10 @@ void ServiceWorkerRegisterJob::OnStartWorkerFinished(
     return;
   }
 
-  const net::URLRequestStatus& main_script_status =
-      new_version()->script_cache_map()->main_script_status();
+  int main_script_net_error =
+      new_version()->script_cache_map()->main_script_net_error();
   std::string message;
-  if (main_script_status.status() != net::URLRequestStatus::SUCCESS) {
+  if (main_script_net_error != net::OK) {
     message = new_version()->script_cache_map()->main_script_status_message();
     if (message.empty())
       message = ServiceWorkerConsts::kServiceWorkerFetchScriptError;
@@ -793,29 +799,31 @@ void ServiceWorkerRegisterJob::ResolvePromise(
 void ServiceWorkerRegisterJob::AddRegistrationToMatchingProviderHosts(
     ServiceWorkerRegistration* registration) {
   DCHECK(registration);
-  for (std::unique_ptr<ServiceWorkerContextCore::ProviderHostIterator> it =
-           context_->GetClientProviderHostIterator(
+  for (std::unique_ptr<ServiceWorkerContextCore::ContainerHostIterator> it =
+           context_->GetClientContainerHostIterator(
                registration->scope().GetOrigin(),
                true /* include_reserved_clients */);
        !it->IsAtEnd(); it->Advance()) {
-    ServiceWorkerProviderHost* host = it->GetProviderHost();
-    if (!ServiceWorkerUtils::ScopeMatches(registration->scope(), host->url())) {
+    ServiceWorkerContainerHost* container_host = it->GetContainerHost();
+    DCHECK(container_host->IsContainerForClient());
+    if (!ServiceWorkerUtils::ScopeMatches(registration->scope(),
+                                          container_host->url())) {
       continue;
     }
-    host->AddMatchingRegistration(registration);
+    container_host->AddMatchingRegistration(registration);
   }
 }
 
 void ServiceWorkerRegisterJob::OnPausedAfterDownload() {
   DCHECK_EQ(GetUpdateCheckType(),
             UpdateCheckType::kMainScriptDuringStartWorker);
-  net::URLRequestStatus status =
-      new_version()->script_cache_map()->main_script_status();
-  if (!status.is_success()) {
+  int main_script_net_error =
+      new_version()->script_cache_map()->main_script_net_error();
+  if (main_script_net_error != net::OK) {
     // OnPausedAfterDownload() signifies a successful network load, which
     // translates into a script cache error only in the byte-for-byte identical
     // case.
-    DCHECK_EQ(status.error(), net::ERR_FILE_EXISTS);
+    DCHECK_EQ(main_script_net_error, net::ERR_FILE_EXISTS);
 
     BumpLastUpdateCheckTimeIfNeeded();
     ResolvePromise(blink::ServiceWorkerStatusCode::kOk, std::string(),

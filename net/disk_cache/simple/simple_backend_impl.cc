@@ -23,7 +23,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/sequenced_task_runner.h"
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -253,8 +252,8 @@ SimpleBackendImpl::~SimpleBackendImpl() {
     index_->WriteToDisk(SimpleIndex::INDEX_WRITE_REASON_SHUTDOWN);
 }
 
-void SimpleBackendImpl::SetWorkerPoolForTesting(
-    scoped_refptr<base::TaskRunner> task_runner) {
+void SimpleBackendImpl::SetTaskRunnerForTesting(
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {
   prioritized_task_runner_ =
       base::MakeRefCounted<net::PrioritizedTaskRunner>(std::move(task_runner));
 }
@@ -773,7 +772,7 @@ SimpleBackendImpl::DiskStatResult SimpleBackendImpl::InitCacheStructureOnDisk(
       result.net_error = net::ERR_FAILED;
     } else if (!result.max_size) {
       int64_t available = base::SysInfo::AmountOfFreeDiskSpace(path);
-      result.max_size = disk_cache::PreferredCacheSize(available);
+      result.max_size = disk_cache::PreferredCacheSize(available, cache_type);
       DCHECK(result.max_size);
     }
   }

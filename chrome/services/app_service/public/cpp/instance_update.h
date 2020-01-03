@@ -10,10 +10,6 @@
 #include "base/time/time.h"
 #include "chrome/services/app_service/public/cpp/instance.h"
 
-namespace aura {
-class Window;
-}
-
 namespace apps {
 
 class Instance;
@@ -69,6 +65,9 @@ class InstanceUpdate {
 
   base::Time LastUpdatedTime() const;
   bool LastUpdatedTimeChanged() const;
+
+  content::BrowserContext* BrowserContext() const;
+  bool BrowserContextChanged() const;
 
  private:
   Instance* state_;

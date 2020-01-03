@@ -48,7 +48,6 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "net/base/url_util.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -191,7 +190,7 @@ std::vector<const std::string*> ExtractResultList(
   if (!values)
     return {};
 
-  base::span<const base::Value> list = values->GetList();
+  base::Value::ConstListView list = values->GetList();
   std::vector<const std::string*> extracted(list.size());
   std::transform(list.begin(), list.end(), extracted.begin(),
                  [field_path](const auto& value) {

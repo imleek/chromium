@@ -28,6 +28,8 @@
 
 #include "base/auto_reset.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/time/time.h"
 #include "third_party/blink/public/common/blob/blob_utils.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
@@ -411,8 +413,8 @@ Blob* XMLHttpRequest::ResponseBlob() {
       binary_response_builder_ = nullptr;
       ReportMemoryUsageToV8();
     }
-    response_blob_ =
-        Blob::Create(BlobDataHandle::Create(std::move(blob_data), size));
+    response_blob_ = MakeGarbageCollected<Blob>(
+        BlobDataHandle::Create(std::move(blob_data), size));
   }
 
   return response_blob_;
@@ -814,9 +816,9 @@ void XMLHttpRequest::send(Document* document, ExceptionState& exception_state) {
   scoped_refptr<EncodedFormData> http_body;
 
   if (AreMethodAndURLValidForSend()) {
-    if (document->IsHTMLDocument())
+    if (IsA<HTMLDocument>(document))
       UpdateContentTypeAndCharset("text/html;charset=UTF-8", "UTF-8");
-    else if (document->IsXMLDocument())
+    else if (IsA<XMLDocument>(document))
       UpdateContentTypeAndCharset("application/xml;charset=UTF-8", "UTF-8");
 
     String body = CreateMarkup(document);
@@ -867,7 +869,7 @@ void XMLHttpRequest::send(Blob* body, ExceptionState& exception_state) {
     if (body->HasBackingFile()) {
       auto* file = To<File>(body);
       if (!file->GetPath().IsEmpty())
-        http_body->AppendFile(file->GetPath());
+        http_body->AppendFile(file->GetPath(), file->LastModifiedTime());
       else
         NOTREACHED();
     } else {
@@ -931,7 +933,8 @@ void XMLHttpRequest::send(DOMArrayBufferView* body,
                           ExceptionState& exception_state) {
   NETWORK_DVLOG(1) << this << " send() ArrayBufferView " << body;
 
-  SendBytesData(body->BaseAddress(), body->byteLength(), exception_state);
+  SendBytesData(body->BaseAddress(), body->byteLengthAsSizeT(),
+                exception_state);
 }
 
 void XMLHttpRequest::SendBytesData(const void* data,
@@ -1175,10 +1178,21 @@ void XMLHttpRequest::CreateRequest(scoped_refptr<EncodedFormData> http_body,
   loader_ = MakeGarbageCollected<ThreadableLoader>(execution_context, this,
                                                    resource_loader_options);
   loader_->SetTimeout(timeout_);
+  base::TimeTicks start_time = base::TimeTicks::Now();
   loader_->Start(request);
 
-  if (!async_)
+  if (!async_) {
+    base::TimeDelta blocking_time = base::TimeTicks::Now() - start_time;
+    if (execution_context.IsDocument()) {
+      UMA_HISTOGRAM_MEDIUM_TIMES("XHR.Sync.BlockingTime.MainThread",
+                                 blocking_time);
+    } else {
+      UMA_HISTOGRAM_MEDIUM_TIMES("XHR.Sync.BlockingTime.WorkerThread",
+                                 blocking_time);
+    }
+
     ThrowForLoadFailureIfNeeded(exception_state, String());
+  }
 }
 
 void XMLHttpRequest::abort() {
@@ -1465,7 +1479,7 @@ String XMLHttpRequest::getAllResponseHeaders() const {
 
   StringBuilder string_builder;
 
-  WebHTTPHeaderSet access_control_expose_header_set =
+  HTTPHeaderSet access_control_expose_header_set =
       cors::ExtractCorsExposedHeaderNamesList(
           with_credentials_ ? network::mojom::CredentialsMode::kInclude
                             : network::mojom::CredentialsMode::kSameOrigin,
@@ -1529,7 +1543,7 @@ const AtomicString& XMLHttpRequest::getResponseHeader(
     return g_null_atom;
   }
 
-  WebHTTPHeaderSet access_control_expose_header_set =
+  HTTPHeaderSet access_control_expose_header_set =
       cors::ExtractCorsExposedHeaderNamesList(
           with_credentials_ ? network::mojom::CredentialsMode::kInclude
                             : network::mojom::CredentialsMode::kSameOrigin,
@@ -1983,10 +1997,10 @@ void XMLHttpRequest::DidDownloadToBlob(scoped_refptr<BlobDataHandle> blob) {
       auto blob_data = std::make_unique<BlobData>();
       blob_data->SetContentType(mime_type);
       blob_data->AppendBlob(std::move(blob), 0, blob_size);
-      response_blob_ =
-          Blob::Create(BlobDataHandle::Create(std::move(blob_data), blob_size));
+      response_blob_ = MakeGarbageCollected<Blob>(
+          BlobDataHandle::Create(std::move(blob_data), blob_size));
     } else {
-      response_blob_ = Blob::Create(std::move(blob));
+      response_blob_ = MakeGarbageCollected<Blob>(std::move(blob));
     }
   }
 }

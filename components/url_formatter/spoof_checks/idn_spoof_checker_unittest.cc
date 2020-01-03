@@ -129,6 +129,13 @@ const IDNTestCase kIdnCases[] = {
     {"xn---123-kbjl2j0bl2k.in", L"\x0939\x093f\x0928\x094d\x0926\x0940-123.in",
      true},
 
+    // Block mixed numeric + numeric lookalike (12.com, using U+0577).
+    {"xn--1-9dd.com", L"1\x0577.com", false},
+    // Block mixed numeric lookalike + numeric (੨0.com, uses U+0A68).
+    {"xn--0-6ee.com", L"\x0a680.com", false},
+    // Block fully numeric lookalikes (৪੨.com using U+09EA and U+0A68).
+    {"xn--47b6w.com", L"\x09ea\x0a68.com", false},
+
     // URL test with mostly numbers and one confusable character
     // Georgian 'd' 4000.com
     {"xn--4000-pfr.com",
@@ -366,9 +373,10 @@ const IDNTestCase kIdnCases[] = {
     // 3) ѕсоре-рау.com with ѕсоре and рау in Cyrillic.
     {"xn----8sbn9akccw8m.com",
      L"\x0455\x0441\x043e\x0440\x0435-\x0440\x0430\x0443.com", false},
-    // 4) ѕсоре·рау.com with scope and pay in Cyrillic and U+00B7 between them.
-    {"xn--uba29ona9akccw8m.com",
-     L"\x0455\x0441\x043e\x0440\x0435\u00b7\x0440\x0430\x0443.com", false},
+    // 4) ѕсоре1рау.com with scope and pay in Cyrillic and a non-letter between
+    // them.
+    {"xn--1-8sbn9akccw8m.com",
+     L"\x0455\x0441\x043e\x0440\x0435\x0031\x0440\x0430\x0443.com", false},
 
     // The same as above three, but in IDN TLD (рф).
     // 1) ѕсоре.рф  with ѕсоре in Cyrillic.
@@ -382,9 +390,10 @@ const IDNTestCase kIdnCases[] = {
     // 3) ѕсоре-рау.рф with ѕсоре and рау in Cyrillic.
     {"xn----8sbn9akccw8m.xn--p1ai",
      L"\x0455\x0441\x043e\x0440\x0435-\x0440\x0430\x0443.\x0440\x0444", true},
-    // 4) ѕсоре·рау.com with scope and pay in Cyrillic and U+00B7 between them.
-    {"xn--uba29ona9akccw8m.xn--p1ai",
-     L"\x0455\x0441\x043e\x0440\x0435\u00b7\x0440\x0430\x0443.\x0440\x0444",
+    // 4) ѕсоре1рау.com with scope and pay in Cyrillic and a non-letter between
+    // them.
+    {"xn--1-8sbn9akccw8m.xn--p1ai",
+     L"\x0455\x0441\x043e\x0440\x0435\x0031\x0440\x0430\x0443.\x0440\x0444",
      true},
 
     // Same as above three, but in .ru TLD.
@@ -398,9 +407,10 @@ const IDNTestCase kIdnCases[] = {
     // 3) ѕсоре-рау.ru with ѕсоре and рау in Cyrillic.
     {"xn----8sbn9akccw8m.ru",
      L"\x0455\x0441\x043e\x0440\x0435-\x0440\x0430\x0443.ru", true},
-    // 4) ѕсоре·рау.ru with scope and pay in Cyrillic and U+00B7 between them.
-    {"xn--uba29ona9akccw8m.ru",
-     L"\x0455\x0441\x043e\x0440\x0435\u00b7\x0440\x0430\x0443.ru", true},
+    // 4) ѕсоре1рау.com with scope and pay in Cyrillic and a non-letter between
+    // them.
+    {"xn--1-8sbn9akccw8m.ru",
+     L"\x0455\x0441\x043e\x0440\x0435\x0031\x0440\x0430\x0443.ru", true},
 
     // ѕсоре-рау.한국 with ѕсоре and рау in Cyrillic. The label will remain
     // punycode while the TLD will be decoded.
@@ -1131,7 +1141,45 @@ const IDNTestCase kIdnCases[] = {
     // U+0259 (ə) is only allowed under the .az TLD.
     {"xn--xample-vyc.com", L"əxample.com", false},
     {"xn--xample-vyc.az", L"əxample.az", true},
-};  // namespace
+
+    // U+00B7 is only allowed on Catalan domains between two l's.
+    {"xn--googlecom-5pa.com", L"google·com.com", false},
+    {"xn--ll-0ea.com", L"l·l.com", false},
+    {"xn--ll-0ea.cat", L"l·l.cat", true},
+    {"xn--al-0ea.cat", L"a·l.cat", false},
+    {"xn--la-0ea.cat", L"l·a.cat", false},
+    {"xn--l-fda.cat", L"·l.cat", false},
+    {"xn--l-gda.cat", L"l·.cat", false},
+
+    {"xn--googlecom-gk6n.com", L"google丨com.com", false},   // (U+4E28)
+    {"xn--googlecom-0y6n.com", L"google乛com.com", false},   // (U+4E5B)
+    {"xn--googlecom-v85n.com", L"google七com.com", false},   // (U+4E03)
+    {"xn--googlecom-g95n.com", L"google丅com.com", false},   // (U+4E05)
+    {"xn--googlecom-go6n.com", L"google⼂com.com", false},   // (U+2F02)
+    {"xn--googlecom-b76o.com", L"google⼗com.com", false},   // (U+2F17)
+    {"xn--googlecom-b76o.com", L"google〸com.com", false},   // (U+3038)
+    {"xn--googlecom-ql3h.com", L"google〇com.com", false},   // (U+3007)
+    {"xn--googlecom-0r5h.com", L"googleㄒcom.com", false},   // (U+3112)
+    {"xn--googlecom-bu5h.com", L"googleㄚcom.com", false},   // (U+311A)
+    {"xn--googlecom-qv5h.com", L"googleㄟcom.com", false},   // (U+311F)
+    {"xn--googlecom-0x5h.com", L"googleㄧcom.com", false},   // (U+3127)
+    {"xn--googlecom-by5h.com", L"googleㄨcom.com", false},   // (U+3128)
+    {"xn--googlecom-ly5h.com", L"googleㄩcom.com", false},   // (U+3129)
+    {"xn--googlecom-5o5h.com", L"googleㄈcom.com", false},   // (U+3108)
+    {"xn--googlecom-075n.com", L"google㆒com.com", false},   // (U+3192)
+    {"xn--googlecom-046h.com", L"googleㆺcom.com", false},   // (U+31BA)
+    {"xn--googlecom-026h.com", L"googleㆳcom.com", false},   // (U+31B3)
+    {"xn--googlecom-lg9q.com", L"google工com.com", false},   // (U+5DE5)
+    {"xn--googlecom-g040a.com", L"google讠com.com", false},  // (U+8BA0)
+    {"xn--googlecom-b85n.com", L"google丁com.com", false},   // (U+4E01)
+
+    {"xn--7dbh4a.com", L"חסד.com", false},
+    {"xn--7dbh4a.il", L"חסד.il", true},
+
+    // Whole-script-confusable in Ethiopic.
+    {"xn--6xd66aa62c.com", L"ሠዐዐፐ.com", false},
+    {"xn--6xd66aa62c.et", L"ሠዐዐፐ.et", true},
+};
 
 namespace test {
 #include "components/url_formatter/spoof_checks/top_domains/test_domains-trie-inc.cc"

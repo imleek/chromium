@@ -72,7 +72,8 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
       public base::MessageLoopCurrent::DestructionObserver {
  public:
   NetworkServiceTestImpl()
-      : memory_pressure_listener_(
+      : test_host_resolver_(new TestHostResolver()),
+        memory_pressure_listener_(
             base::DoNothing(),
             base::BindRepeating(&NetworkServiceTestHelper::
                                     NetworkServiceTestImpl::OnMemoryPressure,
@@ -102,11 +103,17 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
   // network::mojom::NetworkServiceTest:
   void AddRules(std::vector<network::mojom::RulePtr> rules,
                 AddRulesCallback callback) override {
-    auto* host_resolver = test_host_resolver_.host_resolver();
+    // test_host_resolver_ may be empty if
+    // SetAllowNetworkAccessToHostResolutions was invoked.
+    DCHECK(test_host_resolver_);
+    auto* host_resolver = test_host_resolver_->host_resolver();
     for (const auto& rule : rules) {
       switch (rule->resolver_type) {
         case network::mojom::ResolverType::kResolverTypeFail:
           host_resolver->AddSimulatedFailure(rule->host_pattern);
+          break;
+        case network::mojom::ResolverType::kResolverTypeFailTimeout:
+          host_resolver->AddSimulatedTimeoutFailure(rule->host_pattern);
           break;
         case network::mojom::ResolverType::kResolverTypeIPLiteral:
           host_resolver->AddIPLiteralRule(rule->host_pattern, rule->replacement,
@@ -195,6 +202,12 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
     std::move(callback).Run();
   }
 
+  void SetAllowNetworkAccessToHostResolutions(
+      SetAllowNetworkAccessToHostResolutionsCallback callback) override {
+    test_host_resolver_.reset();
+    std::move(callback).Run();
+  }
+
   void CrashOnResolveHost(const std::string& host) override {
     network::HostResolver::SetResolveHostCallbackForTesting(
         base::BindRepeating(CrashResolveHost, host));
@@ -258,7 +271,7 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
 
   bool registered_as_destruction_observer_ = false;
   mojo::ReceiverSet<network::mojom::NetworkServiceTest> receivers_;
-  TestHostResolver test_host_resolver_;
+  std::unique_ptr<TestHostResolver> test_host_resolver_;
   std::unique_ptr<net::MockCertVerifier> mock_cert_verifier_;
   std::unique_ptr<net::ScopedTransportSecurityStateSource>
       transport_security_state_source_;
@@ -277,15 +290,15 @@ NetworkServiceTestHelper::~NetworkServiceTestHelper() = default;
 
 void NetworkServiceTestHelper::RegisterNetworkBinders(
     service_manager::BinderRegistry* registry) {
-  registry->AddInterface(
-      base::Bind(&NetworkServiceTestHelper::BindNetworkServiceTestReceiver,
-                 base::Unretained(this)));
+  registry->AddInterface(base::BindRepeating(
+      &NetworkServiceTestHelper::BindNetworkServiceTestReceiver,
+      base::Unretained(this)));
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   service_manager::SandboxType sandbox_type =
       service_manager::SandboxTypeFromCommandLine(*command_line);
   if (IsUnsandboxedSandboxType(sandbox_type) ||
-      sandbox_type == service_manager::SANDBOX_TYPE_NETWORK) {
+      sandbox_type == service_manager::SandboxType::kNetwork) {
     // Register the EmbeddedTestServer's certs, so that any SSL connections to
     // it succeed. Only do this when file I/O is allowed in the current process.
 #if defined(OS_ANDROID)

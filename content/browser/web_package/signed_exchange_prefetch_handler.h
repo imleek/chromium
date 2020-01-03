@@ -13,9 +13,10 @@
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 
 namespace net {
 struct SHA256HashValue;
@@ -48,9 +49,9 @@ class SignedExchangePrefetchHandler final
   SignedExchangePrefetchHandler(
       int frame_tree_node_id,
       const network::ResourceRequest& resource_request,
-      const network::ResourceResponseHead& response,
+      network::mojom::URLResponseHeadPtr response,
       mojo::ScopedDataPipeConsumerHandle response_body,
-      network::mojom::URLLoaderPtr network_loader,
+      mojo::PendingRemote<network::mojom::URLLoader> network_loader,
       mojo::PendingReceiver<network::mojom::URLLoaderClient>
           network_client_receiver,
       scoped_refptr<network::SharedURLLoaderFactory> network_loader_factory,

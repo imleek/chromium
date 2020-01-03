@@ -133,12 +133,10 @@ TEST_CONFIG = """\
       'fake_args_bot': '//build/args/bots/fake_master/fake_args_bot.gn',
       'fake_multi_phase': { 'phase_1': 'phase_1', 'phase_2': 'phase_2'},
       'fake_args_file': 'args_file_goma',
-      'fake_args_file_twice': 'args_file_twice',
     },
   },
   'configs': {
     'args_file_goma': ['args_file', 'goma'],
-    'args_file_twice': ['args_file', 'args_file'],
     'cros_chrome_sdk': ['cros_chrome_sdk'],
     'rel_bot': ['rel', 'goma', 'fake_feature1'],
     'debug_goma': ['debug', 'goma'],
@@ -200,6 +198,49 @@ TEST_BAD_CONFIG = """\
   },
 }
 """
+
+
+TEST_ARGS_FILE_TWICE_CONFIG = """\
+{
+  'masters': {
+    'chromium': {},
+    'fake_master': {
+      'fake_args_file_twice': 'args_file_twice',
+    },
+  },
+  'configs': {
+    'args_file_twice': ['args_file', 'args_file'],
+  },
+  'mixins': {
+    'args_file': {
+      'args_file': '//build/args/fake.gn',
+    },
+  },
+}
+"""
+
+
+TEST_DUP_CONFIG = """\
+{
+  'masters': {
+    'chromium': {},
+    'fake_master': {
+      'fake_builder': 'some_config',
+      'other_builder': 'some_other_config',
+    },
+  },
+  'configs': {
+    'some_config': ['args_file'],
+    'some_other_config': ['args_file'],
+  },
+  'mixins': {
+    'args_file': {
+      'args_file': '//build/args/fake.gn',
+    },
+  },
+}
+"""
+
 
 TRYSERVER_CONFIG = """\
 {
@@ -401,7 +442,9 @@ class UnitTest(unittest.TestCase):
         ('import("//build/args/fake.gn")\n'
          'use_goma = true\n'))
 
+  def test_gen_args_file_twice(self):
     mbw = self.fake_mbw()
+    mbw.files[mbw.default_config] = TEST_ARGS_FILE_TWICE_CONFIG
     self.check(['gen', '-m', 'fake_master', '-b', 'fake_args_file_twice',
                 '//out/Debug'], mbw=mbw, ret=1)
 
@@ -479,42 +522,6 @@ class UnitTest(unittest.TestCase):
                   mbw.files)
     self.assertIn('/fake_src/out/Default/cc_perftests.isolated.gen.json',
                   mbw.files)
-
-  def test_gen_fuzzer(self):
-    files = {
-      '/tmp/swarming_targets': 'cc_perftests_fuzzer\n',
-      '/fake_src/testing/buildbot/gn_isolate_map.pyl': (
-          "{'cc_perftests_fuzzer': {"
-          "  'label': '//cc:cc_perftests_fuzzer',"
-          "  'type': 'fuzzer',"
-          "}}\n"
-      ),
-    }
-
-    mbw = self.fake_mbw(files=files)
-
-    def fake_call(cmd, env=None, buffer_output=True, stdin=None):
-      del cmd
-      del env
-      del buffer_output
-      del stdin
-      mbw.files['/fake_src/out/Default/cc_perftests_fuzzer.runtime_deps'] = (
-          'cc_perftests_fuzzer\n')
-      return 0, '', ''
-
-    mbw.Call = fake_call
-
-    self.check(['gen',
-                '-c', 'debug_goma',
-                '--swarming-targets-file', '/tmp/swarming_targets',
-                '--isolate-map-file',
-                '/fake_src/testing/buildbot/gn_isolate_map.pyl',
-                '//out/Default'], mbw=mbw, ret=0)
-    self.assertIn('/fake_src/out/Default/cc_perftests_fuzzer.isolate',
-                  mbw.files)
-    self.assertIn(
-        '/fake_src/out/Default/cc_perftests_fuzzer.isolated.gen.json',
-        mbw.files)
 
   def test_multiple_isolate_maps(self):
     files = {
@@ -794,6 +801,14 @@ class UnitTest(unittest.TestCase):
     mbw = self.fake_mbw()
     mbw.files[mbw.default_config] = TEST_BAD_CONFIG
     self.check(['validate'], mbw=mbw, ret=1)
+
+  def test_duplicate_validate(self):
+    mbw = self.fake_mbw()
+    mbw.files[mbw.default_config] = TEST_DUP_CONFIG
+    self.check(['validate'], mbw=mbw, ret=1)
+    self.assertIn('Duplicate configs detected. When evaluated fully, the '
+                  'following configs are all equivalent: \'some_config\', '
+                  '\'some_other_config\'.', mbw.out)
 
   def test_build_command_unix(self):
     files = {

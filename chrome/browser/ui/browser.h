@@ -30,6 +30,7 @@
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
+#include "chrome/browser/ui/signin_view_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/unload_controller.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -56,10 +57,6 @@
 
 #if defined(OS_ANDROID)
 #error This file should only be included on desktop.
-#endif
-
-#if !defined(OS_CHROMEOS)
-#include "chrome/browser/ui/signin_view_controller.h"
 #endif
 
 class BackgroundContents;
@@ -131,6 +128,10 @@ class Browser : public TabStripModelObserver,
     TYPE_APP,
     // Devtools browser.
     TYPE_DEVTOOLS,
+    // App popup browser. It behaves like an app browser (e.g. it should have an
+    // AppBrowserController) but looks like a popup (e.g. it never has a tab
+    // strip).
+    TYPE_APP_POPUP,
     // If you add a new type, consider updating the test
     // BrowserTest.StartMaximized.
   };
@@ -191,6 +192,12 @@ class Browser : public TabStripModelObserver,
                                      Profile* profile,
                                      bool user_gesture);
 
+    static CreateParams CreateForAppPopup(const std::string& app_name,
+                                          bool trusted_source,
+                                          const gfx::Rect& window_bounds,
+                                          Profile* profile,
+                                          bool user_gesture);
+
     static CreateParams CreateForDevTools(Profile* profile);
 
     // The browser type.
@@ -231,8 +238,15 @@ class Browser : public TabStripModelObserver,
     friend class Browser;
     friend class WindowSizerAshTest;
 
+    static CreateParams CreateForAppBase(bool is_popup,
+                                         const std::string& app_name,
+                                         bool trusted_source,
+                                         const gfx::Rect& window_bounds,
+                                         Profile* profile,
+                                         bool user_gesture);
+
     // The application name that is also the name of the window to the shell.
-    // Do not set this value directly, use CreateForApp.
+    // Do not set this value directly, use CreateForApp/CreateForAppPopup.
     // This name will be set for:
     // 1) v1 applications launched via an application shortcut or extension API.
     // 2) undocked devtool windows.
@@ -333,12 +347,9 @@ class Browser : public TabStripModelObserver,
   web_app::AppBrowserController* app_controller() {
     return app_controller_.get();
   }
-
-#if !defined(OS_CHROMEOS)
   SigninViewController* signin_view_controller() {
     return &signin_view_controller_;
   }
-#endif
 
   // Will lazy create the bubble manager.
   ChromeBubbleManager* GetBubbleManager();
@@ -520,13 +531,12 @@ class Browser : public TabStripModelObserver,
       TabStripModel* tab_strip_model,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
-  void OnTabGroupVisualDataChanged(
-      TabStripModel* tab_strip_model,
-      TabGroupId group,
-      const TabGroupVisualData* visual_data) override;
+  void OnTabGroupChanged(const TabGroupChange& change) override;
   void TabPinnedStateChanged(TabStripModel* tab_strip_model,
                              content::WebContents* contents,
                              int index) override;
+  void TabGroupedStateChanged(base::Optional<tab_groups::TabGroupId> group,
+                              int index) override;
   void TabStripEmpty() override;
 
   // Overridden from content::WebContentsDelegate:
@@ -592,13 +602,16 @@ class Browser : public TabStripModelObserver,
   bool is_type_normal() const { return type_ == TYPE_NORMAL; }
   bool is_type_popup() const { return type_ == TYPE_POPUP; }
   bool is_type_app() const { return type_ == TYPE_APP; }
+  bool is_type_app_popup() const { return type_ == TYPE_APP_POPUP; }
   bool is_type_devtools() const { return type_ == TYPE_DEVTOOLS; }
   // TODO(crbug.com/990158): |deprecated_is_app()| is added for backwards
   // compatibility for previous callers to |is_app()| which returned true when
-  // |app_name_| is non-empty.  This includes TYPE_APP and TYPE_DEVTOOLS.
-  // Existing callers should change to use the appropriate is_type_* functions.
+  // |app_name_| is non-empty.  This includes TYPE_APP, TYPE_DEVTOOLS and
+  // TYPE_APP_POPUP. Existing callers should change to use the appropriate
+  // is_type_* functions.
   bool deprecated_is_app() const {
-    return type_ == TYPE_APP || type_ == TYPE_DEVTOOLS;
+    return type_ == TYPE_APP || type_ == TYPE_DEVTOOLS ||
+           type_ == TYPE_APP_POPUP;
   }
 
   // True when the mouse cursor is locked.
@@ -861,9 +874,6 @@ class Browser : public TabStripModelObserver,
   void OnTabReplacedAt(content::WebContents* old_contents,
                        content::WebContents* new_contents,
                        int index);
-  void OnTabGroupChanged(int index,
-                         base::Optional<TabGroupId> old_group,
-                         base::Optional<TabGroupId> new_group);
 
   // Handle changes to kDevToolsAvailability preference.
   void OnDevToolsAvailabilityChanged();
@@ -1139,9 +1149,8 @@ class Browser : public TabStripModelObserver,
   // True if the browser window has been shown at least once.
   bool window_has_shown_;
 
-#if !defined(OS_CHROMEOS)
+  // Controls both signin and sync consent.
   SigninViewController signin_view_controller_;
-#endif
 
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
 

@@ -9,15 +9,15 @@
 #include <string>
 #include <vector>
 
-#include "third_party/blink/public/platform/web_media_constraints.h"
 #include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
-#include "third_party/blink/public/platform/web_rtc_rtp_receiver.h"
-#include "third_party/blink/public/platform/web_rtc_rtp_source.h"
-#include "third_party/blink/public/platform/web_rtc_rtp_transceiver.h"
+#include "third_party/blink/renderer/platform/mediastream/media_constraints.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_dtmf_sender_handler.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_rtp_receiver_platform.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_rtp_sender_platform.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_rtp_source.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_rtp_transceiver_platform.h"
 
 namespace blink {
 
@@ -41,18 +41,17 @@ class FakeRTCRtpSenderImpl : public blink::RTCRtpSenderPlatform {
   rtc::scoped_refptr<webrtc::DtlsTransportInterface> DtlsTransport() override;
   webrtc::DtlsTransportInformation DtlsTransportInformation() override;
   blink::WebMediaStreamTrack Track() const override;
-  blink::WebVector<blink::WebString> StreamIds() const override;
+  Vector<String> StreamIds() const override;
   void ReplaceTrack(blink::WebMediaStreamTrack with_track,
                     blink::RTCVoidRequest* request) override;
   std::unique_ptr<blink::RtcDtmfSenderHandler> GetDtmfSender() const override;
   std::unique_ptr<webrtc::RtpParameters> GetParameters() const override;
-  void SetParameters(blink::WebVector<webrtc::RtpEncodingParameters>,
+  void SetParameters(Vector<webrtc::RtpEncodingParameters>,
                      webrtc::DegradationPreference,
                      blink::RTCVoidRequest*) override;
-  void GetStats(blink::WebRTCStatsReportCallback,
-                const blink::WebVector<webrtc::NonStandardGroupId>&) override;
-  void SetStreams(
-      const blink::WebVector<blink::WebString>& stream_ids) override;
+  void GetStats(RTCStatsReportCallback,
+                const Vector<webrtc::NonStandardGroupId>&) override;
+  void SetStreams(const Vector<String>& stream_ids) override;
 
  private:
   base::Optional<std::string> track_id_;
@@ -60,7 +59,7 @@ class FakeRTCRtpSenderImpl : public blink::RTCRtpSenderPlatform {
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 };
 
-class FakeRTCRtpReceiverImpl : public blink::WebRTCRtpReceiver {
+class FakeRTCRtpReceiverImpl : public RTCRtpReceiverPlatform {
  public:
   FakeRTCRtpReceiverImpl(
       const std::string& track_id,
@@ -70,16 +69,15 @@ class FakeRTCRtpReceiverImpl : public blink::WebRTCRtpReceiver {
   ~FakeRTCRtpReceiverImpl() override;
   FakeRTCRtpReceiverImpl& operator=(const FakeRTCRtpReceiverImpl&);
 
-  std::unique_ptr<blink::WebRTCRtpReceiver> ShallowCopy() const override;
+  std::unique_ptr<RTCRtpReceiverPlatform> ShallowCopy() const override;
   uintptr_t Id() const override;
   rtc::scoped_refptr<webrtc::DtlsTransportInterface> DtlsTransport() override;
   webrtc::DtlsTransportInformation DtlsTransportInformation() override;
   const blink::WebMediaStreamTrack& Track() const override;
-  blink::WebVector<blink::WebString> StreamIds() const override;
-  blink::WebVector<std::unique_ptr<blink::WebRTCRtpSource>> GetSources()
-      override;
-  void GetStats(blink::WebRTCStatsReportCallback,
-                const blink::WebVector<webrtc::NonStandardGroupId>&) override;
+  Vector<String> StreamIds() const override;
+  Vector<std::unique_ptr<RTCRtpSource>> GetSources() override;
+  void GetStats(RTCStatsReportCallback,
+                const Vector<webrtc::NonStandardGroupId>&) override;
   std::unique_ptr<webrtc::RtpParameters> GetParameters() const override;
   void SetJitterBufferMinimumDelay(
       base::Optional<double> delay_seconds) override;
@@ -89,7 +87,7 @@ class FakeRTCRtpReceiverImpl : public blink::WebRTCRtpReceiver {
   std::vector<std::string> stream_ids_;
 };
 
-class FakeRTCRtpTransceiverImpl : public blink::WebRTCRtpTransceiver {
+class FakeRTCRtpTransceiverImpl : public RTCRtpTransceiverPlatform {
  public:
   FakeRTCRtpTransceiverImpl(
       base::Optional<std::string> mid,
@@ -100,12 +98,12 @@ class FakeRTCRtpTransceiverImpl : public blink::WebRTCRtpTransceiver {
       base::Optional<webrtc::RtpTransceiverDirection> current_direction);
   ~FakeRTCRtpTransceiverImpl() override;
 
-  blink::WebRTCRtpTransceiverImplementationType ImplementationType()
+  RTCRtpTransceiverPlatformImplementationType ImplementationType()
       const override;
   uintptr_t Id() const override;
-  blink::WebString Mid() const override;
+  String Mid() const override;
   std::unique_ptr<blink::RTCRtpSenderPlatform> Sender() const override;
-  std::unique_ptr<blink::WebRTCRtpReceiver> Receiver() const override;
+  std::unique_ptr<RTCRtpReceiverPlatform> Receiver() const override;
   bool Stopped() const override;
   webrtc::RtpTransceiverDirection Direction() const override;
   void SetDirection(webrtc::RtpTransceiverDirection direction) override;

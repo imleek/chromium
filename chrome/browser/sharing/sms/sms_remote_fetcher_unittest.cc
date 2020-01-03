@@ -8,11 +8,11 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/sharing/mock_sharing_service.h"
+#include "chrome/browser/sharing/proto/sharing_message.pb.h"
 #include "chrome/browser/sharing/sharing_service.h"
 #include "chrome/browser/sharing/sharing_service_factory.h"
 #include "chrome/browser/sharing/sms/sms_flags.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/sync/protocol/sharing_message.pb.h"
 #include "components/sync_device_info/device_info.h"
 #include "content/public/browser/sms_fetcher.h"
 #include "content/public/test/browser_task_environment.h"
@@ -74,7 +74,7 @@ TEST(SmsRemoteFetcherTest, NoDevicesAvailable) {
   content::BrowserTaskEnvironment task_environment;
   TestingProfile profile;
 
-  flags.InitAndEnableFeature(kSmsFetchRequestHandler);
+  flags.InitAndEnableFeature(kSmsReceiverCrossDevice);
 
   MockSharingService* service = CreateSharingService(&profile);
 
@@ -99,7 +99,7 @@ TEST(SmsRemoteFetcherTest, OneDevice) {
   content::BrowserTaskEnvironment task_environment;
   TestingProfile profile;
 
-  flags.InitAndEnableFeature(kSmsFetchRequestHandler);
+  flags.InitAndEnableFeature(kSmsReceiverCrossDevice);
 
   MockSharingService* service = CreateSharingService(&profile);
 
@@ -112,7 +112,7 @@ TEST(SmsRemoteFetcherTest, OneDevice) {
   base::RunLoop loop;
 
   EXPECT_CALL(*service, SendMessageToDevice(_, _, _, _))
-      .WillOnce(Invoke([&](const std::string& device_guid,
+      .WillOnce(Invoke([&](const syncer::DeviceInfo& device_info,
                            base::TimeDelta response_timeout,
                            chrome_browser_sharing::SharingMessage message,
                            SharingMessageSender::ResponseCallback callback) {
@@ -138,7 +138,7 @@ TEST(SmsRemoteFetcherTest, OneDeviceTimesOut) {
   content::BrowserTaskEnvironment task_environment;
   TestingProfile profile;
 
-  flags.InitAndEnableFeature(kSmsFetchRequestHandler);
+  flags.InitAndEnableFeature(kSmsReceiverCrossDevice);
 
   MockSharingService* service = CreateSharingService(&profile);
 
@@ -151,7 +151,7 @@ TEST(SmsRemoteFetcherTest, OneDeviceTimesOut) {
   base::RunLoop loop;
 
   EXPECT_CALL(*service, SendMessageToDevice(_, _, _, _))
-      .WillOnce(Invoke([&](const std::string& device_guid,
+      .WillOnce(Invoke([&](const syncer::DeviceInfo& device_info,
                            base::TimeDelta response_timeout,
                            chrome_browser_sharing::SharingMessage message,
                            SharingMessageSender::ResponseCallback callback) {

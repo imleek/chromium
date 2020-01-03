@@ -403,9 +403,15 @@ class HeadlessWebContentsPDFStreamTest
     EXPECT_TRUE(success);
     EXPECT_GT(pdf_data.size(), 0U);
     auto pdf_span = base::make_span(pdf_data.data(), pdf_data.size());
+
     int num_pages;
     EXPECT_TRUE(chrome_pdf::GetPDFDocInfo(pdf_span, &num_pages, nullptr));
     EXPECT_EQ(std::ceil(kDocHeight / kPaperHeight), num_pages);
+
+    base::Optional<bool> tagged = chrome_pdf::IsPDFDocTagged(pdf_span);
+    ASSERT_TRUE(tagged.has_value());
+    EXPECT_FALSE(tagged.value());
+
     FinishAsynchronousTest();
   }
 
@@ -461,7 +467,8 @@ class HeadlessWebContentsPDFPageSizeRoundingTest
 };
 
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessWebContentsPDFPageSizeRoundingTest);
-#endif
+
+#endif  // BUILDFLAG(ENABLE_PRINTING)
 
 class HeadlessWebContentsSecurityTest
     : public HeadlessAsyncDevTooledBrowserTest,

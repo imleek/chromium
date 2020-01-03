@@ -9,7 +9,6 @@
 #include "base/memory/memory_pressure_listener.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/util/memory_pressure/fake_memory_pressure_monitor.h"
 #include "build/build_config.h"
@@ -153,8 +152,6 @@ class TabManagerTest : public InProcessBrowserTest {
     // Start with a non-null TimeTicks, as there is no discard protection for
     // a tab with a null focused timestamp.
     test_clock_.Advance(kShortDelay);
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kSiteCharacteristicsDatabase);
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -319,7 +316,6 @@ class TabManagerTest : public InProcessBrowserTest {
   util::test::FakeMemoryPressureMonitor fake_memory_pressure_monitor_;
   base::SimpleTestTickClock test_clock_;
   ScopedSetTickClockForTesting scoped_set_tick_clock_for_testing_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 class TabManagerTestWithTwoTabs : public TabManagerTest {
@@ -982,12 +978,11 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, UrgentFastShutdownSharedTabProcess) {
       "TabManager.Discarding.DiscardedTabCouldFastShutdown", false, 1);
 }
 
-IN_PROC_BROWSER_TEST_F(TabManagerTest,
-                       DISABLED_ProactiveFastShutdownWithUnloadHandler) {
+IN_PROC_BROWSER_TEST_F(TabManagerTest, ProactiveFastShutdownWithUnloadHandler) {
   ASSERT_TRUE(embedded_test_server()->Start());
   // Disable the protection of recent tabs.
-  OpenTwoTabs(GURL(chrome::kChromeUIAboutURL),
-              GURL(embedded_test_server()->GetURL("/unload.html")));
+  OpenTwoTabs(embedded_test_server()->GetURL("a.com", "/title1.html"),
+              embedded_test_server()->GetURL("/unload.html"));
 
   // Advance time so everything is urgent discardable.
   test_clock_.Advance(kBackgroundUrgentProtectionTime);
@@ -1007,8 +1002,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest,
 IN_PROC_BROWSER_TEST_F(TabManagerTest, UrgentFastShutdownWithUnloadHandler) {
   ASSERT_TRUE(embedded_test_server()->Start());
   // Disable the protection of recent tabs.
-  OpenTwoTabs(GURL(chrome::kChromeUIAboutURL),
-              GURL(embedded_test_server()->GetURL("/unload.html")));
+  OpenTwoTabs(embedded_test_server()->GetURL("a.com", "/title1.html"),
+              embedded_test_server()->GetURL("/unload.html"));
 
   // Advance time so everything is urgent discardable.
   test_clock_.Advance(kBackgroundUrgentProtectionTime);
@@ -1043,8 +1038,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest,
                        DISABLED_ProactiveFastShutdownWithBeforeunloadHandler) {
   ASSERT_TRUE(embedded_test_server()->Start());
   // Disable the protection of recent tabs.
-  OpenTwoTabs(GURL(chrome::kChromeUIAboutURL),
-              GURL(embedded_test_server()->GetURL("/beforeunload.html")));
+  OpenTwoTabs(embedded_test_server()->GetURL("a.com", "/title1.html"),
+              embedded_test_server()->GetURL("/beforeunload.html"));
 
   // Advance time so everything is urgent discardable.
   test_clock_.Advance(kBackgroundUrgentProtectionTime);
@@ -1065,8 +1060,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest,
                        UrgentFastShutdownWithBeforeunloadHandler) {
   ASSERT_TRUE(embedded_test_server()->Start());
   // Disable the protection of recent tabs.
-  OpenTwoTabs(GURL(chrome::kChromeUIAboutURL),
-              GURL(embedded_test_server()->GetURL("/beforeunload.html")));
+  OpenTwoTabs(embedded_test_server()->GetURL("a.com", "/title1.html"),
+              embedded_test_server()->GetURL("/beforeunload.html"));
 
   // Advance time so everything is urgent discardable.
   test_clock_.Advance(kBackgroundUrgentProtectionTime);
@@ -1269,12 +1264,6 @@ IN_PROC_BROWSER_TEST_F(TabManagerTestWithTwoTabs,
 // - Freeze happens in renderer: PENDING_DISCARD->DISCARDED
 IN_PROC_BROWSER_TEST_F(TabManagerTestWithTwoTabs,
                        TabFreezeDisallowedWhenProactivelyDiscarding) {
-  // Pretend that the background tab reported its origin trial freeze policy, to
-  // prevent CanFreeze() from returning false.
-  TabLifecycleUnitSource::OnOriginTrialFreezePolicyChanged(
-      GetWebContentsAt(1),
-      performance_manager::mojom::InterventionPolicy::kDefault);
-
   // Proactively discard the background tab.
   EXPECT_EQ(LifecycleUnitState::ACTIVE, GetLifecycleUnitAt(1)->GetState());
   EXPECT_TRUE(

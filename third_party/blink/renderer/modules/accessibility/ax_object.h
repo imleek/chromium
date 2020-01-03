@@ -716,6 +716,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual ax::mojom::Role DetermineAccessibilityRole();
   ax::mojom::Role DetermineAriaRoleAttribute() const;
   virtual ax::mojom::Role AriaRoleAttribute() const;
+  virtual bool HasAriaAttribute() const { return false; }
   virtual AXObject* ActiveDescendant() { return nullptr; }
   virtual String AutoComplete() const { return String(); }
   virtual void AriaOwnsElements(AXObjectVector& owns) const {}
@@ -1030,6 +1031,9 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
                                               const AXObject& second,
                                               int* index_in_ancestor1,
                                               int* index_in_ancestor2);
+
+  // Blink-internal DOM Node ID. Currently used for PDF exporting.
+  int GetDOMNodeId() const;
 
   // Returns a string representation of this object.
   String ToString() const;

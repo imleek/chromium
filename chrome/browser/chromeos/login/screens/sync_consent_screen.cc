@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/consent_auditor/consent_auditor_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -206,7 +207,7 @@ void SyncConsentScreen::RecordConsent(
     int consent_confirmation) {
   consent_auditor::ConsentAuditor* consent_auditor =
       ConsentAuditorFactory::GetForProfile(profile_);
-  const std::string& google_account_id =
+  const CoreAccountId& google_account_id =
       IdentityManagerFactory::GetForProfile(profile_)->GetPrimaryAccountId();
   // TODO(alemate): Support unified_consent_enabled
   sync_pb::UserConsentTypes::SyncConsent sync_consent;

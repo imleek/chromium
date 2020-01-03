@@ -9,6 +9,8 @@
 
 #include "base/single_thread_task_runner.h"
 #include "base/task/post_task.h"
+#include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_mime_types.h"
@@ -17,6 +19,7 @@
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/modules/clipboard/clipboard_item_options.h"
 #include "third_party/blink/renderer/modules/clipboard/clipboard_reader.h"
 #include "third_party/blink/renderer/modules/permissions/permission_utils.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
@@ -28,9 +31,9 @@
 // * clipboard-write
 // See https://w3c.github.io/clipboard-apis/#clipboard-permissions
 //
-// Write access is granted by default, whereas read access is gated behind a
-// permission prompt. Both read and write require the tab to be focused (and
-// Chrome must be the foreground app) for the operation to be allowed.
+// These permissions map to these ContentSettings:
+// * CLIPBOARD_READ_WRITE, for sanitized read, and unsanitized read/write.
+// * CLIPBOARD_SANITIZED_WRITE, for sanitized write only.
 
 namespace blink {
 
@@ -115,7 +118,7 @@ void ClipboardPromise::StartWriteRepresentation() {
       clipboard_item_data_[clipboard_representation_index_].second;
 
   DCHECK(!clipboard_writer_);
-  clipboard_writer_ = ClipboardWriter::Create(type, this);
+  clipboard_writer_ = ClipboardWriter::Create(type, is_raw_, this);
   clipboard_writer_->WriteToSystem(blob);
 }
 
@@ -129,14 +132,14 @@ void ClipboardPromise::RejectFromReadOrDecodeFailure() {
 
 void ClipboardPromise::HandleRead() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  RequestPermission(mojom::blink::PermissionName::CLIPBOARD_READ,
+  RequestPermission(mojom::blink::PermissionName::CLIPBOARD_READ, false,
                     WTF::Bind(&ClipboardPromise::HandleReadWithPermission,
                               WrapPersistent(this)));
 }
 
 void ClipboardPromise::HandleReadText() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  RequestPermission(mojom::blink::PermissionName::CLIPBOARD_READ,
+  RequestPermission(mojom::blink::PermissionName::CLIPBOARD_READ, false,
                     WTF::Bind(&ClipboardPromise::HandleReadTextWithPermission,
                               WrapPersistent(this)));
 }
@@ -161,8 +164,12 @@ void ClipboardPromise::HandleWrite(
   // For now, we only process the first ClipboardItem.
   ClipboardItem* clipboard_item = (*clipboard_items)[0];
   clipboard_item_data_ = clipboard_item->GetItems();
+  is_raw_ = clipboard_item->raw();
 
-  RequestPermission(mojom::blink::PermissionName::CLIPBOARD_WRITE,
+  DCHECK(base::FeatureList::IsEnabled(blink::features::kRawClipboard) ||
+         !is_raw_);
+
+  RequestPermission(mojom::blink::PermissionName::CLIPBOARD_WRITE, is_raw_,
                     WTF::Bind(&ClipboardPromise::HandleWriteWithPermission,
                               WrapPersistent(this)));
 }
@@ -170,7 +177,7 @@ void ClipboardPromise::HandleWrite(
 void ClipboardPromise::HandleWriteText(const String& data) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   plain_text_ = data;
-  RequestPermission(mojom::blink::PermissionName::CLIPBOARD_WRITE,
+  RequestPermission(mojom::blink::PermissionName::CLIPBOARD_WRITE, false,
                     WTF::Bind(&ClipboardPromise::HandleWriteTextWithPermission,
                               WrapPersistent(this)));
 }
@@ -200,8 +207,11 @@ void ClipboardPromise::HandleReadWithPermission(PermissionStatus status) {
     return;
   }
 
+  ClipboardItemOptions* options = ClipboardItemOptions::Create();
+  options->setRaw(false);
+
   HeapVector<Member<ClipboardItem>> clipboard_items = {
-      MakeGarbageCollected<ClipboardItem>(items)};
+      MakeGarbageCollected<ClipboardItem>(items, options)};
   script_promise_resolver_->Resolve(clipboard_items);
 }
 
@@ -232,10 +242,10 @@ void ClipboardPromise::HandleWriteWithPermission(PermissionStatus status) {
   for (const auto& type_and_blob : clipboard_item_data_) {
     String type = type_and_blob.first;
     String type_with_args = type_and_blob.second->type();
-    if (!ClipboardWriter::IsValidType(type)) {
+    if (!is_raw_ && !ClipboardWriter::IsValidType(type)) {
       script_promise_resolver_->Reject(MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kNotAllowedError,
-          "Write type " + type + " not supported."));
+          "Sanitized MIME type " + type + " not supported on write."));
       return;
     }
     if (!type_with_args.Contains(type)) {
@@ -276,17 +286,36 @@ PermissionService* ClipboardPromise::GetPermissionService() {
 
 void ClipboardPromise::RequestPermission(
     mojom::blink::PermissionName permission,
+    bool allow_without_sanitization,
     base::OnceCallback<void(::blink::mojom::PermissionStatus)> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(script_promise_resolver_);
   DCHECK(permission == mojom::blink::PermissionName::CLIPBOARD_READ ||
          permission == mojom::blink::PermissionName::CLIPBOARD_WRITE);
 
-  if (!IsFocusedDocument(ExecutionContext::From(script_state_))) {
+  ExecutionContext* context = ExecutionContext::From(script_state_);
+  DCHECK(context);
+  const Document& document = *To<Document>(context);
+  DCHECK(document.IsSecureContext());  // [SecureContext] in IDL
+
+  if (!document.hasFocus()) {
     script_promise_resolver_->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kNotAllowedError, "Document is not focused."));
     return;
   }
+
+  if (!document.IsFeatureEnabled(
+          mojom::FeaturePolicyFeature::kClipboard,
+          ReportOptions::kReportOnFailure,
+          "The Clipboard API has been blocked because of a Feature Policy "
+          "applied to the current document. See https://goo.gl/EuHzyv for more "
+          "details.")) {
+    script_promise_resolver_->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kNotAllowedError,
+        "Disabled in this document by Feature Policy."));
+    return;
+  }
+
   if (!GetPermissionService()) {
     script_promise_resolver_->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kNotAllowedError,
@@ -294,9 +323,10 @@ void ClipboardPromise::RequestPermission(
     return;
   }
 
-  auto permission_descriptor =
-      CreateClipboardPermissionDescriptor(permission, false);
-  if (permission == mojom::blink::PermissionName::CLIPBOARD_WRITE) {
+  auto permission_descriptor = CreateClipboardPermissionDescriptor(
+      permission, false, allow_without_sanitization);
+  if (permission == mojom::blink::PermissionName::CLIPBOARD_WRITE &&
+      !allow_without_sanitization) {
     // Check permission (but do not query the user).
     // See crbug.com/795929 for moving this check into the Browser process.
     permission_service_->HasPermission(std::move(permission_descriptor),
@@ -314,14 +344,6 @@ scoped_refptr<base::SingleThreadTaskRunner> ClipboardPromise::GetTaskRunner() {
   // Get the User Interaction task runner, as Async Clipboard API calls require
   // user interaction, as specified in https://w3c.github.io/clipboard-apis/
   return GetExecutionContext()->GetTaskRunner(TaskType::kUserInteraction);
-}
-
-bool ClipboardPromise::IsFocusedDocument(ExecutionContext* context) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(context);
-  DCHECK(context->IsSecureContext());  // [SecureContext] in IDL
-  Document* doc = To<Document>(context);
-  return doc && doc->hasFocus();
 }
 
 void ClipboardPromise::Trace(blink::Visitor* visitor) {

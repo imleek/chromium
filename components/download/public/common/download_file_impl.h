@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/cancelable_callback.h"
 #include "base/files/file.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -62,14 +63,14 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadFileImpl : public DownloadFile {
   void AddInputStream(std::unique_ptr<InputStream> stream,
                       int64_t offset) override;
   void RenameAndUniquify(const base::FilePath& full_path,
-                         const RenameCompletionCallback& callback) override;
+                         RenameCompletionCallback callback) override;
   void RenameAndAnnotate(
       const base::FilePath& full_path,
       const std::string& client_guid,
       const GURL& source_url,
       const GURL& referrer_url,
       mojo::PendingRemote<quarantine::mojom::Quarantine> remote_quarantine,
-      const RenameCompletionCallback& callback) override;
+      RenameCompletionCallback callback) override;
   void Detach() override;
   void Cancel() override;
   void SetPotentialFileLength(int64_t length) override;
@@ -79,14 +80,13 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadFileImpl : public DownloadFile {
   void Resume() override;
 
 #if defined(OS_ANDROID)
-  void RenameToIntermediateUri(
-      const GURL& original_url,
-      const GURL& referrer_url,
-      const base::FilePath& file_name,
-      const std::string& mime_type,
-      const base::FilePath& current_path,
-      const RenameCompletionCallback& callback) override;
-  void PublishDownload(const RenameCompletionCallback& callback) override;
+  void RenameToIntermediateUri(const GURL& original_url,
+                               const GURL& referrer_url,
+                               const base::FilePath& file_name,
+                               const std::string& mime_type,
+                               const base::FilePath& current_path,
+                               RenameCompletionCallback callback) override;
+  void PublishDownload(RenameCompletionCallback callback) override;
   base::FilePath GetDisplayName() override;
 #endif  // defined(OS_ANDROID)
 
@@ -154,6 +154,9 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadFileImpl : public DownloadFile {
     void set_finished(bool finish) { finished_ = finish; }
     size_t index() { return index_; }
     void set_index(size_t index) { index_ = index; }
+    base::CancelableOnceClosure* read_stream_callback() {
+      return &read_stream_callback_;
+    }
 
    private:
     // Starting position of the stream, this is from the network response.
@@ -186,6 +189,9 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadFileImpl : public DownloadFile {
 
     // The stream through which data comes.
     std::unique_ptr<InputStream> input_stream_;
+
+    // Cancelable callback to read from the |input_stream_|.
+    base::CancelableOnceClosure read_stream_callback_;
 
     DISALLOW_COPY_AND_ASSIGN(SourceStream);
   };
@@ -226,7 +232,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadFileImpl : public DownloadFile {
   struct RenameParameters {
     RenameParameters(RenameOption option,
                      const base::FilePath& new_path,
-                     const RenameCompletionCallback& completion_callback);
+                     RenameCompletionCallback completion_callback);
     ~RenameParameters();
 
     RenameOption option;
@@ -250,7 +256,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadFileImpl : public DownloadFile {
 
   // Called after |file_| was renamed.
   void OnRenameComplete(const base::FilePath& content_path,
-                        const RenameCompletionCallback& callback,
+                        RenameCompletionCallback callback,
                         DownloadInterruptReason reason);
 
   // Send an update on our progress.

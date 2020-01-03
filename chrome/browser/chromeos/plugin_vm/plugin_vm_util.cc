@@ -7,7 +7,12 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/files/file_util.h"
+#include "base/task/post_task.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_drive_image_download_service.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_image_manager.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_pref_names.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -19,8 +24,19 @@
 #include "chromeos/tpm/install_attributes.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
+#include "google_apis/drive/drive_api_error_codes.h"
 
 namespace plugin_vm {
+
+namespace {
+
+static std::string& GetFakeLicenseKey() {
+  static base::NoDestructor<std::string> license_key;
+  return *license_key;
+}
+
+}  // namespace
 
 // For PluginVm to be allowed:
 // * Profile should be eligible.
@@ -48,6 +64,10 @@ bool IsPluginVmAllowedForProfile(const Profile* profile) {
   // Check that PluginVm feature is enabled.
   if (!base::FeatureList::IsEnabled(features::kPluginVm))
     return false;
+
+  // Bypass other checks when a fake policy is set
+  if (FakeLicenseKeyIsSet())
+    return true;
 
   // TODO(okalitova, aoldemeier): Remove once PluginVm is ready to be launched.
   // Check for alternative condition for manual testing, i.e. the device is in
@@ -118,12 +138,67 @@ bool IsPluginVmWindow(const aura::Window* window) {
 }
 
 std::string GetPluginVmLicenseKey() {
+  if (FakeLicenseKeyIsSet())
+    return GetFakeLicenseKey();
   std::string plugin_vm_license_key;
   if (!chromeos::CrosSettings::Get()->GetString(chromeos::kPluginVmLicenseKey,
                                                 &plugin_vm_license_key)) {
     return std::string();
   }
   return plugin_vm_license_key;
+}
+
+void SetFakePluginVmPolicy(Profile* profile,
+                           const std::string& image_url,
+                           const std::string& image_hash,
+                           const std::string& license_key) {
+  DictionaryPrefUpdate update(profile->GetPrefs(),
+                              plugin_vm::prefs::kPluginVmImage);
+  base::DictionaryValue* dict = update.Get();
+  dict->SetPath("url", base::Value(image_url));
+  dict->SetPath("hash", base::Value(image_hash));
+
+  GetFakeLicenseKey() = license_key;
+}
+
+bool FakeLicenseKeyIsSet() {
+  return !GetFakeLicenseKey().empty();
+}
+
+void RemoveDriveDownloadDirectoryIfExists() {
+  auto log_file_deletion_if_failed = [](bool success) {
+    if (!success) {
+      LOG(ERROR) << "PluginVM failed to delete download directory";
+    }
+  };
+
+  base::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::BindOnce(&base::DeleteFileRecursively,
+                     base::FilePath(kPluginVmDriveDownloadDirectory)),
+      base::BindOnce(std::move(log_file_deletion_if_failed)));
+}
+
+// TODO(muhamedp): Update if a different url format is ultimately chosen.
+bool IsDriveUrl(const GURL& url) {
+  const std::string url_base = "https://drive.google.com/open";
+  const std::string& spec = url.spec();
+  return spec.find(url_base) == 0 && spec.find("id=") < (spec.length() - 3);
+}
+
+// TODO(muhamedp): Update if a different url format is ultimately chosen.
+std::string GetIdFromDriveUrl(const GURL& url) {
+  const std::string& spec = url.spec();
+
+  const size_t id_start = spec.find("id=") + 3;
+  // In case there are other GET parameters after the id.
+  const size_t first_ampersand = spec.find('&', id_start);
+
+  if (first_ampersand == std::string::npos)
+    return spec.substr(id_start);
+  else
+    return spec.substr(id_start, first_ampersand - id_start);
 }
 
 }  // namespace plugin_vm

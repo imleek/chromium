@@ -39,8 +39,8 @@ source_set("v4l2") {
     "v4l2_h264_accelerator.h",
     "v4l2_h264_accelerator_legacy.cc",
     "v4l2_h264_accelerator_legacy.h",
-    "v4l2_image_processor.cc",
-    "v4l2_image_processor.h",
+    "v4l2_image_processor_backend.cc",
+    "v4l2_image_processor_backend.h",
     "v4l2_slice_video_decode_accelerator.cc",
     "v4l2_slice_video_decode_accelerator.h",
     "v4l2_slice_video_decoder.cc",
@@ -77,6 +77,14 @@ source_set("v4l2") {
     ]
   }
 
+  if (use_v4l2_codec_aml) {
+    sources += [
+      "aml_v4l2_device.cc",
+      "aml_v4l2_device.h",
+    ]
+    defines += [ "AML_V4L2" ]
+  }
+
   configs += [ "//third_party/libyuv:libyuv_config" ]
 
   public_deps = [
@@ -91,7 +99,6 @@ source_set("v4l2") {
     "//media/gpu:buildflags",
     "//media/gpu:common",
     "//media/gpu/chromeos:common",
-    "//media/gpu/linux:common",
     "//third_party/libyuv",
     "//ui/gfx/geometry",
     "//ui/ozone",

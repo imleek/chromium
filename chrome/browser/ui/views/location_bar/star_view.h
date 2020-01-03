@@ -24,7 +24,8 @@ class StarView : public PageActionIconView,
  public:
   StarView(CommandUpdater* command_updater,
            Browser* browser,
-           PageActionIconView::Delegate* delegate);
+           IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+           PageActionIconView::Delegate* page_action_icon_delegate);
   ~StarView() override;
 
   // Shows the BookmarkPromoBubbleView when the BookmarkTracker calls for it.
@@ -32,13 +33,14 @@ class StarView : public PageActionIconView,
 
  protected:
   // PageActionIconView:
-  bool Update() override;
+  void UpdateImpl() override;
   void OnExecuting(PageActionIconView::ExecuteSource execute_source) override;
   void ExecuteCommand(ExecuteSource source) override;
   views::BubbleDialogDelegateView* GetBubble() const override;
   SkColor GetInkDropBaseColor() const override;
   const gfx::VectorIcon& GetVectorIcon() const override;
   base::string16 GetTextForTooltipAndAccessibleName() const override;
+  const char* GetClassName() const override;
 
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;

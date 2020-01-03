@@ -119,6 +119,20 @@ class AutofillManager : public AutofillHandler,
                                           const FormData& form,
                                           const FormFieldData& field_data);
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  // Returns the list of credit cards that have associated cloud token data.
+  virtual void FetchVirtualCardCandidates();
+
+  // Callback invoked when an actual card is selected. |selected_card_id| will
+  // be used to identify the card. The selected card's cloud token data will be
+  // fetched from the server.
+  // TODO(crbug.com/1020740): Passes card server id for now. In the future when
+  // one actual credit card can have multiple virtual cards, passes instrument
+  // token instead. Design TBD.
+  virtual void OnVirtualCardCandidateSelected(
+      const std::string& selected_card_id);
+#endif
+
   // Called from our external delegate so they cannot be private.
   virtual void FillOrPreviewForm(AutofillDriver::RendererFormDataAction action,
                                  int query_id,
@@ -156,6 +170,11 @@ class AutofillManager : public AutofillHandler,
 
   // Invoked when the user selected |value| in the Autocomplete drop-down.
   void OnAutocompleteEntrySelected(const base::string16& value);
+
+  // Invoked when the user selects the "Hide Suggestions" item in the
+  // Autocomplete drop-down.
+  virtual void OnUserHideSuggestions(const FormData& form,
+                                     const FormFieldData& field);
 
   // Returns true only if the previewed form should be cleared.
   bool ShouldClearPreviewedForm();
@@ -225,11 +244,11 @@ class AutofillManager : public AutofillHandler,
 
   // Returns true if the value of the AutofillProfileEnabled pref is true and
   // the client supports Autofill.
-  virtual bool IsProfileAutofillEnabled() const;
+  virtual bool IsAutofillProfileEnabled() const;
 
   // Returns true if the value of the AutofillCreditCardEnabled pref is true and
   // the client supports Autofill.
-  virtual bool IsCreditCardAutofillEnabled() const;
+  virtual bool IsAutofillCreditCardEnabled() const;
 
   // Shared code to determine if |form| should be uploaded to the Autofill
   // server. It verifies that uploading is allowed and |form| meets conditions
@@ -520,6 +539,11 @@ class AutofillManager : public AutofillHandler,
                                const FormFieldData& field,
                                std::vector<Suggestion>* suggestions,
                                SuggestionsContext* context);
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  // Whether to show the option to use virtual card in the autofill popup.
+  bool ShouldShowVirtualCardOption(FormStructure* form_structure);
+#endif
 
   // Returns an appropriate EventFormLogger for the given |field_type_group|.
   // May return nullptr.

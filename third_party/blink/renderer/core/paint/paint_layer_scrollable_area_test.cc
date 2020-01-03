@@ -1332,28 +1332,70 @@ TEST_P(PaintLayerScrollableAreaTest, ShowCustomResizerInTextarea) {
   EXPECT_NE(paint_layer->GetScrollableArea()->Resizer(), nullptr);
 }
 
-class PaintLayerScrollableAreaCompositingTest
-    : public PaintLayerScrollableAreaTest {
- public:
-  PaintLayerScrollableAreaCompositingTest() {
-    if (GetParam() & kDoNotCompositeTrivial3D) {
-      scoped_feature_list_.InitAndEnableFeature(
-          blink::features::kDoNotCompositeTrivial3D);
-    } else {
-      scoped_feature_list_.InitAndDisableFeature(
-          blink::features::kDoNotCompositeTrivial3D);
-    }
-  }
+TEST_P(PaintLayerScrollableAreaTest,
+       ApplyPendingHistoryRestoreScrollOffsetTwice) {
+  GetPage().GetSettings().SetTextAreasAreResizable(true);
+  SetBodyInnerHTML(R"HTML(
+    <!doctype HTML>
+    <div id="target" style="overflow: scroll; width: 50px; height: 50px">
+      <div style="width: 50px; height: 500px">
+      </div>
+    </div>
+  )HTML");
 
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
+  const auto* paint_layer =
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))->Layer();
 
-INSTANTIATE_DO_NOT_COMPOSITE_TRIVIAL_3D_P(
-    PaintLayerScrollableAreaCompositingTest);
+  auto* scrollable_area = paint_layer->GetScrollableArea();
+
+  HistoryItem::ViewState view_state;
+  view_state.scroll_offset_ = ScrollOffset(0, 100);
+  scrollable_area->SetPendingHistoryRestoreScrollOffset(view_state, true);
+  scrollable_area->ApplyPendingHistoryRestoreScrollOffset();
+  EXPECT_EQ(ScrollOffset(0, 100), scrollable_area->GetScrollOffset());
+
+  scrollable_area->SetScrollOffset(ScrollOffset(0, 50), kUserScroll);
+
+  // The second call to ApplyPendingHistoryRestoreScrollOffset should
+  // do nothing, since the history was already restored.
+  scrollable_area->ApplyPendingHistoryRestoreScrollOffset();
+  EXPECT_EQ(ScrollOffset(0, 50), scrollable_area->GetScrollOffset());
+}
 
 // Test that a trivial 3D transform results in composited scrolling.
-TEST_P(PaintLayerScrollableAreaCompositingTest, CompositeWithTrivial3D) {
+TEST_P(PaintLayerScrollableAreaTest, CompositeWithTrivial3D) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      #scroller {
+        width: 100px;
+        height: 100px;
+        overflow: scroll;
+        transform: translateZ(0);
+      }
+      #scrolled {
+        width: 200px;
+        height: 200px;
+      }
+    </style>
+    <div id="scroller">
+      <div id="scrolled"></div>
+    </div>
+  )HTML");
+
+  EXPECT_TRUE(UsesCompositedScrolling(GetLayoutObjectByElementId("scroller")));
+}
+
+class PaintLayerScrollableAreaTestLowEndPlatform
+    : public TestingPlatformSupport {
+ public:
+  bool IsLowEndDevice() override { return true; }
+};
+
+// Test that a trivial 3D transform results in composited scrolling even on
+// low-end devices that may not composite trivial 3D transforms.
+TEST_P(PaintLayerScrollableAreaTest, LowEndCompositeWithTrivial3D) {
+  ScopedTestingPlatformSupport<PaintLayerScrollableAreaTestLowEndPlatform>
+      platform;
   SetBodyInnerHTML(R"HTML(
     <style>
       #scroller {

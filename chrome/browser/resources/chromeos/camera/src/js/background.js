@@ -36,11 +36,25 @@ cca.bg.INITIAL_ASPECT_RATIO = 1.7777777777;
 cca.bg.TOPBAR_COLOR = '#000000';
 
 /**
+ * The id of the test app used in Tast.
+ * @type {string}
+ * @const
+ */
+cca.bg.TEST_API_ID = 'behllobkkfkfnphdnhnkndlbkcpglgmj';
+
+/**
  * It's used in test to ensure that we won't connect to the main.html target
  * before the window is created, otherwise the window might disappear.
  * @type {?function(string): undefined}
  */
 cca.bg.onAppWindowCreatedForTesting = null;
+
+/**
+ * It's used in test to catch the perf event before the creation of app window
+ * for time measurement before launch.
+ * @type {?cca.perf.PerfLogger}
+ */
+cca.bg.perfLoggerForTesting = null;
 
 /**
  * Background object for handling launch event.
@@ -63,20 +77,9 @@ cca.bg.WindowState = {
   CLOSED: 'closed',
 };
 
-/* eslint-disable no-unused-vars */
-
-/**
- * @typedef {{
- *   suspend: !function(),
- *   resume: !function(),
- * }}
- */
-cca.bg.WindowOperations;
-
-/* eslint-enable no-unused-vars */
-
 /**
  * Wrapper of AppWindow for tracking its state.
+ * @implements {cca.bg.BackgroundOps}
  */
 cca.bg.Window = class {
   /**
@@ -86,10 +89,12 @@ cca.bg.Window = class {
    *     suspended state.
    * @param {!function(cca.bg.Window)} onClosed Called when window become closed
    *     state.
+   * @param {?cca.perf.PerfLogger} perfLogger The logger for perf events. If it
+   *     is null, we will create a new one for the window.
    * @param {cca.intent.Intent=} intent Intent to be handled by the app window.
    *     Set to null for app window not launching from intent.
    */
-  constructor(onActive, onSuspended, onClosed, intent = null) {
+  constructor(onActive, onSuspended, onClosed, perfLogger, intent = null) {
     /**
      * @type {!function(!cca.bg.Window)}
      * @private
@@ -115,10 +120,22 @@ cca.bg.Window = class {
     this.intent_ = intent;
 
     /**
+     * @type {!cca.perf.PerfLogger}
+     * @private
+     */
+    this.perfLogger_ = perfLogger || new cca.perf.PerfLogger();
+
+    /**
      * @type {?chrome.app.window.AppWindow}
      * @private
      */
     this.appWindow_ = null;
+
+    /**
+     * @type {?cca.bg.ForegroundOps}
+     * @private
+     */
+    this.foregroundOps_ = null;
 
     /**
      * @type {!cca.bg.WindowState}
@@ -165,6 +182,8 @@ cca.bg.Window = class {
           },
         },
         (appWindow) => {
+          this.perfLogger_.start(
+              cca.perf.PerfEvent.LAUNCHING_FROM_WINDOW_CREATION);
           this.appWindow_ = appWindow;
           this.appWindow_.onClosed.addListener(() => {
             chrome.storage.local.set({maximized: appWindow.isMaximized()});
@@ -175,22 +194,7 @@ cca.bg.Window = class {
             }
             this.onClosed_(this);
           });
-          const wnd = appWindow.contentWindow;
-          wnd.intent = this.intent_;
-          wnd.onActive = () => {
-            this.state_ = cca.bg.WindowState.ACTIVE;
-            // For intent only requiring open camera with specific mode without
-            // returning the capture result, called onIntentHandled() right
-            // after app successfully launched.
-            if (this.intent_ !== null && !this.intent_.shouldHandleResult) {
-              this.intent_.finish();
-            }
-            this.onActive_(this);
-          };
-          wnd.onSuspended = () => {
-            this.state_ = cca.bg.WindowState.SUSPENDED;
-            this.onSuspended_(this);
-          };
+          appWindow.contentWindow.backgroundOps = this;
           if (cca.bg.onAppWindowCreatedForTesting !== null) {
             cca.bg.onAppWindowCreatedForTesting(windowUrl);
           }
@@ -198,20 +202,46 @@ cca.bg.Window = class {
   }
 
   /**
-   * Gets WindowOperations associated with this window.
-   * @return {!cca.bg.WindowOperations}
-   * @throws {Error} Throws when no WindowOperations is associated with the
-   *     window.
-   * @private
+   * @override
    */
-  getWindowOps_() {
-    const ops =
-        /** @type {(!cca.bg.WindowOperations|undefined)} */ (
-            this.appWindow_.contentWindow['ops']);
-    if (ops === undefined) {
-      throw new Error('WindowOperations not found on target window.');
+  bindForegroundOps(ops) {
+    this.foregroundOps_ = ops;
+  }
+
+  /**
+   * @override
+   */
+  getIntent() {
+    return this.intent_;
+  }
+
+  /**
+   * @override
+   */
+  notifyActivation() {
+    this.state_ = cca.bg.WindowState.ACTIVE;
+    // For intent only requiring open camera with specific mode without
+    // returning the capture result, called onIntentHandled() right
+    // after app successfully launched.
+    if (this.intent_ !== null && !this.intent_.shouldHandleResult) {
+      this.intent_.finish();
     }
-    return ops;
+    this.onActive_(this);
+  }
+
+  /**
+   * @override
+   */
+  notifySuspension() {
+    this.state_ = cca.bg.WindowState.SUSPENDED;
+    this.onSuspended_(this);
+  }
+
+  /**
+   * @override
+   */
+  getPerfLogger() {
+    return this.perfLogger_;
   }
 
   /**
@@ -223,7 +253,7 @@ cca.bg.Window = class {
       return;
     }
     this.state_ = cca.bg.WindowState.SUSPENDING;
-    this.getWindowOps_().suspend();
+    this.foregroundOps_.suspend();
   }
 
   /**
@@ -231,7 +261,7 @@ cca.bg.Window = class {
    */
   resume() {
     this.state_ = cca.bg.WindowState.RESUMING;
-    this.getWindowOps_().resume();
+    this.foregroundOps_.resume();
   }
 
   /**
@@ -334,7 +364,10 @@ cca.bg.Background = class {
         this.processPendingIntent_();
       }
     };
-    return new cca.bg.Window(onActive, onSuspended, onClosed);
+    const wnd = new cca.bg.Window(
+        onActive, onSuspended, onClosed, cca.bg.perfLoggerForTesting);
+    cca.bg.perfLoggerForTesting = null;
+    return wnd;
   }
 
   /**
@@ -374,7 +407,10 @@ cca.bg.Background = class {
         this.launcherWindow_.resume();
       }
     };
-    return new cca.bg.Window(onActive, onSuspended, onClosed, intent);
+    const wnd = new cca.bg.Window(
+        onActive, onSuspended, onClosed, cca.bg.perfLoggerForTesting, intent);
+    cca.bg.perfLoggerForTesting = null;
+    return wnd;
   }
 
   /**
@@ -464,7 +500,7 @@ cca.bg.Background = class {
  *     asynchronously.
  */
 cca.bg.handleExternalMessageFromTest = function(message, sender, sendResponse) {
-  if (sender.id !== 'behllobkkfkfnphdnhnkndlbkcpglgmj') {
+  if (sender.id !== cca.bg.TEST_API_ID) {
     console.warn(`Unknown sender id: ${sender.id}`);
     return;
   }
@@ -474,6 +510,40 @@ cca.bg.handleExternalMessageFromTest = function(message, sender, sendResponse) {
       return true;
     default:
       console.warn(`Unknown action: ${message.action}`);
+  }
+};
+
+/**
+ * Handles connection from the test extension used in Tast.
+ * @param {Port} port The port that used to do two-way communication.
+ */
+cca.bg.handleExternalConnectionFromTest = function(port) {
+  if (port.sender.id !== cca.bg.TEST_API_ID) {
+    console.warn(`Unknown sender id: ${port.sender.id}`);
+    return;
+  }
+  switch (port.name) {
+    case 'SET_PERF_CONNECTION':
+      port.onMessage.addListener((event) => {
+        if (cca.bg.perfLoggerForTesting === null) {
+          cca.bg.perfLoggerForTesting = new cca.perf.PerfLogger();
+
+          cca.bg.perfLoggerForTesting.addListener((event, duration, extras) => {
+            port.postMessage({event, duration, extras});
+          });
+        }
+
+        const {name} = event;
+        if (name !== cca.perf.PerfEvent.LAUNCHING_FROM_LAUNCH_APP_COLD &&
+            name !== cca.perf.PerfEvent.LAUNCHING_FROM_LAUNCH_APP_WARM) {
+          console.warn(`Unknown event name from test: ${name}`);
+          return;
+        }
+        cca.bg.perfLoggerForTesting.start(name);
+      });
+      return;
+    default:
+      console.warn(`Unknown port name: ${port.name}`);
   }
 };
 
@@ -495,3 +565,6 @@ chrome.app.runtime.onLaunched.addListener((launchData) => {
 
 chrome.runtime.onMessageExternal.addListener(
     cca.bg.handleExternalMessageFromTest);
+
+chrome.runtime.onConnectExternal.addListener(
+    cca.bg.handleExternalConnectionFromTest);

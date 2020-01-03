@@ -5,6 +5,8 @@
 Polymer({
   is: 'oobe-dialog',
 
+  behaviors: [OobeI18nBehavior, CrScrollableBehavior],
+
   properties: {
     /**
      * Controls visibility of the bottom-buttons element.
@@ -63,6 +65,29 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    /**
+     * If true footer would be shrunk as much as possible to fit container.
+     */
+    footerShrinkable: {
+      type: Boolean,
+      value: false,
+    },
+
+    /* The ID of the localized string to be used as title text when no "title"
+     * slot elements are specified.
+     */
+    titleKey: {
+      type: String,
+    },
+
+    /* The ID of the localized string to be used as subtitle text when no
+     * "subtitle" slot elements are specified.
+     */
+    subtitleKey: {
+      type: String,
+    },
+
   },
 
   focus: function() {
@@ -87,8 +112,16 @@ Polymer({
    * Scroll to the bottom of footer container.
    */
   scrollToBottom: function() {
-    var el = this.$$('#footer-container');
+    var el = this.$$('#top-scroll-container');
     el.scrollTop = el.scrollHeight;
+  },
+
+
+  /**
+   * Updates the scroll behaviour.
+   */
+  updateScroll: function() {
+    this.requestUpdateScroll();
   },
 
   /**
@@ -109,6 +142,7 @@ Polymer({
       focusedElements[0].focus();
 
     this.fire('show-dialog');
+    this.updateScroll();
   },
 
   /** @private */

@@ -27,6 +27,7 @@
 #include "base/task/task_traits.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromecast_buildflags.h"
 #include "components/cookie_config/cookie_store_util.h"
 #include "components/domain_reliability/monitor.h"
 #include "components/network_session_configurator/browser/network_session_configurator.h"
@@ -44,7 +45,6 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/coalescing_cert_verifier.h"
 #include "net/cert/ct_verify_result.h"
-#include "net/cert_net/cert_net_fetcher_impl.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/dns/host_cache.h"
 #include "net/dns/mapped_host_resolver.h"
@@ -79,8 +79,10 @@
 #include "services/network/proxy_config_service_mojo.h"
 #include "services/network/proxy_lookup_request.h"
 #include "services/network/proxy_resolving_socket_factory_mojo.h"
+#include "services/network/public/cpp/cert_verifier/cert_net_fetcher_url_loader.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/network_switches.h"
+#include "services/network/quic_transport.h"
 #include "services/network/resolve_host_request.h"
 #include "services/network/resource_scheduler/resource_scheduler_client.h"
 #include "services/network/restricted_cookie_manager.h"
@@ -137,6 +139,7 @@
 
 #if defined(USE_NSS_CERTS)
 #include "net/cert_net/nss_ocsp.h"
+#include "net/cert_net/nss_ocsp_session_url_request.h"
 #endif  // defined(USE_NSS_CERTS)
 
 #if defined(OS_ANDROID)
@@ -348,7 +351,13 @@ NetworkContext::NetworkContext(
       receiver_(this, std::move(receiver)),
       cors_preflight_controller_(
           params_->cors_extra_safelisted_request_header_names) {
-  url_request_context_owner_ = MakeURLRequestContext();
+  // The URLLoaderFactory used by the |cert_net_fetcher_|, that needs to be
+  // bound after most initialization is done.
+  mojo::PendingReceiver<mojom::URLLoaderFactory>
+      cert_net_url_loader_factory_pending_receiver;
+
+  url_request_context_owner_ =
+      MakeURLRequestContext(&cert_net_url_loader_factory_pending_receiver);
   url_request_context_ = url_request_context_owner_.url_request_context.get();
 
   network_service_->RegisterNetworkContext(this);
@@ -370,6 +379,11 @@ NetworkContext::NetworkContext(
     http_auth_merged_preferences_.SetAllowDefaultCredentials(
         params_->http_auth_static_network_context_params
             ->allow_default_credentials);
+  }
+
+  if (cert_net_fetcher_) {
+    CreateUrlLoaderFactoryForNetworkService(
+        std::move(cert_net_url_loader_factory_pending_receiver));
   }
 
   InitializeCorsParams();
@@ -475,7 +489,7 @@ void NetworkContext::CreateURLLoaderFactory(
     scoped_refptr<ResourceSchedulerClient> resource_scheduler_client) {
   url_loader_factories_.emplace(std::make_unique<cors::CorsURLLoaderFactory>(
       this, std::move(params), std::move(resource_scheduler_client),
-      std::move(receiver), &cors_origin_access_list_, nullptr));
+      std::move(receiver), &cors_origin_access_list_));
 }
 
 void NetworkContext::ActivateDohProbes() {
@@ -558,7 +572,7 @@ void NetworkContext::DisableQuic() {
 
 void NetworkContext::DestroyURLLoaderFactory(
     cors::CorsURLLoaderFactory* url_loader_factory) {
-  const uint32_t process_id = url_loader_factory->process_id();
+  const int32_t process_id = url_loader_factory->process_id();
 
   auto it = url_loader_factories_.find(url_loader_factory);
   DCHECK(it != url_loader_factories_.end());
@@ -574,6 +588,13 @@ void NetworkContext::DestroyURLLoaderFactory(
     network_service()
         ->network_usage_accumulator()
         ->ClearBytesTransferredForProcess(process_id);
+  }
+}
+
+void NetworkContext::Remove(QuicTransport* transport) {
+  auto it = quic_transports_.find(transport);
+  if (it != quic_transports_.end()) {
+    quic_transports_.erase(it);
   }
 }
 
@@ -1088,11 +1109,12 @@ void NetworkContext::CreateProxyResolvingSocketFactory(
 
 void NetworkContext::LookUpProxyForURL(
     const GURL& url,
+    const net::NetworkIsolationKey& network_isolation_key,
     mojo::PendingRemote<mojom::ProxyLookupClient> proxy_lookup_client) {
   DCHECK(proxy_lookup_client);
   std::unique_ptr<ProxyLookupRequest> proxy_lookup_request(
-      std::make_unique<ProxyLookupRequest>(std::move(proxy_lookup_client),
-                                           this));
+      std::make_unique<ProxyLookupRequest>(std::move(proxy_lookup_client), this,
+                                           network_isolation_key));
   ProxyLookupRequest* proxy_lookup_request_ptr = proxy_lookup_request.get();
   proxy_lookup_requests_.insert(std::move(proxy_lookup_request));
   proxy_lookup_request_ptr->Start(url);
@@ -1151,6 +1173,7 @@ void NetworkContext::CreateNetLogExporter(
 
 void NetworkContext::ResolveHost(
     const net::HostPortPair& host,
+    const net::NetworkIsolationKey& network_isolation_key,
     mojom::ResolveHostParametersPtr optional_parameters,
     mojo::PendingRemote<mojom::ResolveHostClient> response_client) {
   if (!internal_host_resolver_) {
@@ -1158,7 +1181,8 @@ void NetworkContext::ResolveHost(
         url_request_context_->host_resolver(), url_request_context_->net_log());
   }
 
-  internal_host_resolver_->ResolveHost(host, std::move(optional_parameters),
+  internal_host_resolver_->ResolveHost(host, network_isolation_key,
+                                       std::move(optional_parameters),
                                        std::move(response_client));
 }
 
@@ -1320,7 +1344,7 @@ void NetworkContext::GetHSTSState(const std::string& domain,
       net::TransportSecurityState::STSState dynamic_sts_state;
       net::TransportSecurityState::PKPState dynamic_pkp_state;
       bool found_sts_dynamic = transport_security_state->GetDynamicSTSState(
-          domain, &dynamic_sts_state);
+          domain, &dynamic_sts_state, nullptr);
 
       bool found_pkp_dynamic = transport_security_state->GetDynamicPKPState(
           domain, &dynamic_pkp_state);
@@ -1470,8 +1494,8 @@ void NetworkContext::CreateP2PSocketManager(
       std::make_unique<P2PSocketManager>(
           std::move(client), std::move(trusted_socket_manager),
           std::move(socket_manager_receiver),
-          base::Bind(&NetworkContext::DestroySocketManager,
-                     base::Unretained(this)),
+          base::BindRepeating(&NetworkContext::DestroySocketManager,
+                              base::Unretained(this)),
           url_request_context_);
   socket_managers_[socket_manager.get()] = std::move(socket_manager);
 }
@@ -1620,7 +1644,9 @@ void NetworkContext::OnHttpAuthDynamicParamsChanged(
 #endif
 }
 
-URLRequestContextOwner NetworkContext::MakeURLRequestContext() {
+URLRequestContextOwner NetworkContext::MakeURLRequestContext(
+    mojo::PendingReceiver<mojom::URLLoaderFactory>*
+        cert_net_url_loader_factory_pending_receiver) {
   URLRequestContextBuilderMojo builder;
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
@@ -1632,7 +1658,12 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext() {
 #if defined(OS_ANDROID) || defined(OS_FUCHSIA) || defined(OS_CHROMEOS) || \
     BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED) ||                \
     BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
-    cert_net_fetcher_ = base::MakeRefCounted<net::CertNetFetcherImpl>();
+    mojo::PendingRemote<mojom::URLLoaderFactory> pending_remote;
+    *cert_net_url_loader_factory_pending_receiver =
+        pending_remote.InitWithNewPipeAndPassReceiver();
+    cert_net_fetcher_ =
+        base::MakeRefCounted<cert_verifier::CertNetFetcherURLLoader>(
+            std::move(pending_remote));
 #endif
 #if defined(OS_CHROMEOS)
     scoped_refptr<net::CertVerifyProc> verify_proc;
@@ -1648,8 +1679,9 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext() {
       verify_proc = CreateCertVerifyProcForUser(cert_net_fetcher_,
                                                 std::move(public_slot));
     }
-    cert_verifier_with_trust_anchors_ = new CertVerifierWithTrustAnchors(
-        base::Bind(&NetworkContext::TrustAnchorUsed, base::Unretained(this)));
+    cert_verifier_with_trust_anchors_ =
+        new CertVerifierWithTrustAnchors(base::BindRepeating(
+            &NetworkContext::TrustAnchorUsed, base::Unretained(this)));
     UpdateAdditionalCertificates(
         std::move(params_->initial_additional_certificates));
     cert_verifier_with_trust_anchors_->InitializeOnIOThread(verify_proc);
@@ -1735,7 +1767,7 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext() {
 
     net::CookieCryptoDelegate* crypto_delegate = nullptr;
     if (params_->enable_encrypted_cookies) {
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(IS_CHROMECAST)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && !BUILDFLAG(IS_CHROMECAST)
       DCHECK(network_service_->os_crypt_config_set())
           << "NetworkService::SetCryptConfig must be called before creating a "
              "NetworkContext with encrypted cookies.";
@@ -1776,14 +1808,12 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext() {
 
   if (params_->proxy_resolver_factory) {
     builder.SetMojoProxyResolverFactory(
-        proxy_resolver::mojom::ProxyResolverFactoryPtr(
-            std::move(params_->proxy_resolver_factory)));
+        std::move(params_->proxy_resolver_factory));
   }
 
 #if defined(OS_CHROMEOS)
   if (params_->dhcp_wpad_url_client) {
-    builder.SetDhcpWpadUrlClient(network::mojom::DhcpWpadUrlClientPtr(
-        std::move(params_->dhcp_wpad_url_client)));
+    builder.SetDhcpWpadUrlClient(std::move(params_->dhcp_wpad_url_client));
   }
 #endif  // defined(OS_CHROMEOS)
 
@@ -1904,9 +1934,10 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext() {
   if (network_service_ && network_service_->quic_disabled())
     is_quic_force_disabled = true;
 
+  auto quic_context = std::make_unique<net::QuicContext>();
   network_session_configurator::ParseCommandLineAndFieldTrials(
       *base::CommandLine::ForCurrentProcess(), is_quic_force_disabled,
-      params_->quic_user_agent_id, &session_params);
+      params_->quic_user_agent_id, &session_params, quic_context->params());
 
   session_params.disable_idle_sockets_close_on_memory_pressure =
       params_->disable_idle_sockets_close_on_memory_pressure;
@@ -1921,6 +1952,7 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext() {
           features::kSplitAuthCacheByNetworkIsolationKey);
 
   builder.set_http_network_session_params(session_params);
+  builder.set_quic_context(std::move(quic_context));
 
   builder.SetCreateHttpTransactionFactoryCallback(
       base::BindOnce([](net::HttpNetworkSession* session)
@@ -2071,9 +2103,6 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext() {
       result.url_request_context->cookie_store(),
       std::move(session_cleanup_cookie_store),
       std::move(params_->cookie_manager_params));
-
-  if (cert_net_fetcher_)
-    cert_net_fetcher_->SetURLRequestContext(result.url_request_context.get());
 
   return result;
 }
@@ -2294,14 +2323,13 @@ void NetworkContext::GetOriginPolicyManager(
   origin_policy_manager_->AddReceiver(std::move(receiver));
 }
 
-mojo::PendingRemote<mojom::URLLoaderFactory>
-NetworkContext::CreateUrlLoaderFactoryForNetworkService() {
+void NetworkContext::CreateUrlLoaderFactoryForNetworkService(
+    mojo::PendingReceiver<mojom::URLLoaderFactory>
+        url_loader_factory_pending_receiver) {
   auto url_loader_factory_params = mojom::URLLoaderFactoryParams::New();
   url_loader_factory_params->process_id = network::mojom::kBrowserProcessId;
-  mojo::PendingRemote<mojom::URLLoaderFactory> url_loader_factory;
-  CreateURLLoaderFactory(url_loader_factory.InitWithNewPipeAndPassReceiver(),
+  CreateURLLoaderFactory(std::move(url_loader_factory_pending_receiver),
                          std::move(url_loader_factory_params));
-  return url_loader_factory;
 }
 
 }  // namespace network

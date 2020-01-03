@@ -15,10 +15,6 @@ class CORE_EXPORT CSSAnimation : public Animation {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static CSSAnimation* Create(AnimationEffect*,
-                              AnimationTimeline*,
-                              const String& animation_name);
-
   CSSAnimation(ExecutionContext*,
                AnimationTimeline*,
                AnimationEffect*,
@@ -32,11 +28,12 @@ class CORE_EXPORT CSSAnimation : public Animation {
   String animation_name_;
 };
 
-DEFINE_TYPE_CASTS(CSSAnimation,
-                  Animation,
-                  animation,
-                  animation->IsCSSAnimation(),
-                  animation.IsCSSAnimation());
+template <>
+struct DowncastTraits<CSSAnimation> {
+  static bool AllowFrom(const Animation& animation) {
+    return animation.IsCSSAnimation();
+  }
+};
 
 }  // namespace blink
 

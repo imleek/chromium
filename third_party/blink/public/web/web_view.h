@@ -41,11 +41,14 @@
 
 namespace cc {
 class PaintCanvas;
+struct BrowserControlsParams;
 }
 
 namespace gfx {
 class Point;
+class PointF;
 class Rect;
+class SizeF;
 }
 
 namespace blink {
@@ -63,8 +66,6 @@ class WebViewClient;
 class WebWidget;
 struct PluginAction;
 struct WebDeviceEmulationParams;
-struct WebFloatPoint;
-struct WebFloatSize;
 struct WebRect;
 struct WebSize;
 struct WebTextAutosizerPageInfo;
@@ -158,19 +159,8 @@ class WebView {
   virtual WebLocalFrame* FocusedFrame() = 0;
   virtual void SetFocusedFrame(WebFrame*) = 0;
 
-  // Sets the provided frame as focused and fires blur/focus events on any
-  // currently focused elements in old/new focused documents.  Note that this
-  // is different from setFocusedFrame, which does not fire events on focused
-  // elements.
-  virtual void FocusDocumentView(WebFrame*) = 0;
-
   // Focus the first (last if reverse is true) focusable node.
   virtual void SetInitialFocus(bool reverse) = 0;
-
-  // Clears the focused element (and selection if a text field is focused)
-  // to ensure that a text field on the page is not eating keystrokes we
-  // send it.
-  virtual void ClearFocusedElement() = 0;
 
   // Smooth scroll the root layer to |targetX|, |targetY| in |duration|.
   virtual void SmoothScroll(int target_x,
@@ -225,14 +215,14 @@ class WebView {
   // Sets the offset of the visual viewport within the main frame, in
   // fractional CSS pixels. The offset will be clamped so the visual viewport
   // stays within the frame's bounds.
-  virtual void SetVisualViewportOffset(const WebFloatPoint&) = 0;
+  virtual void SetVisualViewportOffset(const gfx::PointF&) = 0;
 
   // Gets the visual viewport's current offset within the page's main frame,
   // in fractional CSS pixels.
-  virtual WebFloatPoint VisualViewportOffset() const = 0;
+  virtual gfx::PointF VisualViewportOffset() const = 0;
 
   // Get the visual viewport's size in CSS pixels.
-  virtual WebFloatSize VisualViewportSize() const = 0;
+  virtual gfx::SizeF VisualViewportSize() const = 0;
 
   // Resizes the unscaled (page scale = 1.0) visual viewport. Normally the
   // unscaled visual viewport is the same size as the main frame. The passed
@@ -304,6 +294,12 @@ class WebView {
       float top_controls_height,
       float bottom_controls_height,
       bool browser_controls_shrink_layout) = 0;
+
+  // Same as ResizeWithBrowserControls(const WebSize&,float,float,bool), but
+  // includes all browser controls params such as the min heights.
+  virtual void ResizeWithBrowserControls(
+      const WebSize&,
+      cc::BrowserControlsParams browser_controls_params) = 0;
 
   // Same as ResizeWithBrowserControls, but keeps the same BrowserControl
   // settings.

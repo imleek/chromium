@@ -33,8 +33,8 @@
 #include "components/prefs/pref_member.h"
 #include "components/safe_browsing/buildflags.h"
 #include "content/public/browser/render_widget_host.h"
-#include "content/public/browser/web_contents_binding_set.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/browser/web_contents_receiver_set.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -45,6 +45,7 @@ class PasswordAccessoryController;
 class TouchToFillController;
 #endif
 
+class ChromeBiometricAuthenticator;
 class PasswordGenerationPopupObserver;
 class PasswordGenerationPopupControllerImpl;
 class Profile;
@@ -97,6 +98,11 @@ class ChromePasswordManagerClient
       const CredentialsCallback& callback) override;
   void ShowTouchToFill(
       password_manager::PasswordManagerDriver* driver) override;
+  // Returns a pointer to the BiometricAuthenticator which is created on demand.
+  // This is currently only implemented for Android, on all other platforms this
+  // will always be null.
+  password_manager::BiometricAuthenticator* GetBiometricAuthenticator()
+      override;
   void GeneratePassword() override;
   void NotifyUserAutoSignin(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
@@ -315,6 +321,8 @@ class ChromePasswordManagerClient
   base::string16 last_composing_text_;
 #endif
 
+  std::unique_ptr<ChromeBiometricAuthenticator> biometric_authenticator_;
+
   password_manager::ContentPasswordManagerDriverFactory* driver_factory_;
 
   // As a mojo service, will be registered into service registry
@@ -322,8 +330,9 @@ class ChromePasswordManagerClient
   // once main frame host was created.
   password_manager::ContentCredentialManager content_credential_manager_;
 
-  content::WebContentsFrameBindingSet<autofill::mojom::PasswordGenerationDriver>
-      password_generation_driver_bindings_;
+  content::WebContentsFrameReceiverSet<
+      autofill::mojom::PasswordGenerationDriver>
+      password_generation_driver_receivers_;
 
   // Observer for password generation popup.
   PasswordGenerationPopupObserver* observer_;

@@ -75,18 +75,17 @@ VizMainImpl::VizMainImpl(Delegate* delegate,
 
   if (!dependencies_.io_thread_task_runner)
     io_thread_ = CreateAndStartIOThread();
-  if (dependencies_.create_display_compositor) {
-    if (dependencies.viz_compositor_thread_runner) {
-      viz_compositor_thread_runner_ = dependencies.viz_compositor_thread_runner;
-    } else {
-      viz_compositor_thread_runner_impl_ =
-          std::make_unique<VizCompositorThreadRunnerImpl>();
-      viz_compositor_thread_runner_ = viz_compositor_thread_runner_impl_.get();
-    }
-    if (delegate_) {
-      delegate_->PostCompositorThreadCreated(
-          viz_compositor_thread_runner_->task_runner());
-    }
+
+  if (dependencies.viz_compositor_thread_runner) {
+    viz_compositor_thread_runner_ = dependencies.viz_compositor_thread_runner;
+  } else {
+    viz_compositor_thread_runner_impl_ =
+        std::make_unique<VizCompositorThreadRunnerImpl>();
+    viz_compositor_thread_runner_ = viz_compositor_thread_runner_impl_.get();
+  }
+  if (delegate_) {
+    delegate_->PostCompositorThreadCreated(
+        viz_compositor_thread_runner_->task_runner());
   }
 
   if (!gpu_init_->gpu_info().in_process_gpu && dependencies.ukm_recorder) {
@@ -103,8 +102,6 @@ VizMainImpl::VizMainImpl(Delegate* delegate,
       gpu_init_->gpu_feature_info_for_hardware_gpu(),
       gpu_init_->gpu_extra_info(), gpu_init_->vulkan_implementation(),
       base::BindOnce(&VizMainImpl::ExitProcess, base::Unretained(this)));
-  if (dependencies_.create_display_compositor)
-    gpu_service_->set_oopd_enabled();
 }
 
 VizMainImpl::~VizMainImpl() {
@@ -242,7 +239,9 @@ void VizMainImpl::CreateFrameSinkManagerInternal(
       gpu_service_->gpu_channel_manager()->gpu_preferences(),
       gpu_service_->shared_image_manager(),
       gpu_service_->gpu_channel_manager()->program_cache(),
-      gpu_service_->GetContextState());
+      // Unretained is safe since |gpu_service_| outlives |task_executor_|.
+      base::BindRepeating(&GpuServiceImpl::GetContextState,
+                          base::Unretained(gpu_service_.get())));
 
   viz_compositor_thread_runner_->CreateFrameSinkManager(
       std::move(params), task_executor_.get(), gpu_service_.get());
@@ -254,11 +253,17 @@ void VizMainImpl::CreateVizDevTools(mojom::VizDevToolsParamsPtr params) {
 #endif
 }
 
-void VizMainImpl::ExitProcess() {
+void VizMainImpl::ExitProcess(bool immediately) {
   DCHECK(gpu_thread_task_runner_->BelongsToCurrentThread());
 
   // Close mojom::VizMain bindings first so the browser can't try to reconnect.
   receiver_.reset();
+
+  if (!gpu_init_->gpu_info().in_process_gpu && immediately) {
+    // Atomically shut down GPU process to make it faster and simpler.
+    base::Process::TerminateCurrentProcessImmediately(/*exit_code=*/0);
+    return;
+  }
 
   if (viz_compositor_thread_runner_) {
     // OOP-D requires destroying RootCompositorFrameSinkImpls on the compositor

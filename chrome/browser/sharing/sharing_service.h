@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "chrome/browser/sharing/proto/sharing_message.pb.h"
 #include "chrome/browser/sharing/sharing_device_registration.h"
 #include "chrome/browser/sharing/sharing_message_sender.h"
 #include "chrome/browser/sharing/sharing_send_message_result.h"
@@ -20,7 +21,6 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync/driver/sync_service_observer.h"
 #include "components/sync/protocol/device_info_specifics.pb.h"
-#include "components/sync/protocol/sharing_message.pb.h"
 #include "net/base/backoff_entry.h"
 
 #if defined(OS_ANDROID)
@@ -75,14 +75,14 @@ class SharingService : public KeyedService, syncer::SyncServiceObserver {
       sync_pb::SharingSpecificFields::EnabledFeatures required_feature) const;
 
   // Sends a Sharing message to remote device.
-  // |device_guid|: Sync GUID of receiver device.
+  // |device|: The receiver device.
   // |response_timeout|: Maximum amount of time waiting for a response before
   // invoking |callback| with kAckTimeout.
   // |message|: Message to be sent.
   // |callback| will be invoked once a response has received from remote device,
   // or if operation has failed or timed out.
   virtual void SendMessageToDevice(
-      const std::string& device_guid,
+      const syncer::DeviceInfo& device,
       base::TimeDelta response_timeout,
       chrome_browser_sharing::SharingMessage message,
       SharingMessageSender::ResponseCallback callback);
@@ -117,8 +117,7 @@ class SharingService : public KeyedService, syncer::SyncServiceObserver {
   void OnDeviceUnregistered(SharingDeviceRegistrationResult result);
 
   // Returns list of devices that have |required_feature| enabled. Also
-  // filters out devices which have not been online for more than
-  // |SharingConstants::kDeviceExpiration| time.
+  // filters out devices which have not been active for some time.
   SharingDeviceList FilterDeviceCandidates(
       SharingDeviceList devices,
       sync_pb::SharingSpecificFields::EnabledFeatures required_feature) const;

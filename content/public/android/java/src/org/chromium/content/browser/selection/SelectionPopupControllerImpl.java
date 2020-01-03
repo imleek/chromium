@@ -1242,6 +1242,8 @@ public class SelectionPopupControllerImpl extends ActionModeCallbackHelper
             @SelectionEventType int eventType, int left, int top, int right, int bottom) {
         // Ensure the provided selection coordinates form a non-empty rect, as required by
         // the selection action mode.
+        // NOTE: the native side ensures the rectangle is not empty, but that's done using floating
+        // point, which means it's entirely possible for this code to receive an empty rect.
         if (left == right) ++right;
         if (top == bottom) ++bottom;
 

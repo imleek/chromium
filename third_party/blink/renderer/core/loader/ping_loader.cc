@@ -101,10 +101,12 @@ class BeaconBlob final : public Beacon {
     DCHECK(data_);
 
     scoped_refptr<EncodedFormData> entity_body = EncodedFormData::Create();
-    if (data_->HasBackingFile())
-      entity_body->AppendFile(To<File>(data_.Get())->GetPath());
-    else
+    if (data_->HasBackingFile()) {
+      entity_body->AppendFile(To<File>(data_.Get())->GetPath(),
+                              To<File>(data_.Get())->LastModifiedTime());
+    } else {
       entity_body->AppendBlob(data_->Uuid(), data_->GetBlobDataHandle());
+    }
 
     request.SetHttpBody(std::move(entity_body));
 
@@ -121,15 +123,19 @@ class BeaconBlob final : public Beacon {
 
 class BeaconDOMArrayBufferView final : public Beacon {
  public:
-  explicit BeaconDOMArrayBufferView(DOMArrayBufferView* data) : data_(data) {}
+  explicit BeaconDOMArrayBufferView(DOMArrayBufferView* data) : data_(data) {
+    CHECK(base::CheckedNumeric<wtf_size_t>(data->byteLengthAsSizeT()).IsValid())
+        << "EncodedFormData::Create cannot deal with huge ArrayBuffers.";
+  }
 
-  uint64_t size() const override { return data_->byteLength(); }
+  uint64_t size() const override { return data_->byteLengthAsSizeT(); }
 
   void Serialize(ResourceRequest& request) const override {
     DCHECK(data_);
 
-    scoped_refptr<EncodedFormData> entity_body =
-        EncodedFormData::Create(data_->BaseAddress(), data_->byteLength());
+    scoped_refptr<EncodedFormData> entity_body = EncodedFormData::Create(
+        data_->BaseAddress(),
+        base::checked_cast<wtf_size_t>(data_->byteLengthAsSizeT()));
     request.SetHttpBody(std::move(entity_body));
 
     // FIXME: a reasonable choice, but not in the spec; should it give a
@@ -249,6 +255,7 @@ void PingLoader::SendViolationReport(LocalFrame* frame,
   request.SetHttpBody(std::move(report));
   request.SetCredentialsMode(network::mojom::CredentialsMode::kSameOrigin);
   request.SetRequestContext(mojom::RequestContextType::CSP_REPORT);
+  request.SetRequestDestination(network::mojom::RequestDestination::kReport);
   request.SetRequestorOrigin(frame->GetDocument()->GetSecurityOrigin());
   request.SetRedirectMode(network::mojom::RedirectMode::kError);
   FetchParameters params(request);

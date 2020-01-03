@@ -14,6 +14,7 @@ import "services/network/public/mojom/address_list.mojom";
 import "services/network/public/mojom/cookie_manager.mojom";
 import "services/network/public/mojom/default_credentials.mojom";
 import "services/network/public/mojom/cors_origin_pattern.mojom";
+import "services/network/public/mojom/cross_origin_embedder_policy.mojom";
 import "services/network/public/mojom/host_resolver.mojom";
 import "services/network/public/mojom/http_request_headers.mojom";
 import "services/network/public/mojom/ip_address.mojom";
@@ -218,7 +219,8 @@ struct NetworkContextParams {
   // Handles PAC script execution. If not populated, will attempt to use
   // platform implementation to execute PAC scripts, if available (Only
   // available on Windows and Mac).
-  proxy_resolver.mojom.ProxyResolverFactory? proxy_resolver_factory;
+  pending_remote<proxy_resolver.mojom.ProxyResolverFactory>?
+      proxy_resolver_factory;
 
   // Retrieves the PAC script URL set via DHCP from the browser process. Only
   // used if |proxy_resolver_factory| is set. Note: optional because some tests
@@ -488,11 +490,11 @@ struct ClearDataFilter {
 struct NetworkUsage {
   // |process_id| is 0 for the browser process, otherwise it's the child process
   // ID.
-  uint32 process_id;
+  int32 process_id;
 
   // The ID of the IPC route for the consumer, which identifies the RenderFrame
   // or like-thing.
-  uint32 routing_id;
+  int32 routing_id;
 
   // Raw bytes received from the network since the start/restart of the service.
   int64 total_bytes_received;
@@ -517,32 +519,54 @@ struct SignedExchangeReport {
   mojo_base.mojom.TimeDelta elapsed_time;
 };
 
-const uint32 kBrowserProcessId = 0;
-const uint32 kInvalidProcessId = 0xffffffff;
+const int32 kBrowserProcessId = 0;
+const int32 kInvalidProcessId = -1;
 
-// https://mikewest.github.io/corpp/#integration-html
-enum CrossOriginEmbedderPolicy {
-  kNone,
-  kRequireCorp,
+// URLLoaderFactory made by the network service consists of two layers of
+// factories, the "internal" one that directly talks to the //net layer, and
+// the "outer" one (which is also called CorsURLLoader) that enforces necessary
+// security features such as CORS.
+//
+// This struct can be used to specify an alternative "internal"
+// URLLoaderFactory so that the requests can still go through the "outer" one
+// for security features, but then they are routed to the alternative
+// |overriding_factory| rather than the one that talks to //net, which is also
+// exposed to the consumer as |overridden_factory_receiver|.
+//
+// |overridden_factory_receiver| is useful when the receiver of
+// |overriding_factory|| wants to decide which (of the "internal", or the
+// "alternative" one) URLLoaderFactory to use on a per-request basis.
+struct URLLoaderFactoryOverride {
+  // This factory replaces the "internal" factory.
+  pending_remote<URLLoaderFactory> overriding_factory;
+
+  // A receiver for the replaced "internal" URLLoaderFactory.
+  pending_receiver<URLLoaderFactory>? overridden_factory_receiver;
 };
 
 struct URLLoaderFactoryParams {
   // Process requesting the URLLoaderFactory.
   // Set to kBrowserProcessId to indicate the browser process.
-  uint32 process_id = kInvalidProcessId;
+  int32 process_id = kInvalidProcessId;
 
   // If specified, then |request_initiator_site_lock| locks
   // |ResourceRequest::request_initiator| to the specified origin.
-  // TODO(lukasza): https://crbug.com/891872: Make this non-optional.
-  // TODO(lukasza, nasko): https://crbug.com/888079: Make this an *origin* lock
-  // (rather than just a site lock).
+  // TODO(lukasza): https://crbug.com/891872: 1) Make this non-optional,
+  // 2) Make this an *origin* lock (rather than a *site* lock).
   url.mojom.Origin? request_initiator_site_lock;
 
   // Cross-origin read blocking (CORB) configuration.
   bool is_corb_enabled = true;
 
-  // True if web related security (e.g., CORS) should be disabled. This is
-  // mainly used by people testing their sites, via a command line switch.
+  // Indicate whether a request is not from web page ( probably from chrome
+  // extension background page ).
+  bool unsafe_non_webby_initiator = false;
+
+  // If `true`, this factory is being created for a context that isn't
+  // considered to be of the web. "Site"-based features, like Fetch
+  // Metadata's `Sec-Fetch-Site` header will treat all requests from
+  // this factory as initiated by the user agent itself, not from any
+  // particular page.
   bool disable_web_security = false;
 
   // https://mikewest.github.io/corpp/#integration-html
@@ -568,6 +592,15 @@ struct URLLoaderFactoryParams {
   // consumers can issue requests with ResourceRequest::trusted_params
   // populated.
   bool is_trusted;
+
+  // An identifier for toplevel frame. This is used for resource accounting
+  // for keepalive requests. When this factory is for a dedicated worker,
+  // the identifier for the toplevel frame of the ancestor's frame is given.
+  // When this factory is for a shared/service worker, null is given.
+  mojo_base.mojom.UnguessableToken? top_frame_id;
+
+  // Replaces the "internal" factory used by security features such as CORS.
+  URLLoaderFactoryOverride? factory_override;
 };
 
 // The |credentials| output parameter is given to URLRequest::SetAuth()
@@ -637,8 +670,8 @@ interface NetworkContextClient {
   // network::ResourceRequest::fetch_window_id.
   OnAuthRequired(
       mojo_base.mojom.UnguessableToken? window_id,
-      uint32 process_id,
-      uint32 routing_id,
+      int32 process_id,
+      int32 routing_id,
       uint32 request_id,
       url.mojom.Url url,
       bool first_auth_attempt,
@@ -656,8 +689,8 @@ interface NetworkContextClient {
   // making the request, see network::ResourceRequest::fetch_window_id.
   OnCertificateRequested(
       mojo_base.mojom.UnguessableToken? window_id,
-      uint32 process_id,
-      uint32 routing_id,
+      int32 process_id,
+      int32 routing_id,
       uint32 request_id,
       network.mojom.SSLCertRequestInfo cert_info,
       pending_remote<ClientCertificateResponder> cert_responder);
@@ -665,8 +698,8 @@ interface NetworkContextClient {
   // Called when an SSL certificate is encountered.
   // The callback argument is a net::ERROR value. If it's net::OK, then the
   // request is resumed. Otherwise it's cancelled with the given error.
-  OnSSLCertificateError(uint32 process_id,
-                        uint32 routing_id,
+  OnSSLCertificateError(int32 process_id,
+                        int32 routing_id,
                         url.mojom.Url url,
                         int32 net_error,
                         SSLInfo ssl_info,
@@ -680,7 +713,7 @@ interface NetworkContextClient {
   // If any files referenced by |file_paths| cannot be read, a net::ERROR will
   // be returned, and |files| will be an empty list. If the |async| parameter
   // is true, the files will be opened with FLAG_ASYNC.
-  OnFileUploadRequested(uint32 process_id,
+  OnFileUploadRequested(int32 process_id,
                         bool async,
                         array<mojo_base.mojom.FilePath> file_paths) =>
                         (int32 net_error, array<mojo_base.mojom.File> files);
@@ -698,7 +731,7 @@ interface NetworkContextClient {
   // https://www.w3.org/TR/clear-site-data/
   // TODO(crbug.com/876931): We might want to move header parsing work to
   // Network Service for security concerns (e.g. |header_value| => booleans).
-  OnClearSiteData(uint32 process_id,
+  OnClearSiteData(int32 process_id,
                   int32 routing_id,
                   url.mojom.Url url,
                   string header_value,
@@ -1036,8 +1069,11 @@ interface NetworkContext {
   CreateProxyResolvingSocketFactory(
       pending_receiver<ProxyResolvingSocketFactory> factory);
 
-  // Looks up what proxy to use for a particular URL.
+  // Looks up what proxy to use for a particular URL. |network_isolation_key|
+  // is used to partition the DNS cache in the case a PAC script is used, and
+  // should match the NIK of the frame the lookup is for use with.
   LookUpProxyForURL(url.mojom.Url url,
+                    NetworkIsolationKey network_isolation_key,
                     pending_remote<ProxyLookupClient> proxy_lookup_client);
 
   // Forces refetching the proxy configuration, and applying it.
@@ -1127,6 +1163,7 @@ interface NetworkContext {
   // All outstanding requests are cancelled if the NetworkContext is destroyed.
   // Such requests will receive ERR_FAILED via |response_client|.
   ResolveHost(HostPortPair host,
+              NetworkIsolationKey network_isolation_key,
               ResolveHostParameters? optional_parameters,
               pending_remote<ResolveHostClient> response_client);
 

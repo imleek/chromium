@@ -96,10 +96,6 @@ void WebClient::AllowCertificateError(
   callback.Run(false);
 }
 
-bool WebClient::IsSlimNavigationManagerEnabled() const {
-  return base::FeatureList::IsEnabled(web::features::kSlimNavigationManager);
-}
-
 void WebClient::PrepareErrorPage(WebState* web_state,
                                  const GURL& url,
                                  NSError* error,
@@ -114,6 +110,14 @@ void WebClient::PrepareErrorPage(WebState* web_state,
 
 UIView* WebClient::GetWindowedContainer() {
   return nullptr;
+}
+
+bool WebClient::ForceMobileVersionByDefault(const GURL&) {
+  return false;
+}
+
+UserAgentType WebClient::GetDefaultUserAgent(UIView* web_view) {
+  return UserAgentType::MOBILE;
 }
 
 }  // namespace web

@@ -133,7 +133,7 @@ static_library("arc") {
     "//ui/display/manager",
     "//ui/events",
     "//ui/events:dom_keycode_converter",
-    "//ui/events/ozone:events_ozone_evdev",
+    "//ui/events/ozone",
     "//ui/wm/public",
     "//url:url",
   ]
@@ -170,14 +170,26 @@ static_library("arc_base_enums") {
   ]
 }
 
-static_library("arc_base_utils") {
+source_set("arc_features") {
   sources = [
     "arc_features.cc",
     "arc_features.h",
+  ]
+
+  deps = [
+    "//base",
+  ]
+}
+
+static_library("arc_base_utils") {
+  sources = [
     "arc_util.cc",
     "arc_util.h",
   ]
 
+  public_deps = [
+    ":arc_features",
+  ]
   deps = [
     "//ash/public/cpp",
     "//base",
@@ -222,6 +234,8 @@ static_library("arc_base") {
     "session/arc_vm_client_adapter.h",
     "session/arc_vm_client_adapter_util.cc",
     "session/arc_vm_client_adapter_util.h",
+    "session/file_system_status.cc",
+    "session/file_system_status.h",
   ]
 
   deps = [
@@ -365,12 +379,15 @@ source_set("unit_tests") {
     "net/always_on_vpn_manager_unittest.cc",
     "net/arc_net_host_impl_unittest.cc",
     "power/arc_power_bridge_unittest.cc",
+    "property/arc_property_bridge_unittest.cc",
     "session/arc_data_remover_unittest.cc",
     "session/arc_session_impl_unittest.cc",
     "session/arc_session_runner_unittest.cc",
     "session/arc_vm_client_adapter_unittest.cc",
     "session/arc_vm_client_adapter_util_unittest.cc",
+    "session/file_system_status_unittest.cc",
     "timer/arc_timer_bridge_unittest.cc",
+    "video_accelerator/arc_video_accelerator_util_unittest.cc",
     "wake_lock/arc_wake_lock_bridge_unittest.cc",
   ]
 
@@ -393,6 +410,7 @@ source_set("unit_tests") {
     "//chromeos/network:test_support",
     "//chromeos/system:system",
     "//components/account_id",
+    "//components/arc/video_accelerator",
     "//components/keyed_service/content",
     "//components/prefs:test_support",
     "//components/session_manager/core:core",
@@ -405,7 +423,6 @@ source_set("unit_tests") {
     "//mojo/public/cpp/system:system",
     "//services/device/public/cpp:test_support",
     "//services/device/public/mojom",
-    "//services/service_manager/public/cpp/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/aura",

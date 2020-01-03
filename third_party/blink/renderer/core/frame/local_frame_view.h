@@ -45,6 +45,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record.h"
 #include "third_party/blink/renderer/platform/graphics/paint_invalidation_reason.h"
 #include "third_party/blink/renderer/platform/graphics/subtree_paint_property_update_reason.h"
+#include "third_party/blink/renderer/platform/instrumentation/memory_pressure_listener.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
@@ -61,7 +62,6 @@ class AXObjectCache;
 class ChromeClient;
 class CompositorAnimationTimeline;
 class Cursor;
-class DisplayItemClient;
 class DocumentLifecycle;
 class FloatRect;
 class FloatSize;
@@ -115,7 +115,8 @@ struct LifecycleData {
 
 class CORE_EXPORT LocalFrameView final
     : public GarbageCollected<LocalFrameView>,
-      public FrameView {
+      public FrameView,
+      public MemoryPressureListener {
   USING_GARBAGE_COLLECTED_MIXIN(LocalFrameView);
 
   friend class PaintControllerPaintTestBase;
@@ -428,21 +429,10 @@ class CORE_EXPORT LocalFrameView final
   // FIXME: Remove this method once plugin loading is decoupled from layout.
   void FlushAnyPendingPostLayoutTasks();
 
-  static void SetInitialTracksPaintInvalidationsForTesting(bool);
-
   // These methods are for testing.
-  void SetTracksPaintInvalidations(bool);
-  bool IsTrackingPaintInvalidations() const {
-    return tracked_object_paint_invalidations_.get();
-  }
-  void TrackObjectPaintInvalidation(const DisplayItemClient&,
-                                    PaintInvalidationReason);
-  struct ObjectPaintInvalidation {
-    String name;
-    PaintInvalidationReason reason;
-  };
-  Vector<ObjectPaintInvalidation>* TrackedObjectPaintInvalidations() const {
-    return tracked_object_paint_invalidations_.get();
+  void SetTracksRasterInvalidations(bool);
+  bool IsTrackingRasterInvalidations() const {
+    return is_tracking_raster_invalidations_;
   }
 
   using ScrollableAreaSet = HeapHashSet<Member<PaintLayerScrollableArea>>;
@@ -611,6 +601,8 @@ class CORE_EXPORT LocalFrameView final
   void DequeueScrollAnchoringAdjustment(ScrollableArea*);
   void PerformScrollAnchoringAdjustments();
 
+  void SetNeedsEnqueueScrollEvent(PaintLayerScrollableArea*);
+
   // Only for CompositeAfterPaint.
   std::unique_ptr<JSONObject> CompositedLayersAsJSON(LayerTreeFlags);
 
@@ -623,7 +615,8 @@ class CORE_EXPORT LocalFrameView final
 
   bool HasVisibleSlowRepaintViewportConstrainedObjects() const;
 
-  bool MapToVisualRectInRemoteRootFrame(PhysicalRect&);
+  bool MapToVisualRectInRemoteRootFrame(PhysicalRect& rect,
+                                        bool apply_overflow_clip = true);
 
   void MapLocalToRemoteRootFrame(TransformState&);
 
@@ -631,6 +624,13 @@ class CORE_EXPORT LocalFrameView final
 
   // The visual viewport can supply scrollbars.
   void VisualViewportScrollbarsChanged();
+
+  void SetVisualViewportNeedsRepaint() {
+    visual_viewport_needs_repaint_ = true;
+  }
+  bool VisualViewportNeedsRepaint() const {
+    return visual_viewport_needs_repaint_;
+  }
 
   LayoutUnit CaretWidth() const;
 
@@ -649,12 +649,6 @@ class CORE_EXPORT LocalFrameView final
   PaintArtifactCompositor* GetPaintArtifactCompositor() const;
 
   const cc::Layer* RootCcLayer() const;
-
-  // Keeps track of whether the scrollable state for the LocalRoot has changed
-  // since ScrollingCoordinator last checked. Only ScrollingCoordinator should
-  // ever call the clearing function.
-  bool FrameIsScrollableDidChange();
-  void ClearFrameIsScrollableDidChange();
 
   // Should be called whenever this LocalFrameView adds or removes a
   // scrollable area, or gains/loses a composited layer.
@@ -705,6 +699,8 @@ class CORE_EXPORT LocalFrameView final
     return lifecycle_updates_throttled_;
   }
   void VisibilityChanged(blink::mojom::FrameVisibility visibility) override;
+
+  void EnqueueScrollEvents();
 
  private:
   LocalFrameView(LocalFrame&, IntRect);
@@ -837,6 +833,9 @@ class CORE_EXPORT LocalFrameView final
 
   void UpdateLayerDebugInfoEnabled();
 
+  // MemoryPressureListener
+  void OnPurgeMemory() override;
+
   LayoutSize size_;
 
   typedef HashSet<scoped_refptr<LayoutEmbeddedObject>> EmbeddedObjectSet;
@@ -927,6 +926,8 @@ class CORE_EXPORT LocalFrameView final
       HeapLinkedHashSet<WeakMember<ScrollableArea>>;
   AnchoringAdjustmentQueue anchoring_adjustment_queue_;
 
+  HeapLinkedHashSet<WeakMember<PaintLayerScrollableArea>> scroll_event_queue_;
+
   bool suppress_adjust_view_size_;
 #if DCHECK_IS_ON()
   // In DCHECK on builds, this is set to false when we're running lifecycle
@@ -943,20 +944,22 @@ class CORE_EXPORT LocalFrameView final
   // We won't defer again for the same document.
   bool have_deferred_commits_ = false;
 
+  bool visual_viewport_needs_repaint_ = false;
+
   // Whether to collect layer debug information for debugging, tracing,
   // inspection, etc. Applies to local root only.
   bool layer_debug_info_enabled_ = DCHECK_IS_ON();
 
   LifecycleData lifecycle_data_;
 
-  IntRect remote_viewport_intersection_;
-
   // Lazily created, but should only be created on a local frame root's view.
   mutable std::unique_ptr<ScrollingCoordinatorContext> scrolling_context_;
 
   // For testing.
-  std::unique_ptr<Vector<ObjectPaintInvalidation>>
-      tracked_object_paint_invalidations_;
+  bool is_tracking_raster_invalidations_ = false;
+
+  // True if a memory pressure signal for compositing has been received.
+  bool received_compositor_memory_pressure_purge_signal_ = false;
 
   // Currently used in PushPaintArtifactToCompositor() to collect composited
   // layers as foreign layers. It's transient, but may live across frame updates
@@ -1022,20 +1025,6 @@ inline void LocalFrameView::IncrementVisuallyNonEmptyPixelCount(
   static const unsigned kVisualPixelThreshold = 32 * 32;
   if (visually_non_empty_pixel_count_ > kVisualPixelThreshold)
     SetIsVisuallyNonEmpty();
-}
-
-inline bool operator==(const LocalFrameView::ObjectPaintInvalidation& a,
-                       const LocalFrameView::ObjectPaintInvalidation& b) {
-  return a.name == b.name && a.reason == b.reason;
-}
-inline bool operator!=(const LocalFrameView::ObjectPaintInvalidation& a,
-                       const LocalFrameView::ObjectPaintInvalidation& b) {
-  return !(a == b);
-}
-inline std::ostream& operator<<(
-    std::ostream& os,
-    const LocalFrameView::ObjectPaintInvalidation& info) {
-  return os << info.name << " reason=" << info.reason;
 }
 
 template <>

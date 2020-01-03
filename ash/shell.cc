@@ -52,7 +52,7 @@
 #include "ash/highlighter/highlighter_controller.h"
 #include "ash/home_screen/home_screen_controller.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
-#include "ash/ime/ime_controller.h"
+#include "ash/ime/ime_controller_impl.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/keyboard/ui/keyboard_ui_factory.h"
 #include "ash/laser/laser_pointer_controller.h"
@@ -168,7 +168,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "dbus/bus.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
@@ -240,7 +239,7 @@ Shell* Shell::instance_ = nullptr;
 // static
 Shell* Shell::CreateInstance(ShellInitParams init_params) {
   CHECK(!instance_);
-  instance_ = new Shell(std::move(init_params.delegate), init_params.connector);
+  instance_ = new Shell(std::move(init_params.delegate));
   instance_->Init(init_params.context_factory,
                   init_params.context_factory_private, init_params.local_state,
                   std::move(init_params.keyboard_ui_factory),
@@ -521,18 +520,15 @@ void Shell::NotifyShelfAutoHideBehaviorChanged(aura::Window* root_window) {
 ////////////////////////////////////////////////////////////////////////////////
 // Shell, private:
 
-Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate,
-             service_manager::Connector* connector)
+Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate)
     : brightness_control_delegate_(
           std::make_unique<system::BrightnessControllerChromeos>()),
-      connector_(connector),
       focus_cycler_(std::make_unique<FocusCycler>()),
-      ime_controller_(std::make_unique<ImeController>()),
+      ime_controller_(std::make_unique<ImeControllerImpl>()),
       immersive_context_(std::make_unique<ImmersiveContextAsh>()),
       keyboard_brightness_control_delegate_(
           std::make_unique<KeyboardBrightnessController>()),
       locale_update_controller_(std::make_unique<LocaleUpdateControllerImpl>()),
-      media_controller_(std::make_unique<MediaControllerImpl>(connector)),
       ash_color_provider_(std::make_unique<AshColorProvider>()),
       session_controller_(std::make_unique<SessionControllerImpl>()),
       shell_delegate_(std::move(shell_delegate)),
@@ -563,8 +559,12 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate,
       std::make_unique<KeyboardControllerImpl>(session_controller_.get());
 
   if (base::FeatureList::IsEnabled(features::kUseBluetoothSystemInAsh)) {
-    tray_bluetooth_helper_ =
-        std::make_unique<TrayBluetoothHelperExperimental>(connector_);
+    mojo::PendingRemote<device::mojom::BluetoothSystemFactory>
+        bluetooth_system_factory;
+    shell_delegate_->BindBluetoothSystemFactory(
+        bluetooth_system_factory.InitWithNewPipeAndPassReceiver());
+    tray_bluetooth_helper_ = std::make_unique<TrayBluetoothHelperExperimental>(
+        std::move(bluetooth_system_factory));
   } else {
     tray_bluetooth_helper_ = std::make_unique<TrayBluetoothHelperLegacy>();
   }
@@ -877,12 +877,10 @@ void Shell::Init(
       std::make_unique<PolicyRecommendationRestorer>();
   screen_switch_check_controller_ =
       std::make_unique<ScreenSwitchCheckController>();
-  // Connector can be null in tests.
-  if (connector_) {
-    multidevice_notification_presenter_ =
-        std::make_unique<MultiDeviceNotificationPresenter>(
-            message_center::MessageCenter::Get(), connector_);
-  }
+  multidevice_notification_presenter_ =
+      std::make_unique<MultiDeviceNotificationPresenter>(
+          message_center::MessageCenter::Get());
+  media_controller_ = std::make_unique<MediaControllerImpl>();
 
   tablet_mode_controller_ = std::make_unique<TabletModeController>();
 
@@ -909,8 +907,6 @@ void Shell::Init(
       std::make_unique<CursorManager>(base::WrapUnique(native_cursor_manager_));
 
   InitializeDisplayManager();
-
-  display_prefs_ = std::make_unique<DisplayPrefs>(local_state_);
 
   // RefreshFontParams depends on display prefs.
   display_manager_->RefreshFontParams();
@@ -1124,9 +1120,13 @@ void Shell::Init(
     peripheral_battery_tracker_ = std::make_unique<PeripheralBatteryTracker>();
   }
   power_event_observer_.reset(new PowerEventObserver());
+
+  mojo::PendingRemote<device::mojom::Fingerprint> fingerprint;
+  shell_delegate_->BindFingerprint(
+      fingerprint.InitWithNewPipeAndPassReceiver());
   user_activity_notifier_ =
       std::make_unique<ui::UserActivityPowerManagerNotifier>(
-          user_activity_detector_.get(), connector_);
+          user_activity_detector_.get(), std::move(fingerprint));
   video_activity_notifier_.reset(
       new VideoActivityNotifier(video_detector_.get()));
   bluetooth_notification_controller_ =
@@ -1149,7 +1149,7 @@ void Shell::Init(
 
   if (base::FeatureList::IsEnabled(features::kMediaSessionNotification)) {
     media_notification_controller_ =
-        std::make_unique<MediaNotificationControllerImpl>(connector_);
+        std::make_unique<MediaNotificationControllerImpl>();
   }
 
   for (auto& observer : shell_observers_)
@@ -1167,7 +1167,6 @@ void Shell::Init(
 }
 
 void Shell::InitializeDisplayManager() {
-  bool display_initialized = display_manager_->InitFromCommandLine();
 
   display_manager_->InitConfigurator(
       ui::OzonePlatform::GetInstance()->CreateNativeDisplayDelegate());
@@ -1182,6 +1181,10 @@ void Shell::InitializeDisplayManager() {
 
   projecting_observer_ =
       std::make_unique<ProjectingObserver>(display_manager_->configurator());
+
+  display_prefs_ = std::make_unique<DisplayPrefs>(local_state_);
+
+  bool display_initialized = display_manager_->InitFromCommandLine();
 
   if (!display_initialized) {
     if (chromeos::IsRunningAsSystemCompositor()) {

@@ -18,10 +18,10 @@
 #include "content/common/drag_event_source_info.h"
 #include "content/public/common/drop_data.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
-#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace blink {
@@ -319,10 +319,6 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // Returns true if there is context menu shown on page.
   virtual bool IsShowingContextMenuOnPage() const;
-
-  // Returns an object that will override handling of Text Input and Mouse
-  // Lock events from the renderer.
-  virtual InputEventShim* GetInputEventShim() const;
 
   // Returns the focused frame across all delegates, or nullptr if none.
   virtual RenderFrameHostImpl* GetFocusedFrameFromFocusedDelegate();

@@ -82,7 +82,6 @@
 <translation id="3822383571486410024">Allargueu aquest text fins a un mínim de <ph name="MIN_CHARACTERS" /> caràcters (ara n'utilitzeu <ph name="CURRENT_LENGTH" />).</translation>
 <translation id="383465348367842624">Un nom d'usuari seguit de "<ph name="ATSIGN" />" no pot contenir el símbol "<ph name="INVALIDCHARACTER" />".</translation>
 <translation id="3846214748874656680">Surt de la pantalla completa</translation>
-<translation id="3889183436948184105">revisió</translation>
 <translation id="3920932319529768807">conclusió</translation>
 <translation id="3924558731517983934">aplicació</translation>
 <translation id="3944740393230681990">pròleg</translation>
@@ -114,9 +113,12 @@
 <translation id="479989351350248267">cerca</translation>
 <translation id="4812940957355064477">Introduïu un número.</translation>
 <translation id="4912536737030637138">entrada bibliogràfica</translation>
+<translation id="492244087561876220">comentari</translation>
+<translation id="4971739861736909480">S'ha seleccionat <ph name="ACCNAME" /></translation>
 <translation id="4975562563186953947">Elements seleccionats: <ph name="SELECTED_COUNT" /></translation>
 <translation id="4992066212339426712">Deixa de silenciar</translation>
 <translation id="49969490063480558">Introduïu un domini precedit per "<ph name="ATSIGN" />". "<ph name="INVALIDADDRESS" />" no és una adreça electrònica completa.</translation>
+<translation id="5022314756875057021">grup de files</translation>
 <translation id="5034860022980953847">indicador de progrés</translation>
 <translation id="5090250355906949916">barra de moment del vídeo</translation>
 <translation id="5093189678851173835">epígraf</translation>
@@ -217,6 +219,7 @@
 <translation id="7888071071722539607">Incloeu el símbol "<ph name="ATSIGN" />" a l'adreça electrònica. Al camp "<ph name="INVALIDADDRESS" />" falta el símbol "<ph name="ATSIGN" />".</translation>
 <translation id="7891486169920085145">divisor</translation>
 <translation id="795667975304826397">No s'ha triat cap fitxer</translation>
+<translation id="7962328325860248200">No s'ha seleccionat <ph name="ACCNAME" /></translation>
 <translation id="8034303206267677282">important</translation>
 <translation id="8053789581856978548">camp de text de la cerca</translation>
 <translation id="8057695513531652401">avís</translation>

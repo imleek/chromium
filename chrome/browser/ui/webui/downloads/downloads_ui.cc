@@ -19,10 +19,10 @@
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
 #include "chrome/browser/ui/webui/downloads/downloads.mojom.h"
 #include "chrome/browser/ui/webui/downloads/downloads_dom_handler.h"
-#include "chrome/browser/ui/webui/localized_string.h"
 #include "chrome/browser/ui/webui/managed_ui_handler.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/browser/ui/webui/theme_source.h"
+#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -44,7 +44,6 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/resources/grit/webui_resources.h"
 
 using content::BrowserContext;
 using content::DownloadManager;
@@ -60,8 +59,16 @@ constexpr char kGeneratedPath[] =
 content::WebUIDataSource* CreateDownloadsUIHTMLSource(Profile* profile) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIDownloadsHost);
-  source->OverrideContentSecurityPolicyScriptSrc(
-      "script-src chrome://resources chrome://test 'self';");
+
+#if BUILDFLAG(OPTIMIZE_WEBUI)
+  webui::SetupBundledWebUIDataSource(source, "downloads.js",
+                                     IDR_DOWNLOADS_DOWNLOADS_ROLLUP_JS,
+                                     IDR_DOWNLOADS_DOWNLOADS_HTML);
+#else
+  webui::SetupWebUIDataSource(
+      source, base::make_span(kDownloadsResources, kDownloadsResourcesSize),
+      kGeneratedPath, IDR_DOWNLOADS_DOWNLOADS_HTML);
+#endif
 
   bool requests_ap_verdicts =
       safe_browsing::AdvancedProtectionStatusManagerFactory::GetForProfile(
@@ -69,7 +76,7 @@ content::WebUIDataSource* CreateDownloadsUIHTMLSource(Profile* profile) {
           ->RequestsAdvancedProtectionVerdicts();
   source->AddBoolean("requestsApVerdicts", requests_ap_verdicts);
 
-  static constexpr LocalizedString kStrings[] = {
+  static constexpr webui::LocalizedString kStrings[] = {
       {"title", IDS_DOWNLOAD_TITLE},
       {"searchResultsPlural", IDS_SEARCH_RESULTS_PLURAL},
       {"searchResultsSingular", IDS_SEARCH_RESULTS_SINGULAR},
@@ -119,7 +126,7 @@ content::WebUIDataSource* CreateDownloadsUIHTMLSource(Profile* profile) {
       {"toastRemovedFromList", IDS_DOWNLOAD_TOAST_REMOVED_FROM_LIST},
       {"undo", IDS_DOWNLOAD_UNDO},
   };
-  AddLocalizedStringsBulk(source, kStrings, base::size(kStrings));
+  AddLocalizedStringsBulk(source, kStrings);
 
   source->AddLocalizedString("dangerDownloadDesc",
                              IDS_BLOCK_REASON_DANGEROUS_DOWNLOAD);
@@ -138,10 +145,10 @@ content::WebUIDataSource* CreateDownloadsUIHTMLSource(Profile* profile) {
   // NOTE: the undo shortcut is also defined in downloads/downloads.html
   // TODO(crbug/893033): de-duplicate shortcut by moving all shortcut
   // definitions from JS to C++.
-  ui::Accelerator undoAccelerator(ui::VKEY_Z, ui::EF_PLATFORM_ACCELERATOR);
+  ui::Accelerator undo_accelerator(ui::VKEY_Z, ui::EF_PLATFORM_ACCELERATOR);
   source->AddString("undoDescription", l10n_util::GetStringFUTF16(
                                            IDS_UNDO_DESCRIPTION,
-                                           undoAccelerator.GetShortcutText()));
+                                           undo_accelerator.GetShortcutText()));
 
   PrefService* prefs = profile->GetPrefs();
   source->AddBoolean("allowDeletingHistory",
@@ -156,25 +163,6 @@ content::WebUIDataSource* CreateDownloadsUIHTMLSource(Profile* profile) {
                           IDR_DOWNLOADS_IMAGES_NO_DOWNLOADS_SVG);
   source->AddResourcePath("downloads.mojom-lite.js",
                           IDR_DOWNLOADS_MOJO_LITE_JS);
-  source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER);
-  source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER);
-#if BUILDFLAG(OPTIMIZE_WEBUI)
-  source->AddResourcePath("downloads.js", IDR_DOWNLOADS_DOWNLOADS_ROLLUP_JS);
-  source->SetDefaultResource(IDR_DOWNLOADS_VULCANIZED_HTML);
-#else
-  for (size_t i = 0; i < kDownloadsResourcesSize; ++i) {
-    std::string path = kDownloadsResources[i].name;
-    if (path.rfind(kGeneratedPath, 0) == 0) {
-      path = path.substr(sizeof(kGeneratedPath) - 1);
-    }
-
-    source->AddResourcePath(path, kDownloadsResources[i].value);
-  }
-  source->SetDefaultResource(IDR_DOWNLOADS_DOWNLOADS_HTML);
-#endif
-
-  source->EnableReplaceI18nInJS();
-  source->UseStringsJs();
 
   return source;
 }
@@ -197,10 +185,9 @@ DownloadsUI::DownloadsUI(content::WebUI* web_ui)
   ManagedUIHandler::Initialize(web_ui, source);
   content::WebUIDataSource::Add(profile, source);
   content::URLDataSource::Add(profile, std::make_unique<ThemeSource>(profile));
-
-  AddHandlerToRegistry(base::BindRepeating(&DownloadsUI::BindPageHandlerFactory,
-                                           base::Unretained(this)));
 }
+
+WEB_UI_CONTROLLER_TYPE_IMPL(DownloadsUI)
 
 DownloadsUI::~DownloadsUI() = default;
 
@@ -211,7 +198,7 @@ base::RefCountedMemory* DownloadsUI::GetFaviconResourceBytes(
       IDR_DOWNLOADS_FAVICON, scale_factor);
 }
 
-void DownloadsUI::BindPageHandlerFactory(
+void DownloadsUI::BindInterface(
     mojo::PendingReceiver<downloads::mojom::PageHandlerFactory> receiver) {
   page_factory_receiver_.reset();
 

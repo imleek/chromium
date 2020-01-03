@@ -14,6 +14,7 @@
 #include "base/optional.h"
 #include "build/build_config.h"
 #include "components/viz/service/display/output_surface.h"
+#include "components/viz/service/display/skia_output_surface.h"
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/src/gpu/GrSemaphore.h"
@@ -36,10 +37,12 @@ namespace gl {
 class GLImage;
 }
 
+namespace gpu {
+class MemoryTracker;
+class MemoryTypeTracker;
+}  // namespace gpu
+
 namespace viz {
-#if defined(OS_WIN)
-class DCLayerOverlay;
-#endif
 
 class SkiaOutputDevice {
  public:
@@ -73,6 +76,7 @@ class SkiaOutputDevice {
                                    const gfx::Size& pixel_size)>;
   SkiaOutputDevice(
       bool need_swap_semaphore,
+      gpu::MemoryTracker* memory_tracker,
       DidSwapBufferCompleteCallback did_swap_buffer_complete_callback);
   virtual ~SkiaOutputDevice();
 
@@ -99,9 +103,10 @@ class SkiaOutputDevice {
   virtual void SetDrawRectangle(const gfx::Rect& draw_rectangle);
 
   virtual void SetGpuVSyncEnabled(bool enabled);
+  virtual void ScheduleOverlays(SkiaOutputSurface::OverlayList overlays);
+
 #if defined(OS_WIN)
   virtual void SetEnableDCLayers(bool enabled);
-  virtual void ScheduleDCLayers(std::vector<DCLayerOverlay> dc_layers);
 #endif
 
   const OutputSurface::Capabilities& capabilities() const {
@@ -118,6 +123,20 @@ class SkiaOutputDevice {
   bool is_emulated_rgbx() const { return is_emulated_rgbx_; }
 
  protected:
+  // Only valid between StartSwapBuffers and FinishSwapBuffers.
+  class SwapInfo {
+   public:
+    SwapInfo(uint64_t swap_id, BufferPresentedCallback feedback);
+    SwapInfo(SwapInfo&& other);
+    ~SwapInfo();
+    const gpu::SwapBuffersCompleteParams& Complete(gfx::SwapResult result);
+    void CallFeedback();
+
+   private:
+    BufferPresentedCallback feedback_;
+    gpu::SwapBuffersCompleteParams params_;
+  };
+
   // Begin paint the back buffer.
   virtual SkSurface* BeginPaint() = 0;
 
@@ -126,7 +145,7 @@ class SkiaOutputDevice {
 
   // Helper method for SwapBuffers() and PostSubBuffer(). It should be called
   // at the beginning of SwapBuffers() and PostSubBuffer() implementations
-  void StartSwapBuffers(base::Optional<BufferPresentedCallback> feedback);
+  void StartSwapBuffers(BufferPresentedCallback feedback);
 
   // Helper method for SwapBuffers() and PostSubBuffer(). It should be called
   // at the end of SwapBuffers() and PostSubBuffer() implementations
@@ -140,27 +159,14 @@ class SkiaOutputDevice {
   uint64_t swap_id_ = 0;
   DidSwapBufferCompleteCallback did_swap_buffer_complete_callback_;
 
-  // Only valid between StartSwapBuffers and FinishSwapBuffers.
-  class SwapInfo {
-   public:
-    SwapInfo(uint64_t swap_id,
-             base::Optional<BufferPresentedCallback> feedback);
-    SwapInfo(SwapInfo&& other);
-    ~SwapInfo();
-    const gpu::SwapBuffersCompleteParams& Complete(gfx::SwapResult result);
-    void CallFeedback();
-
-   private:
-    base::Optional<BufferPresentedCallback> feedback_;
-    gpu::SwapBuffersCompleteParams params_;
-  };
-
   base::queue<SwapInfo> pending_swaps_;
 
   ui::LatencyTracker latency_tracker_;
 
   // RGBX format is emulated with RGBA.
   bool is_emulated_rgbx_ = false;
+
+  std::unique_ptr<gpu::MemoryTypeTracker> memory_type_tracker_;
 
   DISALLOW_COPY_AND_ASSIGN(SkiaOutputDevice);
 };

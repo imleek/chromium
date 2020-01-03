@@ -77,6 +77,34 @@ String GetFrameAttribute(HTMLFrameOwnerElement* frame_owner,
   return attr_value;
 }
 
+AtomicString GetFrameOwnerType(HTMLFrameOwnerElement* frame_owner) {
+  switch (frame_owner->OwnerType()) {
+    case FrameOwnerElementType::kNone:
+      return "window";
+    case FrameOwnerElementType::kIframe:
+      return "iframe";
+    case FrameOwnerElementType::kObject:
+      return "object";
+    case FrameOwnerElementType::kEmbed:
+      return "embed";
+    case FrameOwnerElementType::kFrame:
+      return "frame";
+    case FrameOwnerElementType::kPortal:
+      return "portal";
+  }
+  NOTREACHED();
+  return "";
+}
+
+String GetFrameSrc(HTMLFrameOwnerElement* frame_owner) {
+  switch (frame_owner->OwnerType()) {
+    case FrameOwnerElementType::kObject:
+      return GetFrameAttribute(frame_owner, html_names::kDataAttr, false);
+    default:
+      return GetFrameAttribute(frame_owner, html_names::kSrcAttr, false);
+  }
+}
+
 const AtomicString& SelfKeyword() {
   DEFINE_STATIC_LOCAL(const AtomicString, kSelfAttribution, ("self"));
   return kSelfAttribution;
@@ -130,7 +158,12 @@ WindowPerformance::WindowPerformance(LocalDOMWindow* window)
     : Performance(
           ToTimeOrigin(window),
           window->document()->GetTaskRunner(TaskType::kPerformanceTimeline)),
-      DOMWindowClient(window) {}
+      DOMWindowClient(window) {
+  DCHECK(GetFrame());
+  DCHECK(GetFrame()->GetPerformanceMonitor());
+  GetFrame()->GetPerformanceMonitor()->Subscribe(
+      PerformanceMonitor::kLongTask, kLongTaskObserverThreshold, this);
+}
 
 WindowPerformance::~WindowPerformance() = default;
 
@@ -183,19 +216,6 @@ WindowPerformance::CreateNavigationTimingInstance() {
 
   return MakeGarbageCollected<PerformanceNavigationTiming>(
       GetFrame(), info, time_origin_, server_timing);
-}
-
-void WindowPerformance::UpdateLongTaskInstrumentation() {
-  if (!GetFrame() || !GetFrame()->GetDocument())
-    return;
-
-  if (HasObserverFor(PerformanceEntry::kLongTask)) {
-    UseCounter::Count(GetFrame()->GetDocument(), WebFeature::kLongTaskObserver);
-    GetFrame()->GetPerformanceMonitor()->Subscribe(
-        PerformanceMonitor::kLongTask, kLongTaskObserverThreshold, this);
-  } else {
-    GetFrame()->GetPerformanceMonitor()->UnsubscribeAll(this);
-  }
 }
 
 void WindowPerformance::BuildJSONValue(V8ObjectBuilder& builder) const {
@@ -297,14 +317,14 @@ void WindowPerformance::ReportLongTask(base::TimeTicks start_time,
   DOMWindow* culprit_dom_window = attribution.second;
   if (!culprit_dom_window || !culprit_dom_window->GetFrame() ||
       !culprit_dom_window->GetFrame()->DeprecatedLocalOwner()) {
-    AddLongTaskTiming(start_time, end_time, attribution.first, g_empty_string,
-                      g_empty_string, g_empty_string);
+    AddLongTaskTiming(start_time, end_time, attribution.first, "window",
+                      g_empty_string, g_empty_string, g_empty_string);
   } else {
     HTMLFrameOwnerElement* frame_owner =
         culprit_dom_window->GetFrame()->DeprecatedLocalOwner();
     AddLongTaskTiming(
-        start_time, end_time, attribution.first,
-        GetFrameAttribute(frame_owner, html_names::kSrcAttr, false),
+        start_time, end_time, attribution.first, GetFrameOwnerType(frame_owner),
+        GetFrameSrc(frame_owner),
         GetFrameAttribute(frame_owner, html_names::kIdAttr, false),
         GetFrameAttribute(frame_owner, html_names::kNameAttr, true));
   }

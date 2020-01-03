@@ -16,11 +16,13 @@
 #include "base/scoped_observer.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
+#include "chrome/browser/chromeos/settings/stats_reporting_controller.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
-#include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
+#include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom-forward.h"
 #include "chromeos/services/machine_learning/public/mojom/model.mojom.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/clipboard_observer.h"
 #include "ui/display/display.h"
@@ -413,6 +415,18 @@ class AutotestPrivateImportCrostiniFunction : public ExtensionFunction {
   void CrostiniImported(crostini::CrostiniResult);
 };
 
+class AutotestPrivateInstallPluginVMFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.installPluginVM",
+                             AUTOTESTPRIVATE_INSTALLPLUGINVM)
+
+ private:
+  ~AutotestPrivateInstallPluginVMFunction() override;
+  ResponseAction Run() override;
+
+  void OnInstallFinished(bool success);
+};
+
 class AutotestPrivateRegisterComponentFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("autotestPrivate.registerComponent",
@@ -530,9 +544,9 @@ class AutotestPrivateBootstrapMachineLearningServiceFunction
 
   // Callbacks for a basic Mojo call to MachineLearningService.LoadModel.
   void ModelLoaded(chromeos::machine_learning::mojom::LoadModelResult result);
-  void ConnectionError();
+  void OnMojoDisconnect();
 
-  chromeos::machine_learning::mojom::ModelPtr model_;
+  mojo::Remote<chromeos::machine_learning::mojom::Model> model_;
 };
 
 // Enable/disable the Google Assistant feature. This toggles the Assistant user
@@ -816,22 +830,6 @@ class AutotestPrivateShowVirtualKeyboardIfEnabledFunction
   ResponseAction Run() override;
 };
 
-class AutotestPrivateSetArcAppWindowStateFunction : public ExtensionFunction {
- public:
-  AutotestPrivateSetArcAppWindowStateFunction();
-  DECLARE_EXTENSION_FUNCTION("autotestPrivate.setArcAppWindowState",
-                             AUTOTESTPRIVATE_SETARCAPPWINDOWSTATE)
-
- private:
-  ~AutotestPrivateSetArcAppWindowStateFunction() override;
-  ResponseAction Run() override;
-
-  // Callback function to be called after window state is changed.
-  void WindowStateChanged(ash::WindowStateType expected_type, bool success);
-
-  std::unique_ptr<WindowStateChangeObserver> window_state_observer_;
-};
-
 class AutotestPrivateSetArcAppWindowFocusFunction : public ExtensionFunction {
  public:
   AutotestPrivateSetArcAppWindowFocusFunction();
@@ -840,29 +838,6 @@ class AutotestPrivateSetArcAppWindowFocusFunction : public ExtensionFunction {
 
  private:
   ~AutotestPrivateSetArcAppWindowFocusFunction() override;
-  ResponseAction Run() override;
-};
-
-class AutotestPrivateGetArcAppWindowStateFunction : public ExtensionFunction {
- public:
-  AutotestPrivateGetArcAppWindowStateFunction();
-  DECLARE_EXTENSION_FUNCTION("autotestPrivate.getArcAppWindowState",
-                             AUTOTESTPRIVATE_GETARCAPPWINDOWSTATE)
-
- private:
-  ~AutotestPrivateGetArcAppWindowStateFunction() override;
-  ResponseAction Run() override;
-};
-
-// Gets various window properties of an ARC window.
-class AutotestPrivateGetArcAppWindowInfoFunction : public ExtensionFunction {
- public:
-  AutotestPrivateGetArcAppWindowInfoFunction();
-  DECLARE_EXTENSION_FUNCTION("autotestPrivate.getArcAppWindowInfo",
-                             AUTOTESTPRIVATE_GETARCAPPWINDOWINFO)
-
- private:
-  ~AutotestPrivateGetArcAppWindowInfoFunction() override;
   ResponseAction Run() override;
 };
 
@@ -1105,6 +1080,23 @@ class AutotestPrivateMouseMoveFunction : public ExtensionFunction {
   void OnDone();
 
   std::unique_ptr<EventGenerator> event_generator_;
+};
+
+class AutotestPrivateSetMetricsEnabledFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateSetMetricsEnabledFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.setMetricsEnabled",
+                             AUTOTESTPRIVATE_SETMETRICSENABLED)
+
+ private:
+  ~AutotestPrivateSetMetricsEnabledFunction() override;
+  ResponseAction Run() override;
+
+  void OnStatsReportingStateChanged();
+
+  std::unique_ptr<chromeos::StatsReportingController::ObserverSubscription>
+      stats_reporting_observer_subscription_;
+  bool target_value_ = false;
 };
 
 template <>

@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "components/autofill_assistant/browser/client_status.h"
 #include "components/autofill_assistant/browser/details.h"
 #include "components/autofill_assistant/browser/info_box.h"
 #include "components/autofill_assistant/browser/state.h"
@@ -34,6 +35,8 @@ class ClientMemory;
 struct ClientSettings;
 class TriggerContext;
 class WebsiteLoginFetcher;
+class EventHandler;
+class UserModel;
 
 class ScriptExecutorDelegate {
  public:
@@ -55,7 +58,10 @@ class ScriptExecutorDelegate {
   virtual WebsiteLoginFetcher* GetWebsiteLoginFetcher() = 0;
   virtual content::WebContents* GetWebContents() = 0;
   virtual std::string GetAccountEmailAddress() = 0;
-  virtual void EnterState(AutofillAssistantState state) = 0;
+  virtual std::string GetLocale() = 0;
+
+  // Enters the given state. Returns true if the state was changed.
+  virtual bool EnterState(AutofillAssistantState state) = 0;
 
   // Make the area of the screen that correspond to the given elements
   // touchable.
@@ -68,12 +74,10 @@ class ScriptExecutorDelegate {
   virtual void SetInfoBox(const InfoBox& info_box) = 0;
   virtual void ClearInfoBox() = 0;
   virtual void SetCollectUserDataOptions(
-      std::unique_ptr<CollectUserDataOptions> collect_user_data_options,
-      std::unique_ptr<UserData> user_data) = 0;
+      CollectUserDataOptions* collect_user_data_options) = 0;
   virtual void WriteUserData(
-      base::OnceCallback<void(const CollectUserDataOptions*,
-                              UserData*,
-                              UserData::FieldChange*)> write_callback) = 0;
+      base::OnceCallback<void(UserData*, UserData::FieldChange*)>
+          write_callback) = 0;
   virtual void SetProgress(int progress) = 0;
   virtual void SetProgressVisible(bool visible) = 0;
   virtual void SetUserActions(
@@ -84,7 +88,10 @@ class ScriptExecutorDelegate {
   virtual ConfigureBottomSheetProto::PeekMode GetPeekMode() = 0;
   virtual bool SetForm(
       std::unique_ptr<FormProto> form,
-      base::RepeatingCallback<void(const FormProto::Result*)> callback) = 0;
+      base::RepeatingCallback<void(const FormProto::Result*)> changed_callback,
+      base::OnceCallback<void(const ClientStatus&)> cancel_callback) = 0;
+  virtual UserModel* GetUserModel() = 0;
+  virtual EventHandler* GetEventHandler() = 0;
 
   // Makes no area of the screen touchable.
   void ClearTouchableElementArea() {

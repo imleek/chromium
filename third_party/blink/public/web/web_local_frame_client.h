@@ -40,10 +40,10 @@
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/sandbox_flags.h"
 #include "third_party/blink/public/common/frame/user_activation_update_type.h"
+#include "third_party/blink/public/common/input/web_scroll_types.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
 #include "third_party/blink/public/common/navigation/triggering_event_info.h"
-#include "third_party/blink/public/common/sudden_termination_disabler_type.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/mojom/use_counter/css_property_id.mojom-shared.h"
 #include "third_party/blink/public/platform/blame_context.h"
@@ -55,7 +55,7 @@
 #include "third_party/blink/public/platform/web_effective_connection_type.h"
 #include "third_party/blink/public/platform/web_file_system_type.h"
 #include "third_party/blink/public/platform/web_insecure_request_policy.h"
-#include "third_party/blink/public/platform/web_scroll_types.h"
+#include "third_party/blink/public/platform/web_prescient_networking.h"
 #include "third_party/blink/public/platform/web_set_sink_id_callbacks.h"
 #include "third_party/blink/public/platform/web_source_location.h"
 #include "third_party/blink/public/platform/web_url_error.h"
@@ -108,10 +108,11 @@ class WebMediaPlayerEncryptedMediaClient;
 class WebMediaPlayerSource;
 class WebMediaStreamDeviceObserver;
 class WebNavigationControl;
-class WebServiceWorkerProvider;
 class WebPlugin;
+class WebPrescientNetworking;
 class WebRTCPeerConnectionHandler;
 class WebRelatedAppsFetcher;
+class WebServiceWorkerProvider;
 class WebSocketHandshakeThrottle;
 class WebString;
 class WebURL;
@@ -184,6 +185,11 @@ class BLINK_EXPORT WebLocalFrameClient {
   virtual WebExternalPopupMenu* CreateExternalPopupMenu(
       const WebPopupMenuInfo&,
       WebExternalPopupMenuClient*) {
+    return nullptr;
+  }
+
+  // May return null.
+  virtual std::unique_ptr<WebPrescientNetworking> CreatePrescientNetworking() {
     return nullptr;
   }
 
@@ -300,10 +306,6 @@ class BLINK_EXPORT WebLocalFrameClient {
   // Replicate user activation state updates for this frame to the embedder.
   virtual void UpdateUserActivationState(UserActivationUpdateType update_type) {
   }
-
-  // Called if the previous document had a user gesture and is on the same
-  // eTLD+1 as the current document.
-  virtual void SetHasReceivedUserGestureBeforeNavigation(bool value) {}
 
   // Called when a frame is capturing mouse input, such as when a scrollbar
   // is being dragged.
@@ -734,15 +736,6 @@ class BLINK_EXPORT WebLocalFrameClient {
   // in page operation.
   virtual void HandleAccessibilityFindInPageTermination() {}
 
-  // Sudden termination --------------------------------------------------
-
-  // Called when elements preventing the sudden termination of the frame
-  // become present or stop being present. |type| is the type of element
-  // (BeforeUnload handler, Unload handler).
-  virtual void SuddenTerminationDisablerChanged(bool present,
-                                                SuddenTerminationDisablerType) {
-  }
-
   // Audio Output Devices API --------------------------------------------
 
   // Checks that the given audio sink exists and is authorized. The result is
@@ -782,7 +775,7 @@ class BLINK_EXPORT WebLocalFrameClient {
 
   // AppCache ------------------------------------------------------------
   virtual void UpdateSubresourceFactory(
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo> info) {}
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> pending_factory) {}
 
   // Misc ----------------------------------------------------------------
 

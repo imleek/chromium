@@ -44,10 +44,12 @@ import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
 import org.chromium.chrome.browser.contacts_picker.ContactsPickerDialog;
 import org.chromium.chrome.browser.content_capture.ContentCaptureHistoryDeletionObserver;
+import org.chromium.chrome.browser.crash.CrashUploadCountStore;
 import org.chromium.chrome.browser.crash.LogcatExtractionRunnable;
 import org.chromium.chrome.browser.crash.MinidumpUploadService;
 import org.chromium.chrome.browser.download.DownloadController;
 import org.chromium.chrome.browser.download.DownloadManagerService;
+import org.chromium.chrome.browser.download.ExploreOfflineStatusProvider;
 import org.chromium.chrome.browser.firstrun.ForcedSigninProcessor;
 import org.chromium.chrome.browser.flags.FeatureUtilities;
 import org.chromium.chrome.browser.history.HistoryDeletionBridge;
@@ -67,7 +69,6 @@ import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.photo_picker.PhotoPickerDialog;
-import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.profiles.ProfileManagerUtils;
 import org.chromium.chrome.browser.rlz.RevenueStats;
 import org.chromium.chrome.browser.searchwidget.SearchWidgetProvider;
@@ -89,8 +90,6 @@ import org.chromium.content_public.browser.BrowserTaskExecutor;
 import org.chromium.content_public.browser.ChildProcessLauncherHelper;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.common.ContentSwitches;
-import org.chromium.printing.PrintDocumentAdapterWrapper;
-import org.chromium.printing.PrintingControllerImpl;
 import org.chromium.ui.ContactsPickerListener;
 import org.chromium.ui.PhotoPickerListener;
 import org.chromium.ui.UiUtils;
@@ -419,12 +418,6 @@ public class ProcessInitializationHandler {
                     DownloadController.setDownloadNotificationService(
                             DownloadManagerService.getDownloadManagerService());
                 }
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                    String errorText = ContextUtils.getApplicationContext().getString(
-                            R.string.error_printing_failed);
-                    PrintingControllerImpl.create(new PrintDocumentAdapterWrapper(), errorText);
-                }
             }
         });
 
@@ -452,6 +445,7 @@ public class ProcessInitializationHandler {
 
         deferredStartupHandler.addDeferredTask(
                 () -> SharedClipboardShareActivity.updateComponentEnabledState());
+        deferredStartupHandler.addDeferredTask(() -> ExploreOfflineStatusProvider.getInstance());
     }
 
     private void initChannelsAsync() {
@@ -532,7 +526,7 @@ public class ProcessInitializationHandler {
                 // possible. Instead, metrics are temporarily written to prefs; export those prefs
                 // to UMA metrics here.
                 MinidumpUploadService.storeBreakpadUploadStatsInUma(
-                        ChromePreferenceManager.getInstance());
+                        CrashUploadCountStore.getInstance());
 
                 // Likewise, this is a good time to process and clean up any pending or stale crash
                 // reports left behind by previous runs.

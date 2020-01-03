@@ -37,30 +37,28 @@ void ReportOutstandingBlobs(ReportOutstandingState* state,
 
 struct UnusedBlob {
   int64_t database_id;
-  int64_t blob_key;
+  int64_t blob_number;
 
   bool operator<(const UnusedBlob& other) const {
     if (database_id == other.database_id)
-      return blob_key < other.blob_key;
+      return blob_number < other.blob_number;
     return database_id < other.database_id;
   }
 };
 
 void ReportUnusedBlob(std::set<UnusedBlob>* unused_blob_records,
                       int64_t database_id,
-                      int64_t blob_key) {
-  unused_blob_records->insert({database_id, blob_key});
+                      int64_t blob_number) {
+  unused_blob_records->insert({database_id, blob_number});
 }
 
 // Base class for our test fixtures.
 class IndexedDBActiveBlobRegistryTest : public testing::Test {
  public:
-  typedef IndexedDBBlobInfo::ReleaseCallback ReleaseCallback;
-
   static const int64_t kDatabaseId0 = 7;
   static const int64_t kDatabaseId1 = 12;
-  static const int64_t kBlobKey0 = 77;
-  static const int64_t kBlobKey1 = 14;
+  static const int64_t kBlobNumber0 = 77;
+  static const int64_t kBlobNumber1 = 14;
 
   IndexedDBActiveBlobRegistryTest()
       : registry_(std::make_unique<IndexedDBActiveBlobRegistry>(
@@ -87,7 +85,8 @@ TEST_F(IndexedDBActiveBlobRegistryTest, DeleteUnused) {
   EXPECT_TRUE(report_outstanding_state_.no_calls());
   EXPECT_TRUE(unused_blobs_.empty());
 
-  EXPECT_FALSE(registry()->MarkDeletedCheckIfUsed(kDatabaseId0, kBlobKey0));
+  EXPECT_FALSE(registry()->MarkBlobInfoDeletedAndCheckIfReferenced(
+      kDatabaseId0, kBlobNumber0));
   RunUntilIdle();
 
   EXPECT_TRUE(report_outstanding_state_.no_calls());
@@ -98,10 +97,10 @@ TEST_F(IndexedDBActiveBlobRegistryTest, SimpleUse) {
   EXPECT_TRUE(report_outstanding_state_.no_calls());
   EXPECT_TRUE(unused_blobs_.empty());
 
-  base::Closure add_ref =
-      registry()->GetAddBlobRefCallback(kDatabaseId0, kBlobKey0);
-  ReleaseCallback release =
-      registry()->GetFinalReleaseCallback(kDatabaseId0, kBlobKey0);
+  auto add_ref =
+      registry()->GetMarkBlobActiveCallback(kDatabaseId0, kBlobNumber0);
+  auto release =
+      registry()->GetFinalReleaseCallback(kDatabaseId0, kBlobNumber0);
   std::move(add_ref).Run();
   RunUntilIdle();
 
@@ -109,7 +108,7 @@ TEST_F(IndexedDBActiveBlobRegistryTest, SimpleUse) {
   EXPECT_EQ(0, report_outstanding_state_.false_calls);
   EXPECT_TRUE(unused_blobs_.empty());
 
-  std::move(release).Run(base::FilePath());
+  std::move(release).Run();
   RunUntilIdle();
 
   EXPECT_EQ(1, report_outstanding_state_.true_calls);
@@ -121,10 +120,10 @@ TEST_F(IndexedDBActiveBlobRegistryTest, DeleteWhileInUse) {
   EXPECT_TRUE(report_outstanding_state_.no_calls());
   EXPECT_TRUE(unused_blobs_.empty());
 
-  base::Closure add_ref =
-      registry()->GetAddBlobRefCallback(kDatabaseId0, kBlobKey0);
-  ReleaseCallback release =
-      registry()->GetFinalReleaseCallback(kDatabaseId0, kBlobKey0);
+  auto add_ref =
+      registry()->GetMarkBlobActiveCallback(kDatabaseId0, kBlobNumber0);
+  auto release =
+      registry()->GetFinalReleaseCallback(kDatabaseId0, kBlobNumber0);
 
   std::move(add_ref).Run();
   RunUntilIdle();
@@ -133,19 +132,20 @@ TEST_F(IndexedDBActiveBlobRegistryTest, DeleteWhileInUse) {
   EXPECT_EQ(0, report_outstanding_state_.false_calls);
   EXPECT_TRUE(unused_blobs_.empty());
 
-  EXPECT_TRUE(registry()->MarkDeletedCheckIfUsed(kDatabaseId0, kBlobKey0));
+  EXPECT_TRUE(registry()->MarkBlobInfoDeletedAndCheckIfReferenced(
+      kDatabaseId0, kBlobNumber0));
   RunUntilIdle();
 
   EXPECT_EQ(1, report_outstanding_state_.true_calls);
   EXPECT_EQ(0, report_outstanding_state_.false_calls);
   EXPECT_TRUE(unused_blobs_.empty());
 
-  std::move(release).Run(base::FilePath());
+  std::move(release).Run();
   RunUntilIdle();
 
   EXPECT_EQ(1, report_outstanding_state_.true_calls);
   EXPECT_EQ(1, report_outstanding_state_.false_calls);
-  UnusedBlob unused_blob = {kDatabaseId0, kBlobKey0};
+  UnusedBlob unused_blob = {kDatabaseId0, kBlobNumber0};
   EXPECT_EQ(1u, unused_blobs_.size());
   EXPECT_TRUE(base::Contains(unused_blobs_, unused_blob));
 }
@@ -154,22 +154,22 @@ TEST_F(IndexedDBActiveBlobRegistryTest, MultipleBlobs) {
   EXPECT_TRUE(report_outstanding_state_.no_calls());
   EXPECT_TRUE(unused_blobs_.empty());
 
-  base::Closure add_ref_00 =
-      registry()->GetAddBlobRefCallback(kDatabaseId0, kBlobKey0);
-  ReleaseCallback release_00 =
-      registry()->GetFinalReleaseCallback(kDatabaseId0, kBlobKey0);
-  base::Closure add_ref_01 =
-      registry()->GetAddBlobRefCallback(kDatabaseId0, kBlobKey1);
-  ReleaseCallback release_01 =
-      registry()->GetFinalReleaseCallback(kDatabaseId0, kBlobKey1);
-  base::Closure add_ref_10 =
-      registry()->GetAddBlobRefCallback(kDatabaseId1, kBlobKey0);
-  ReleaseCallback release_10 =
-      registry()->GetFinalReleaseCallback(kDatabaseId1, kBlobKey0);
-  base::Closure add_ref_11 =
-      registry()->GetAddBlobRefCallback(kDatabaseId1, kBlobKey1);
-  ReleaseCallback release_11 =
-      registry()->GetFinalReleaseCallback(kDatabaseId1, kBlobKey1);
+  auto add_ref_00 =
+      registry()->GetMarkBlobActiveCallback(kDatabaseId0, kBlobNumber0);
+  auto release_00 =
+      registry()->GetFinalReleaseCallback(kDatabaseId0, kBlobNumber0);
+  auto add_ref_01 =
+      registry()->GetMarkBlobActiveCallback(kDatabaseId0, kBlobNumber1);
+  auto release_01 =
+      registry()->GetFinalReleaseCallback(kDatabaseId0, kBlobNumber1);
+  auto add_ref_10 =
+      registry()->GetMarkBlobActiveCallback(kDatabaseId1, kBlobNumber0);
+  auto release_10 =
+      registry()->GetFinalReleaseCallback(kDatabaseId1, kBlobNumber0);
+  auto add_ref_11 =
+      registry()->GetMarkBlobActiveCallback(kDatabaseId1, kBlobNumber1);
+  auto release_11 =
+      registry()->GetFinalReleaseCallback(kDatabaseId1, kBlobNumber1);
 
   std::move(add_ref_00).Run();
   std::move(add_ref_01).Run();
@@ -179,7 +179,7 @@ TEST_F(IndexedDBActiveBlobRegistryTest, MultipleBlobs) {
   EXPECT_EQ(0, report_outstanding_state_.false_calls);
   EXPECT_TRUE(unused_blobs_.empty());
 
-  std::move(release_00).Run(base::FilePath());
+  std::move(release_00).Run();
   std::move(add_ref_10).Run();
   std::move(add_ref_11).Run();
   RunUntilIdle();
@@ -188,29 +188,30 @@ TEST_F(IndexedDBActiveBlobRegistryTest, MultipleBlobs) {
   EXPECT_EQ(0, report_outstanding_state_.false_calls);
   EXPECT_TRUE(unused_blobs_.empty());
 
-  EXPECT_TRUE(registry()->MarkDeletedCheckIfUsed(kDatabaseId0, kBlobKey1));
+  EXPECT_TRUE(registry()->MarkBlobInfoDeletedAndCheckIfReferenced(
+      kDatabaseId0, kBlobNumber1));
   RunUntilIdle();
 
   EXPECT_EQ(1, report_outstanding_state_.true_calls);
   EXPECT_EQ(0, report_outstanding_state_.false_calls);
   EXPECT_TRUE(unused_blobs_.empty());
 
-  std::move(release_01).Run(base::FilePath());
-  std::move(release_11).Run(base::FilePath());
+  std::move(release_01).Run();
+  std::move(release_11).Run();
   RunUntilIdle();
 
   EXPECT_EQ(1, report_outstanding_state_.true_calls);
   EXPECT_EQ(0, report_outstanding_state_.false_calls);
-  UnusedBlob unused_blob = {kDatabaseId0, kBlobKey1};
+  UnusedBlob unused_blob = {kDatabaseId0, kBlobNumber1};
   EXPECT_TRUE(base::Contains(unused_blobs_, unused_blob));
   EXPECT_EQ(1u, unused_blobs_.size());
 
-  std::move(release_10).Run(base::FilePath());
+  std::move(release_10).Run();
   RunUntilIdle();
 
   EXPECT_EQ(1, report_outstanding_state_.true_calls);
   EXPECT_EQ(1, report_outstanding_state_.false_calls);
-  unused_blob = {kDatabaseId0, kBlobKey1};
+  unused_blob = {kDatabaseId0, kBlobNumber1};
   EXPECT_TRUE(base::Contains(unused_blobs_, unused_blob));
   EXPECT_EQ(1u, unused_blobs_.size());
 }
@@ -219,14 +220,14 @@ TEST_F(IndexedDBActiveBlobRegistryTest, ForceShutdown) {
   EXPECT_TRUE(report_outstanding_state_.no_calls());
   EXPECT_TRUE(unused_blobs_.empty());
 
-  base::Closure add_ref_0 =
-      registry()->GetAddBlobRefCallback(kDatabaseId0, kBlobKey0);
-  ReleaseCallback release_0 =
-      registry()->GetFinalReleaseCallback(kDatabaseId0, kBlobKey0);
-  base::Closure add_ref_1 =
-      registry()->GetAddBlobRefCallback(kDatabaseId0, kBlobKey1);
-  ReleaseCallback release_1 =
-      registry()->GetFinalReleaseCallback(kDatabaseId0, kBlobKey1);
+  auto add_ref_0 =
+      registry()->GetMarkBlobActiveCallback(kDatabaseId0, kBlobNumber0);
+  auto release_0 =
+      registry()->GetFinalReleaseCallback(kDatabaseId0, kBlobNumber0);
+  auto add_ref_1 =
+      registry()->GetMarkBlobActiveCallback(kDatabaseId0, kBlobNumber1);
+  auto release_1 =
+      registry()->GetFinalReleaseCallback(kDatabaseId0, kBlobNumber1);
 
   std::move(add_ref_0).Run();
   RunUntilIdle();
@@ -245,8 +246,8 @@ TEST_F(IndexedDBActiveBlobRegistryTest, ForceShutdown) {
   EXPECT_EQ(0, report_outstanding_state_.false_calls);
   EXPECT_TRUE(unused_blobs_.empty());
 
-  std::move(release_0).Run(base::FilePath());
-  std::move(release_1).Run(base::FilePath());
+  std::move(release_0).Run();
+  std::move(release_1).Run();
   RunUntilIdle();
 
   // Nothing changes.

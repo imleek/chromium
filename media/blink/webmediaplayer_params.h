@@ -20,6 +20,7 @@
 #include "media/base/media_switches.h"
 #include "media/base/routing_token_callback.h"
 #include "media/blink/media_blink_export.h"
+#include "media/blink/power_status_helper.h"
 #include "media/mojo/mojom/media_metrics_provider.mojom.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/platform/web_media_player.h"
@@ -63,7 +64,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
   // AdjustAllocatedMemoryCB and the return value is the total number of bytes
   // used by objects external to V8.  Note: this value includes things that are
   // not the WebMediaPlayer!
-  typedef base::Callback<int64_t(int64_t)> AdjustAllocatedMemoryCB;
+  using AdjustAllocatedMemoryCB = base::RepeatingCallback<int64_t(int64_t)>;
 
   // |defer_load_cb|, |audio_renderer_sink|, |compositor_task_runner|, and
   // |context_3d_cb| may be null.
@@ -88,7 +89,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
       blink::WebMediaPlayer::SurfaceLayerMode use_surface_layer_for_video,
       bool is_background_suspend_enabled,
       bool is_background_video_play_enabled,
-      bool is_background_video_track_optimization_supported);
+      bool is_background_video_track_optimization_supported,
+      std::unique_ptr<PowerStatusHelper> power_status_helper);
 
   ~WebMediaPlayerParams();
 
@@ -171,6 +173,10 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
     return is_background_video_track_optimization_supported_;
   }
 
+  std::unique_ptr<PowerStatusHelper> TakePowerStatusHelper() {
+    return std::move(power_status_helper_);
+  }
+
  private:
   DeferLoadCB defer_load_cb_;
   scoped_refptr<SwitchableAudioRendererSink> audio_renderer_sink_;
@@ -199,6 +205,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerParams {
   bool is_background_video_playback_enabled_ = true;
   // Whether background video optimization is supported on current platform.
   bool is_background_video_track_optimization_supported_ = true;
+
+  std::unique_ptr<PowerStatusHelper> power_status_helper_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(WebMediaPlayerParams);
 };

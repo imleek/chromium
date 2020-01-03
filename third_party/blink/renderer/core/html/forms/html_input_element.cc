@@ -34,6 +34,7 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_scroll_into_view_params.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
+#include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
@@ -73,6 +74,7 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/bindings/to_v8.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/language.h"
@@ -183,27 +185,27 @@ bool HTMLInputElement::IsValidValue(const String& value) const {
 }
 
 bool HTMLInputElement::TooLong() const {
-  return willValidate() && TooLong(value(), kCheckDirtyFlag);
+  return TooLong(value(), kCheckDirtyFlag);
 }
 
 bool HTMLInputElement::TooShort() const {
-  return willValidate() && TooShort(value(), kCheckDirtyFlag);
+  return TooShort(value(), kCheckDirtyFlag);
 }
 
 bool HTMLInputElement::TypeMismatch() const {
-  return willValidate() && input_type_->TypeMismatch();
+  return input_type_->TypeMismatch();
 }
 
 bool HTMLInputElement::ValueMissing() const {
-  return willValidate() && input_type_->ValueMissing(value());
+  return input_type_->ValueMissing(value());
 }
 
 bool HTMLInputElement::HasBadInput() const {
-  return willValidate() && input_type_view_->HasBadInput();
+  return input_type_view_->HasBadInput();
 }
 
 bool HTMLInputElement::PatternMismatch() const {
-  return willValidate() && input_type_->PatternMismatch(value());
+  return input_type_->PatternMismatch(value());
 }
 
 bool HTMLInputElement::TooLong(const String& value,
@@ -217,17 +219,14 @@ bool HTMLInputElement::TooShort(const String& value,
 }
 
 bool HTMLInputElement::RangeUnderflow() const {
-  return willValidate() && input_type_->RangeUnderflow(value());
+  return input_type_->RangeUnderflow(value());
 }
 
 bool HTMLInputElement::RangeOverflow() const {
-  return willValidate() && input_type_->RangeOverflow(value());
+  return input_type_->RangeOverflow(value());
 }
 
 String HTMLInputElement::validationMessage() const {
-  if (!willValidate())
-    return String();
-
   if (CustomError())
     return CustomValidationMessage();
 
@@ -235,7 +234,7 @@ String HTMLInputElement::validationMessage() const {
 }
 
 String HTMLInputElement::ValidationSubMessage() const {
-  if (!willValidate() || CustomError())
+  if (CustomError())
     return String();
   return input_type_->ValidationMessage(*input_type_view_).second;
 }
@@ -249,7 +248,7 @@ double HTMLInputElement::Maximum() const {
 }
 
 bool HTMLInputElement::StepMismatch() const {
-  return willValidate() && input_type_->StepMismatch(value());
+  return input_type_->StepMismatch(value());
 }
 
 bool HTMLInputElement::GetAllowedValueStep(Decimal* step) const {
@@ -587,6 +586,7 @@ FormControlState HTMLInputElement::SaveFormControlState() const {
 void HTMLInputElement::RestoreFormControlState(const FormControlState& state) {
   input_type_view_->RestoreFormControlState(state);
   state_restored_ = true;
+  QueueInputAndChangeEvents();
 }
 
 bool HTMLInputElement::CanStartSelection() const {
@@ -1035,7 +1035,7 @@ bool HTMLInputElement::SizeShouldIncludeDecoration(int& preferred_size) const {
 
 void HTMLInputElement::CloneNonAttributePropertiesFrom(const Element& source,
                                                        CloneChildrenFlag flag) {
-  const HTMLInputElement& source_element = ToHTMLInputElement(source);
+  const auto& source_element = To<HTMLInputElement>(source);
 
   non_attribute_value_ = source_element.non_attribute_value_;
   has_dirty_value_ = source_element.has_dirty_value_;
@@ -1196,16 +1196,27 @@ void HTMLInputElement::UpdateView() {
   input_type_view_->UpdateView();
 }
 
-double HTMLInputElement::valueAsDate(bool& is_null) const {
+ScriptValue HTMLInputElement::valueAsDate(ScriptState* script_state) const {
+  UseCounter::Count(GetDocument(), WebFeature::kInputElementValueAsDateGetter);
+  // TODO(crbug.com/988343): InputType::ValueAsDate() should return
+  // base::Optional<base::Time>.
   double date = input_type_->ValueAsDate();
-  is_null = !std::isfinite(date);
-  return date;
+  v8::Isolate* isolate = script_state->GetIsolate();
+  if (!std::isfinite(date))
+    return ScriptValue::CreateNull(isolate);
+  return ScriptValue(isolate, ToV8(base::Time::FromJsTime(date), script_state));
 }
 
-void HTMLInputElement::setValueAsDate(double value,
-                                      bool is_null,
+void HTMLInputElement::setValueAsDate(ScriptState* script_state,
+                                      const ScriptValue& value,
                                       ExceptionState& exception_state) {
-  input_type_->SetValueAsDate(value, exception_state);
+  UseCounter::Count(GetDocument(), WebFeature::kInputElementValueAsDateSetter);
+  base::Optional<base::Time> date =
+      NativeValueTraits<IDLDateOrNull>::NativeValue(
+          script_state->GetIsolate(), value.V8Value(), exception_state);
+  if (exception_state.HadException())
+    return;
+  input_type_->SetValueAsDate(date, exception_state);
 }
 
 double HTMLInputElement::valueAsNumber() const {
@@ -1650,7 +1661,7 @@ HTMLDataListElement* HTMLInputElement::DataList() const {
   if (!input_type_->ShouldRespectListAttribute())
     return nullptr;
 
-  return ToHTMLDataListElementOrNull(
+  return DynamicTo<HTMLDataListElement>(
       GetTreeScope().getElementById(FastGetAttribute(html_names::kListAttr)));
 }
 
@@ -1768,22 +1779,6 @@ String HTMLInputElement::DefaultToolTip() const {
 
 bool HTMLInputElement::ShouldAppearIndeterminate() const {
   return input_type_->ShouldAppearIndeterminate();
-}
-
-bool HTMLInputElement::IsInRequiredRadioButtonGroup() {
-  // TODO(tkent): Remove type check.
-  DCHECK_EQ(type(), input_type_names::kRadio);
-  if (RadioButtonGroupScope* scope = GetRadioButtonGroupScope())
-    return scope->IsInRequiredGroup(this);
-  return false;
-}
-
-HTMLInputElement* HTMLInputElement::CheckedRadioButtonForGroup() {
-  if (checked())
-    return this;
-  if (RadioButtonGroupScope* scope = GetRadioButtonGroupScope())
-    return scope->CheckedButtonForGroup(GetName());
-  return nullptr;
 }
 
 RadioButtonGroupScope* HTMLInputElement::GetRadioButtonGroupScope() const {
@@ -1921,7 +1916,7 @@ bool HTMLInputElement::SetupDateTimeChooserParameters(
         continue;
       suggestion->localized_value = LocalizeValue(option->value());
       suggestion->label =
-          option->value() == option->label() ? String() : option->label();
+          option->value() == option->label() ? String("") : option->label();
       parameters.suggestions.push_back(std::move(suggestion));
     }
   }

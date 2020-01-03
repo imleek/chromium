@@ -61,6 +61,7 @@ public class TabSwitcherCoordinator
     private final TabSelectionEditorCoordinator mTabSelectionEditorCoordinator;
     private final UndoGroupSnackbarController mUndoGroupSnackbarController;
     private final TabModelSelector mTabModelSelector;
+    private final @TabListCoordinator.TabListMode int mMode;
 
     private final MenuOrKeyboardActionController
             .MenuOrKeyboardActionHandler mTabSwitcherMenuActionHandler =
@@ -87,6 +88,7 @@ public class TabSwitcherCoordinator
             MenuOrKeyboardActionController menuOrKeyboardActionController,
             SnackbarManager.SnackbarManageable snackbarManageable, ViewGroup container,
             @TabListCoordinator.TabListMode int mode) {
+        mMode = mode;
         mTabModelSelector = tabModelSelector;
 
         PropertyModel containerViewModel = new PropertyModel(TabListContainerProperties.ALL_KEYS);
@@ -95,7 +97,8 @@ public class TabSwitcherCoordinator
                 context, container, tabModelSelector, tabContentManager, null);
 
         mMediator = new TabSwitcherMediator(this, containerViewModel, tabModelSelector,
-                fullscreenManager, container, mTabSelectionEditorCoordinator.getController(), mode);
+                fullscreenManager, container, mTabSelectionEditorCoordinator.getController(),
+                tabContentManager, mode);
 
         mMultiThumbnailCardProvider =
                 new MultiThumbnailCardProvider(context, tabContentManager, tabModelSelector);
@@ -198,6 +201,16 @@ public class TabSwitcherCoordinator
     }
 
     @Override
+    public int getTabListTopOffset() {
+        return mTabListCoordinator.getTabListTopOffset();
+    }
+
+    @Override
+    public int getListModeForTesting() {
+        return mMode;
+    }
+
+    @Override
     public boolean prepareOverview() {
         boolean quick = mMediator.prepareOverview();
         mTabListCoordinator.prepareOverview();
@@ -278,6 +291,7 @@ public class TabSwitcherCoordinator
             }
         }
 
+        mMediator.registerFirstMeaningfulPaintRecorder();
         return mTabListCoordinator.resetWithListOfTabs(tabs, quickMode, mruMode);
     }
 

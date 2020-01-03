@@ -15,10 +15,6 @@
 #include "components/sync/test/fake_server/fake_server_network_resources.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/signin/scoped_account_consistency.h"
-#endif
-
-#if defined(OS_CHROMEOS)
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #endif
@@ -27,22 +23,10 @@ namespace browsing_data_counter_utils {
 
 class BrowsingDataCounterUtilsBrowserTest : public SyncTest {
  public:
-  BrowsingDataCounterUtilsBrowserTest()
-      : SyncTest(SINGLE_CLIENT)
-#if defined(OS_CHROMEOS)
-        ,
-        scoped_mirror_(std::make_unique<ScopedAccountConsistencyMirror>())
-#endif
-  {
-  }
+  BrowsingDataCounterUtilsBrowserTest() : SyncTest(SINGLE_CLIENT) {}
   ~BrowsingDataCounterUtilsBrowserTest() override = default;
 
  private:
-#if defined(OS_CHROMEOS)
-  // Need to manually turn on mirror for now.
-  const std::unique_ptr<ScopedAccountConsistencyMirror> scoped_mirror_;
-#endif
-
   DISALLOW_COPY_AND_ASSIGN(BrowsingDataCounterUtilsBrowserTest);
 };
 
@@ -58,13 +42,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataCounterUtilsBrowserTest,
           GetFakeServer()->AsWeakPtr()));
 
   std::string username;
-#if defined(OS_CHROMEOS)
-  // In browser tests, the profile may already by authenticated with stub
-  // account |user_manager::kStubUserEmail|.
-  CoreAccountInfo info =
-      IdentityManagerFactory::GetForProfile(profile)->GetPrimaryAccountInfo();
-  username = info.email;
-#endif
+
   if (username.empty())
     username = "user@gmail.com";
 
@@ -73,10 +51,6 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataCounterUtilsBrowserTest,
           profile, username, "unused" /* password */,
           ProfileSyncServiceHarness::SigninType::FAKE_SIGNIN);
 
-#if defined(OS_CHROMEOS)
-  // On Chrome OS, the profile is always authenticated.
-  EXPECT_TRUE(ShouldShowCookieException(profile));
-#else
   // By default, a fresh profile is not signed in, nor syncing, so no cookie
   // exception should be shown.
   EXPECT_FALSE(ShouldShowCookieException(profile));
@@ -84,6 +58,10 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataCounterUtilsBrowserTest,
   // Sign the profile in.
   EXPECT_TRUE(harness->SignInPrimaryAccount());
 
+#if defined(OS_CHROMEOS)
+  // On Chrome OS sync in turned on by default.
+  EXPECT_TRUE(ShouldShowCookieException(profile));
+#else
   // Sign-in alone shouldn't lead to a cookie exception.
   EXPECT_FALSE(ShouldShowCookieException(profile));
 #endif

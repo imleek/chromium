@@ -22,8 +22,12 @@ const base::Feature kNativeFileSystemReadOnlyUsageIndicatorFeature{
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 NativeFileSystemAccessIconView::NativeFileSystemAccessIconView(
-    Delegate* delegate)
-    : PageActionIconView(nullptr, 0, delegate) {
+    IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+    PageActionIconView::Delegate* page_action_icon_delegate)
+    : PageActionIconView(nullptr,
+                         0,
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate) {
   SetVisible(false);
 }
 
@@ -32,8 +36,7 @@ views::BubbleDialogDelegateView* NativeFileSystemAccessIconView::GetBubble()
   return NativeFileSystemUsageBubbleView::GetBubble();
 }
 
-bool NativeFileSystemAccessIconView::Update() {
-  const bool was_visible = GetVisible();
+void NativeFileSystemAccessIconView::UpdateImpl() {
   const bool had_write_access = has_write_access_;
 
   has_write_access_ = GetWebContents() &&
@@ -56,8 +59,6 @@ bool NativeFileSystemAccessIconView::Update() {
   // it was still open.
   if (!GetVisible())
     NativeFileSystemUsageBubbleView::CloseCurrentBubble();
-
-  return GetVisible() != was_visible || had_write_access != has_write_access_;
 }
 
 base::string16
@@ -103,4 +104,8 @@ void NativeFileSystemAccessIconView::OnExecuting(ExecuteSource execute_source) {
 const gfx::VectorIcon& NativeFileSystemAccessIconView::GetVectorIcon() const {
   return has_write_access_ ? kSaveOriginalFileIcon
                            : vector_icons::kInsertDriveFileOutlineIcon;
+}
+
+const char* NativeFileSystemAccessIconView::GetClassName() const {
+  return "NativeFileSystemAccessIconView";
 }

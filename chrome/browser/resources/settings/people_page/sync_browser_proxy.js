@@ -23,6 +23,7 @@ settings.StoredAccount;
  *            disabled: (boolean|undefined),
  *            domain: (string|undefined),
  *            hasError: (boolean|undefined),
+ *            hasPasswordsOnlyError: (boolean|undefined),
  *            hasUnrecoverableError: (boolean|undefined),
  *            managed: (boolean|undefined),
  *            firstSetupInProgress: (boolean|undefined),
@@ -51,6 +52,8 @@ settings.StatusAction = {
       'signOutAndSignIn',               // User needs to sign out and sign in.
   UPGRADE_CLIENT: 'upgradeClient',      // User needs to upgrade the client.
   ENTER_PASSPHRASE: 'enterPassphrase',  // User needs to enter passphrase.
+  // User needs to go through key retrieval.
+  RETRIEVE_TRUSTED_VAULT_KEYS: 'retrieveTrustedVaultKeys',
   CONFIRM_SYNC_SETTINGS:
       'confirmSyncSettings',  // User needs to confirm sync settings.
 };
@@ -60,45 +63,34 @@ settings.StatusAction = {
  * C++ and JS. Its naming and structure is not optimal, but changing it would
  * require changes to the C++ handler, which is already functional.
  * @typedef {{
- *   appsEnforced: boolean,
  *   appsRegistered: boolean,
  *   appsSynced: boolean,
- *   autofillEnforced: boolean,
  *   autofillRegistered: boolean,
  *   autofillSynced: boolean,
- *   bookmarksEnforced: boolean,
  *   bookmarksRegistered: boolean,
  *   bookmarksSynced: boolean,
  *   encryptAllData: boolean,
  *   encryptAllDataAllowed: boolean,
  *   enterPassphraseBody: (string|undefined),
- *   extensionsEnforced: boolean,
  *   extensionsRegistered: boolean,
  *   extensionsSynced: boolean,
  *   fullEncryptionBody: string,
  *   passphrase: (string|undefined),
  *   passphraseRequired: boolean,
- *   passwordsEnforced: boolean,
  *   passwordsRegistered: boolean,
  *   passwordsSynced: boolean,
  *   paymentsIntegrationEnabled: boolean,
- *   preferencesEnforced: boolean,
  *   preferencesRegistered: boolean,
  *   preferencesSynced: boolean,
  *   setNewPassphrase: (boolean|undefined),
  *   syncAllDataTypes: boolean,
- *   tabsEnforced: boolean,
  *   tabsRegistered: boolean,
  *   tabsSynced: boolean,
- *   themesEnforced: boolean,
  *   themesRegistered: boolean,
  *   themesSynced: boolean,
- *   typedUrlsEnforced: boolean,
+ *   trustedVaultKeysRequired: boolean,
  *   typedUrlsRegistered: boolean,
  *   typedUrlsSynced: boolean,
- *   wifiConfigurationsEnforced: boolean,
- *   wifiConfigurationsRegistered: boolean,
- *   wifiConfigurationsSynced: boolean,
  * }}
  */
 settings.SyncPrefs;
@@ -140,6 +132,7 @@ cr.define('settings', function() {
      * Invalidates the Sync token without signing the user out.
      */
     pauseSync() {}
+    // </if>
 
     /**
      * @return {number} the number of times the sync account promo was shown.
@@ -151,8 +144,6 @@ cr.define('settings', function() {
      */
     incrementPromoImpressionCount() {}
 
-    // </if>
-
     // <if expr="chromeos">
     /**
      * Signs the user out.
@@ -160,6 +151,11 @@ cr.define('settings', function() {
     attemptUserExit() {}
 
     // </if>
+
+    /**
+     * Starts the key retrieval process.
+     */
+    startKeyRetrieval() {}
 
     /**
      * Gets the current sync status.
@@ -242,6 +238,7 @@ cr.define('settings', function() {
     pauseSync() {
       chrome.send('SyncSetupPauseSync');
     }
+    // </if>
 
     /** @override */
     getPromoImpressionCount() {
@@ -257,13 +254,17 @@ cr.define('settings', function() {
           (this.getPromoImpressionCount() + 1).toString());
     }
 
-    // </if>
     // <if expr="chromeos">
     /** @override */
     attemptUserExit() {
       return chrome.send('AttemptUserExit');
     }
     // </if>
+
+    /** @override */
+    startKeyRetrieval() {
+      chrome.send('SyncStartKeyRetrieval');
+    }
 
     /** @override */
     getSyncStatus() {

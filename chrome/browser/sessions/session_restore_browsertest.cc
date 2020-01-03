@@ -45,7 +45,8 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/startup/startup_types.h"
-#include "chrome/browser/ui/tabs/tab_group_id.h"
+#include "chrome/browser/ui/tabs/tab_group.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -59,6 +60,9 @@
 #include "components/sessions/core/serialized_navigation_entry_test_helper.h"
 #include "components/sessions/core/session_types.h"
 #include "components/sessions/core/tab_restore_service.h"
+#include "components/tab_groups/tab_group_color.h"
+#include "components/tab_groups/tab_group_id.h"
+#include "components/tab_groups/tab_group_visual_data.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
@@ -378,11 +382,18 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreMinimizedWindow) {
   Browser* restored = QuitBrowserAndRestore(browser(), 3);
   EXPECT_EQ(1, restored->tab_strip_model()->count());
 
+#if defined(OS_MACOSX)
+  // On macOS, minimized windows are neither active nor shown, to avoid causing
+  // space switches during session restore.
+  EXPECT_FALSE(restored->window()->IsActive());
+  EXPECT_FALSE(restored->window()->IsVisible());
+#else
   // Expect the window to be visible.
   // Prior to the fix for https://crbug.com/1018885, the window was active but
   // not visible.
   EXPECT_TRUE(restored->window()->IsActive());
   EXPECT_TRUE(restored->window()->IsVisible());
+#endif
 }
 
 // Verify that restored tabs have correct disposition. Only one tab should
@@ -905,7 +916,7 @@ void CreateTabGroups(TabStripModel* model,
   ASSERT_EQ(model->count(), static_cast<int>(specified_groups.size()));
 
   // Maps |specified_groups| IDs to actual group IDs in |model|.
-  base::flat_map<int, TabGroupId> group_map;
+  base::flat_map<int, tab_groups::TabGroupId> group_map;
 
   for (int i = 0; i < model->count(); ++i) {
     if (specified_groups[i] == base::nullopt)
@@ -917,7 +928,7 @@ void CreateTabGroups(TabStripModel* model,
     // If |group_map| doesn't contain a value for |specified_group|, we can
     // assume we haven't created the group yet.
     if (match == group_map.end()) {
-      const TabGroupId actual_group = model->AddToNewGroup({i});
+      const tab_groups::TabGroupId actual_group = model->AddToNewGroup({i});
       group_map.insert(std::make_pair(specified_group, actual_group));
     } else {
       const content::WebContents* const contents = model->GetWebContentsAt(i);
@@ -935,13 +946,14 @@ void CheckTabGrouping(TabStripModel* model,
   ASSERT_EQ(model->count(), static_cast<int>(specified_groups.size()));
 
   // Maps |specified_groups| IDs to actual group IDs in |model|.
-  base::flat_map<int, TabGroupId> group_map;
+  base::flat_map<int, tab_groups::TabGroupId> group_map;
 
   for (int i = 0; i < model->count(); ++i) {
     SCOPED_TRACE(i);
 
     const base::Optional<int> specified_group = specified_groups[i];
-    const base::Optional<TabGroupId> actual_group = model->GetTabGroupForTab(i);
+    const base::Optional<tab_groups::TabGroupId> actual_group =
+        model->GetTabGroupForTab(i);
 
     // The tab should be grouped iff it's grouped in |specified_groups|.
     EXPECT_EQ(actual_group.has_value(), specified_group.has_value());
@@ -959,9 +971,9 @@ void CheckTabGrouping(TabStripModel* model,
 }
 
 // Returns the optional group ID for each tab in a vector.
-std::vector<base::Optional<TabGroupId>> GetTabGroups(
+std::vector<base::Optional<tab_groups::TabGroupId>> GetTabGroups(
     const TabStripModel* model) {
-  std::vector<base::Optional<TabGroupId>> result(model->count());
+  std::vector<base::Optional<tab_groups::TabGroupId>> result(model->count());
   for (int i = 0; i < model->count(); ++i)
     result[i] = model->GetTabGroupForTab(i);
   return result;
@@ -1038,25 +1050,26 @@ IN_PROC_BROWSER_TEST_P(SessionRestoreTabGroupsTest, GroupMetadataRestored) {
 
   // Group the first 2 and second 2 tabs, making for 2 groups with 2 tabs and 1
   // ungrouped tab in the strip.
-  const TabGroupId group1 = tsm->AddToNewGroup({0, 1});
-  const TabGroupId group2 = tsm->AddToNewGroup({2, 3});
+  const tab_groups::TabGroupId group1 = tsm->AddToNewGroup({0, 1});
+  const tab_groups::TabGroupId group2 = tsm->AddToNewGroup({2, 3});
 
   // Get the default visual data for the first group and set custom visual data
   // for the second.
-  const TabGroupVisualData group1_data = *tsm->GetVisualDataForGroup(group1);
-  const TabGroupVisualData group2_data(base::ASCIIToUTF16("Foo"),
-                                       gfx::kGoogleBlue600);
-  tsm->SetVisualDataForGroup(group2, group2_data);
+  const tab_groups::TabGroupVisualData group1_data =
+      *tsm->group_model()->GetTabGroup(group1)->visual_data();
+  const tab_groups::TabGroupVisualData group2_data(
+      base::ASCIIToUTF16("Foo"), tab_groups::TabGroupColorId::kBlue);
+  tsm->group_model()->GetTabGroup(group2)->SetVisualData(group2_data);
 
   Browser* const new_browser = QuitBrowserAndRestore(browser(), 5);
   TabStripModel* const new_tsm = new_browser->tab_strip_model();
   ASSERT_EQ(5, new_tsm->count());
 
   // Check that the restored visual data is the same.
-  const TabGroupVisualData* const group1_restored_data =
-      new_tsm->GetVisualDataForGroup(group1);
-  const TabGroupVisualData* const group2_restored_data =
-      new_tsm->GetVisualDataForGroup(group2);
+  const tab_groups::TabGroupVisualData* const group1_restored_data =
+      new_tsm->group_model()->GetTabGroup(group1)->visual_data();
+  const tab_groups::TabGroupVisualData* const group2_restored_data =
+      new_tsm->group_model()->GetTabGroup(group2)->visual_data();
   EXPECT_EQ(group1_data.title(), group1_restored_data->title());
   EXPECT_EQ(group1_data.color(), group1_restored_data->color());
   EXPECT_EQ(group2_data.title(), group2_restored_data->title());
@@ -2029,9 +2042,9 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreWithURLInCommandLineTest,
   EXPECT_EQ(url3_, tab_strip_model->GetWebContentsAt(2)->GetURL());
 }
 
-class SecFetchSiteSessionRestoreTest : public SessionRestoreTest {
+class MultiOriginSessionRestoreTest : public SessionRestoreTest {
  public:
-  SecFetchSiteSessionRestoreTest()
+  MultiOriginSessionRestoreTest()
       : https_test_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
     feature_list_.InitWithFeatures(
         {network::features::kFetchMetadata,
@@ -2060,10 +2073,6 @@ class SecFetchSiteSessionRestoreTest : public SessionRestoreTest {
         .ExtractString();
   }
 
-  GURL GetSecFetchUrl() {
-    return GetSameOriginUrl("/echoheader?sec-fetch-site");
-  }
-
   GURL GetSameOriginUrl(const std::string& path_and_query) {
     return https_test_server_.GetURL(path_and_query);
   }
@@ -2077,19 +2086,21 @@ class SecFetchSiteSessionRestoreTest : public SessionRestoreTest {
   net::EmbeddedTestServer https_test_server_;
   base::test::ScopedFeatureList feature_list_;
 
-  DISALLOW_COPY_AND_ASSIGN(SecFetchSiteSessionRestoreTest);
+  DISALLOW_COPY_AND_ASSIGN(MultiOriginSessionRestoreTest);
 };
 
 // Test that Sec-Fetch-Site http request header is correctly replayed during
 // session restore.  This is a regression test for https://crbug.com/976055.
-IN_PROC_BROWSER_TEST_F(SecFetchSiteSessionRestoreTest, Test) {
+IN_PROC_BROWSER_TEST_F(MultiOriginSessionRestoreTest, SecFetchSite) {
+  GURL sec_fetch_url = GetSameOriginUrl("/echoheader?sec-fetch-site");
+
   // Tab #1: Same-origin navigation.
   ui_test_utils::NavigateToURL(browser(), GetSameOriginUrl("/title1.html"));
   {
     content::WebContents* tab1 = GetTab(browser(), 0);
     content::TestNavigationObserver nav_observer(tab1);
     ASSERT_TRUE(content::ExecJs(
-        tab1, content::JsReplace("location = $1", GetSecFetchUrl())));
+        tab1, content::JsReplace("location = $1", sec_fetch_url)));
     nav_observer.Wait();
   }
 
@@ -2102,13 +2113,13 @@ IN_PROC_BROWSER_TEST_F(SecFetchSiteSessionRestoreTest, Test) {
     content::WebContents* tab2 = GetTab(browser(), 1);
     content::TestNavigationObserver nav_observer(tab2);
     ASSERT_TRUE(content::ExecJs(
-        tab2, content::JsReplace("location = $1", GetSecFetchUrl())));
+        tab2, content::JsReplace("location = $1", sec_fetch_url)));
     nav_observer.Wait();
   }
 
   // Tab #3: Omnibox navigation.
   ui_test_utils::NavigateToURLWithDisposition(
-      browser(), GetSecFetchUrl(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      browser(), sec_fetch_url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
   // Verify that all the tabs have seen the expected Sec-Fetch-Site header.
@@ -2128,4 +2139,258 @@ IN_PROC_BROWSER_TEST_F(SecFetchSiteSessionRestoreTest, Test) {
   EXPECT_EQ("same-origin", GetContent(new_browser, 0));
   EXPECT_EQ("cross-site", GetContent(new_browser, 1));
   EXPECT_EQ("none", GetContent(new_browser, 2));
+}
+
+// Test that it is possible to navigate back to a restored about:blank history
+// entry with a non-null initiator origin.  This test cases covers the original
+// repro steps reported in https://crbug.com/1026474.
+IN_PROC_BROWSER_TEST_F(MultiOriginSessionRestoreTest, BackToAboutBlank1) {
+  // Open about:blank in a new tab.
+  GURL initial_url = embedded_test_server()->GetURL("foo.com", "/title1.html");
+  url::Origin initial_origin = url::Origin::Create(initial_url);
+  ui_test_utils::NavigateToURL(browser(), initial_url);
+  content::WebContents* old_popup = nullptr;
+  {
+    content::WebContents* tab1 = GetTab(browser(), 0);
+    content::WebContentsAddedObserver popup_observer;
+    ASSERT_TRUE(ExecJs(tab1, "window.open('about:blank')"));
+    old_popup = popup_observer.GetWebContents();
+    EXPECT_EQ(GURL(url::kAboutBlankURL),
+              old_popup->GetMainFrame()->GetLastCommittedURL());
+    EXPECT_EQ(initial_origin,
+              old_popup->GetMainFrame()->GetLastCommittedOrigin());
+  }
+
+  // Navigate the popup to another site.
+  GURL other_url = embedded_test_server()->GetURL("bar.com", "/title1.html");
+  url::Origin other_origin = url::Origin::Create(other_url);
+  {
+    content::TestNavigationObserver nav_observer(old_popup);
+    ASSERT_TRUE(content::ExecJs(
+        old_popup, content::JsReplace("location = $1", other_url)));
+    nav_observer.Wait();
+  }
+  EXPECT_EQ(other_url, old_popup->GetMainFrame()->GetLastCommittedURL());
+  EXPECT_EQ(other_origin, old_popup->GetMainFrame()->GetLastCommittedOrigin());
+  ASSERT_TRUE(old_popup->GetController().CanGoBack());
+
+  // Kill the original browser then open a new one to trigger a restore.
+  Browser* new_browser = QuitBrowserAndRestore(browser(), 1);
+  ASSERT_EQ(1u, active_browser_list_->size());
+  ASSERT_EQ(2, new_browser->tab_strip_model()->count());
+  content::WebContents* new_popup = GetTab(new_browser, 1);
+  old_popup = nullptr;
+
+  // Verify that the restored popup hosts |other_url|.
+  EXPECT_EQ(other_url, new_popup->GetMainFrame()->GetLastCommittedURL());
+  EXPECT_EQ(other_origin, new_popup->GetMainFrame()->GetLastCommittedOrigin());
+  ASSERT_TRUE(new_popup->GetController().CanGoBack());
+
+  // Navigate the popup back to about:blank.
+  {
+    content::TestNavigationObserver nav_observer(new_popup);
+    new_popup->GetController().GoBack();
+    nav_observer.Wait();
+  }
+  EXPECT_EQ(GURL(url::kAboutBlankURL),
+            new_popup->GetMainFrame()->GetLastCommittedURL());
+  // TODO(lukasza): https://crbug.com/888079: The browser process should tell
+  // the renderer which (initiator-based) origin to commit.  Right now, Blink
+  // just falls back to an opaque origin.
+  EXPECT_TRUE(new_popup->GetMainFrame()->GetLastCommittedOrigin().opaque());
+}
+
+// Test that it is possible to navigate back to a restored about:blank history
+// entry with a missing initiator origin.  Note that this scenario did not hit
+// the CHECK from https://crbug.com/1026474, because the CHECK is/was skipped
+// for opaque origins (which would be the case for about:blank with a missing
+// initiator origin).
+IN_PROC_BROWSER_TEST_F(MultiOriginSessionRestoreTest,
+                       BackToAboutBlank1_Omnibox) {
+  // Browser-initiated navigation to about:blank.
+  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+  content::WebContents* old_tab = GetTab(browser(), 0);
+  EXPECT_EQ(GURL(url::kAboutBlankURL),
+            old_tab->GetMainFrame()->GetLastCommittedURL());
+  EXPECT_TRUE(old_tab->GetMainFrame()->GetLastCommittedOrigin().opaque());
+
+  // Navigate the tab to another site.
+  GURL other_url = embedded_test_server()->GetURL("bar.com", "/title1.html");
+  url::Origin other_origin = url::Origin::Create(other_url);
+  {
+    content::TestNavigationObserver nav_observer(old_tab);
+    ASSERT_TRUE(content::ExecJs(
+        old_tab, content::JsReplace("location = $1", other_url)));
+    nav_observer.Wait();
+  }
+  EXPECT_EQ(other_url, old_tab->GetMainFrame()->GetLastCommittedURL());
+  EXPECT_EQ(other_origin, old_tab->GetMainFrame()->GetLastCommittedOrigin());
+  ASSERT_TRUE(old_tab->GetController().CanGoBack());
+
+  // Kill the original browser then open a new one to trigger a restore.
+  Browser* new_browser = QuitBrowserAndRestore(browser(), 1);
+  ASSERT_EQ(1u, active_browser_list_->size());
+  ASSERT_EQ(1, new_browser->tab_strip_model()->count());
+  content::WebContents* new_tab = GetTab(new_browser, 0);
+  old_tab = nullptr;
+
+  // Verify that the restored popup hosts |other_url|.
+  EXPECT_EQ(other_url, new_tab->GetMainFrame()->GetLastCommittedURL());
+  EXPECT_EQ(other_origin, new_tab->GetMainFrame()->GetLastCommittedOrigin());
+  ASSERT_TRUE(new_tab->GetController().CanGoBack());
+
+  // Navigate the popup back to about:blank.
+  {
+    content::TestNavigationObserver nav_observer(new_tab);
+    new_tab->GetController().GoBack();
+    nav_observer.Wait();
+  }
+  EXPECT_EQ(GURL(url::kAboutBlankURL),
+            new_tab->GetMainFrame()->GetLastCommittedURL());
+  EXPECT_TRUE(new_tab->GetMainFrame()->GetLastCommittedOrigin().opaque());
+}
+
+// Test that it is possible to navigate back to a restored about:blank history
+// entry with a non-null initiator origin.  This test cases covers the variant
+// of the repro that was reported in https://crbug.com/1016954#c27.
+IN_PROC_BROWSER_TEST_F(MultiOriginSessionRestoreTest, BackToAboutBlank2) {
+  // Open about:blank#foo in a new tab.
+  //
+  // Note that about:blank (rather than about:blank#foo) wouldn't work, because
+  // about:blank is treated by the renderer-side as an initial, empty history
+  // entry and replaced during the navigation to |other_url| below.
+  GURL initial_url = embedded_test_server()->GetURL("foo.com", "/title1.html");
+  url::Origin initial_origin = url::Origin::Create(initial_url);
+  ui_test_utils::NavigateToURL(browser(), initial_url);
+  {
+    content::WebContents* tab1 = GetTab(browser(), 0);
+    content::WebContentsAddedObserver popup_observer;
+    ASSERT_TRUE(ExecJs(tab1, "window.open('about:blank#foo')"));
+    content::WebContents* old_popup = popup_observer.GetWebContents();
+    EXPECT_EQ(GURL("about:blank#foo"),
+              old_popup->GetMainFrame()->GetLastCommittedURL());
+    EXPECT_EQ(initial_origin,
+              old_popup->GetMainFrame()->GetLastCommittedOrigin());
+  }
+
+  // Kill the original browser then open a new one to trigger a restore.
+  Browser* new_browser = QuitBrowserAndRestore(browser(), 1);
+  ASSERT_EQ(1u, active_browser_list_->size());
+  ASSERT_EQ(2, new_browser->tab_strip_model()->count());
+  content::WebContents* new_popup = GetTab(new_browser, 1);
+
+  // Verify that the restored popup hosts about:blank#foo.
+  EXPECT_EQ(GURL("about:blank#foo"),
+            new_popup->GetMainFrame()->GetLastCommittedURL());
+  // TODO(lukasza): https://crbug.com/888079: The browser process should tell
+  // the renderer which (initiator-based) origin to commit.  Right now, Blink
+  // just falls back to an opaque origin.
+  EXPECT_TRUE(new_popup->GetMainFrame()->GetLastCommittedOrigin().opaque());
+
+  // Navigate the popup to another site.
+  GURL other_url = embedded_test_server()->GetURL("bar.com", "/title1.html");
+  url::Origin other_origin = url::Origin::Create(other_url);
+  {
+    content::TestNavigationObserver nav_observer(new_popup);
+    ASSERT_TRUE(content::ExecJs(
+        new_popup, content::JsReplace("location = $1", other_url)));
+    nav_observer.Wait();
+  }
+  EXPECT_EQ(other_url, new_popup->GetMainFrame()->GetLastCommittedURL());
+  EXPECT_EQ(other_origin, new_popup->GetMainFrame()->GetLastCommittedOrigin());
+  ASSERT_TRUE(new_popup->GetController().CanGoBack());
+
+  // Navigate the popup back to about:blank#foo.
+  {
+    content::TestNavigationObserver nav_observer(new_popup);
+    new_popup->GetController().GoBack();
+    nav_observer.Wait();
+  }
+  EXPECT_EQ(GURL("about:blank#foo"),
+            new_popup->GetMainFrame()->GetLastCommittedURL());
+  // TODO(lukasza): https://crbug.com/888079: The browser process should tell
+  // the renderer which (initiator-based) origin to commit.  Right now, Blink
+  // just falls back to an opaque origin.
+  EXPECT_TRUE(new_popup->GetMainFrame()->GetLastCommittedOrigin().opaque());
+}
+
+// Test that it is possible to navigate back to a subframe with a restored
+// about:blank history entry with a non-null initiator origin - see
+// https://crbug.com/1026474.
+IN_PROC_BROWSER_TEST_F(MultiOriginSessionRestoreTest,
+                       BackToAboutBlankSubframe) {
+  // Navigate to a.com(a.com/title2.html).
+  GURL main_url = embedded_test_server()->GetURL(
+      "a.com", "/frame_tree/page_with_samesite_frame.html");
+  url::Origin a_origin = url::Origin::Create(main_url);
+  GURL subframe_url = embedded_test_server()->GetURL("a.com", "/title2.html");
+  ui_test_utils::NavigateToURL(browser(), main_url);
+  content::WebContents* old_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_EQ(main_url, old_tab->GetMainFrame()->GetLastCommittedURL());
+  EXPECT_EQ(a_origin, old_tab->GetMainFrame()->GetLastCommittedOrigin());
+  ASSERT_EQ(2u, old_tab->GetAllFrames().size());
+  content::RenderFrameHost* subframe = old_tab->GetAllFrames()[1];
+  EXPECT_EQ(subframe_url, subframe->GetLastCommittedURL());
+  EXPECT_EQ(a_origin, subframe->GetLastCommittedOrigin());
+
+  // Have main frame initiate navigating the subframe to about:blank.
+  // Expected state after the navigation: a.com(a.com-blank).
+  {
+    content::TestNavigationObserver nav_observer(old_tab);
+    ASSERT_TRUE(
+        content::ExecJs(old_tab, "window.open('about:blank', 'subframe');"));
+    nav_observer.Wait();
+  }
+  ASSERT_EQ(2u, old_tab->GetAllFrames().size());
+  EXPECT_EQ(subframe, old_tab->GetAllFrames()[1]);
+  EXPECT_EQ(GURL(url::kAboutBlankURL), subframe->GetLastCommittedURL());
+  EXPECT_EQ(a_origin, subframe->GetLastCommittedOrigin());
+
+  // Have subframe (about:blank from a.com origin) navigate itself to c.com.
+  // Expected state after the navigation: a.com(c.com).
+  GURL c_url = embedded_test_server()->GetURL("c.com", "/title3.html");
+  url::Origin c_origin = url::Origin::Create(c_url);
+  {
+    content::TestNavigationObserver nav_observer(old_tab);
+    ASSERT_TRUE(
+        content::ExecJs(subframe, content::JsReplace("location = $1;", c_url)));
+    nav_observer.Wait();
+  }
+  ASSERT_EQ(2u, old_tab->GetAllFrames().size());
+  subframe = old_tab->GetAllFrames()[1];
+  EXPECT_EQ(c_url, subframe->GetLastCommittedURL());
+  EXPECT_EQ(c_origin, subframe->GetLastCommittedOrigin());
+
+  // Kill the original browser then open a new one to trigger a restore.
+  ASSERT_TRUE(old_tab->GetController().CanGoBack());
+  Browser* new_browser = QuitBrowserAndRestore(browser(), 1);
+  ASSERT_EQ(1u, active_browser_list_->size());
+  ASSERT_EQ(1, new_browser->tab_strip_model()->count());
+  content::WebContents* new_tab =
+      new_browser->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(new_tab->GetController().CanGoBack());
+  old_tab = nullptr;
+
+  // Verify that the restored tab hosts: a.com(c.com).
+  EXPECT_EQ(main_url, new_tab->GetMainFrame()->GetLastCommittedURL());
+  EXPECT_EQ(a_origin, new_tab->GetMainFrame()->GetLastCommittedOrigin());
+  ASSERT_EQ(2u, new_tab->GetAllFrames().size());
+  subframe = new_tab->GetAllFrames()[1];
+  EXPECT_EQ(c_url, subframe->GetLastCommittedURL());
+  EXPECT_EQ(c_origin, subframe->GetLastCommittedOrigin());
+
+  // Go back - this should reach: a.com(a.com-blank).
+  {
+    content::TestNavigationObserver nav_observer(new_tab);
+    new_tab->GetController().GoBack();
+    nav_observer.Wait();
+  }
+  ASSERT_EQ(2u, new_tab->GetAllFrames().size());
+  subframe = new_tab->GetAllFrames()[1];
+  EXPECT_EQ(GURL(url::kAboutBlankURL), subframe->GetLastCommittedURL());
+  // TODO(lukasza): https://crbug.com/888079: The browser process should tell
+  // the renderer which (initiator-based) origin to commit.  Right now, Blink
+  // just falls back to an opaque origin.
+  EXPECT_TRUE(subframe->GetLastCommittedOrigin().opaque());
 }

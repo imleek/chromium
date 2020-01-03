@@ -23,6 +23,7 @@
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/fake_embedded_worker_instance_client.h"
 #include "content/browser/service_worker/fake_service_worker.h"
+#include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_ping_controller.h"
 #include "content/browser/service_worker/service_worker_registration.h"
@@ -176,12 +177,14 @@ class ServiceWorkerVersionTest : public testing::Test {
     base::WeakPtr<ServiceWorkerProviderHost> host = CreateProviderHostForWindow(
         controllee_process_id, true /* is_parent_frame_secure */,
         helper_->context()->AsWeakPtr(), &remote_endpoint);
-    host->UpdateUrls(registration_->scope(), registration_->scope(),
-                     url::Origin::Create(registration_->scope()));
-    host->SetControllerRegistration(registration_,
-                                    false /* notify_controllerchange */);
+    host->container_host()->UpdateUrls(
+        registration_->scope(),
+        net::SiteForCookies::FromUrl(registration_->scope()),
+        url::Origin::Create(registration_->scope()));
+    host->container_host()->SetControllerRegistration(
+        registration_, false /* notify_controllerchange */);
     EXPECT_TRUE(version_->HasControllee());
-    EXPECT_TRUE(host->controller());
+    EXPECT_TRUE(host->container_host()->controller());
     return remote_endpoint;
   }
 
@@ -426,11 +429,13 @@ TEST_F(ServiceWorkerVersionTest, Doom) {
   base::WeakPtr<ServiceWorkerProviderHost> host = CreateProviderHostForWindow(
       33 /* dummy render process id */, true /* is_parent_frame_secure */,
       helper_->context()->AsWeakPtr(), &remote_endpoint);
-  host->UpdateUrls(registration_->scope(), registration_->scope(),
-                   url::Origin::Create(registration_->scope()));
-  host->SetControllerRegistration(registration_, false);
+  host->container_host()->UpdateUrls(
+      registration_->scope(),
+      net::SiteForCookies::FromUrl(registration_->scope()),
+      url::Origin::Create(registration_->scope()));
+  host->container_host()->SetControllerRegistration(registration_, false);
   EXPECT_TRUE(version_->HasControllee());
-  EXPECT_TRUE(host->controller());
+  EXPECT_TRUE(host->container_host()->controller());
 
   // Doom the version.
   version_->Doom();
@@ -438,7 +443,7 @@ TEST_F(ServiceWorkerVersionTest, Doom) {
   // The controllee should have been removed.
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, version_->status());
   EXPECT_FALSE(version_->HasControllee());
-  EXPECT_FALSE(host->controller());
+  EXPECT_FALSE(host->container_host()->controller());
 }
 
 TEST_F(ServiceWorkerVersionTest, SetDevToolsAttached) {
@@ -1193,12 +1198,14 @@ TEST_F(ServiceWorkerVersionTest,
   base::WeakPtr<ServiceWorkerProviderHost> host =
       std::move(host_and_info->host);
   remote_endpoint.BindForWindow(std::move(host_and_info->info));
-  host->UpdateUrls(registration_->scope(), registration_->scope(),
-                   url::Origin::Create(registration_->scope()));
-  host->SetControllerRegistration(registration_,
-                                  false /* notify_controllerchange */);
+  host->container_host()->UpdateUrls(
+      registration_->scope(),
+      net::SiteForCookies::FromUrl(registration_->scope()),
+      url::Origin::Create(registration_->scope()));
+  host->container_host()->SetControllerRegistration(
+      registration_, false /* notify_controllerchange */);
   EXPECT_TRUE(version_->HasControllee());
-  EXPECT_TRUE(host->controller());
+  EXPECT_TRUE(host->container_host()->controller());
 
   // RenderProcessHost should be notified of foreground worker.
   base::RunLoop().RunUntilIdle();
@@ -1207,12 +1214,13 @@ TEST_F(ServiceWorkerVersionTest,
       helper_->mock_render_process_host()->foreground_service_worker_count());
 
   // This is necessary to make OnBeginNavigationCommit() work.
-  auto remote_controller = host->GetRemoteControllerServiceWorker();
+  auto remote_controller =
+      host->container_host()->GetRemoteControllerServiceWorker();
 
   // Now begin the navigation commit with the same process id used by the
   // worker. This should cause the worker to stop being considered foreground
   // priority.
-  host->OnBeginNavigationCommit(
+  host->container_host()->OnBeginNavigationCommit(
       version_->embedded_worker()->process_id(),
       /* render_frame_id = */ 1,
       network::mojom::CrossOriginEmbedderPolicy::kNone);

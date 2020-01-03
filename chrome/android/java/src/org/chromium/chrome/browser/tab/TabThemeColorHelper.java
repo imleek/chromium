@@ -10,8 +10,8 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.UserData;
-import org.chromium.chrome.browser.ui.styles.ChromeColors;
 import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.RenderWidgetHostView;
@@ -22,7 +22,7 @@ import org.chromium.content_public.browser.WebContents;
  */
 public class TabThemeColorHelper extends EmptyTabObserver implements UserData {
     private static final Class<TabThemeColorHelper> USER_DATA_KEY = TabThemeColorHelper.class;
-    private final Tab mTab;
+    private final TabImpl mTab;
 
     private int mDefaultColor;
     private int mColor;
@@ -78,7 +78,7 @@ public class TabThemeColorHelper extends EmptyTabObserver implements UserData {
     }
 
     private TabThemeColorHelper(Tab tab) {
-        mTab = tab;
+        mTab = (TabImpl) tab;
         mDefaultColor = calculateDefaultColor();
         mIsDefaultColorUsed = true;
         mIsUsingColorFromTabContents = false;

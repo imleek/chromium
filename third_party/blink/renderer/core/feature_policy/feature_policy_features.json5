@@ -94,6 +94,11 @@
       depends_on: ["FeaturePolicyForClientHints"],
     },
     {
+      name: "ClientHintUAMobile",
+      feature_policy_name: "ch-ua-mobile",
+      depends_on: ["FeaturePolicyForClientHints"],
+    },
+    {
       name: "ClientHintViewportWidth",
       feature_policy_name: "ch-viewport-width",
       depends_on: ["FeaturePolicyForClientHints"],
@@ -102,11 +107,6 @@
       name: "ClientHintWidth",
       feature_policy_name: "ch-width",
       depends_on: ["FeaturePolicyForClientHints"],
-    },
-    {
-      name: "DocumentAccess",
-      feature_policy_name: "document-access",
-      depends_on: ["ExperimentalProductivityFeatures"],
     },
     {
       name: "DocumentDomain",
@@ -118,8 +118,8 @@
       depends_on: ["ExperimentalProductivityFeatures"],
     },
     {
-      name: "DownloadsWithoutUserActivation",
-      feature_policy_name: "downloads-without-user-activation",
+      name: "Downloads",
+      feature_policy_name: "downloads",
       depends_on: ["FeaturePolicyForSandbox"],
     },
     {
@@ -244,6 +244,11 @@
       name: "Presentation",
       feature_policy_name: "presentation",
       depends_on: ["FeaturePolicyForSandbox"],
+    },
+    {
+      name: "PublicKeyCredentials",
+      feature_policy_name: "publickey-credentials",
+      depends_on: ["WebAuthenticationFeaturePolicy"],
     },
     {
       name: "Script",

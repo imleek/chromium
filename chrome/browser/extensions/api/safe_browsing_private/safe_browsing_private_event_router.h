@@ -40,6 +40,14 @@ class BinaryUploadService;
 class DlpDeepScanningVerdict;
 }
 
+#if defined(OS_CHROMEOS)
+
+namespace user_manager {
+class User;
+}
+
+#endif
+
 namespace extensions {
 
 // An event router that observes Safe Browsing events and notifies listeners.
@@ -72,7 +80,7 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
   static const char kKeyDangerousDownloadEvent[];
   static const char kKeyInterstitialEvent[];
   static const char kKeySensitiveDataEvent[];
-  static const char kKeyLargeUnscannedFileEvent[];
+  static const char kKeyUnscannedFileEvent[];
 
   // String constants for the "trigger" event field.
   static const char kTriggerFileDownload[];
@@ -128,13 +136,14 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
       const std::string& trigger,
       const int64_t content_size);
 
-  // Notifies listeners that deep scanning failed, since the file was too large.
-  void OnLargeUnscannedFileEvent(const GURL& url,
-                                 const std::string& file_name,
-                                 const std::string& download_digest_sha256,
-                                 const std::string& mime_type,
-                                 const std::string& trigger,
-                                 const int64_t content_size);
+  // Notifies listeners that deep scanning failed, for the given |reason|.
+  void OnUnscannedFileEvent(const GURL& url,
+                            const std::string& file_name,
+                            const std::string& download_digest_sha256,
+                            const std::string& mime_type,
+                            const std::string& trigger,
+                            const std::string& reason,
+                            const int64_t content_size);
 
   // Notifies listeners that the user saw a download warning.
   // - |url| is the download URL
@@ -166,8 +175,7 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
   // function is public so that it can called in tests.
   static bool ShouldInitRealtimeReportingClient();
 
-  void SetCloudPolicyClientForTesting(
-      std::unique_ptr<policy::CloudPolicyClient> client);
+  void SetCloudPolicyClientForTesting(policy::CloudPolicyClient* client);
 
  protected:
   // Callback to report safe browsing event through real-time reporting channel,
@@ -191,6 +199,9 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
       policy::DeviceManagementService* device_management_service,
       bool authorized);
 
+  // Continues execution if the client is authorized to do so.
+  void IfAuthorized(base::OnceCallback<void(bool)> cont);
+
   // Determines if the real-time reporting feature is enabled.
   bool IsRealtimeReportingEnabled();
 
@@ -202,18 +213,45 @@ class SafeBrowsingPrivateEventRouter : public KeyedService {
   virtual void ReportRealtimeEvent(const std::string&,
                                    EventBuilder event_builder);
 
+  // Create a privately owned cloud policy client for events routing.
+  void CreatePrivateCloudPolicyClient(
+      const std::string& policy_client_desc,
+      policy::DeviceManagementService* device_management_service,
+      const std::string& client_id,
+      const std::string& dm_token);
+
+  // Handle the availability of a cloud policy client.
+  void OnCloudPolicyClientAvailable(const std::string& policy_client_desc,
+                                    policy::CloudPolicyClient* client);
+
+#if defined(OS_CHROMEOS)
+
+  // Return the Chrome OS user who is subject to reporting, or nullptr if
+  // the user cannot be deterined.
+  static const user_manager::User* GetChromeOSUser();
+
+#endif
+
+  // Determines if real-time reporting is available based on platform and user.
+  static bool IsRealtimeReportingAvailable();
+
   // Returns the Gaia email address of the account signed in to the profile or
   // an empty string if the profile is not signed in.
-  std::string GetProfileUserName();
+  std::string GetProfileUserName() const;
 
   content::BrowserContext* context_;
   signin::IdentityManager* identity_manager_ = nullptr;
   EventRouter* event_router_ = nullptr;
   safe_browsing::BinaryUploadService* binary_upload_service_ = nullptr;
-  std::unique_ptr<policy::CloudPolicyClient> client_;
+  // The cloud policy client used to upload events to the cloud. This client
+  // is never used to fetch policies. This pointer is not owned by the class.
+  policy::CloudPolicyClient* client_ = nullptr;
+  // The |private_client_| is used on platforms where we cannot just get a
+  // client and we create our own (used through |client_|).
+  std::unique_ptr<policy::CloudPolicyClient> private_client_;
   PrefChangeRegistrar registrar_;
 
-  base::WeakPtrFactory<SafeBrowsingPrivateEventRouter> weakptr_factory_{this};
+  base::WeakPtrFactory<SafeBrowsingPrivateEventRouter> weak_ptr_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingPrivateEventRouter);
 };
 

@@ -76,13 +76,12 @@
 #include "third_party/blink/renderer/core/layout/layout_text_control.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
 #include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_item.h"
 #include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_marker.h"
 #include "third_party/blink/renderer/core/loader/progress_tracker.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
-#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment_traversal.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
@@ -163,10 +162,10 @@ ScrollableArea* AXLayoutObject::GetScrollableAreaIfScrollable() const {
 static bool IsImageOrAltText(LayoutBoxModelObject* box, Node* node) {
   if (box && box->IsImage())
     return true;
-  if (IsHTMLImageElement(node))
+  if (IsA<HTMLImageElement>(node))
     return true;
-  if (IsHTMLInputElement(node) &&
-      ToHTMLInputElement(node)->HasFallbackContent())
+  auto* html_input_element = DynamicTo<HTMLInputElement>(node);
+  if (html_input_element && html_input_element->HasFallbackContent())
     return true;
   return false;
 }
@@ -199,6 +198,8 @@ ax::mojom::Role AXLayoutObject::NativeRoleIgnoringAria() const {
   // considered a data table if ARIA markup indicates it is a table.
   if (layout_object_->IsTable() && node)
     return ax::mojom::Role::kLayoutTable;
+  if (layout_object_->IsTableSection())
+    return DetermineTableSectionRole();
   if (layout_object_->IsTableRow() && node)
     return DetermineTableRowRole();
   if (layout_object_->IsTableCell() && node)
@@ -207,7 +208,7 @@ ax::mojom::Role AXLayoutObject::NativeRoleIgnoringAria() const {
   if (css_box && IsImageOrAltText(css_box, node)) {
     if (node && node->IsLink())
       return ax::mojom::Role::kImageMap;
-    if (IsHTMLInputElement(node))
+    if (IsA<HTMLInputElement>(node))
       return ButtonRoleType();
     if (IsSVGImage())
       return ax::mojom::Role::kSvgRoot;
@@ -225,16 +226,6 @@ ax::mojom::Role AXLayoutObject::NativeRoleIgnoringAria() const {
     return ax::mojom::Role::kImage;
   if (layout_object_->IsSVGRoot())
     return ax::mojom::Role::kSvgRoot;
-
-  // Table sections should be ignored if there is no reason not to, e.g.
-  // ARIA 1.2 (and Core-AAM 1.1) state that elements which are focusable
-  // and not hidden must be included in the accessibility tree.
-  if (layout_object_->IsTableSection()) {
-    auto* element = DynamicTo<Element>(node);
-    if (element && element->SupportsFocus())
-      return ax::mojom::Role::kGroup;
-    return ax::mojom::Role::kIgnored;
-  }
 
   if (layout_object_->IsHR())
     return ax::mojom::Role::kSplitter;
@@ -969,13 +960,13 @@ String AXLayoutObject::ImageDataUrl(const IntSize& max_size) const {
   ImageBitmapOptions* options = ImageBitmapOptions::Create();
   ImageBitmap* image_bitmap = nullptr;
   Document* document = &node->GetDocument();
-  if (auto* image = ToHTMLImageElementOrNull(node)) {
+  if (auto* image = DynamicTo<HTMLImageElement>(node)) {
     image_bitmap = ImageBitmap::Create(image, base::Optional<IntRect>(),
                                        document, options);
-  } else if (auto* canvas = ToHTMLCanvasElementOrNull(node)) {
+  } else if (auto* canvas = DynamicTo<HTMLCanvasElement>(node)) {
     image_bitmap =
         ImageBitmap::Create(canvas, base::Optional<IntRect>(), options);
-  } else if (auto* video = ToHTMLVideoElementOrNull(node)) {
+  } else if (auto* video = DynamicTo<HTMLVideoElement>(node)) {
     image_bitmap = ImageBitmap::Create(video, base::Optional<IntRect>(),
                                        document, options);
   }
@@ -1265,17 +1256,18 @@ static AXObject* NextOnLineInternalNG(const AXObject& ax_object) {
   DCHECK(!ax_object.IsDetached());
   const LayoutObject& layout_object = *ax_object.GetLayoutObject();
   DCHECK(ShouldUseLayoutNG(layout_object)) << layout_object;
-  if (layout_object.IsListMarkerIncludingNG())
+  if (layout_object.IsListMarkerIncludingNG() ||
+      !layout_object.IsInLayoutNGInlineFormattingContext())
     return nullptr;
-
-  const auto fragments = NGPaintFragment::InlineFragmentsFor(&layout_object);
-  if (fragments.IsEmpty() || !fragments.IsInLayoutNGInlineFormattingContext())
+  NGInlineCursor cursor;
+  cursor.MoveTo(layout_object);
+  if (!cursor)
     return nullptr;
-  NGPaintFragmentTraversal runner(*fragments.back().ContainerLineBox(),
-                                  fragments.back());
-  for (runner.MoveToNextInlineLeaf(); !runner.IsAtEnd();
-       runner.MoveToNextInlineLeaf()) {
-    LayoutObject* runner_layout_object = runner->GetMutableLayoutObject();
+  for (;;) {
+    cursor.MoveToNextInlineLeafOnLine();
+    if (!cursor)
+      break;
+    LayoutObject* runner_layout_object = cursor.CurrentMutableLayoutObject();
     if (AXObject* result =
             ax_object.AXObjectCache().GetOrCreate(runner_layout_object))
       return result;
@@ -1345,17 +1337,18 @@ static AXObject* PreviousOnLineInlineNG(const AXObject& ax_object) {
   DCHECK(!ax_object.IsDetached());
   const LayoutObject& layout_object = *ax_object.GetLayoutObject();
   DCHECK(ShouldUseLayoutNG(layout_object)) << layout_object;
-  if (layout_object.IsListMarkerIncludingNG())
+  if (layout_object.IsListMarkerIncludingNG() ||
+      !layout_object.IsInLayoutNGInlineFormattingContext())
     return nullptr;
-
-  const auto fragments = NGPaintFragment::InlineFragmentsFor(&layout_object);
-  if (fragments.IsEmpty() || !fragments.IsInLayoutNGInlineFormattingContext())
+  NGInlineCursor cursor;
+  cursor.MoveTo(layout_object);
+  if (!cursor)
     return nullptr;
-  NGPaintFragmentTraversal runner(*fragments.front().ContainerLineBox(),
-                                  fragments.front());
-  for (runner.MoveToPreviousInlineLeaf(); !runner.IsAtEnd();
-       runner.MoveToPreviousInlineLeaf()) {
-    LayoutObject* earlier_layout_object = runner->GetMutableLayoutObject();
+  for (;;) {
+    cursor.MoveToPreviousInlineLeafOnLine();
+    if (!cursor)
+      break;
+    LayoutObject* earlier_layout_object = cursor.CurrentMutableLayoutObject();
     if (AXObject* result =
             ax_object.AXObjectCache().GetOrCreate(earlier_layout_object))
       return result;
@@ -1372,7 +1365,15 @@ AXObject* AXLayoutObject::PreviousOnLine() const {
     return nullptr;
 
   AXObject* result = nullptr;
-  if (ShouldUseLayoutNG(*GetLayoutObject())) {
+  AXObject* previous_sibling = AccessibilityIsIncludedInTree()
+                                   ? PreviousSiblingIncludingIgnored()
+                                   : nullptr;
+  if (previous_sibling && previous_sibling->GetLayoutObject() &&
+      previous_sibling->GetLayoutObject()->IsLayoutNGListMarker()) {
+    if (!previous_sibling->Children().size())
+      return nullptr;
+    result = previous_sibling->LastChild();
+  } else if (ShouldUseLayoutNG(*GetLayoutObject())) {
     result = PreviousOnLineInlineNG(*this);
   } else {
     InlineBox* inline_box = nullptr;
@@ -1460,7 +1461,7 @@ String AXLayoutObject::StringValue() const {
   // exception of checkboxes and radio buttons (which would return "on"), and
   // buttons which will return their name.
   // https://html.spec.whatwg.org/C/#dom-input-value
-  if (const auto* input = ToHTMLInputElementOrNull(GetNode())) {
+  if (const auto* input = DynamicTo<HTMLInputElement>(GetNode())) {
     if (input->type() != input_type_names::kButton &&
         input->type() != input_type_names::kCheckbox &&
         input->type() != input_type_names::kImage &&
@@ -1928,11 +1929,6 @@ AXObject* AXLayoutObject::RawFirstChild() const {
         top_section ? top_section->ToMutableLayoutObject() : nullptr);
   }
 
-  if (layout_object_->IsLayoutNGListMarker()) {
-    // We don't care tree structure of list marker.
-    return nullptr;
-  }
-
   LayoutObject* first_child = layout_object_->SlowFirstChild();
 
   // CSS first-letter pseudo element is handled as continuation. Returning it
@@ -2078,8 +2074,8 @@ void AXLayoutObject::AddChildren() {
   if (auto* element = DynamicTo<Element>(GetNode())) {
     if (!is_continuation &&
         !IsA<HTMLMapElement>(
-            *element) &&                 // Handled in AddImageMapChildren (img)
-        !IsHTMLRubyElement(*element) &&  // Special layout handling
+            *element) &&  // Handled in AddImageMapChildren (img)
+        !IsA<HTMLRubyElement>(*element) &&   // Special layout handling
         !IsA<HTMLTableElement>(*element) &&  // thead/tfoot move around
         !element->IsPseudoElement()) {       // Not visited in layout traversal
       AXNodeObject::AddChildren();
@@ -2126,7 +2122,7 @@ bool AXLayoutObject::CanHaveChildren() const {
     return false;
   if (GetCSSAltText(GetNode()))
     return false;
-  if (layout_object_->IsListMarkerIncludingNGInside())
+  if (layout_object_->IsListMarker())
     return false;
   return AXNodeObject::CanHaveChildren();
 }
@@ -2244,15 +2240,17 @@ bool AXLayoutObject::OnNativeSetValueAction(const String& string) {
     return false;
 
   LayoutBoxModelObject* layout_object = ToLayoutBoxModelObject(layout_object_);
-  if (layout_object->IsTextField() && IsHTMLInputElement(*GetNode())) {
-    ToHTMLInputElement(*GetNode())
-        .setValue(string, TextFieldEventBehavior::kDispatchInputAndChangeEvent);
+  auto* html_input_element = DynamicTo<HTMLInputElement>(*GetNode());
+  if (html_input_element && layout_object->IsTextField()) {
+    html_input_element->setValue(
+        string, TextFieldEventBehavior::kDispatchInputAndChangeEvent);
     return true;
   }
 
-  if (layout_object->IsTextArea() && IsHTMLTextAreaElement(*GetNode())) {
-    ToHTMLTextAreaElement(*GetNode())
-        .setValue(string, TextFieldEventBehavior::kDispatchInputAndChangeEvent);
+  if (auto* text_area_element = DynamicTo<HTMLTextAreaElement>(*GetNode())) {
+    DCHECK(layout_object->IsTextArea());
+    text_area_element->setValue(
+        string, TextFieldEventBehavior::kDispatchInputAndChangeEvent);
     return true;
   }
 
@@ -2539,11 +2537,11 @@ bool AXLayoutObject::IsDataTable() const {
 
       // In this case, the developer explicitly assigned a "data" table
       // attribute.
-      if (IsHTMLTableCellElement(*cell_node)) {
-        HTMLTableCellElement& cell_element = ToHTMLTableCellElement(*cell_node);
-        if (!cell_element.Headers().IsEmpty() ||
-            !cell_element.Abbr().IsEmpty() || !cell_element.Axis().IsEmpty() ||
-            !cell_element.FastGetAttribute(html_names::kScopeAttr).IsEmpty())
+      if (auto* cell_element = DynamicTo<HTMLTableCellElement>(*cell_node)) {
+        if (!cell_element->Headers().IsEmpty() ||
+            !cell_element->Abbr().IsEmpty() ||
+            !cell_element->Axis().IsEmpty() ||
+            !cell_element->FastGetAttribute(html_names::kScopeAttr).IsEmpty())
           return true;
       }
 
@@ -3103,9 +3101,10 @@ void AXLayoutObject::AddListMarker() {
 }
 
 void AXLayoutObject::AddPopupChildren() {
-  if (!IsHTMLInputElement(GetNode()))
+  auto* html_input_element = DynamicTo<HTMLInputElement>(GetNode());
+  if (!html_input_element)
     return;
-  if (AXObject* ax_popup = ToHTMLInputElement(GetNode())->PopupRootAXObject())
+  if (AXObject* ax_popup = html_input_element->PopupRootAXObject())
     children_.push_back(ax_popup);
 }
 

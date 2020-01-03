@@ -5,9 +5,9 @@
 #include "third_party/blink/renderer/core/html/forms/internal_popup_menu.h"
 
 #include "build/build_config.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
 #include "third_party/blink/renderer/core/css/css_font_selector.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
@@ -275,7 +275,7 @@ void InternalPopupMenu::WriteDocument(SharedBuffer* data) {
       AddOption(context, *option);
     else if (auto* optgroup = DynamicTo<HTMLOptGroupElement>(child))
       AddOptGroup(context, *optgroup);
-    else if (auto* hr = ToHTMLHRElementOrNull(child))
+    else if (auto* hr = DynamicTo<HTMLHRElement>(child))
       AddSeparator(context, *hr);
   }
   context.FinishGroupIfNecessary();
@@ -545,7 +545,7 @@ void InternalPopupMenu::Update() {
       AddOption(context, *option);
     else if (auto* optgroup = DynamicTo<HTMLOptGroupElement>(child))
       AddOptGroup(context, *optgroup);
-    else if (auto* hr = ToHTMLHRElementOrNull(child))
+    else if (auto* hr = DynamicTo<HTMLHRElement>(child))
       AddSeparator(context, *hr);
   }
   context.FinishGroupIfNecessary();

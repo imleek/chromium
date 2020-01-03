@@ -295,7 +295,7 @@ AXPlatformNode* AXPlatformNode::FromNativeViewAccessible(
 // AXPlatformNodeWin
 //
 
-AXPlatformNodeWin::AXPlatformNodeWin() {}
+AXPlatformNodeWin::AXPlatformNodeWin() : force_new_hypertext_(false) {}
 
 AXPlatformNodeWin::~AXPlatformNodeWin() {
   ClearOwnRelations();
@@ -303,12 +303,17 @@ AXPlatformNodeWin::~AXPlatformNodeWin() {
 
 void AXPlatformNodeWin::Init(AXPlatformNodeDelegate* delegate) {
   AXPlatformNodeBase::Init(delegate);
+  force_new_hypertext_ = false;
 }
 
 void AXPlatformNodeWin::ClearOwnRelations() {
   for (size_t i = 0; i < relations_.size(); ++i)
     relations_[i]->Invalidate();
   relations_.clear();
+}
+
+void AXPlatformNodeWin::ForceNewHypertext() {
+  force_new_hypertext_ = true;
 }
 
 // Static
@@ -1062,6 +1067,9 @@ IFACEMETHODIMP AXPlatformNodeWin::get_accName(VARIANT var_id, BSTR* name_bstr) {
        GetIAccessible2UsageObserverList()) {
     observer.OnAccNameCalled();
   }
+
+  if (!IsNameExposed())
+    return S_FALSE;
 
   bool has_name = target->HasStringAttribute(ax::mojom::StringAttribute::kName);
   base::string16 name =
@@ -1933,7 +1941,8 @@ IFACEMETHODIMP AXPlatformNodeWin::ScrollIntoView() {
       ax::mojom::ScrollAlignment::kScrollAlignmentCenter;
   action_data.vertical_scroll_alignment =
       ax::mojom::ScrollAlignment::kScrollAlignmentCenter;
-  action_data.action = ax::mojom::Action::kScrollToMakeVisible;
+  action_data.scroll_behavior =
+      ax::mojom::ScrollBehavior::kDoNotScrollIfVisible;
   if (GetDelegate()->AccessibilityPerformAction(action_data))
     return S_OK;
   return E_FAIL;
@@ -4054,9 +4063,11 @@ IFACEMETHODIMP AXPlatformNodeWin::GetPropertyValue(PROPERTYID property_id,
     } break;
 
     case UIA_NamePropertyId:
-      result->vt = VT_BSTR;
-      GetStringAttributeAsBstr(ax::mojom::StringAttribute::kName,
-                               &result->bstrVal);
+      if (IsNameExposed()) {
+        result->vt = VT_BSTR;
+        GetStringAttributeAsBstr(ax::mojom::StringAttribute::kName,
+                                 &result->bstrVal);
+      }
       break;
 
     case UIA_OrientationPropertyId:
@@ -4176,7 +4187,8 @@ IFACEMETHODIMP AXPlatformNodeWin::GetPropertyValue(PROPERTYID property_id,
         result->vt = VT_I4;
         result->intVal = *set_size;
       }
-    } break;
+      break;
+    }
 
     case UIA_LandmarkTypePropertyId: {
       base::Optional<LONG> landmark_type = ComputeUIALandmarkType();
@@ -4229,7 +4241,8 @@ IFACEMETHODIMP AXPlatformNodeWin::get_ProviderOptions(ProviderOptions* ret) {
   UIA_VALIDATE_CALL_1_ARG(ret);
 
   *ret = ProviderOptions_ServerSideProvider | ProviderOptions_UseComThreading |
-         ProviderOptions_RefuseNonClientSupport;
+         ProviderOptions_RefuseNonClientSupport |
+         ProviderOptions_HasNativeIAccessible;
   return S_OK;
 }
 
@@ -4323,16 +4336,8 @@ STDMETHODIMP AXPlatformNodeWin::InternalQueryInterface(
 
 HRESULT AXPlatformNodeWin::GetTextAttributeValue(TEXTATTRIBUTEID attribute_id,
                                                  VARIANT* result) {
-  // Text attributes of kInlineTextBox nodes are stored on the parent node
-  // (which is typically a kStaticText or kLineBreak node).
-  if (GetData().role == ax::mojom::Role::kInlineTextBox) {
-    AXPlatformNodeWin* parent_platform_node =
-        static_cast<AXPlatformNodeWin*>(FromNativeViewAccessible(GetParent()));
-    if (!parent_platform_node)
-      return UIA_E_ELEMENTNOTAVAILABLE;
-
-    return parent_platform_node->GetTextAttributeValue(attribute_id, result);
-  }
+  // This should only be called on nodes actually in the tree
+  DCHECK(!GetDelegate()->IsChildOfLeaf());
 
   switch (attribute_id) {
     case UIA_BackgroundColorAttributeId:
@@ -4599,8 +4604,6 @@ int AXPlatformNodeWin::MSAARole() {
       return ROLE_SYSTEM_LINK;
 
     case ax::mojom::Role::kComment:
-    case ax::mojom::Role::kCommentSection:
-    case ax::mojom::Role::kRevision:
     case ax::mojom::Role::kSuggestion:
       return ROLE_SYSTEM_GROUPING;
 
@@ -4846,6 +4849,16 @@ int AXPlatformNodeWin::MSAARole() {
     case ax::mojom::Role::kListItem:
       return ROLE_SYSTEM_LISTITEM;
 
+    case ax::mojom::Role::kListMarker:
+      if (!GetDelegate()->GetChildCount()) {
+        // There's only a name attribute when using Legacy layout. With Legacy
+        // layout, list markers have no child and are considered as StaticText.
+        // We consider a list marker as a group in LayoutNG since it has
+        // a text child node.
+        return ROLE_SYSTEM_STATICTEXT;
+      }
+      return ROLE_SYSTEM_GROUPING;
+
     case ax::mojom::Role::kLog:
       return ROLE_SYSTEM_CLIENT;
 
@@ -4853,7 +4866,7 @@ int AXPlatformNodeWin::MSAARole() {
       return ROLE_SYSTEM_GROUPING;
 
     case ax::mojom::Role::kMark:
-      return ROLE_SYSTEM_TEXT;
+      return ROLE_SYSTEM_GROUPING;
 
     case ax::mojom::Role::kMarquee:
       return ROLE_SYSTEM_ANIMATION;
@@ -4928,6 +4941,9 @@ int AXPlatformNodeWin::MSAARole() {
       return IsInTreeGrid() ? ROLE_SYSTEM_OUTLINEITEM : ROLE_SYSTEM_ROW;
     }
 
+    case ax::mojom::Role::kRowGroup:
+      return ROLE_SYSTEM_GROUPING;
+
     case ax::mojom::Role::kRowHeader:
       return ROLE_SYSTEM_ROWHEADER;
 
@@ -4967,7 +4983,6 @@ int AXPlatformNodeWin::MSAARole() {
       return ROLE_SYSTEM_CHECKBUTTON;
 
     case ax::mojom::Role::kRubyAnnotation:
-    case ax::mojom::Role::kListMarker:
     case ax::mojom::Role::kStaticText:
       return ROLE_SYSTEM_STATICTEXT;
 
@@ -5194,10 +5209,9 @@ int32_t AXPlatformNodeWin::ComputeIA2Role() {
 
   switch (GetData().role) {
     case ax::mojom::Role::kComment:
-    case ax::mojom::Role::kCommentSection:
-    case ax::mojom::Role::kRevision:
+      return IA2_ROLE_COMMENT;
     case ax::mojom::Role::kSuggestion:
-      return IA2_ROLE_SECTION;
+      return IA2_ROLE_SUGGESTION;
     case ax::mojom::Role::kBanner:
     case ax::mojom::Role::kHeader:
       // CORE-AAM recommends LANDMARK instead of HEADER.
@@ -5318,7 +5332,7 @@ int32_t AXPlatformNodeWin::ComputeIA2Role() {
       ia2_role = IA2_ROLE_LANDMARK;
       break;
     case ax::mojom::Role::kMark:
-      ia2_role = IA2_ROLE_TEXT_FRAME;
+      ia2_role = IA2_ROLE_MARK;
       break;
     case ax::mojom::Role::kMenuItemCheckBox:
       ia2_role = IA2_ROLE_CHECK_MENU_ITEM;
@@ -5415,8 +5429,6 @@ base::string16 AXPlatformNodeWin::UIAAriaRole() {
       return L"link";
 
     case ax::mojom::Role::kComment:
-    case ax::mojom::Role::kCommentSection:
-    case ax::mojom::Role::kRevision:
     case ax::mojom::Role::kSuggestion:
       return L"group";
 
@@ -5671,6 +5683,16 @@ base::string16 AXPlatformNodeWin::UIAAriaRole() {
     case ax::mojom::Role::kListItem:
       return L"listitem";
 
+    case ax::mojom::Role::kListMarker:
+      if (!GetDelegate()->GetChildCount()) {
+        // There's only a name attribute when using Legacy layout. With Legacy
+        // layout, list markers have no child and are considered as StaticText.
+        // We consider a list marker as a group in LayoutNG since it has
+        // a text child node.
+        return L"description";
+      }
+      return L"group";
+
     case ax::mojom::Role::kLog:
       return L"log";
 
@@ -5753,6 +5775,9 @@ base::string16 AXPlatformNodeWin::UIAAriaRole() {
       return IsInTreeGrid() ? L"treeitem" : L"row";
     }
 
+    case ax::mojom::Role::kRowGroup:
+      return L"rowgroup";
+
     case ax::mojom::Role::kRowHeader:
       return L"rowheader";
 
@@ -5795,7 +5820,6 @@ base::string16 AXPlatformNodeWin::UIAAriaRole() {
       return L"switch";
 
     case ax::mojom::Role::kRubyAnnotation:
-    case ax::mojom::Role::kListMarker:
     case ax::mojom::Role::kStaticText:
       return L"description";
 
@@ -6038,7 +6062,7 @@ base::string16 AXPlatformNodeWin::ComputeUIAProperties() {
     }
   }
 
-  if (IsRangeValueSupported(data)) {
+  if (data.IsRangeValueSupported()) {
     FloatAttributeToUIAAriaProperty(
         properties, ax::mojom::FloatAttribute::kMaxValueForRange, "valuemax");
     FloatAttributeToUIAAriaProperty(
@@ -6078,8 +6102,6 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
       return UIA_HyperlinkControlTypeId;
 
     case ax::mojom::Role::kComment:
-    case ax::mojom::Role::kCommentSection:
-    case ax::mojom::Role::kRevision:
     case ax::mojom::Role::kSuggestion:
       return ROLE_SYSTEM_GROUPING;
 
@@ -6331,6 +6353,16 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
     case ax::mojom::Role::kListItem:
       return UIA_ListItemControlTypeId;
 
+    case ax::mojom::Role::kListMarker:
+      if (!GetDelegate()->GetChildCount()) {
+        // There's only a name attribute when using Legacy layout. With Legacy
+        // layout, list markers have no child and are considered as StaticText.
+        // We consider a list marker as a group in LayoutNG since it has
+        // a text child node.
+        return UIA_TextControlTypeId;
+      }
+      return UIA_GroupControlTypeId;
+
     case ax::mojom::Role::kLog:
       return UIA_GroupControlTypeId;
 
@@ -6414,6 +6446,9 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
                             : UIA_DataItemControlTypeId;
     }
 
+    case ax::mojom::Role::kRowGroup:
+      return UIA_GroupControlTypeId;
+
     case ax::mojom::Role::kRowHeader:
       return UIA_DataItemControlTypeId;
 
@@ -6445,7 +6480,6 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
       return UIA_ButtonControlTypeId;
 
     case ax::mojom::Role::kRubyAnnotation:
-    case ax::mojom::Role::kListMarker:
     case ax::mojom::Role::kStaticText:
       return UIA_TextControlTypeId;
 
@@ -6537,6 +6571,16 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
   return UIA_DocumentControlTypeId;
 }
 
+bool AXPlatformNodeWin::IsNameExposed() const {
+  const AXNodeData& data = GetData();
+  switch (data.role) {
+    case ax::mojom::Role::kListMarker:
+      return !GetDelegate()->GetChildCount();
+    default:
+      return true;
+  }
+}
+
 bool AXPlatformNodeWin::IsUIAControl() const {
   // UIA provides multiple "views": raw, content and control. We only want to
   // populate the content and control views with items that make sense to
@@ -6550,12 +6594,12 @@ bool AXPlatformNodeWin::IsUIAControl() const {
       // text to be effectively repeated.
       auto* parent = FromNativeViewAccessible(GetDelegate()->GetParent());
       while (parent) {
-        const ui::AXNodeData& data = parent->GetData();
+        const AXNodeData& data = parent->GetData();
+        if (IsCellOrTableHeader(data.role))
+          return false;
         switch (data.role) {
           case ax::mojom::Role::kButton:
-          case ax::mojom::Role::kCell:
           case ax::mojom::Role::kCheckBox:
-          case ax::mojom::Role::kColumnHeader:
           case ax::mojom::Role::kGroup:
           case ax::mojom::Role::kHeading:
           case ax::mojom::Role::kLineBreak:
@@ -6568,7 +6612,7 @@ bool AXPlatformNodeWin::IsUIAControl() const {
           case ax::mojom::Role::kMenuListOption:
           case ax::mojom::Role::kRadioButton:
           case ax::mojom::Role::kRow:
-          case ax::mojom::Role::kRowHeader:
+          case ax::mojom::Role::kRowGroup:
           case ax::mojom::Role::kStaticText:
           case ax::mojom::Role::kSwitch:
           case ax::mojom::Role::kTab:
@@ -6580,6 +6624,57 @@ bool AXPlatformNodeWin::IsUIAControl() const {
         }
         parent = FromNativeViewAccessible(parent->GetParent());
       }
+    }
+    const AXNodeData& data = GetData();
+    // https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-treeoverview#control-view
+    // The control view also includes noninteractive UI items that contribute
+    // to the logical structure of the UI.
+    if (IsControl(data.role) || ComputeUIALandmarkType() ||
+        IsTableLike(data.role) || IsList(data.role)) {
+      return true;
+    }
+    if (IsImage(data.role)) {
+      // If the author provides an explicitly empty alt text attribute then
+      // the image is decorational and should not be considered as a control.
+      if (data.role == ax::mojom::Role::kImage &&
+          data.GetNameFrom() ==
+              ax::mojom::NameFrom::kAttributeExplicitlyEmpty) {
+        return false;
+      }
+      return true;
+    }
+    switch (data.role) {
+      case ax::mojom::Role::kArticle:
+      case ax::mojom::Role::kBlockquote:
+      case ax::mojom::Role::kDetails:
+      case ax::mojom::Role::kFigure:
+      case ax::mojom::Role::kFooter:
+      case ax::mojom::Role::kFooterAsNonLandmark:
+      case ax::mojom::Role::kHeader:
+      case ax::mojom::Role::kHeaderAsNonLandmark:
+      case ax::mojom::Role::kLabelText:
+      case ax::mojom::Role::kListBoxOption:
+      case ax::mojom::Role::kListItem:
+      case ax::mojom::Role::kMeter:
+      case ax::mojom::Role::kProgressIndicator:
+      case ax::mojom::Role::kSection:
+      case ax::mojom::Role::kSplitter:
+      case ax::mojom::Role::kTime:
+        return true;
+      default:
+        break;
+    }
+    // Classify generic containers that are not clickable or focusable and have
+    // no name, description, landmark type, and is not the root of editable
+    // content as not controls.
+    // Doing so helps Narrator find all the content of live regions.
+    if (!data.GetBoolAttribute(ax::mojom::BoolAttribute::kHasAriaAttribute) &&
+        !data.GetBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot) &&
+        data.GetStringAttribute(ax::mojom::StringAttribute::kName).empty() &&
+        data.GetStringAttribute(ax::mojom::StringAttribute::kDescription)
+            .empty() &&
+        !data.HasState(ax::mojom::State::kFocusable) && !data.IsClickable()) {
+      return false;
     }
     return true;
   }
@@ -6857,9 +6952,6 @@ int AXPlatformNodeWin::MSAAState() const {
 // static
 base::Optional<DWORD> AXPlatformNodeWin::MojoEventToMSAAEvent(
     ax::mojom::Event event) {
-  if (::switches::IsExperimentalAccessibilityPlatformUIAEnabled())
-    return base::nullopt;
-
   switch (event) {
     case ax::mojom::Event::kAlert:
       return EVENT_SYSTEM_ALERT;
@@ -7004,7 +7096,7 @@ BSTR AXPlatformNodeWin::GetValueAttributeAsBstr(AXPlatformNodeWin* target) {
   // provided either via aria-valuenow or the actual control's value is held in
   // |ax::mojom::FloatAttribute::kValueForRange|.
   result = target->GetString16Attribute(ax::mojom::StringAttribute::kValue);
-  if (result.empty() && IsRangeValueSupported(target->GetData())) {
+  if (result.empty() && target->GetData().IsRangeValueSupported()) {
     float fval;
     if (target->GetFloatAttribute(ax::mojom::FloatAttribute::kValueForRange,
                                   &fval)) {
@@ -7118,7 +7210,7 @@ bool AXPlatformNodeWin::IsInTreeGrid() {
   AXPlatformNodeBase* container = FromNativeViewAccessible(GetParent());
 
   // If parent was a rowgroup, we need to look at the grandparent
-  if (container && container->GetData().role == ax::mojom::Role::kGroup)
+  if (container && container->GetData().role == ax::mojom::Role::kRowGroup)
     container = FromNativeViewAccessible(container->GetParent());
 
   if (!container)
@@ -7252,7 +7344,7 @@ AXPlatformNodeWin::GetPatternProviderFactoryMethod(PATTERNID pattern_id) {
 
   switch (pattern_id) {
     case UIA_ExpandCollapsePatternId:
-      if (SupportsExpandCollapse(data)) {
+      if (data.SupportsExpandCollapse()) {
         return &PatternProvider<IExpandCollapseProvider>;
       }
       break;
@@ -7270,13 +7362,13 @@ AXPlatformNodeWin::GetPatternProviderFactoryMethod(PATTERNID pattern_id) {
       break;
 
     case UIA_InvokePatternId:
-      if (IsInvokable(data)) {
+      if (data.IsInvocable()) {
         return &PatternProvider<IInvokeProvider>;
       }
       break;
 
     case UIA_RangeValuePatternId:
-      if (IsRangeValueSupported(data)) {
+      if (data.IsRangeValueSupported()) {
         return &PatternProvider<IRangeValueProvider>;
       }
       break;

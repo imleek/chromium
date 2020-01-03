@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/paint/compositing/compositing_inputs_updater.h"
 
+#include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
@@ -48,6 +49,13 @@ void CompositingInputsUpdater::Update() {
   UpdateType update_type = kDoNotForceUpdate;
   PaintLayer* layer =
       compositing_inputs_root_ ? compositing_inputs_root_ : root_layer_;
+
+  if (DisplayLockUtilities::NearestLockedExclusiveAncestor(
+          layer->GetLayoutObject())) {
+    compositing_inputs_root_ = nullptr;
+    return;
+  }
+
   CompositingReasons initial_compositing_reasons =
       layer->DirectCompositingReasons();
   ApplyAncestorInfoToSelfAndAncestorsRecursively(layer, update_type, info);
@@ -160,8 +168,15 @@ void CompositingInputsUpdater::UpdateSelfAndDescendantsRecursively(
         layer->DirectCompositingReasons());
   }
 
-  bool should_recurse =
-      layer->ChildNeedsCompositingInputsUpdate() || update_type == kForceUpdate;
+  // Note that prepaint may use the compositing information, so only skip
+  // recursing it if we're skipping prepaint.
+  bool recursion_blocked_by_display_lock =
+      layer->GetLayoutObject().PrePaintBlockedByDisplayLock(
+          DisplayLockLifecycleTarget::kChildren);
+
+  bool should_recurse = (layer->ChildNeedsCompositingInputsUpdate() ||
+                         update_type == kForceUpdate) &&
+                        !recursion_blocked_by_display_lock;
 
   layer->SetDescendantHasDirectOrScrollingCompositingReason(false);
   bool descendant_has_direct_compositing_reason = false;
@@ -180,7 +195,11 @@ void CompositingInputsUpdater::UpdateSelfAndDescendantsRecursively(
       !layer->NeedsCompositedScrolling())
     layer->GetScrollableArea()->UpdateNeedsCompositedScrolling(true);
 
-  layer->ClearChildNeedsCompositingInputsUpdate();
+  // If display lock blocked this recursion, then keep the dirty bit around
+  // since it is a breadcrumb that will allow us to recurse later when we unlock
+  // the element.
+  if (!recursion_blocked_by_display_lock)
+    layer->ClearChildNeedsCompositingInputsUpdate();
 
   geometry_map_.PopMappingsToAncestor(layer->Parent());
 
@@ -440,8 +459,16 @@ void CompositingInputsUpdater::UpdateAncestorDependentCompositingInputs(
 
 void CompositingInputsUpdater::AssertNeedsCompositingInputsUpdateBitsCleared(
     PaintLayer* layer) {
-  DCHECK(!layer->ChildNeedsCompositingInputsUpdate());
+  bool recursion_blocked_by_display_lock =
+      layer->GetLayoutObject().PrePaintBlockedByDisplayLock(
+          DisplayLockLifecycleTarget::kChildren);
+
+  DCHECK(recursion_blocked_by_display_lock ||
+         !layer->ChildNeedsCompositingInputsUpdate());
   DCHECK(!layer->NeedsCompositingInputsUpdate());
+
+  if (recursion_blocked_by_display_lock)
+    return;
 
   for (PaintLayer* child = layer->FirstChild(); child;
        child = child->NextSibling())

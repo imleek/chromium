@@ -35,6 +35,7 @@
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/prefs/pref_service.h"
+#include "components/security_state/core/security_state_pref_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_details.h"
@@ -238,7 +239,7 @@ bool TabSpecificContentSettings::IsContentBlocked(
       content_type == ContentSettingsType::MIDI_SYSEX ||
       content_type == ContentSettingsType::ADS ||
       content_type == ContentSettingsType::SOUND ||
-      content_type == ContentSettingsType::CLIPBOARD_READ ||
+      content_type == ContentSettingsType::CLIPBOARD_READ_WRITE ||
       content_type == ContentSettingsType::SENSORS) {
     const auto& it = content_settings_status_.find(content_type);
     if (it != content_settings_status_.end())
@@ -261,7 +262,7 @@ bool TabSpecificContentSettings::IsContentAllowed(
       content_type != ContentSettingsType::MEDIASTREAM_CAMERA &&
       content_type != ContentSettingsType::PPAPI_BROKER &&
       content_type != ContentSettingsType::MIDI_SYSEX &&
-      content_type != ContentSettingsType::CLIPBOARD_READ &&
+      content_type != ContentSettingsType::CLIPBOARD_READ_WRITE &&
       content_type != ContentSettingsType::SENSORS) {
     return false;
   }
@@ -766,6 +767,20 @@ void TabSpecificContentSettings::ReadyToCommitNavigation(
   if (!navigation_handle->IsInMainFrame() ||
       navigation_handle->IsSameDocument()) {
     return;
+  }
+
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+
+  if (profile &&
+      !profile->GetPrefs()->GetBoolean(
+          security_state::prefs::kStricterMixedContentTreatmentEnabled)) {
+    auto* render_frame_host = navigation_handle->GetRenderFrameHost();
+    mojo::AssociatedRemote<chrome::mojom::ContentSettingsAgent>
+        content_settings_agent;
+    render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
+        &content_settings_agent);
+    content_settings_agent->SetDisabledMixedContentUpgrades();
   }
 
   // There may be content settings that were updated for the navigated URL.

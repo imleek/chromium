@@ -4,59 +4,66 @@
 
 import sys
 
-import mako.lookup
 import mako.template
+
+
+_MAKO_TEMPLATE_PASS_KEY = object()
+
+
+class MakoTemplate(object):
+    """Represents a compiled template object."""
+
+    _mako_template_cache = {}
+
+    def __init__(self, template_text):
+        assert isinstance(template_text, str)
+
+        template_params = {
+            "strict_undefined": True,
+        }
+
+        template = self._mako_template_cache.get(template_text)
+        if template is None:
+            template = mako.template.Template(
+                text=template_text, **template_params)
+            self._mako_template_cache[template_text] = template
+        self._template = template
+
+    def mako_template(self, pass_key=None):
+        assert pass_key is _MAKO_TEMPLATE_PASS_KEY
+        return self._template
 
 
 class MakoRenderer(object):
     """Represents a renderer object implemented with Mako templates."""
 
-    def __init__(self, template_dirs=None):
-        self._template_params = {
-            "strict_undefined": True,
-        }
-
-        self._template_lookup = mako.lookup.TemplateLookup(
-            directories=template_dirs, **self._template_params)
-
+    def __init__(self):
         self._caller_stack = []
         self._caller_stack_on_error = []
 
-    def render(self,
-               caller,
-               template_path=None,
-               template_text=None,
-               template_vars=None):
+    def render(self, caller, template, template_vars):
         """
         Renders the template with variable bindings.
 
         It's okay to invoke |render| method recursively and |caller| is pushed
-        onto the call stack, which is accessible via |callers| and |last_caller|
-        methods.
+        onto the call stack, which is accessible via
+        |callers_from_first_to_last| method, etc.
 
         Args:
-            template_path: A filepath to a template file.
-            template_text: A text content to be used as a template.  Either of
-                |template_path| or |template_text| must be specified.
-            template_vars: Template variable bindings.
             caller: An object to be pushed onto the call stack.
+            template: A MakoTemplate.
+            template_vars: A dict of template variable bindings.
         """
-
-        assert template_path is not None or template_text is not None
-        assert template_path is None or template_text is None
-        assert isinstance(template_vars, dict)
         assert caller is not None
+        assert isinstance(template, MakoTemplate)
+        assert isinstance(template_vars, dict)
 
         self._caller_stack.append(caller)
 
         try:
-            if template_path is not None:
-                template = self._template_lookup.get_template(template_path)
-            elif template_text is not None:
-                template = mako.template.Template(
-                    text=template_text, **self._template_params)
-
-            text = template.render(**template_vars)
+            mako_template = template.mako_template(
+                pass_key=_MAKO_TEMPLATE_PASS_KEY)
+            text = mako_template.render(**template_vars)
         except:
             # Print stacktrace of template rendering.
             sys.stderr.write("\n")
@@ -64,9 +71,9 @@ class MakoRenderer(object):
             sys.stderr.write("  * name: {}, type: {}\n".format(
                 _guess_caller_name(self.last_caller), type(self.last_caller)))
             sys.stderr.write("  * depth: {}, module_id: {}\n".format(
-                len(self._caller_stack), template.module_id))
+                len(self._caller_stack), mako_template.module_id))
             sys.stderr.write("---- template source ----\n")
-            sys.stderr.write(template.source)
+            sys.stderr.write(mako_template.source)
 
             # Save the error state at the deepest call.
             current = self._caller_stack
@@ -85,7 +92,15 @@ class MakoRenderer(object):
         return text
 
     @property
-    def callers(self):
+    def callers_from_first_to_last(self):
+        """
+        Returns the callers of this renderer in the order from the first caller
+        to the last caller.
+        """
+        return iter(self._caller_stack)
+
+    @property
+    def callers_from_last_to_first(self):
         """
         Returns the callers of this renderer in the order from the last caller
         to the first caller.
@@ -121,10 +136,10 @@ def _guess_caller_name(caller):
             if value is caller:
                 return name
         try:
-            # Outer SequenceNode may contain the caller.
+            # Outer ListNode may contain the caller.
             for index, value in enumerate(caller.outer, 1):
                 if value is caller:
-                    return "{}-of-{}-in-seq".format(index, len(caller.outer))
+                    return "{}-of-{}-in-list".format(index, len(caller.outer))
         except:
             pass
         return "<no name>"

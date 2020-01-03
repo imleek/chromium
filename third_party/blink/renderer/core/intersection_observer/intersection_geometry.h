@@ -52,6 +52,10 @@ class CORE_EXPORT IntersectionGeometry {
     TransformationMatrix root_to_document_transform;
   };
 
+  static const LayoutObject* GetRootLayoutObjectForTarget(
+      const Element* root_element,
+      LayoutObject* target);
+
   IntersectionGeometry(const Element* root,
                        const Element& target,
                        const Vector<Length>& root_margin,
@@ -65,7 +69,6 @@ class CORE_EXPORT IntersectionGeometry {
                        unsigned flags);
 
   IntersectionGeometry(const IntersectionGeometry&) = default;
-  ~IntersectionGeometry();
 
   bool ShouldReportRootBounds() const {
     return flags_ & kShouldReportRootBounds;
@@ -79,6 +82,10 @@ class CORE_EXPORT IntersectionGeometry {
 
   PhysicalRect TargetRect() const { return target_rect_; }
   PhysicalRect IntersectionRect() const { return intersection_rect_; }
+  PhysicalRect UnclippedIntersectionRect() const {
+    return unclipped_intersection_rect_;
+  }
+
   PhysicalRect RootRect() const { return root_rect_; }
 
   IntRect IntersectionIntRect() const {
@@ -104,12 +111,14 @@ class CORE_EXPORT IntersectionGeometry {
   bool ClipToRoot(const LayoutObject* root,
                   const LayoutObject* target,
                   const PhysicalRect& root_rect,
+                  PhysicalRect& unclipped_intersection_rect,
                   PhysicalRect& intersection_rect);
   unsigned FirstThresholdGreaterThan(float ratio,
                                      const Vector<float>& thresholds) const;
 
   PhysicalRect target_rect_;
   PhysicalRect intersection_rect_;
+  PhysicalRect unclipped_intersection_rect_;
   PhysicalRect root_rect_;
   unsigned flags_;
   double intersection_ratio_;

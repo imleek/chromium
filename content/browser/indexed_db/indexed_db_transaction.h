@@ -23,6 +23,7 @@
 #include "base/timer/timer.h"
 #include "components/services/storage/indexed_db/scopes/scope_lock.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
+#include "content/browser/indexed_db/indexed_db_blob_storage.h"
 #include "content/browser/indexed_db/indexed_db_connection.h"
 #include "content/browser/indexed_db/indexed_db_database_error.h"
 #include "content/browser/indexed_db/indexed_db_observer.h"
@@ -147,6 +148,13 @@ class CONTENT_EXPORT IndexedDBTransaction {
 
   ScopesLocksHolder* mutable_locks_receiver() { return &locks_receiver_; }
 
+  // in_flight_memory() is used to keep track of all memory scheduled to be
+  // written using ScheduleTask. This is reported to memory dumps.
+  int64_t in_flight_memory() const { return in_flight_memory_; }
+  void set_in_flight_memory(int64_t in_flight_memory) {
+    in_flight_memory_ = in_flight_memory;
+  }
+
  protected:
   // Test classes may derive, but most creation should be done via
   // IndexedDBClassFactory.
@@ -202,8 +210,7 @@ class CONTENT_EXPORT IndexedDBTransaction {
   bool IsTaskQueueEmpty() const;
   bool HasPendingTasks() const;
 
-  leveldb::Status BlobWriteComplete(
-      IndexedDBBackingStore::BlobWriteResult result);
+  leveldb::Status BlobWriteComplete(BlobWriteResult result);
   void CloseOpenCursorBindings();
   void CloseOpenCursors();
   leveldb::Status CommitPhaseTwo();
@@ -235,6 +242,8 @@ class CONTENT_EXPORT IndexedDBTransaction {
 
   // Metrics for quota.
   int64_t size_ = 0;
+
+  int64_t in_flight_memory_ = 0;
 
   class TaskQueue {
    public:

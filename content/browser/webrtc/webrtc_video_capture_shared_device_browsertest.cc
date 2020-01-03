@@ -131,7 +131,7 @@ class WebRtcVideoCaptureSharedDeviceBrowserTest
             subscriber_.InitWithNewPipeAndPassReceiver());
   }
 
-  scoped_refptr<base::TaskRunner> main_task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> main_task_runner_;
   std::unique_ptr<video_capture::MockVideoFrameHandler>
       mock_video_frame_handler_;
 
@@ -274,7 +274,7 @@ IN_PROC_BROWSER_TEST_P(
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     WebRtcVideoCaptureSharedDeviceBrowserTest,
     ::testing::Values(
         TestParams{ServiceApi::kSingleClient,

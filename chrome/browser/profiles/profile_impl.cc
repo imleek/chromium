@@ -67,8 +67,6 @@
 #include "chrome/browser/native_file_system/native_file_system_permission_context_factory.h"
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
-#include "chrome/browser/plugins/chrome_plugin_service_filter.h"
-#include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector_builder.h"
@@ -76,7 +74,6 @@
 #include "chrome/browser/policy/schema_registry_service_builder.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
-#include "chrome/browser/prefs/in_process_service_factory_factory.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/prefs/profile_pref_store_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
@@ -161,25 +158,15 @@
 #include "services/data_decoder/public/cpp/data_decoder.h"
 #include "services/identity/identity_service.h"
 #include "services/network/public/cpp/features.h"
-#include "services/preferences/public/cpp/in_process_service_factory.h"
 #include "services/preferences/public/mojom/preferences.mojom.h"
 #include "services/preferences/public/mojom/tracked_preference_validation_delegate.mojom.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/android_sms/android_sms_app_manager.h"
-#include "chrome/browser/chromeos/android_sms/android_sms_pairing_state_tracker_impl.h"
-#include "chrome/browser/chromeos/android_sms/android_sms_service_factory.h"
 #include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
-#include "chrome/browser/chromeos/authpolicy/auth_policy_credentials_manager.h"
-#include "chrome/browser/chromeos/cryptauth/gcm_device_info_provider_impl.h"
-#include "chrome/browser/chromeos/device_sync/device_sync_client_factory.h"
 #include "chrome/browser/chromeos/locale_change_guard.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
-#include "chrome/browser/chromeos/multidevice_setup/auth_token_validator_factory.h"
-#include "chrome/browser/chromeos/multidevice_setup/auth_token_validator_impl.h"
-#include "chrome/browser/chromeos/multidevice_setup/oobe_completion_tracker_factory.h"
 #include "chrome/browser/chromeos/policy/active_directory_policy_manager.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/policy/user_policy_manager_builder_chromeos.h"
@@ -190,13 +177,11 @@
 #include "chrome/browser/signin/chrome_device_id_helper.h"
 #include "chromeos/components/account_manager/account_manager.h"
 #include "chromeos/components/account_manager/account_manager_factory.h"
-#include "chromeos/services/multidevice_setup/multidevice_setup_service.h"
-#include "chromeos/services/multidevice_setup/public/mojom/constants.mojom.h"
-#include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
-
+#else
+#include "chrome/browser/policy/cloud/user_cloud_policy_manager_builder.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -210,10 +195,6 @@
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
-#if !defined(OS_CHROMEOS)
-#include "chrome/browser/policy/cloud/user_cloud_policy_manager_builder.h"
-#endif
-
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_special_storage_policy.h"
@@ -224,6 +205,11 @@
 #include "extensions/browser/extension_pref_value_map_factory.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+#include "chrome/browser/plugins/chrome_plugin_service_filter.h"
+#include "chrome/browser/plugins/plugin_prefs.h"
 #endif
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
@@ -246,8 +232,9 @@ using content::DownloadManagerDelegate;
 namespace {
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
-// Delay, in milliseconds, before we explicitly create the SessionService.
-const int kCreateSessionServiceDelayMS = 500;
+// Delay before we explicitly create the SessionService.
+static constexpr TimeDelta kCreateSessionServiceDelay =
+    TimeDelta::FromMilliseconds(500);
 #endif
 
 // Value written to prefs for EXIT_CRASHED and EXIT_SESSION_ENDED.
@@ -465,8 +452,8 @@ ProfileImpl::ProfileImpl(
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
   create_session_service_timer_.Start(
-      FROM_HERE, TimeDelta::FromMilliseconds(kCreateSessionServiceDelayMS),
-      this, &ProfileImpl::EnsureSessionServiceCreated);
+      FROM_HERE, kCreateSessionServiceDelay, this,
+      &ProfileImpl::EnsureSessionServiceCreated);
 #endif
 
   set_is_guest_profile(path == ProfileManager::GetGuestProfilePath());
@@ -1102,7 +1089,7 @@ PrefService* ProfileImpl::GetOffTheRecordPrefs() {
 PrefService* ProfileImpl::GetReadOnlyOffTheRecordPrefs() {
   if (!dummy_otr_prefs_) {
     dummy_otr_prefs_ = CreateIncognitoPrefServiceSyncable(
-        prefs_.get(), CreateExtensionPrefStore(this, true), nullptr);
+        prefs_.get(), CreateExtensionPrefStore(this, true));
   }
   return dummy_otr_prefs_.get();
 }
@@ -1186,7 +1173,11 @@ content::PushMessagingService* ProfileImpl::GetPushMessagingService() {
 
 content::StorageNotificationService*
 ProfileImpl::GetStorageNotificationService() {
+#if defined(OS_ANDROID)
+  return nullptr;
+#else
   return StorageNotificationServiceFactory::GetForBrowserContext(this);
+#endif
 }
 
 content::SSLHostStateDelegate* ProfileImpl::GetSSLHostStateDelegate() {
@@ -1277,39 +1268,6 @@ bool ProfileImpl::ShouldEnableOutOfBlinkCors() {
   if (cors_legacy_mode_enabled_.value())
     return false;
   return base::FeatureList::IsEnabled(network::features::kOutOfBlinkCors);
-}
-
-std::unique_ptr<service_manager::Service> ProfileImpl::HandleServiceRequest(
-    const std::string& service_name,
-    service_manager::mojom::ServiceRequest request) {
-  if (service_name == prefs::mojom::kServiceName) {
-    return InProcessPrefServiceFactoryFactory::GetInstanceForKey(key_.get())
-        ->CreatePrefService(std::move(request));
-  }
-
-#if defined(OS_CHROMEOS)
-  if (service_name == chromeos::multidevice_setup::mojom::kServiceName) {
-    chromeos::android_sms::AndroidSmsService* android_sms_service =
-        chromeos::android_sms::AndroidSmsServiceFactory::GetForBrowserContext(
-            this);
-    return std::make_unique<
-        chromeos::multidevice_setup::MultiDeviceSetupService>(
-        std::move(request), GetPrefs(),
-        chromeos::device_sync::DeviceSyncClientFactory::GetForProfile(this),
-        chromeos::multidevice_setup::AuthTokenValidatorFactory ::GetForProfile(
-            this),
-        chromeos::multidevice_setup::OobeCompletionTrackerFactory::
-            GetForProfile(this),
-        android_sms_service ? android_sms_service->android_sms_app_manager()
-                            : nullptr,
-        android_sms_service
-            ? android_sms_service->android_sms_pairing_state_tracker()
-            : nullptr,
-        chromeos::GcmDeviceInfoProviderImpl::GetInstance());
-  }
-#endif  // defined(OS_CHROMEOS)
-
-  return nullptr;
 }
 
 std::string ProfileImpl::GetMediaDeviceIDSalt() {

@@ -59,7 +59,6 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "services/service_manager/public/cpp/connector.h"
 
 #if defined(OS_ANDROID)
 #include "components/download/internal/common/android/download_collection_bridge.h"
@@ -70,11 +69,11 @@ namespace download {
 namespace {
 
 void DeleteDownloadedFileDone(base::WeakPtr<DownloadItemImpl> item,
-                              const base::Callback<void(bool)>& callback,
+                              base::OnceCallback<void(bool)> callback,
                               bool success) {
   if (success && item.get())
     item->OnDownloadedFileRemoved();
-  callback.Run(success);
+  std::move(callback).Run(success);
 }
 
 // Wrapper around DownloadFile::Detach and DownloadFile::Cancel that
@@ -228,6 +227,7 @@ DownloadItemImpl::RequestInfo::RequestInfo(
     const GURL& tab_url,
     const GURL& tab_referrer_url,
     const base::Optional<url::Origin>& request_initiator,
+    const net::NetworkIsolationKey& network_isolation_key,
     const std::string& suggested_filename,
     const base::FilePath& forced_file_path,
     ui::PageTransition transition_type,
@@ -240,6 +240,7 @@ DownloadItemImpl::RequestInfo::RequestInfo(
       tab_url(tab_url),
       tab_referrer_url(tab_referrer_url),
       request_initiator(request_initiator),
+      network_isolation_key(network_isolation_key),
       suggested_filename(suggested_filename),
       forced_file_path(forced_file_path),
       transition_type(transition_type),
@@ -247,8 +248,12 @@ DownloadItemImpl::RequestInfo::RequestInfo(
       remote_address(remote_address),
       start_time(start_time) {}
 
-DownloadItemImpl::RequestInfo::RequestInfo(const GURL& url)
-    : url_chain(std::vector<GURL>(1, url)), start_time(base::Time::Now()) {}
+DownloadItemImpl::RequestInfo::RequestInfo(
+    const GURL& url,
+    const net::NetworkIsolationKey& network_isolation_key)
+    : url_chain(std::vector<GURL>(1, url)),
+      network_isolation_key(network_isolation_key),
+      start_time(base::Time::Now()) {}
 
 DownloadItemImpl::RequestInfo::RequestInfo() = default;
 
@@ -321,6 +326,7 @@ DownloadItemImpl::DownloadItemImpl(
                     tab_url,
                     tab_refererr_url,
                     request_initiator,
+                    net::NetworkIsolationKey::Todo(),  // crbug/1028901
                     std::string(),
                     base::FilePath(),
                     ui::PAGE_TRANSITION_LINK,
@@ -380,6 +386,7 @@ DownloadItemImpl::DownloadItemImpl(DownloadItemImplDelegate* delegate,
                     info.tab_url,
                     info.tab_referrer_url,
                     info.request_initiator,
+                    info.network_isolation_key,
                     base::UTF16ToUTF8(info.save_info->suggested_name),
                     info.save_info->file_path,
                     info.transition_type ? info.transition_type.value()
@@ -423,8 +430,10 @@ DownloadItemImpl::DownloadItemImpl(
     const base::FilePath& path,
     const GURL& url,
     const std::string& mime_type,
+    const net::NetworkIsolationKey& network_isolation_key,
+
     DownloadJob::CancelRequestCallback cancel_request_callback)
-    : request_info_(url),
+    : request_info_(url, network_isolation_key),
       guid_(base::GenerateGUID()),
       download_id_(download_id),
       mime_type_(mime_type),
@@ -436,7 +445,8 @@ DownloadItemImpl::DownloadItemImpl(
       is_updating_observers_(false) {
   job_ = DownloadJobFactory::CreateJob(
       this, std::move(cancel_request_callback), DownloadCreateInfo(), true,
-      URLLoaderFactoryProvider::GetNullPtr(), nullptr);
+      URLLoaderFactoryProvider::GetNullPtr(),
+      /*wake_lock_provider_binder*/ base::NullCallback());
   delegate_->Attach();
   Init(true /* actively downloading */, TYPE_SAVE_PAGE_AS);
 }
@@ -828,6 +838,11 @@ const base::Optional<url::Origin>& DownloadItemImpl::GetRequestInitiator()
   return request_info_.request_initiator;
 }
 
+const net::NetworkIsolationKey& DownloadItemImpl::GetNetworkIsolationKey()
+    const {
+  return request_info_.network_isolation_key;
+}
+
 std::string DownloadItemImpl::GetSuggestedFilename() const {
   return request_info_.suggested_filename;
 }
@@ -873,6 +888,10 @@ bool DownloadItemImpl::IsSavePackageDownload() const {
   return job_ && job_->IsSavePackageDownload();
 }
 
+DownloadSource DownloadItemImpl::GetDownloadSource() const {
+  return download_source_;
+}
+
 const base::FilePath& DownloadItemImpl::GetFullPath() const {
   return destination_info_.current_path;
 }
@@ -912,29 +931,29 @@ bool DownloadItemImpl::GetFileExternallyRemoved() const {
   return file_externally_removed_;
 }
 
-void DownloadItemImpl::DeleteFile(const base::Callback<void(bool)>& callback) {
+void DownloadItemImpl::DeleteFile(base::OnceCallback<void(bool)> callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (GetState() != DownloadItem::COMPLETE) {
     // Pass a null WeakPtr so it doesn't call OnDownloadedFileRemoved.
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&DeleteDownloadedFileDone,
-                       base::WeakPtr<DownloadItemImpl>(), callback, false));
+        FROM_HERE, base::BindOnce(&DeleteDownloadedFileDone,
+                                  base::WeakPtr<DownloadItemImpl>(),
+                                  std::move(callback), false));
     return;
   }
   if (GetFullPath().empty() || file_externally_removed_) {
     // Pass a null WeakPtr so it doesn't call OnDownloadedFileRemoved.
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&DeleteDownloadedFileDone,
-                       base::WeakPtr<DownloadItemImpl>(), callback, true));
+        FROM_HERE, base::BindOnce(&DeleteDownloadedFileDone,
+                                  base::WeakPtr<DownloadItemImpl>(),
+                                  std::move(callback), true));
     return;
   }
   base::PostTaskAndReplyWithResult(
       GetDownloadTaskRunner().get(), FROM_HERE,
-      base::Bind(&DeleteDownloadedFile, GetFullPath()),
-      base::Bind(&DeleteDownloadedFileDone, weak_ptr_factory_.GetWeakPtr(),
-                 callback));
+      base::BindOnce(&DeleteDownloadedFile, GetFullPath()),
+      base::BindOnce(&DeleteDownloadedFileDone, weak_ptr_factory_.GetWeakPtr(),
+                     std::move(callback)));
 }
 
 DownloadFile* DownloadItemImpl::GetDownloadFile() {
@@ -1197,6 +1216,12 @@ bool DownloadItemImpl::HasStrongValidators() const {
   return !etag_.empty() || !last_modified_time_.empty();
 }
 
+void DownloadItemImpl::BindWakeLockProvider(
+    mojo::PendingReceiver<device::mojom::WakeLockProvider> receiver) {
+  if (delegate_)
+    delegate_->BindWakeLockProvider(std::move(receiver));
+}
+
 void DownloadItemImpl::UpdateValidatorsOnResumption(
     const DownloadCreateInfo& new_create_info) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -1443,7 +1468,9 @@ void DownloadItemImpl::Start(
     URLLoaderFactoryProvider::URLLoaderFactoryProviderPtr
         url_loader_factory_provider) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK(!download_file_);
+  CHECK(!download_file_) << "last interrupt reason: "
+                         << DownloadInterruptReasonToString(last_reason_)
+                         << ", state: " << DebugDownloadStateString(state_);
   DVLOG(20) << __func__ << "() this=" << DebugString(true);
   RecordDownloadCountWithSource(START_COUNT, download_source_);
 
@@ -1451,7 +1478,8 @@ void DownloadItemImpl::Start(
   job_ = DownloadJobFactory::CreateJob(
       this, std::move(cancel_request_callback), new_create_info, false,
       std::move(url_loader_factory_provider),
-      delegate_ ? delegate_->GetServiceManagerConnector() : nullptr);
+      base::BindRepeating(&DownloadItemImpl::BindWakeLockProvider,
+                          weak_ptr_factory_.GetWeakPtr()));
   if (job_->IsParallelizable()) {
     RecordParallelizableDownloadCount(START_COUNT, IsParallelDownloadEnabled());
   }
@@ -1868,8 +1896,8 @@ void DownloadItemImpl::OnDownloadRenamedToFinalName(
   TransitionTo(COMPLETING_INTERNAL);
 
   if (delegate_->ShouldOpenDownload(
-          this, base::Bind(&DownloadItemImpl::DelayedDownloadOpened,
-                           weak_ptr_factory_.GetWeakPtr()))) {
+          this, base::BindOnce(&DownloadItemImpl::DelayedDownloadOpened,
+                               weak_ptr_factory_.GetWeakPtr()))) {
     Completed();
   } else {
     delegate_delayed_complete_ = true;
@@ -2351,7 +2379,7 @@ void DownloadItemImpl::ResumeInterruptedDownload(
     return;
 
   // We are starting a new request. Shake off all pending operations.
-  DCHECK(!download_file_);
+  CHECK(!download_file_);
   weak_ptr_factory_.InvalidateWeakPtrs();
 
   // Reset the appropriate state if restarting.
@@ -2404,7 +2432,8 @@ void DownloadItemImpl::ResumeInterruptedDownload(
   // request will not be dropped if the WebContents (and by extension, the
   // associated renderer) goes away before a response is received.
   std::unique_ptr<DownloadUrlParameters> download_params(
-      new DownloadUrlParameters(GetURL(), traffic_annotation));
+      new DownloadUrlParameters(GetURL(), traffic_annotation,
+                                request_info_.network_isolation_key));
   download_params->set_file_path(GetFullPath());
   if (received_slices_.size() > 0) {
     std::vector<DownloadItem::ReceivedSlice> slices_to_download =

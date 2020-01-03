@@ -45,6 +45,7 @@
 #include "extensions/common/file_util.h"
 #include "extensions/common/value_builder.h"
 #include "extensions/test/test_extension_dir.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/test/test_url_loader_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -125,7 +126,8 @@ network::ResourceRequest CreateResourceRequest(const std::string& method,
   network::ResourceRequest request;
   request.method = method;
   request.url = url;
-  request.site_for_cookies = url;  // bypass third-party cookie blocking.
+  request.site_for_cookies =
+      net::SiteForCookies::FromUrl(url);  // bypass third-party cookie blocking.
   request.request_initiator =
       url::Origin::Create(url);  // ensure initiator set.
   request.referrer_policy = content::Referrer::GetDefaultReferrerPolicy();
@@ -262,10 +264,10 @@ class ExtensionProtocolsTestBase : public testing::Test {
     constexpr int32_t kRoutingId = 81;
     constexpr int32_t kRequestId = 28;
 
-    network::mojom::URLLoaderPtr loader;
+    mojo::PendingRemote<network::mojom::URLLoader> loader;
     network::TestURLLoaderClient client;
     loader_factory_->CreateLoaderAndStart(
-        mojo::MakeRequest(&loader), kRoutingId, kRequestId,
+        loader.InitWithNewPipeAndPassReceiver(), kRoutingId, kRequestId,
         network::mojom::kURLLoadOptionNone,
         CreateResourceRequest("GET", resource_type, url), client.CreateRemote(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));

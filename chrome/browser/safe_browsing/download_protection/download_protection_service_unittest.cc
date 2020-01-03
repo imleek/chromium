@@ -16,6 +16,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -37,14 +38,13 @@
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/policy/browser_dm_token_storage.h"
-#include "chrome/browser/policy/fake_browser_dm_token_storage.h"
-#include "chrome/browser/safe_browsing/download_protection/binary_upload_service.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/test_binary_upload_service.h"
+#include "chrome/browser/safe_browsing/dm_token_utils.h"
 #include "chrome/browser/safe_browsing/download_protection/check_native_file_system_write_request.h"
 #include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/safe_browsing/download_protection/ppapi_download_request.h"
-#include "chrome/browser/safe_browsing/download_protection/test_binary_upload_service.h"
 #include "chrome/browser/safe_browsing/incident_reporting/incident_reporting_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
@@ -300,8 +300,8 @@ class DownloadProtectionServiceTest : public ChromeRenderViewHostTestHarness {
             profile(),
             base::BindRepeating(&BuildSafeBrowsingPrivateEventRouter));
 
-    storage_.SetClientId("client id");
-    storage_.SetDMToken("dm token");
+    SetDMTokenForTesting(
+        policy::DMToken::CreateValidTokenForTesting("dm_token"));
   }
 
   void TearDown() override {
@@ -319,14 +319,14 @@ class DownloadProtectionServiceTest : public ChromeRenderViewHostTestHarness {
     ChromeRenderViewHostTestHarness::TearDown();
   }
 
-  void EnableFeature(const base::Feature& feature) {
+  void EnableFeatures(const std::vector<base::Feature>& features) {
     scoped_feature_list_.Reset();
-    scoped_feature_list_.InitAndEnableFeature(feature);
+    scoped_feature_list_.InitWithFeatures(features, {});
   }
 
-  void DisableFeature(const base::Feature& feature) {
+  void DisableFeatures(const std::vector<base::Feature>& features) {
     scoped_feature_list_.Reset();
-    scoped_feature_list_.InitAndDisableFeature(feature);
+    scoped_feature_list_.InitWithFeatures({}, features);
   }
 
   void SetWhitelistedDownloadSampleRate(double target_rate) {
@@ -665,7 +665,6 @@ class DownloadProtectionServiceTest : public ChromeRenderViewHostTestHarness {
   base::ScopedTempDir temp_dir_;
   extensions::TestEventRouter* test_event_router_;
   TestingProfileManager testing_profile_manager_;
-  policy::FakeBrowserDMTokenStorage storage_;
 };
 
 class DeepScanningDownloadTest : public DownloadProtectionServiceTest,
@@ -675,10 +674,11 @@ class DeepScanningDownloadTest : public DownloadProtectionServiceTest,
     // Enable the feature early to prevent race condition trying to access
     // the enabled features set.  This happens for example when the history
     // service is started below.
-    if (GetParam())
-      EnableFeature(kDeepScanningOfDownloads);
-    else
-      DisableFeature(kDeepScanningOfDownloads);
+    if (GetParam()) {
+      EnableFeatures({kMalwareScanEnabled, kContentComplianceEnabled});
+    } else {
+      DisableFeatures({kMalwareScanEnabled, kContentComplianceEnabled});
+    }
   }
 };
 
@@ -2858,7 +2858,8 @@ TEST_F(DownloadProtectionServiceTest, DoesNotSendPingForCancelledDownloads) {
 }
 
 TEST_P(DeepScanningDownloadTest, PasswordProtectedArchivesBlockedByPreference) {
-  if (!base::FeatureList::IsEnabled(kDeepScanningOfDownloads))
+  if (!base::FeatureList::IsEnabled(kMalwareScanEnabled) &&
+      !base::FeatureList::IsEnabled(kContentComplianceEnabled))
     return;
 
   base::FilePath test_zip;
@@ -2909,7 +2910,8 @@ TEST_P(DeepScanningDownloadTest, PasswordProtectedArchivesBlockedByPreference) {
 }
 
 TEST_P(DeepScanningDownloadTest, LargeFileBlockedByPreference) {
-  if (!base::FeatureList::IsEnabled(kDeepScanningOfDownloads))
+  if (!base::FeatureList::IsEnabled(kMalwareScanEnabled) &&
+      !base::FeatureList::IsEnabled(kContentComplianceEnabled))
     return;
 
   base::FilePath test_zip;
@@ -3337,7 +3339,8 @@ TEST_F(DownloadProtectionServiceTest,
 }
 
 TEST_P(DeepScanningDownloadTest, FailedDeepScanningPreservesWarnings) {
-  if (!base::FeatureList::IsEnabled(kDeepScanningOfDownloads))
+  if (!base::FeatureList::IsEnabled(kMalwareScanEnabled) &&
+      !base::FeatureList::IsEnabled(kContentComplianceEnabled))
     return;
 
   NiceMockDownloadItem item;

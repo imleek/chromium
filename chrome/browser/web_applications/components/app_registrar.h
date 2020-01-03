@@ -13,6 +13,7 @@
 #include "base/optional.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/common/web_application_info.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 class GURL;
@@ -21,6 +22,7 @@ class Profile;
 namespace web_app {
 
 class AppRegistrarObserver;
+class WebAppRegistrar;
 
 enum class ExternalInstallSource;
 
@@ -34,11 +36,6 @@ class AppRegistrar {
 
   // Returns true if the app with |app_id| is currently fully locally installed.
   virtual bool IsLocallyInstalled(const AppId& app_id) const = 0;
-
-  // Returns true if the app with |app_id| was previously uninstalled by the
-  // user. For example, if a user uninstalls a default app ('default apps' are
-  // considered external apps), then this will return true.
-  virtual bool WasExternalAppUninstalledByUser(const AppId& app_id) const = 0;
 
   // Returns true if the app was installed by user, false if default installed.
   virtual bool WasInstalledByUser(const AppId& app_id) const = 0;
@@ -75,7 +72,15 @@ class AppRegistrar {
   virtual DisplayMode GetAppDisplayMode(const AppId& app_id) const = 0;
   virtual DisplayMode GetAppUserDisplayMode(const AppId& app_id) const = 0;
 
+  // Returns the "icons" field from the app manifest, use |AppIconManager| to
+  // load icon bitmap data.
+  virtual std::vector<WebApplicationIconInfo> GetAppIconInfos(
+      const AppId& app_id) const = 0;
+
   virtual std::vector<AppId> GetAppIds() const = 0;
+
+  // Safe downcast.
+  virtual WebAppRegistrar* AsWebAppRegistrar() = 0;
 
   // Searches for the first app id in the registry for which the |url| is in
   // scope.
@@ -103,6 +108,7 @@ class AppRegistrar {
   void RemoveObserver(AppRegistrarObserver* observer);
 
   void NotifyWebAppInstalled(const AppId& app_id);
+  void NotifyWebAppWillBeUninstalled(const AppId& app_id);
   void NotifyWebAppUninstalled(const AppId& app_id);
 
  protected:

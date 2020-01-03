@@ -39,10 +39,9 @@
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/text_input_state.h"
 #include "content/common/widget_messages.h"
-#include "content/public/browser/guest_mode.h"
 #include "content/public/browser/render_process_host.h"
 #include "gpu/ipc/common/gpu_messages.h"
-#include "third_party/blink/public/platform/web_touch_event.h"
+#include "third_party/blink/public/common/input/web_touch_event.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
@@ -315,13 +314,6 @@ void RenderWidgetHostViewChildFrame::SetInsets(const gfx::Insets& insets) {
 }
 
 gfx::NativeView RenderWidgetHostViewChildFrame::GetNativeView() {
-  // TODO(ekaramad): To accomodate MimeHandlerViewGuest while embedded inside
-  // OOPIF-webview, we need to return the native view to be used by
-  // RenderWidgetHostViewGuest. Remove this once https://crbug.com/642826 is
-  // fixed.
-  if (!frame_connector_)
-    return nullptr;
-
   RenderWidgetHostView* parent_view =
       frame_connector_->GetParentRenderWidgetHostView();
   return parent_view ? parent_view->GetNativeView() : nullptr;
@@ -964,18 +956,6 @@ InputEventAckState RenderWidgetHostViewChildFrame::FilterInputEvent(
   return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
 }
 
-InputEventAckState RenderWidgetHostViewChildFrame::FilterChildGestureEvent(
-    const blink::WebGestureEvent& gesture_event) {
-  // We may be the owner of a RenderWidgetHostViewGuest,
-  // so we talk to the root RWHV on its behalf.
-  // TODO(mcnee): Remove once MimeHandlerViewGuest is based on OOPIF.
-  // See crbug.com/659750
-  if (frame_connector_)
-    return frame_connector_->GetRootRenderWidgetHostView()
-        ->FilterChildGestureEvent(gesture_event);
-  return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
-}
-
 BrowserAccessibilityManager*
 RenderWidgetHostViewChildFrame::CreateBrowserAccessibilityManager(
     BrowserAccessibilityDelegate* delegate,
@@ -1022,9 +1002,8 @@ void RenderWidgetHostViewChildFrame::CreateCompositorFrameSinkSupport() {
 
   DCHECK(!support_);
   constexpr bool is_root = false;
-  constexpr bool needs_sync_points = true;
   support_ = GetHostFrameSinkManager()->CreateCompositorFrameSinkSupport(
-      this, frame_sink_id_, is_root, needs_sync_points);
+      this, frame_sink_id_, is_root);
   if (parent_frame_sink_id_.is_valid()) {
     GetHostFrameSinkManager()->RegisterFrameSinkHierarchy(parent_frame_sink_id_,
                                                           frame_sink_id_);

@@ -4,19 +4,18 @@
 
 #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
 
-#include <map>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/flat_map.h"
 #include "base/containers/id_map.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -31,10 +30,10 @@
 #include "chrome/browser/printing/print_preview_data_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/webui/localized_string.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/browser/ui/webui/print_preview/print_preview_handler.h"
 #include "chrome/browser/ui/webui/theme_source.h"
+#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -58,7 +57,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/resources/grit/webui_resources.h"
 #include "ui/web_dialogs/web_dialog_delegate.h"
 #include "ui/web_dialogs/web_dialog_ui.h"
 
@@ -92,7 +90,7 @@ constexpr char kGeneratedPath[] =
 
 PrintPreviewUI::TestDelegate* g_test_delegate = nullptr;
 
-// Thread-safe wrapper around a std::map to keep track of mappings from
+// Thread-safe wrapper around a base::flat_map to keep track of mappings from
 // PrintPreviewUI IDs to most recent print preview request IDs.
 class PrintPreviewRequestIdMapWithLock {
  public:
@@ -124,7 +122,7 @@ class PrintPreviewRequestIdMapWithLock {
 
  private:
   // Mapping from PrintPreviewUI ID to print preview request ID.
-  typedef std::map<int, int> PrintPreviewRequestIdMap;
+  using PrintPreviewRequestIdMap = base::flat_map<int, int>;
 
   PrintPreviewRequestIdMap map_;
   base::Lock lock_;
@@ -148,9 +146,8 @@ bool ShouldHandleRequestCallback(const std::string& path) {
 }
 
 // Get markup or other resources for the print preview page.
-void HandleRequestCallback(
-    const std::string& path,
-    const content::WebUIDataSource::GotDataCallback& callback) {
+void HandleRequestCallback(const std::string& path,
+                           content::WebUIDataSource::GotDataCallback callback) {
   // ChromeWebUIDataSource handles most requests except for the print preview
   // data.
   int preview_ui_id;
@@ -161,16 +158,16 @@ void HandleRequestCallback(
   PrintPreviewDataService::GetInstance()->GetDataEntry(preview_ui_id,
                                                        page_index, &data);
   if (data.get()) {
-    callback.Run(data.get());
+    std::move(callback).Run(data.get());
     return;
   }
   // Invalid request.
   auto empty_bytes = base::MakeRefCounted<base::RefCountedBytes>();
-  callback.Run(empty_bytes.get());
+  std::move(callback).Run(empty_bytes.get());
 }
 
 void AddPrintPreviewStrings(content::WebUIDataSource* source) {
-  static constexpr LocalizedString kLocalizedStrings[] = {
+  static constexpr webui::LocalizedString kLocalizedStrings[] = {
     {"accept", IDS_PRINT_PREVIEW_ACCEPT_INVITE},
     {"acceptForGroup", IDS_PRINT_PREVIEW_ACCEPT_GROUP_INVITE},
     {"accountSelectTitle", IDS_PRINT_PREVIEW_ACCOUNT_SELECT_TITLE},
@@ -283,6 +280,8 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"scalingInstruction", IDS_PRINT_PREVIEW_SCALING_INSTRUCTION},
     {"scalingLabel", IDS_PRINT_PREVIEW_SCALING_LABEL},
     {"searchBoxPlaceholder", IDS_PRINT_PREVIEW_SEARCH_BOX_PLACEHOLDER},
+    {"searchResultBubbleText", IDS_SEARCH_RESULT_BUBBLE_TEXT},
+    {"searchResultsBubbleText", IDS_SEARCH_RESULTS_BUBBLE_TEXT},
     {"selectButton", IDS_PRINT_PREVIEW_BUTTON_SELECT},
     {"seeMore", IDS_PRINT_PREVIEW_SEE_MORE},
     {"seeMoreDestinationsLabel", IDS_PRINT_PREVIEW_SEE_MORE_DESTINATIONS_LABEL},
@@ -295,14 +294,14 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"optionPin", IDS_PRINT_PREVIEW_OPTION_PIN},
     {"pinErrorMessage", IDS_PRINT_PREVIEW_PIN_ERROR_MESSAGE},
     {"pinPlaceholder", IDS_PRINT_PREVIEW_PIN_PLACEHOLDER},
+    {"printerEulaURL", IDS_PRINT_PREVIEW_EULA_URL},
 #endif
 #if defined(OS_MACOSX)
     {"openPdfInPreviewOption", IDS_PRINT_PREVIEW_OPEN_PDF_IN_PREVIEW_APP},
     {"openingPDFInPreview", IDS_PRINT_PREVIEW_OPENING_PDF_IN_PREVIEW_APP},
 #endif
   };
-  AddLocalizedStringsBulk(source, kLocalizedStrings,
-                          base::size(kLocalizedStrings));
+  AddLocalizedStringsBulk(source, kLocalizedStrings);
 
   source->AddString("gcpCertificateErrorLearnMoreURL",
                     chrome::kCloudPrintCertificateErrorLearnMoreURL);
@@ -396,31 +395,19 @@ void SetupPrintPreviewPlugin(content::WebUIDataSource* source) {
 content::WebUIDataSource* CreatePrintPreviewUISource(Profile* profile) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIPrintHost);
-  source->OverrideContentSecurityPolicyScriptSrc(
-      "script-src chrome://resources chrome://test 'self';");
-  AddPrintPreviewStrings(source);
-  source->UseStringsJs();
-  source->EnableReplaceI18nInJS();
 #if BUILDFLAG(OPTIMIZE_WEBUI)
-  source->AddResourcePath("print_preview.js",
-                          IDR_PRINT_PREVIEW_PRINT_PREVIEW_ROLLUP_JS);
-  source->SetDefaultResource(IDR_PRINT_PREVIEW_VULCANIZED_HTML);
+  webui::SetupBundledWebUIDataSource(source, "print_preview.js",
+                                     IDR_PRINT_PREVIEW_PRINT_PREVIEW_ROLLUP_JS,
+                                     IDR_PRINT_PREVIEW_PRINT_PREVIEW_HTML);
 #else
-  // Add all Print Preview resources.
-  for (size_t i = 0; i < kPrintPreviewResourcesSize; ++i) {
-    std::string path = kPrintPreviewResources[i].name;
-    if (path.rfind(kGeneratedPath, 0) == 0) {
-      path = path.substr(sizeof(kGeneratedPath) - 1);
-    }
-
-    source->AddResourcePath(path, kPrintPreviewResources[i].value);
-  }
-  source->SetDefaultResource(IDR_PRINT_PREVIEW_HTML);
+  webui::SetupWebUIDataSource(
+      source,
+      base::make_span(kPrintPreviewResources, kPrintPreviewResourcesSize),
+      kGeneratedPath, IDR_PRINT_PREVIEW_PRINT_PREVIEW_HTML);
 #endif
+  AddPrintPreviewStrings(source);
   SetupPrintPreviewPlugin(source);
   AddPrintPreviewFlags(source, profile);
-  source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER);
-  source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER);
   return source;
 }
 
@@ -687,17 +674,11 @@ void PrintPreviewUI::OnDidPreviewPage(
 }
 
 void PrintPreviewUI::OnPreviewDataIsAvailable(
-    int expected_pages_count,
     scoped_refptr<base::RefCountedMemory> data,
     int preview_request_id) {
-  VLOG(1) << "Print preview request finished with "
-          << expected_pages_count << " pages";
-
   if (!initial_preview_start_time_.is_null()) {
     UMA_HISTOGRAM_TIMES("PrintPreview.InitialDisplayTime",
                         base::TimeTicks::Now() - initial_preview_start_time_);
-    UMA_HISTOGRAM_COUNTS_1M("PrintPreview.PageCount.Initial",
-                            expected_pages_count);
     UMA_HISTOGRAM_COUNTS_1M(
         "PrintPreview.RegeneratePreviewRequest.BeforeFirstData",
         handler_->regenerate_preview_request_count());

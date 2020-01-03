@@ -331,9 +331,12 @@ class DemoSetupTest : public LoginManagerTest {
   // Simulates click on the network list item. |element| should specify
   // the aria-label of the desired network-list-item.
   void ClickNetworkListElement(const std::string& name) {
-    const std::string query = base::StrCat(
-        {ScreenToContentQuery(NetworkScreenView::kScreenId),
-         ".getNetworkListItemByNameForTest('", name, "').click()"});
+    const std::string element =
+        base::StrCat({ScreenToContentQuery(NetworkScreenView::kScreenId),
+                      ".getNetworkListItemByNameForTest('", name, "')"});
+    test::OobeJS().CreateVisibilityWaiter(true, element)->Wait();
+
+    const std::string query = base::StrCat({element, ".click()"});
     test::ExecuteOobeJSAsync(query);
   }
 
@@ -729,16 +732,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupTest, OnlineSetupFlowErrorDefault) {
   EXPECT_FALSE(StartupUtils::IsDeviceRegistered());
 }
 
-// Consistently timing out on xxx. http://crbug/com/1025213
-#if defined(OS_LINUX)
-#define MAYBE_OnlineSetupFlowErrorPowerwashRequired \
-  DISABLED_OnlineSetupFlowErrorPowerwashRequired
-#else
-#define MAYBE_OnlineSetupFlowErrorPowerwashRequired \
-  OnlineSetupFlowErrorPowerwashRequired
-#endif
-IN_PROC_BROWSER_TEST_F(DemoSetupTest,
-                       MAYBE_OnlineSetupFlowErrorPowerwashRequired) {
+IN_PROC_BROWSER_TEST_F(DemoSetupTest, OnlineSetupFlowErrorPowerwashRequired) {
   // Simulate online setup failure that requires powerwash.
   enrollment_helper_.ExpectEnrollmentMode(
       policy::EnrollmentConfig::MODE_ATTESTATION);

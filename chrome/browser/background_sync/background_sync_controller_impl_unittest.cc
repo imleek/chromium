@@ -74,8 +74,6 @@ class BackgroundSyncControllerImplTest : public testing::Test {
   }
 
   void ResetFieldTrialList() {
-    field_trial_list_ =
-        std::make_unique<base::FieldTrialList>(nullptr /* entropy provider */);
     variations::testing::ClearAllVariationParams();
     base::FieldTrialList::CreateFieldTrial(
         BackgroundSyncControllerImpl::kFieldTrialName, kFieldTrialGroup);
@@ -96,11 +94,10 @@ class BackgroundSyncControllerImplTest : public testing::Test {
     return registration;
   }
 
-  content::BrowserTaskEnvironment task_environment_;
   base::ScopedTempDir temp_dir_;
+  content::BrowserTaskEnvironment task_environment_;
   TestingProfile profile_;
   std::unique_ptr<BackgroundSyncControllerImpl> controller_;
-  std::unique_ptr<base::FieldTrialList> field_trial_list_;
 
   DISALLOW_COPY_AND_ASSIGN(BackgroundSyncControllerImplTest);
 };
@@ -181,8 +178,6 @@ TEST_F(BackgroundSyncControllerImplTest, AllParamsSet) {
 }
 
 TEST_F(BackgroundSyncControllerImplTest, OneShotSyncMultipleAttempts) {
-  controller_ = std::make_unique<BackgroundSyncControllerImpl>(
-      profile_.GetOffTheRecordProfile());
   content::BackgroundSyncParameters sync_parameters;
   url::Origin origin = url::Origin::Create(GURL(kExampleUrl));
   SiteEngagementScore::SetParamValuesForTesting();
@@ -212,8 +207,6 @@ TEST_F(BackgroundSyncControllerImplTest, OneShotSyncMultipleAttempts) {
 }
 
 TEST_F(BackgroundSyncControllerImplTest, PeriodicSyncMultipleAttempts) {
-  controller_ = std::make_unique<BackgroundSyncControllerImpl>(
-      profile_.GetOffTheRecordProfile());
   content::BackgroundSyncParameters sync_parameters;
   url::Origin origin = url::Origin::Create(GURL(kExampleUrl));
   SiteEngagementScore::SetParamValuesForTesting();
@@ -244,8 +237,6 @@ TEST_F(BackgroundSyncControllerImplTest, PeriodicSyncMultipleAttempts) {
 
 TEST_F(BackgroundSyncControllerImplTest,
        GetNextEventDelayWithSiteEngagementPenalty) {
-  controller_ = std::make_unique<BackgroundSyncControllerImpl>(
-      profile_.GetOffTheRecordProfile());
   content::BackgroundSyncParameters sync_parameters;
   int64_t min_gap_between_periodic_sync_events_ms =
       sync_parameters.min_periodic_sync_events_interval.InMilliseconds();
@@ -298,8 +289,6 @@ TEST_F(BackgroundSyncControllerImplTest,
 }
 
 TEST_F(BackgroundSyncControllerImplTest, MaxFrequencyForOrigin) {
-  controller_ = std::make_unique<BackgroundSyncControllerImpl>(
-      profile_.GetOffTheRecordProfile());
   content::BackgroundSyncParameters sync_parameters;
   url::Origin origin = url::Origin::Create(GURL(kExampleUrl));
   SiteEngagementScore::SetParamValuesForTesting();
@@ -345,8 +334,6 @@ TEST_F(BackgroundSyncControllerImplTest, MaxFrequencyForOrigin) {
 }
 
 TEST_F(BackgroundSyncControllerImplTest, CrossRegistrationLimitsForOrigin) {
-  controller_ = std::make_unique<BackgroundSyncControllerImpl>(
-      profile_.GetOffTheRecordProfile());
   content::BackgroundSyncParameters sync_parameters;
   url::Origin origin = url::Origin::Create(GURL(kExampleUrl));
   SiteEngagementScore::SetParamValuesForTesting();

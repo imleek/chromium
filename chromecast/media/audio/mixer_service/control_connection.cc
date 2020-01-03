@@ -48,9 +48,9 @@ void ControlConnection::SetMuted(AudioContentType type, bool muted) {
   muted_[type] = muted;
   if (socket_) {
     Generic message;
-    auto* muted = message.mutable_set_device_muted();
-    muted->set_content_type(ConvertContentType(type));
-    muted->set_muted(muted);
+    auto* mute_message = message.mutable_set_device_muted();
+    mute_message->set_content_type(ConvertContentType(type));
+    mute_message->set_muted(muted);
     socket_->SendProto(message);
   }
 }
@@ -110,7 +110,8 @@ void ControlConnection::SetStreamCountCallback(StreamCountCallback callback) {
   stream_count_callback_ = std::move(callback);
   if (socket_) {
     Generic message;
-    message.mutable_request_stream_count()->set_subscribe(!callback.is_null());
+    message.mutable_request_stream_count()->set_subscribe(
+        !stream_count_callback_.is_null());
     socket_->SendProto(message);
   }
 }

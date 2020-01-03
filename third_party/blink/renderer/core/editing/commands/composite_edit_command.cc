@@ -265,15 +265,15 @@ void CompositeEditCommand::InsertParagraphSeparator(
 
 bool CompositeEditCommand::IsRemovableBlock(const Node* node) {
   DCHECK(node);
-  if (!IsHTMLDivElement(*node))
+  const auto* element = DynamicTo<HTMLDivElement>(node);
+  if (!element)
     return false;
 
-  const HTMLDivElement& element = ToHTMLDivElement(*node);
-  ContainerNode* parent_node = element.parentNode();
+  ContainerNode* parent_node = element->parentNode();
   if (parent_node && parent_node->firstChild() != parent_node->lastChild())
     return false;
 
-  if (!element.hasAttributes())
+  if (!element->hasAttributes())
     return true;
 
   return false;
@@ -643,7 +643,8 @@ bool CompositeEditCommand::DeleteSelection(
     return true;
 
   ApplyCommandToComposite(
-      DeleteSelectionCommand::Create(GetDocument(), options), editing_state);
+      MakeGarbageCollected<DeleteSelectionCommand>(GetDocument(), options),
+      editing_state);
   if (editing_state->IsAborted())
     return false;
 
@@ -1498,9 +1499,10 @@ void CompositeEditCommand::MoveParagraphs(
                 GetDocument(),
                 CreateMarkup(start.ParentAnchoredEquivalent(),
                              end.ParentAnchoredEquivalent(),
-                             kDoNotAnnotateForInterchange,
-                             ConvertBlocksToInlines::kConvert,
-                             kDoNotResolveURLs, constraining_ancestor),
+                             CreateMarkupOptions::Builder()
+                                 .SetShouldConvertBlocksToInlines(true)
+                                 .SetConstrainingAncestor(constraining_ancestor)
+                                 .Build()),
                 "", kDisallowScriptingAndPluginContent)
           : nullptr;
 
@@ -1516,7 +1518,7 @@ void CompositeEditCommand::MoveParagraphs(
         start_of_paragraph_to_move.DeepEquivalent());
     style_in_empty_paragraph->MergeTypingStyle(&GetDocument());
     // The moved paragraph should assume the block style of the destination.
-    style_in_empty_paragraph->RemoveBlockProperties();
+    style_in_empty_paragraph->RemoveBlockProperties(&GetDocument());
   }
 
   // FIXME (5098931): We should add a new insert action
@@ -1771,9 +1773,8 @@ bool CompositeEditCommand::BreakOutOfEmptyMailBlockquotedParagraph(
   GetDocument().UpdateStyleAndLayout();
 
   VisiblePosition caret = EndingVisibleSelection().VisibleStart();
-  HTMLQuoteElement* highest_blockquote =
-      ToHTMLQuoteElement(HighestEnclosingNodeOfType(
-          caret.DeepEquivalent(), &IsMailHTMLBlockquoteElement));
+  auto* highest_blockquote = To<HTMLQuoteElement>(HighestEnclosingNodeOfType(
+      caret.DeepEquivalent(), &IsMailHTMLBlockquoteElement));
   if (!highest_blockquote)
     return false;
 

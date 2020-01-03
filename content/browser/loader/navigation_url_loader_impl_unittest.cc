@@ -105,9 +105,9 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
 
   bool MaybeCreateLoaderForResponse(
       const network::ResourceRequest& request,
-      const network::ResourceResponseHead& response,
+      network::mojom::URLResponseHeadPtr* response,
       mojo::ScopedDataPipeConsumerHandle* response_body,
-      network::mojom::URLLoaderPtr* loader,
+      mojo::PendingRemote<network::mojom::URLLoader>* loader,
       mojo::PendingReceiver<network::mojom::URLLoaderClient>* client_receiver,
       blink::ThrottlingURLLoader* url_loader,
       bool* skip_other_interceptors,
@@ -177,7 +177,8 @@ class NavigationURLLoaderImplTest : public testing::Test {
             GURL() /* searchable_form_url */,
             std::string() /* searchable_form_encoding */,
             GURL() /* client_side_redirect_url */,
-            base::nullopt /* devtools_initiator_info */);
+            base::nullopt /* devtools_initiator_info */,
+            false /* attach_same_site_cookie */);
 
     auto common_params = CreateCommonNavigationParams();
     common_params->url = url;

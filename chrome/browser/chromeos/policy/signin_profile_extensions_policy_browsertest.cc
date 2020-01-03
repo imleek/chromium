@@ -144,10 +144,8 @@ SigninProfileExtensionsPolicyPerChannelTest::
 content::StoragePartition* GetStoragePartitionForSigninExtension(
     Profile* profile,
     const std::string& extension_id) {
-  const GURL site =
-      extensions::util::GetSiteForExtensionId(extension_id, profile);
-  return content::BrowserContext::GetStoragePartitionForSite(
-      profile, site, /*can_create=*/false);
+  return extensions::util::GetStoragePartitionForExtensionId(
+      extension_id, profile, /*can_create=*/false);
 }
 
 }  // namespace
@@ -246,7 +244,7 @@ IN_PROC_BROWSER_TEST_P(SigninProfileExtensionsPolicyPerChannelTest,
           kNotWhitelistedExtensionId));
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          SigninProfileExtensionsPolicyPerChannelTest,
                          testing::Values(version_info::Channel::UNKNOWN,
                                          version_info::Channel::CANARY,

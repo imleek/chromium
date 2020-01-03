@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 #include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
 
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -176,8 +176,10 @@ void PaintTimingDetector::StopRecordingLargestContentfulPaint() {
 }
 
 void PaintTimingDetector::NotifyInputEvent(WebInputEvent::Type type) {
+  // A single keyup event should be ignored. It could be caused by user actions
+  // such as refreshing via Ctrl+R.
   if (type == WebInputEvent::kMouseMove || type == WebInputEvent::kMouseEnter ||
-      type == WebInputEvent::kMouseLeave ||
+      type == WebInputEvent::kMouseLeave || type == WebInputEvent::kKeyUp ||
       WebInputEvent::IsPinchGestureEventType(type)) {
     return;
   }
@@ -336,9 +338,10 @@ void ScopedPaintTimingDetectorBlockPaintHook::EmplaceIfNeeded(
   // aggregation corresponds to an element. See crbug.com/988593. When set,
   // |top_| becomes |this|, and |top_| is restored to the previous value when
   // the ScopedPaintTimingDetectorBlockPaintHook goes out of scope.
-  if (aggregator.GetNode())
-    reset_top_.emplace(&top_, this);
+  if (!aggregator.GetNode())
+    return;
 
+  reset_top_.emplace(&top_, this);
   TextPaintTimingDetector* detector = aggregator.GetFrameView()
                                           ->GetPaintTimingDetector()
                                           .GetTextPaintTimingDetector();

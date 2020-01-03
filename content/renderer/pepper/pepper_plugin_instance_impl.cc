@@ -92,18 +92,18 @@
 #include "ppapi/thunk/ppb_buffer_api.h"
 #include "printing/buildflags/buildflags.h"
 #include "skia/ext/platform_canvas.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "third_party/blink/public/common/input/web_pointer_event.h"
+#include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_cursor_info.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/platform/web_keyboard_event.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
-#include "third_party/blink/public/platform/web_pointer_event.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/platform/web_touch_event.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_error.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -118,7 +118,6 @@
 #include "third_party/blink/public/web/web_print_preset_options.h"
 #include "third_party/blink/public/web/web_print_scaling_option.h"
 #include "third_party/blink/public/web/web_script_source.h"
-#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/events/blink/blink_event_util.h"
@@ -181,7 +180,6 @@ using blink::WebURLError;
 using blink::WebAssociatedURLLoaderClient;
 using blink::WebURLRequest;
 using blink::WebURLResponse;
-using blink::WebUserGestureIndicator;
 using blink::WebView;
 using blink::WebWidget;
 
@@ -2275,8 +2273,7 @@ void PepperPluginInstanceImpl::RemovePluginObject(PluginObject* plugin_object) {
 }
 
 bool PepperPluginInstanceImpl::HasTransientUserActivation() const {
-  return WebUserGestureIndicator::IsProcessingUserGesture(
-      render_frame_->GetWebFrame());
+  return render_frame_->GetWebFrame()->HasTransientUserActivation();
 }
 
 void PepperPluginInstanceImpl::OnLockMouseACK(bool succeeded) {

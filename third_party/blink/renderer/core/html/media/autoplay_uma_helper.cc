@@ -39,9 +39,9 @@ int64_t GetUserGestureStatusForUkmMetric(LocalFrame* frame) {
 
   if (LocalFrame::HasTransientUserActivation(frame))
     result |= 0x01;
-  if (frame->HasBeenActivated())
+  if (frame->HasStickyUserActivation())
     result |= 0x02;
-  if (frame->HasReceivedUserGestureBeforeNavigation())
+  if (frame->HadStickyUserActivationBeforeNavigation())
     result |= 0x04;
 
   return result;
@@ -69,9 +69,6 @@ void AutoplayUmaHelper::OnAutoplayInitiated(AutoplaySource source) {
   DEFINE_STATIC_LOCAL(EnumerationHistogram, audio_histogram,
                       ("Media.Audio.Autoplay",
                        static_cast<int>(AutoplaySource::kNumberOfUmaSources)));
-  DEFINE_STATIC_LOCAL(
-      EnumerationHistogram, blocked_muted_video_histogram,
-      ("Media.Video.Autoplay.Muted.Blocked", kAutoplayBlockedReasonMax));
 
   // Autoplay already initiated
   if (sources_.Contains(source))
@@ -80,7 +77,7 @@ void AutoplayUmaHelper::OnAutoplayInitiated(AutoplaySource source) {
   sources_.insert(source);
 
   // Record the source.
-  if (element_->IsHTMLVideoElement()) {
+  if (IsA<HTMLVideoElement>(element_.Get())) {
     video_histogram.Count(static_cast<int>(source));
     if (element_->muted())
       muted_video_histogram.Count(static_cast<int>(source));
@@ -91,7 +88,7 @@ void AutoplayUmaHelper::OnAutoplayInitiated(AutoplaySource source) {
   // Record dual source.
   if (sources_.size() ==
       static_cast<size_t>(AutoplaySource::kNumberOfSources)) {
-    if (element_->IsHTMLVideoElement()) {
+    if (IsA<HTMLVideoElement>(element_.Get())) {
       video_histogram.Count(static_cast<int>(AutoplaySource::kDualSource));
       if (element_->muted())
         muted_video_histogram.Count(
@@ -99,14 +96,6 @@ void AutoplayUmaHelper::OnAutoplayInitiated(AutoplaySource source) {
     } else {
       audio_histogram.Count(static_cast<int>(AutoplaySource::kDualSource));
     }
-  }
-
-  // Record if it will be blocked by the Autoplay setting.
-  if (element_->IsHTMLVideoElement() && element_->muted() &&
-      AutoplayPolicy::DocumentShouldAutoplayMutedVideos(
-          element_->GetDocument()) &&
-      !element_->GetAutoplayPolicy().IsAutoplayAllowedPerSettings()) {
-    blocked_muted_video_histogram.Count(kAutoplayBlockedReasonSetting);
   }
 
   element_->addEventListener(event_type_names::kPlaying, this, false);
@@ -234,7 +223,7 @@ void AutoplayUmaHelper::HandleContextDestroyed() {
 
 void AutoplayUmaHelper::MaybeStartRecordingMutedVideoPlayMethodBecomeVisible() {
   if (!sources_.Contains(AutoplaySource::kMethod) ||
-      !element_->IsHTMLVideoElement() || !element_->muted())
+      !IsA<HTMLVideoElement>(element_.Get()) || !element_->muted())
     return;
 
   muted_video_play_method_intersection_observer_ = IntersectionObserver::Create(
@@ -262,7 +251,7 @@ void AutoplayUmaHelper::MaybeStopRecordingMutedVideoPlayMethodBecomeVisible(
 }
 
 void AutoplayUmaHelper::MaybeStartRecordingMutedVideoOffscreenDuration() {
-  if (!element_->IsHTMLVideoElement() || !element_->muted() ||
+  if (!IsA<HTMLVideoElement>(element_.Get()) || !element_->muted() ||
       !sources_.Contains(AutoplaySource::kMethod))
     return;
 

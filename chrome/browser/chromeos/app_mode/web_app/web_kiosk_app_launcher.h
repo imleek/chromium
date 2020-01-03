@@ -36,6 +36,7 @@ class WebKioskAppLauncher {
     virtual void InitializeNetwork() = 0;
     virtual void OnAppStartedInstalling() = 0;
     virtual void OnAppPrepared() = 0;
+    virtual void OnAppInstallFailed() = 0;
     virtual void OnAppLaunched() = 0;
     virtual void OnAppLaunchFailed() = 0;
 
@@ -44,14 +45,16 @@ class WebKioskAppLauncher {
   };
 
   WebKioskAppLauncher(Profile* profile, Delegate* delegate);
-  ~WebKioskAppLauncher();
+  virtual ~WebKioskAppLauncher();
 
   // Prepares the environment for an app launch.
-  void Initialize(const AccountId& account_id);
-  // Continues the installation when the network i
-  void ContinueWithNetworkReady();
-  // Launches the app after the initialization is done.
-  void LaunchApp();
+  virtual void Initialize(const AccountId& account_id);
+  // Continues the installation when the network is ready.
+  virtual void ContinueWithNetworkReady();
+  // Launches the app after the app is prepared.
+  virtual void LaunchApp();
+  // Stops current installation.
+  virtual void CancelCurrentInstallation();
 
  private:
   void OnAppDataObtained(std::unique_ptr<WebApplicationInfo> app_info);

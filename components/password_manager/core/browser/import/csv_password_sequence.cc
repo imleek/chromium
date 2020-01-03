@@ -21,21 +21,6 @@ namespace password_manager {
 
 namespace {
 
-// Terminal returns the end iterator for a given ColumnMap and CSV data.
-CSVPasswordIterator Terminal(const CSVPassword::ColumnMap& map,
-                             base::StringPiece csv) {
-  // The terminal iterator needs to compare equal to the result of begin()
-  // incremented enough times to reach the end of the CSV. Iterator equivalence,
-  // governed by CSVPasswordIterator::operator==, requires that the StringPieces
-  // associated with the iterators have the same data pointer, instead of just
-  // checking the equivalence of the two StringPieces. This is explained in the
-  // comment for CSVPasswordIterator::operator==. Therefore the iterator
-  // constructed here needs to be associated with a StringPiece pointing its
-  // data to csv.data() + csv.size() instead of just with the result of
-  // StringPiece's default constructor.
-  return CSVPasswordIterator(map, csv.substr(csv.size()));
-}
-
 // Given a CSV column |name|, returns the matching CSVPassword::Label or nothing
 // if the column name is not recognised.
 base::Optional<CSVPassword::Label> NameToLabel(base::StringPiece name) {
@@ -99,16 +84,6 @@ CSVPasswordSequence::CSVPasswordSequence(std::string csv)
       return;
     }
   }
-
-  // Check the data rows.
-  CSVPasswordIterator end = Terminal(map_, csv_);
-  for (CSVPasswordIterator it(map_, data_rows_); it != end; ++it) {
-    CSVPassword::Status status = it->Parse(nullptr);
-    if (status != CSVPassword::Status::kOK) {
-      result_ = status;
-      return;
-    }
-  }
 }
 
 CSVPasswordSequence::CSVPasswordSequence(CSVPasswordSequence&&) = default;
@@ -124,7 +99,7 @@ CSVPasswordIterator CSVPasswordSequence::begin() const {
 }
 
 CSVPasswordIterator CSVPasswordSequence::end() const {
-  return Terminal(map_, csv_);
+  return CSVPasswordIterator(map_, base::StringPiece());
 }
 
 }  // namespace password_manager

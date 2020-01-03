@@ -5,6 +5,7 @@
 import("//build/util/branding.gni")
 import("//components/vector_icons/vector_icons.gni")
 import("//device/vr/buildflags/buildflags.gni")
+import("//ui/webui/webui_features.gni")
 
 aggregate_vector_icons("chrome_vector_icons") {
   icon_directory = "."
@@ -16,13 +17,12 @@ aggregate_vector_icons("chrome_vector_icons") {
     "add.icon",
     "ads.icon",
     "apps.icon",
-    "autofill/webauthn_offer_dialog_header.icon",
-    "autofill/webauthn_offer_dialog_header_dark.icon",
+    "autofill/webauthn_dialog_header.icon",
+    "autofill/webauthn_dialog_header_dark.icon",
     "blocked_badge.icon",
     "blocked_redirect.icon",
     "bluetooth.icon",
     "browser_tools.icon",
-    "browser_tools_animated.icon",
     "browser_tools_error.icon",
     "browser_tools_update.icon",
     "caret_down.icon",
@@ -170,10 +170,16 @@ aggregate_vector_icons("chrome_vector_icons") {
 
   if (is_win) {
     icons += [
+      "back_arrow_windows.icon",
+      "back_arrow_windows_touch.icon",
       "inactive_toast_arrow.icon",
       "inactive_toast_close.icon",
       "inactive_toast_logo.icon",
+      "navigate_stop_windows.icon",
+      "navigate_stop_windows_touch.icon",
       "open_in_phone.icon",
+      "reload_windows.icon",
+      "reload_windows_touch.icon",
     ]
   }
 
@@ -206,6 +212,10 @@ aggregate_vector_icons("chrome_vector_icons") {
   if (enable_vr && !is_android) {
     # Used on desktop VR headsets and Linux unit tests.
     icons += [ "open_in_browser.icon" ]
+  }
+
+  if (enable_webui_tab_strip) {
+    icons += [ "new_tab_toolbar_button.icon" ]
   }
 
   if (is_chrome_branded) {

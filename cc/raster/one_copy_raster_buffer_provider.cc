@@ -159,7 +159,10 @@ std::unique_ptr<RasterBuffer>
 OneCopyRasterBufferProvider::AcquireBufferForRaster(
     const ResourcePool::InUsePoolResource& resource,
     uint64_t resource_content_id,
-    uint64_t previous_content_id) {
+    uint64_t previous_content_id,
+    bool depends_on_at_raster_decodes,
+    bool depends_on_hardware_accelerated_jpeg_candidates,
+    bool depends_on_hardware_accelerated_webp_candidates) {
   if (!resource.gpu_backing()) {
     auto backing = std::make_unique<OneCopyGpuBacking>();
     backing->worker_context_provider = worker_context_provider_;
@@ -377,21 +380,20 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
   }
 
   if (mailbox->IsZero()) {
-    uint32_t flags =
+    uint32_t usage =
         gpu::SHARED_IMAGE_USAGE_DISPLAY | gpu::SHARED_IMAGE_USAGE_RASTER;
     if (mailbox_texture_is_overlay_candidate)
-      flags |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
+      usage |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
     *mailbox = sii->CreateSharedImage(resource_format, resource_size,
-                                      color_space, flags);
+                                      color_space, usage);
   }
 
   // Create staging shared image.
   if (staging_buffer->mailbox.IsZero()) {
-    uint32_t flags =
-        gpu::SHARED_IMAGE_USAGE_DISPLAY | gpu::SHARED_IMAGE_USAGE_RASTER;
+    const uint32_t usage = gpu::SHARED_IMAGE_USAGE_RASTER;
     staging_buffer->mailbox =
         sii->CreateSharedImage(staging_buffer->gpu_memory_buffer.get(),
-                               gpu_memory_buffer_manager_, color_space, flags);
+                               gpu_memory_buffer_manager_, color_space, usage);
   } else {
     sii->UpdateSharedImage(staging_buffer->sync_token, staging_buffer->mailbox);
   }
@@ -450,7 +452,8 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
 
     ri->CopySubTexture(staging_buffer->mailbox, *mailbox,
                        mailbox_texture_target, 0, y, 0, y, rect_to_copy.width(),
-                       rows_to_copy);
+                       rows_to_copy, false /* unpack_flip_y */,
+                       false /* unpack_premultiply_alpha */);
     y += rows_to_copy;
 
     // Increment |bytes_scheduled_since_last_flush_| by the amount of memory

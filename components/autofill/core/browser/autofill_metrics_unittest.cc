@@ -6705,7 +6705,7 @@ TEST_F(AutofillMetricsTest, AddressFormEventsAreSegmented) {
 // Test that we log that Profile Autofill is enabled when filling a form.
 TEST_F(AutofillMetricsTest, AutofillProfileIsEnabledAtPageLoad) {
   base::HistogramTester histogram_tester;
-  autofill_manager_->SetProfileAutofillEnabled(true);
+  autofill_manager_->SetAutofillProfileEnabled(true);
   autofill_manager_->OnFormsSeen(std::vector<FormData>(), TimeTicks());
   histogram_tester.ExpectUniqueSample("Autofill.Address.IsEnabled.PageLoad",
                                       true, 1);
@@ -6714,7 +6714,7 @@ TEST_F(AutofillMetricsTest, AutofillProfileIsEnabledAtPageLoad) {
 // Test that we log that Profile Autofill is disabled when filling a form.
 TEST_F(AutofillMetricsTest, AutofillProfileIsDisabledAtPageLoad) {
   base::HistogramTester histogram_tester;
-  autofill_manager_->SetProfileAutofillEnabled(false);
+  autofill_manager_->SetAutofillProfileEnabled(false);
   autofill_manager_->OnFormsSeen(std::vector<FormData>(), TimeTicks());
   histogram_tester.ExpectUniqueSample("Autofill.Address.IsEnabled.PageLoad",
                                       false, 1);
@@ -6723,7 +6723,7 @@ TEST_F(AutofillMetricsTest, AutofillProfileIsDisabledAtPageLoad) {
 // Test that we log that CreditCard Autofill is enabled when filling a form.
 TEST_F(AutofillMetricsTest, AutofillCreditCardIsEnabledAtPageLoad) {
   base::HistogramTester histogram_tester;
-  autofill_manager_->SetCreditCardAutofillEnabled(true);
+  autofill_manager_->SetAutofillCreditCardEnabled(true);
   autofill_manager_->OnFormsSeen(std::vector<FormData>(), TimeTicks());
   histogram_tester.ExpectUniqueSample("Autofill.CreditCard.IsEnabled.PageLoad",
                                       true, 1);
@@ -6732,7 +6732,7 @@ TEST_F(AutofillMetricsTest, AutofillCreditCardIsEnabledAtPageLoad) {
 // Test that we log that CreditCard Autofill is disabled when filling a form.
 TEST_F(AutofillMetricsTest, AutofillCreditCardIsDisabledAtPageLoad) {
   base::HistogramTester histogram_tester;
-  autofill_manager_->SetCreditCardAutofillEnabled(false);
+  autofill_manager_->SetAutofillCreditCardEnabled(false);
   autofill_manager_->OnFormsSeen(std::vector<FormData>(), TimeTicks());
   histogram_tester.ExpectUniqueSample("Autofill.CreditCard.IsEnabled.PageLoad",
                                       false, 1);
@@ -8493,13 +8493,9 @@ TEST_F(AutofillMetricsTest, RecordCardUploadDecisionMetric_NoUkmService) {
 }
 
 // Test the ukm recorded when Suggestion is shown.
-// Flaky on Win.  http://crbug.com/876954
-#if defined(OS_WIN)
-#define MAYBE_AutofillSuggestionShownTest DISABLED_AutofillSuggestionShownTest
-#else
-#define MAYBE_AutofillSuggestionShownTest AutofillSuggestionShownTest
-#endif
-TEST_F(AutofillMetricsTest, MAYBE_AutofillSuggestionShownTest) {
+//
+// Flaky on all platforms. TODO(crbug.com/876897): Fix it.
+TEST_F(AutofillMetricsTest, DISABLED_AutofillSuggestionShownTest) {
   RecreateCreditCards(true /* include_local_credit_card */,
                       false /* include_masked_server_credit_card */,
                       false /* include_full_server_credit_card */);
@@ -9117,7 +9113,8 @@ TEST_F(AutofillMetricsTest, FormEventMetrics_BySyncState) {
     base::HistogramTester histogram_tester;
     AddressFormEventLogger logger(
         /*is_in_main_frame=*/true,
-        /*form_interactions_ukm_logger=*/nullptr);
+        /*form_interactions_ukm_logger=*/nullptr,
+        /*client=*/nullptr);
     logger.OnDidSeeFillableDynamicForm(AutofillSyncSigninState::kSignedOut,
                                        form_structure);
     histogram_tester.ExpectBucketCount(
@@ -9128,7 +9125,8 @@ TEST_F(AutofillMetricsTest, FormEventMetrics_BySyncState) {
     base::HistogramTester histogram_tester;
     AddressFormEventLogger logger(
         /*is_in_main_frame=*/true,
-        /*form_interactions_ukm_logger=*/nullptr);
+        /*form_interactions_ukm_logger=*/nullptr,
+        /*client=*/nullptr);
     logger.OnDidRefill(AutofillSyncSigninState::kSignedIn, form_structure);
     histogram_tester.ExpectBucketCount(
         "Autofill.FormEvents.Address.WithNoData.SignedIn",

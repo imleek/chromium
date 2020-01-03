@@ -21,7 +21,6 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -41,6 +40,7 @@
 #include "chrome/browser/previews/previews_lite_page_redirect_url_loader_interceptor.h"
 #include "chrome/browser/previews/previews_service.h"
 #include "chrome/browser/previews/previews_service_factory.h"
+#include "chrome/browser/previews/previews_test_util.h"
 #include "chrome/browser/previews/previews_ui_tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -107,29 +107,6 @@ const char kPreviewsHost[] = "litepages.googlezip.net";
 // A host that is blacklisted for Lite Page Redirect previews and won't trigger
 // on it.
 const char kBlacklistedHost[] = "blacklisted.com";
-
-// Retries fetching |histogram_name| until it contains at least |count| samples.
-void RetryForHistogramUntilCountReached(base::HistogramTester* histogram_tester,
-                                        const std::string& histogram_name,
-                                        size_t count) {
-  while (true) {
-    base::ThreadPoolInstance::Get()->FlushForTesting();
-    base::RunLoop().RunUntilIdle();
-
-    content::FetchHistogramsFromChildProcesses();
-    SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
-
-    const std::vector<base::Bucket> buckets =
-        histogram_tester->GetAllSamples(histogram_name);
-    size_t total_count = 0;
-    for (const auto& bucket : buckets) {
-      total_count += bucket.count;
-    }
-    if (total_count >= count) {
-      break;
-    }
-  }
-}
 
 }  // namespace
 
@@ -944,18 +921,9 @@ class PreviewsLitePageRedirectServerBrowserTest
 
 // Param is true if DRP holdback should be enabled.
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     PreviewsLitePageRedirectServerBrowserTest,
     ::testing::Bool());
-
-// Previews InfoBar (which these tests trigger) does not work on Mac.
-// See https://crbug.com/782322 for detail.
-// Also occasional flakes on win7 (https://crbug.com/789542).
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
-#define DISABLE_ON_WIN_MAC_CHROMEOS(x) DISABLED_##x
-#else
-#define DISABLE_ON_WIN_MAC_CHROMEOS(x) x
-#endif
 
 IN_PROC_BROWSER_TEST_P(
     PreviewsLitePageRedirectServerBrowserTest,
@@ -1669,7 +1637,7 @@ class PreviewsLitePageRedirectServerTimeoutBrowserTest
 
 // Param is true if DRP holdback should be enabled.
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     PreviewsLitePageRedirectServerTimeoutBrowserTest,
     ::testing::Bool());
 
@@ -1699,12 +1667,10 @@ IN_PROC_BROWSER_TEST_P(PreviewsLitePageRedirectServerTimeoutBrowserTest,
   }
 }
 
-// Disabled previously on WIN/MAC/CHROMEOS, flakiness still occurred on various
-// linux bots, so this test is now fully disabled due to that flakiness. See
-// https://crbug.com/1024824.
 IN_PROC_BROWSER_TEST_P(
     PreviewsLitePageRedirectServerTimeoutBrowserTest,
-    DISABLED_LitePagePreviewsOriginProbe_ExternalFailureReported) {
+    DISABLE_ON_WIN_MAC_CHROMEOS(
+        LitePagePreviewsOriginProbe_ExternalFailureReported)) {
   set_origin_probe_success(true);
 
   base::HistogramTester histogram_tester;
@@ -1716,7 +1682,9 @@ IN_PROC_BROWSER_TEST_P(
       "Previews.ServerLitePage.ServerResponse",
       previews::LitePageRedirectServerResponse::kTimeout, 1);
 
-  WaitForServerProbe();
+  RetryForHistogramUntilCountReached(
+      &histogram_tester,
+      "Availability.Prober.DidSucceed.AfterReportedFailure.Litepages", 1);
 
   histogram_tester.ExpectUniqueSample(
       "Availability.Prober.DidSucceed.AfterReportedFailure.Litepages", true, 1);
@@ -1737,7 +1705,7 @@ class PreviewsLitePageRedirectServerBadServerBrowserTest
 
 // Param is true if DRP holdback should be enabled.
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     PreviewsLitePageRedirectServerBadServerBrowserTest,
     ::testing::Bool());
 
@@ -1783,7 +1751,7 @@ class PreviewsLitePageRedirectServerDataSaverBrowserTest
 
 // Param is true if DRP holdback should be enabled.
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     PreviewsLitePageRedirectServerDataSaverBrowserTest,
     ::testing::Bool());
 
@@ -1820,7 +1788,7 @@ class PreviewsLitePageRedirectServerNoDataSaverHeaderBrowserTest
 
 // Param is true if DRP holdback should be enabled.
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     PreviewsLitePageRedirectServerNoDataSaverHeaderBrowserTest,
     ::testing::Bool());
 
@@ -1861,7 +1829,7 @@ class PreviewsLitePageRedirectNotificationDSEnabledBrowserTest
 
 // Pecond param is true if DRP holdback should be enabled.
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     PreviewsLitePageRedirectNotificationDSEnabledBrowserTest,
     ::testing::Bool());
 
@@ -1921,7 +1889,7 @@ class PreviewsLitePageRedirectDSDisabledBrowserTest
 
 // Param is true if DRP holdback should be enabled.
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     PreviewsLitePageRedirectDSDisabledBrowserTest,
     ::testing::Bool());
 
@@ -1953,7 +1921,7 @@ class PreviewsLitePageRedirectControlBrowserTest
 
 // Param is true if DRP holdback should be enabled.
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     PreviewsLitePageRedirectControlBrowserTest,
     ::testing::Bool());
 
@@ -2042,7 +2010,7 @@ IN_PROC_BROWSER_TEST_P(
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     PreviewsLitePageRedirectServerNetworkIsolationBrowserTest,
     ::testing::Values(NetworkIsolationKeyMode::kNone,
                       NetworkIsolationKeyMode::kTopFrameOrigin,
@@ -2085,7 +2053,7 @@ class PreviewsLitePageRedirectAndPageHintsBrowserTest
 
 // Param is true if DRP holdback should be enabled.
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     PreviewsLitePageRedirectAndPageHintsBrowserTest,
     ::testing::Bool());
 
@@ -2327,22 +2295,22 @@ class CoinFlipHoldbackExperimentBrowserTestWithCoinFlipHoldbackDisabled
 
 // Param is true if DRP holdback should be enabled.
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     CoinFlipHoldbackExperimentBrowserTest,
     ::testing::Bool());
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     CoinFlipHoldbackExperimentBrowserTestWithRandomNavigationCoinFlip,
     ::testing::Bool());
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     CoinFlipHoldbackExperimentBrowserTestWithoutRandomNavigationCoinFlip,
     ::testing::Bool());
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     CoinFlipHoldbackExperimentBrowserTestWithCoinFlipHoldbackDisabled,
     ::testing::Bool());
 

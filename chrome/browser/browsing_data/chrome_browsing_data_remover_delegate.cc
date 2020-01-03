@@ -53,7 +53,7 @@
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/permissions/adaptive_notification_permission_ui_selector.h"
+#include "chrome/browser/permissions/adaptive_quiet_notification_permission_ui_enabler.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
@@ -714,6 +714,10 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
         ContentSettingsType::USB_CHOOSER_DATA, delete_begin_, delete_end_,
         HostContentSettingsMap::PatternSourcePredicate());
 
+    host_content_settings_map_->ClearSettingsForOneTypeWithPredicate(
+        ContentSettingsType::BLUETOOTH_CHOOSER_DATA, delete_begin_, delete_end_,
+        HostContentSettingsMap::PatternSourcePredicate());
+
     auto* handler_registry =
         ProtocolHandlerRegistryFactory::GetForBrowserContext(profile_);
     if (handler_registry)
@@ -781,9 +785,9 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
                                                                   delete_end_);
     }
 
-    auto* permission_ui_selector =
-        AdaptiveNotificationPermissionUiSelector::GetForProfile(profile_);
-    permission_ui_selector->ClearInteractionHistory(delete_begin_, delete_end_);
+    auto* permission_ui_enabler =
+        AdaptiveQuietNotificationPermissionUiEnabler::GetForProfile(profile_);
+    permission_ui_enabler->ClearInteractionHistory(delete_begin_, delete_end_);
   }
 
   if ((remove_mask & DATA_TYPE_SITE_USAGE_DATA) ||
@@ -915,13 +919,23 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
   //////////////////////////////////////////////////////////////////////////////
   // DATA_TYPE_CACHE
   if (remove_mask & content::BrowsingDataRemover::DATA_TYPE_CACHE) {
-    // Tell the renderers to clear their cache.
+    // Tell the renderers associated with |profile_| to clear their cache.
     // TODO(crbug.com/668114): Renderer cache is a platform concept, and should
     // live in BrowsingDataRemoverImpl. However, WebCacheManager itself is
     // a component with dependency on content/browser. Untangle these
     // dependencies or reimplement the relevant part of WebCacheManager
     // in content/browser.
-    web_cache::WebCacheManager::GetInstance()->ClearCache();
+    // TODO(crbug.com/1022757): add a test for this.
+    for (content::RenderProcessHost::iterator iter =
+             content::RenderProcessHost::AllHostsIterator();
+         !iter.IsAtEnd(); iter.Advance()) {
+      content::RenderProcessHost* render_process_host = iter.GetCurrentValue();
+      if (render_process_host->GetBrowserContext() == profile_ &&
+          render_process_host->IsInitializedAndNotDead()) {
+        web_cache::WebCacheManager::GetInstance()->ClearCacheForProcess(
+            render_process_host->GetID());
+      }
+    }
 
 #if BUILDFLAG(ENABLE_NACL)
     base::PostTask(

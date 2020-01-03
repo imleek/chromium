@@ -416,11 +416,11 @@ class HostedAppTest : public extensions::ExtensionBrowserTest,
   }
 
   web_app::AppId InstallShortcutAppForCurrentUrl() {
-    chrome::SetAutoAcceptBookmarkAppDialogForTesting(true);
+    chrome::SetAutoAcceptBookmarkAppDialogForTesting(true, false);
     web_app::WebAppInstallObserver observer(profile());
     CHECK(chrome::ExecuteCommand(browser(), IDC_CREATE_SHORTCUT));
     web_app::AppId app_id = observer.AwaitNextInstall();
-    chrome::SetAutoAcceptBookmarkAppDialogForTesting(false);
+    chrome::SetAutoAcceptBookmarkAppDialogForTesting(false, false);
     return app_id;
   }
 
@@ -703,8 +703,16 @@ IN_PROC_BROWSER_TEST_P(HostedAppTest,
   NavigateAndCheckForToolbar(app_browser_, app_url, true);
 }
 
+// Flaky, mostly on Windows: http://crbug.com/1032319
+#if defined(OS_WIN)
+#define MAYBE_ShouldShowCustomTabBarForHTTPAppHTTPSUrl \
+  DISABLED_ShouldShowCustomTabBarForHTTPAppHTTPSUrl
+#else
+#define MAYBE_ShouldShowCustomTabBarForHTTPAppHTTPSUrl \
+  ShouldShowCustomTabBarForHTTPAppHTTPSUrl
+#endif
 IN_PROC_BROWSER_TEST_P(HostedAppTest,
-                       ShouldShowCustomTabBarForHTTPAppHTTPSUrl) {
+                       MAYBE_ShouldShowCustomTabBarForHTTPAppHTTPSUrl) {
   ASSERT_TRUE(https_server()->Start());
 
   const GURL app_url = https_server()->GetURL("app.com", "/simple.html");
@@ -973,7 +981,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, PWASizeIsCorrectlyRestored) {
   EXPECT_TRUE(web_app::AppBrowserController::IsForWebAppBrowser(app_browser_));
   NavigateToURLAndWait(app_browser_, GetSecureAppURL());
 
-  gfx::Rect bounds = gfx::Rect(10, 10, 500, 500);
+  gfx::Rect bounds = gfx::Rect(50, 50, 500, 500);
   app_browser_->window()->SetBounds(bounds);
   app_browser_->window()->Close();
 
@@ -991,7 +999,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
   EXPECT_TRUE(web_app::AppBrowserController::IsForWebAppBrowser(app_browser_));
   NavigateToURLAndWait(app_browser_, GetSecureAppURL());
 
-  gfx::Rect bounds = gfx::Rect(10, 10, 500, 500);
+  gfx::Rect bounds = gfx::Rect(50, 50, 500, 500);
   app_browser_->window()->SetBounds(bounds);
   app_browser_->window()->Close();
 
@@ -999,6 +1007,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
 
   sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(profile());
+  ASSERT_GT(service->entries().size(), 0U);
   service->RestoreMostRecentEntry(nullptr);
 
   content::WebContents* restored_web_contents =
@@ -1389,7 +1398,13 @@ IN_PROC_BROWSER_TEST_P(SharedPWATest, InstallToShelfContainsAppName) {
 IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, OverscrollEnabled) {
   ASSERT_TRUE(https_server()->Start());
   InstallSecurePWA();
+
+  // Overscroll is only enabled on Aura platforms currently.
+#if defined(USE_AURA)
   EXPECT_TRUE(app_browser_->CanOverscrollContent());
+#else
+  EXPECT_FALSE(app_browser_->CanOverscrollContent());
+#endif
 }
 
 // Tests that mixed content is not loaded inside PWA windows.
@@ -2178,6 +2193,13 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest, MAYBE_FromOutsideHostedApp) {
   }
 }
 
+// Tests that a packaged app is not considered an installed bookmark app.
+IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest,
+                       AppRegistrarExcludesPackaged) {
+  SetupApp("https_app");
+  EXPECT_FALSE(registrar().IsInstalled(app_->id()));
+}
+
 // Helper class that sets up two isolated origins, where one is a subdomain of
 // the other: https://isolated.com and https://very.isolated.com.
 class HostedAppIsolatedOriginTest : public HostedAppProcessModelTest {
@@ -2751,38 +2773,38 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
   NavigateAndCheckForToolbar(app_browser_, popup_url, false);
 }
 
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+INSTANTIATE_TEST_SUITE_P(All,
                          HostedAppTest,
                          ::testing::Values(AppType::HOSTED_APP,
                                            AppType::BOOKMARK_APP));
 
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+INSTANTIATE_TEST_SUITE_P(All,
                          SharedAppTest,
                          ::testing::Values(AppType::HOSTED_APP,
                                            AppType::BOOKMARK_APP,
                                            AppType::WEB_APP));
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     HostedAppPWAOnlyTest,
     ::testing::Values(AppType::BOOKMARK_APP));
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     SharedPWATest,
     ::testing::Values(AppType::BOOKMARK_APP, AppType::WEB_APP));
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     HostedAppProcessModelTest,
     ::testing::Values(AppType::HOSTED_APP));
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     HostedAppIsolatedOriginTest,
     ::testing::Values(AppType::HOSTED_APP));
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     HostedAppSitePerProcessTest,
     ::testing::Values(AppType::HOSTED_APP));

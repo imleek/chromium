@@ -2,25 +2,27 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Polymer, html, afterNextRender} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
+import './item.js';
+import './shared_style.js';
+import './strings.m.js';
+
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {isMac} from 'chrome://resources/js/cr.m.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
+import {ListPropertyUpdateBehavior} from 'chrome://resources/js/list_property_update_behavior.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
 import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
-import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
+import {afterNextRender, html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 import {deselectItems, selectAll, selectItem, updateAnchor} from './actions.js';
 import {BrowserProxy} from './browser_proxy.js';
 import {CommandManager} from './command_manager.js';
 import {MenuSource} from './constants.js';
-import './item.js';
-import './shared_style.js';
 import {StoreClient} from './store_client.js';
-import './strings.m.js';
 import {BookmarksPageState} from './types.js';
 import {canReorderChildren, getDisplayedList} from './util.js';
-import {ListPropertyUpdateBehavior} from 'chrome://resources/js/list_property_update_behavior.m.js';
 
 Polymer({
   is: 'bookmarks-list',
@@ -128,10 +130,11 @@ Polymer({
     if (this.matches(':focus-within')) {
       if (this.selectedItems_.size > 0) {
         const selectedId = Array.from(this.selectedItems_)[0];
-        skipFocus = newValue.some(id => id == selectedId);
-        selectIndex = this.displayedList_.findIndex(({id}) => selectedId == id);
+        skipFocus = newValue.some(id => id === selectedId);
+        selectIndex =
+            this.displayedList_.findIndex(({id}) => selectedId === id);
       }
-      if (selectIndex == -1 && updatedList.length > 0) {
+      if (selectIndex === -1 && updatedList.length > 0) {
         selectIndex = 0;
       } else {
         selectIndex = Math.min(selectIndex, updatedList.length - 1);
@@ -180,8 +183,8 @@ Polymer({
   emptyListMessage_: function() {
     let emptyListMessage = 'noSearchResults';
     if (!this.searchTerm_) {
-      emptyListMessage = canReorderChildren(
-                             this.getState(), this.getState().selectedFolder) ?
+      emptyListMessage =
+          canReorderChildren(this.getState(), this.getState().selectedFolder) ?
           'emptyList' :
           'emptyUnmodifiableList';
     }
@@ -190,7 +193,7 @@ Polymer({
 
   /** @private */
   isEmptyList_: function() {
-    return this.displayedList_.length == 0;
+    return this.displayedList_.length === 0;
   },
 
   /** @private */
@@ -207,12 +210,12 @@ Polymer({
   },
 
   /**
-   * @param {Event} e
+   * @param {!CustomEvent<{source: !MenuSource}>} e
    * @private
    */
   onOpenCommandMenu_: function(e) {
     // If the item is not visible, scroll to it before rendering the menu.
-    if (e.source == MenuSource.ITEM) {
+    if (e.detail.source === MenuSource.ITEM) {
       this.scrollToId_(
           /** @type {BookmarksItemElement} */ (e.composedPath()[0]).itemId);
     }
@@ -229,21 +232,20 @@ Polymer({
     // This should only matter if an unrelated update to the bookmark model
     // happens with the perfect timing to end up in a tracked batch update.
     const toHighlight = /** @type {!Array<string>} */
-        (e.detail.filter((item) => this.displayedIds_.indexOf(item) != -1));
+        (e.detail.filter((item) => this.displayedIds_.indexOf(item) !== -1));
 
     if (toHighlight.length <= 0) {
       return;
     }
 
     const leadId = toHighlight[0];
-    this.dispatch(
-        selectAll(toHighlight, this.getState(), leadId));
+    this.dispatch(selectAll(toHighlight, this.getState(), leadId));
 
     // Allow iron-list time to render additions to the list.
     this.async(function() {
       this.scrollToId_(leadId);
       const leadIndex = this.displayedIds_.indexOf(leadId);
-      assert(leadIndex != -1);
+      assert(leadIndex !== -1);
       this.$.list.focusItem(leadIndex);
     });
   },
@@ -260,22 +262,22 @@ Polymer({
         this.getIndexForItemElement_(/** @type {HTMLElement} */ (e.target));
     const oldFocusedIndex = focusedIndex;
     const cursorModifier = isMac ? e.metaKey : e.ctrlKey;
-    if (e.key == 'ArrowUp') {
+    if (e.key === 'ArrowUp') {
       focusedIndex--;
       focusMoved = true;
-    } else if (e.key == 'ArrowDown') {
+    } else if (e.key === 'ArrowDown') {
       focusedIndex++;
       focusMoved = true;
       e.preventDefault();
-    } else if (e.key == 'Home') {
+    } else if (e.key === 'Home') {
       focusedIndex = 0;
       focusMoved = true;
-    } else if (e.key == 'End') {
+    } else if (e.key === 'End') {
       focusedIndex = list.items.length - 1;
       focusMoved = true;
-    } else if (e.key == ' ' && cursorModifier) {
-      this.dispatch(selectItem(
-          this.displayedIds_[focusedIndex], this.getState(), {
+    } else if (e.key === ' ' && cursorModifier) {
+      this.dispatch(
+          selectItem(this.displayedIds_[focusedIndex], this.getState(), {
             clear: false,
             range: false,
             toggle: true,
@@ -289,13 +291,11 @@ Polymer({
       list.focusItem(focusedIndex);
 
       if (cursorModifier && !e.shiftKey) {
-        this.dispatch(
-            updateAnchor(this.displayedIds_[focusedIndex]));
+        this.dispatch(updateAnchor(this.displayedIds_[focusedIndex]));
       } else {
         // If shift-selecting with no anchor, use the old focus index.
-        if (e.shiftKey && this.getState().selection.anchor == null) {
-          this.dispatch(updateAnchor(
-              this.displayedIds_[oldFocusedIndex]));
+        if (e.shiftKey && this.getState().selection.anchor === null) {
+          this.dispatch(updateAnchor(this.displayedIds_[oldFocusedIndex]));
         }
 
         // If the focus moved from something other than a Ctrl + move event,
@@ -312,8 +312,8 @@ Polymer({
     }
 
     // Prevent the iron-list from changing focus on enter.
-    if (e.key == 'Enter') {
-      if (e.composedPath()[0].tagName == 'CR-ICON-BUTTON') {
+    if (e.key === 'Enter') {
+      if (e.composedPath()[0].tagName === 'CR-ICON-BUTTON') {
         return;
       }
       if (e.composedPath()[0] instanceof HTMLButtonElement) {
@@ -344,5 +344,15 @@ Polymer({
       y: e.clientY,
       source: MenuSource.LIST,
     });
+  },
+
+  /**
+   * Returns a 1-based index for aria-rowindex.
+   * @param {number} index
+   * @return {number}
+   * @private
+   */
+  getAriaRowindex_: function(index) {
+    return index + 1;
   },
 });

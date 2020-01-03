@@ -20,6 +20,8 @@ namespace ash {
 
 namespace {
 constexpr int kAnimationDurationMs = 250;
+constexpr int kTrayWidth = kStatusAreaOverflowButtonSize.width();
+constexpr int kTrayHeight = kStatusAreaOverflowButtonSize.height();
 }  // namespace
 
 StatusAreaOverflowButtonTray::IconView::IconView()
@@ -33,11 +35,11 @@ StatusAreaOverflowButtonTray::IconView::IconView()
   layer()->SetFillsBoundsOpaquely(false);
 
   gfx::ImageSkia image = gfx::CreateVectorIcon(
-      kOverflowShelfLeftIcon, ShelfConfig::Get()->shelf_icon_color());
+      kOverflowShelfRightIcon, ShelfConfig::Get()->shelf_icon_color());
   SetImage(image);
 
-  const int vertical_padding = (kTrayItemSize - image.height()) / 2;
-  const int horizontal_padding = (kTrayItemSize - image.width()) / 2;
+  const int vertical_padding = (kTrayHeight - image.height()) / 2;
+  const int horizontal_padding = (kTrayWidth - image.width()) / 2;
   SetBorder(views::CreateEmptyBorder(
       gfx::Insets(vertical_padding, horizontal_padding)));
 
@@ -77,10 +79,10 @@ void StatusAreaOverflowButtonTray::IconView::UpdateRotation() {
   double progress = slide_animation_->GetCurrentValue();
 
   gfx::Transform transform;
-  double center = kTrayItemSize / 2.0;
-  transform.Translate(gfx::Vector2d(center, center));
+  gfx::Vector2d center(kTrayWidth / 2.0, kTrayHeight / 2.0);
+  transform.Translate(center);
   transform.RotateAboutZAxis(180.0 * progress);
-  transform.Translate(gfx::Vector2d(-center, -center));
+  transform.Translate(gfx::Vector2d(-center.x(), -center.y()));
 
   SetTransform(transform);
 }
@@ -94,6 +96,11 @@ StatusAreaOverflowButtonTray::~StatusAreaOverflowButtonTray() {}
 
 void StatusAreaOverflowButtonTray::ClickedOutsideBubble() {}
 
+void StatusAreaOverflowButtonTray::ResetStateToCollapsed() {
+  state_ = CLICK_TO_EXPAND;
+  icon_->ToggleState(state_);
+}
+
 base::string16 StatusAreaOverflowButtonTray::GetAccessibleNameForTray() {
   return l10n_util::GetStringUTF16(
       state_ == CLICK_TO_COLLAPSE ? IDS_ASH_STATUS_AREA_OVERFLOW_BUTTON_COLLAPSE
@@ -105,20 +112,27 @@ void StatusAreaOverflowButtonTray::HideBubbleWithView(
 
 void StatusAreaOverflowButtonTray::Initialize() {
   TrayBackgroundView::Initialize();
-
-  // TODO(tengs): Make this tray button visible when the device is in tablet
-  // mode and the status area width exceeds the maximum desirable width.
   SetVisiblePreferred(false);
 }
 
 bool StatusAreaOverflowButtonTray::PerformAction(const ui::Event& event) {
-  // TODO(tengs): Toggle the visibility of other trays based on the button state
-  // and the amount of available width in the shelf.
-
   state_ = state_ == CLICK_TO_COLLAPSE ? CLICK_TO_EXPAND : CLICK_TO_COLLAPSE;
   icon_->ToggleState(state_);
-
+  shelf()->GetStatusAreaWidget()->UpdateCollapseState();
   return false;
+}
+
+void StatusAreaOverflowButtonTray::SetVisiblePreferred(bool visible_preferred) {
+  // The visibility of the overflow tray button is completed controlled by the
+  // StatusAreaWidget, so we bypass all default visibility logic from
+  // TrayBackgroundView.
+  views::View::SetVisible(visible_preferred);
+}
+
+void StatusAreaOverflowButtonTray::UpdateAfterStatusAreaCollapseChange() {
+  // The visibility of the overflow tray button is completed controlled by the
+  // StatusAreaWidget, so we bypass all default visibility logic from
+  // TrayBackgroundView.
 }
 
 const char* StatusAreaOverflowButtonTray::GetClassName() const {

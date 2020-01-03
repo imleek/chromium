@@ -33,8 +33,10 @@
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
+#include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -48,7 +50,9 @@
 #include "net/http/http_util.h"
 #include "services/service_manager/sandbox/fuchsia/sandbox_policy_fuchsia.h"
 #include "third_party/widevine/cdm/widevine_cdm_common.h"
+#include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
+#include "ui/ozone/public/ozone_switches.h"
 
 namespace {
 
@@ -137,6 +141,47 @@ const base::Value& GetWebEngineConfig() {
   return config;
 }
 
+// Returns false if the config is present but has invalid contents.
+bool MaybeAddCommandLineArgsFromConfig(const base::Value& config,
+                                       base::CommandLine* command_line) {
+  const base::Value* args = config.FindDictKey("command-line-args");
+  if (!args)
+    return true;
+
+  static const base::StringPiece kAllowedArgs[] = {
+      switches::kEnableFeatures,
+      switches::kEnableFuchsiaAudioConsumer,
+      switches::kEnableLowEndDeviceMode,
+      switches::kForceGpuMemAvailableMb,
+      switches::kForceGpuMemDiscardableLimitMb,
+      switches::kMinHeightForGpuRasterTile,
+      switches::kRendererProcessLimit,
+  };
+
+  for (const auto& arg : args->DictItems()) {
+    if (!base::Contains(kAllowedArgs, arg.first)) {
+      LOG(ERROR) << "Unknown command-line arg: " << arg.first;
+      // TODO(https://crbug.com/1032439): Return false here once we are done
+      // experimenting with memory-related command-line options.
+      continue;
+    }
+    if (!arg.second.is_string()) {
+      LOG(ERROR) << "Config command-line arg must be a string: " << arg.first;
+      return false;
+    }
+    command_line->AppendSwitchNative(arg.first, arg.second.GetString());
+
+    // TODO(https://crbug.com/1023012): enable-low-end-device-mode currently
+    // fakes 512MB total physical memory, which triggers RGB4444 textures,
+    // which
+    // we don't yet support.
+    if (arg.first == switches::kEnableLowEndDeviceMode)
+      command_line->AppendSwitch(switches::kDisableRGBA4444Textures);
+  }
+
+  return true;
+}
+
 // Returns true if DRM is supported in current configuration. Currently we
 // assume that it is supported on ARM64, but not on x64.
 //
@@ -186,7 +231,7 @@ void ContextProviderImpl::Create(
   launch_options.process_name_suffix = ":context";
 
   service_manager::SandboxPolicyFuchsia sandbox_policy;
-  sandbox_policy.Initialize(service_manager::SANDBOX_TYPE_WEB_CONTEXT);
+  sandbox_policy.Initialize(service_manager::SandboxType::kWebContext);
   sandbox_policy.SetServiceDirectory(std::move(service_directory));
   sandbox_policy.UpdateLaunchOptionsForSandbox(&launch_options);
 
@@ -258,7 +303,6 @@ void ContextProviderImpl::Create(
 
   bool enable_vulkan = (features & fuchsia::web::ContextFeatureFlags::VULKAN) ==
                        fuchsia::web::ContextFeatureFlags::VULKAN;
-
   bool enable_widevine =
       (features & fuchsia::web::ContextFeatureFlags::WIDEVINE_CDM) ==
       fuchsia::web::ContextFeatureFlags::WIDEVINE_CDM;
@@ -280,9 +324,23 @@ void ContextProviderImpl::Create(
     return;
   }
 
-  if (enable_vulkan) {
-    DLOG(ERROR) << "Enabling Vulkan GPU acceleration.";
+  const bool is_headless =
+      (features & fuchsia::web::ContextFeatureFlags::HEADLESS) ==
+      fuchsia::web::ContextFeatureFlags::HEADLESS;
+  if (is_headless) {
+    launch_command.AppendSwitchNative(switches::kOzonePlatform,
+                                      switches::kHeadless);
+    launch_command.AppendSwitch(switches::kHeadless);
+  }
 
+  if (enable_vulkan) {
+    if (is_headless) {
+      LOG(ERROR) << "VULKAN and HEADLESS features cannot be used together.";
+      context_request.Close(ZX_ERR_INVALID_ARGS);
+      return;
+    }
+
+    DLOG(ERROR) << "Enabling Vulkan GPU acceleration.";
     // Vulkan requires use of SkiaRenderer, configured to a use Vulkan context.
     launch_command.AppendSwitch(switches::kUseVulkan);
     launch_command.AppendSwitchASCII(switches::kEnableFeatures,
@@ -305,7 +363,8 @@ void ContextProviderImpl::Create(
     launch_command.AppendSwitch(switches::kDisableSoftwareRasterizer);
   }
 
-  const base::Value& web_engine_config = GetWebEngineConfig();
+  const base::Value& web_engine_config =
+      config_for_test_.is_none() ? GetWebEngineConfig() : config_for_test_;
   bool allow_protected_graphics =
       web_engine_config.FindBoolPath("allow-protected-graphics")
           .value_or(false);
@@ -323,6 +382,9 @@ void ContextProviderImpl::Create(
             .value_or(false);
     if (force_protected_video_buffers) {
       launch_command.AppendSwitch(switches::kForceProtectedVideoOutputBuffers);
+      // TODO(crbug.com/1019212): We observed flicker and buffer issues when
+      // using accelerated canvas with protected memory.
+      launch_command.AppendSwitch(switches::kDisableAccelerated2dCanvas);
     }
   }
 
@@ -359,6 +421,11 @@ void ContextProviderImpl::Create(
     }
 
     launch_command.AppendSwitch(switches::kDisableSoftwareVideoDecoders);
+  }
+
+  if (!MaybeAddCommandLineArgsFromConfig(web_engine_config, &launch_command)) {
+    context_request.Close(ZX_ERR_INTERNAL);
+    return;
   }
 
   // Validate embedder-supplied product, and optional version, and pass it to

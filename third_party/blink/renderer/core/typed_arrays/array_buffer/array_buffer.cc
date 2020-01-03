@@ -30,36 +30,35 @@
 
 namespace blink {
 
-ArrayBuffer::ArrayBuffer(ArrayBufferContents& contents) : is_detached_(false) {
-  if (contents.IsShared())
-    contents.ShareWith(contents_);
-  else
-    contents.Transfer(contents_);
-}
-
 bool ArrayBuffer::Transfer(ArrayBufferContents& result) {
   DCHECK(!IsShared());
   scoped_refptr<ArrayBuffer> keep_alive(this);
 
-  if (!contents_.Data()) {
+  if (is_detached_) {
     result.Detach();
     return false;
   }
 
+  if (!contents_.Data()) {
+    // We transfer an empty ArrayBuffer, we can just allocate an empty content.
+    result = ArrayBufferContents(contents_.BackingStore());
+    return true;
+  }
+
   bool all_views_are_detachable = true;
-  for (auto* view : views_) {
-    if (!view->IsDetachable()) {
+  for (ArrayBufferView* i = first_view_; i; i = i->next_view_) {
+    if (!i->IsDetachable())
       all_views_are_detachable = false;
-    }
   }
 
   if (all_views_are_detachable) {
     contents_.Transfer(result);
 
-    for (auto* view : views_) {
-      view->Detach();
+    while (first_view_) {
+      ArrayBufferView* current = first_view_;
+      RemoveView(current);
+      current->Detach();
     }
-    views_.clear();
 
     is_detached_ = true;
   } else {
@@ -80,7 +79,7 @@ bool ArrayBuffer::ShareContentsWith(ArrayBufferContents& result) {
   DCHECK(IsShared());
   scoped_refptr<ArrayBuffer> keep_alive(this);
 
-  if (!contents_.DataShared()) {
+  if (!contents_.BackingStore()) {
     result.Detach();
     return false;
   }
@@ -93,7 +92,7 @@ bool ArrayBuffer::ShareNonSharedForInternalUse(ArrayBufferContents& result) {
   DCHECK(!IsShared());
   scoped_refptr<ArrayBuffer> keep_alive(this);
 
-  if (!contents_.Data()) {
+  if (!contents_.BackingStore()) {
     result.Detach();
     return false;
   }
@@ -103,12 +102,23 @@ bool ArrayBuffer::ShareNonSharedForInternalUse(ArrayBufferContents& result) {
 }
 
 void ArrayBuffer::AddView(ArrayBufferView* view) {
-  views_.insert(view);
+  view->buffer_ = this;
+  view->prev_view_ = nullptr;
+  view->next_view_ = first_view_;
+  if (first_view_)
+    first_view_->prev_view_ = view;
+  first_view_ = view;
 }
 
 void ArrayBuffer::RemoveView(ArrayBufferView* view) {
-  DCHECK(views_.Contains(view));
-  views_.erase(view);
+  DCHECK_EQ(this, view->buffer_.get());
+  if (view->next_view_)
+    view->next_view_->prev_view_ = view->prev_view_;
+  if (view->prev_view_)
+    view->prev_view_->next_view_ = view->next_view_;
+  if (first_view_ == view)
+    first_view_ = view->next_view_;
+  view->prev_view_ = view->next_view_ = nullptr;
 }
 
 }  // namespace blink

@@ -4,9 +4,9 @@
     found in the LICENSE file. -->
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/omnibox_answer"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:gravity="center"
     android:orientation="vertical"
     android:minHeight="@dimen/omnibox_suggestion_height"
     android:paddingVertical="10dp">
@@ -26,6 +26,7 @@
         android:layout_height="wrap_content"
         android:textAppearance="@style/TextAppearance.BlackBody"
         android:maxLines="1"
+        android:visibility="gone"
         android:ellipsize="end"
         android:textAlignment="viewStart" />
 

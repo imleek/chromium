@@ -164,6 +164,7 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   DocumentLoader* CreateDocumentLoader(
       LocalFrame*,
       WebNavigationType,
+      base::Optional<ContentSecurityPolicy*>,
       std::unique_ptr<WebNavigationParams> navigation_params,
       std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) override;
 
@@ -219,17 +220,12 @@ class LocalFrameClientImpl final : public LocalFrameClient {
 
   unsigned BackForwardLength() override;
 
-  void SuddenTerminationDisablerChanged(bool present,
-                                        SuddenTerminationDisablerType) override;
-
   BlameContext* GetFrameBlameContext() override;
 
   KURL OverrideFlashEmbedWithHTML(const KURL&) override;
 
   void NotifyUserActivation(bool need_browser_verification) override;
-  void ConsumeUserActivation() override;
-
-  void SetHasReceivedUserGestureBeforeNavigation(bool value) override;
+  void ConsumeTransientUserActivation() override;
 
   void AbortClientNavigation() override;
 
@@ -293,7 +289,8 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   void TransferUserActivationFrom(LocalFrame* source_frame) override;
 
   void UpdateSubresourceFactory(
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo> info) override;
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> pending_factory)
+      override;
 
  private:
   bool IsLocalFrameClientImpl() const override { return true; }

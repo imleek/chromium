@@ -46,6 +46,7 @@
 #include "chrome/browser/notifications/notifier_state_tracker_factory.h"
 #include "chrome/browser/ntp_snippets/content_suggestions_service_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
+#include "chrome/browser/permissions/adaptive_quiet_notification_permission_ui_enabler.h"
 #include "chrome/browser/plugins/plugin_prefs_factory.h"
 #include "chrome/browser/policy/cloud/user_cloud_policy_invalidator_factory.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
@@ -164,10 +165,6 @@
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
 #endif
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-#include "chrome/browser/sync/sync_clipboard_service_factory.h"
-#endif
-
 namespace chrome {
 
 void AddProfilesExtraParts(ChromeBrowserMainParts* main_parts) {
@@ -208,14 +205,13 @@ void ChromeBrowserMainExtraPartsProfiles::
 #endif
 
 #if !defined(OS_ANDROID)
-  if (apps::AppServiceProxyFactory::IsEnabled()) {
-    apps::AppServiceProxyFactory::GetInstance();
-  }
+  apps::AppServiceProxyFactory::GetInstance();
 #endif
   AboutSigninInternalsFactory::GetInstance();
   AccountConsistencyModeManagerFactory::GetInstance();
   AccountInvestigatorFactory::GetInstance();
   AccountReconcilorFactory::GetInstance();
+  AdaptiveQuietNotificationPermissionUiEnabler::Factory::GetInstance();
   AutocompleteClassifierFactory::GetInstance();
   autofill::PersonalDataManagerFactory::GetInstance();
 #if BUILDFLAG(ENABLE_BACKGROUND_CONTENTS)
@@ -351,9 +347,6 @@ void ChromeBrowserMainExtraPartsProfiles::
   StorageNotificationServiceFactory::GetInstance();
 #endif
   suggestions::SuggestionsServiceFactory::GetInstance();
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-  SyncClipboardServiceFactory::GetInstance();
-#endif
   TabRestoreServiceFactory::GetInstance();
   TemplateURLFetcherFactory::GetInstance();
   TemplateURLServiceFactory::GetInstance();

@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/html_area_element.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
@@ -61,7 +62,7 @@ HTMLImageElement* HTMLMapElement::ImageElement() {
   for (unsigned i = 0; Element* curr = images->item(i); ++i) {
     // The HTMLImageElement's useMap() value includes the '#' symbol at the
     // beginning, which has to be stripped off.
-    HTMLImageElement& image_element = ToHTMLImageElement(*curr);
+    auto& image_element = To<HTMLImageElement>(*curr);
     String use_map_name =
         image_element.FastGetAttribute(html_names::kUsemapAttr)
             .GetString()
@@ -83,7 +84,7 @@ void HTMLMapElement::ParseAttribute(const AttributeModificationParams& params) {
     if (params.name == html_names::kIdAttr) {
       // Call base class so that hasID bit gets set.
       HTMLElement::ParseAttribute(params);
-      if (GetDocument().IsHTMLDocument())
+      if (IsA<HTMLDocument>(GetDocument()))
         return;
     }
     if (isConnected())

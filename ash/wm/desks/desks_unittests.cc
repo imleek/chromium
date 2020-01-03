@@ -1755,8 +1755,8 @@ TEST_F(
   EXPECT_TRUE(overview_controller->StartOverview());
   split_view_controller()->SnapWindow(win1.get(), SplitViewController::LEFT);
   EXPECT_EQ(win1.get(), split_view_controller()->left_window());
-  EXPECT_FALSE(CanSnapInSplitview(win2.get()));
-  EXPECT_FALSE(CanSnapInSplitview(win3.get()));
+  EXPECT_FALSE(split_view_controller()->CanSnapWindow(win2.get()));
+  EXPECT_FALSE(split_view_controller()->CanSnapWindow(win3.get()));
 
   // Switch to |desk_2| using its |mini_view|. Split view and overview should
   // end, but |win1| should retain its snapped state.
@@ -1955,7 +1955,7 @@ TEST_F(TabletModeDesksTest, RestoringUnsnappableWindowsInSplitView) {
   views::Widget* widget = views::Widget::GetWidgetForNativeWindow(window.get());
   widget->non_client_view()->set_client_view(
       new TestClientView(widget, gfx::Size(350, 100)));
-  EXPECT_FALSE(CanSnapInSplitview(window.get()));
+  EXPECT_FALSE(split_view_controller()->CanSnapWindow(window.get()));
 
   // Change to a portrait orientation and expect it's possible to snap the
   // window.
@@ -1965,7 +1965,7 @@ TEST_F(TabletModeDesksTest, RestoringUnsnappableWindowsInSplitView) {
                               display::Display::RotationSource::ACTIVE);
   EXPECT_EQ(test_api.GetCurrentOrientation(),
             OrientationLockType::kPortraitPrimary);
-  EXPECT_TRUE(CanSnapInSplitview(window.get()));
+  EXPECT_TRUE(split_view_controller()->CanSnapWindow(window.get()));
 
   // Snap the window in this orientation.
   split_view_controller()->SnapWindow(window.get(), SplitViewController::LEFT);
@@ -2053,7 +2053,7 @@ TEST_F(DesksTest, AutohiddenShelfAnimatesAfterDeskSwitch) {
   ShelfWidget* shelf_widget = shelf->shelf_widget();
   const gfx::Rect shown_shelf_bounds = shelf_widget->GetWindowBoundsInScreen();
 
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
 
   // Enable animations so that we can make sure that they occur.
   ui::ScopedAnimationDurationScaleMode regular_animations(
@@ -2716,7 +2716,7 @@ TEST_F(DesksAcceleratorsTest, CannotMoveAlwaysOnTopWindows) {
 // - Reusing containers when desks are removed and created.
 
 // Instantiate the parametrized tests.
-INSTANTIATE_TEST_SUITE_P(, DesksTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, DesksTest, ::testing::Bool());
 
 }  // namespace
 

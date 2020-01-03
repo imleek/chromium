@@ -26,10 +26,6 @@ namespace base {
 class DictionaryValue;
 }  // namespace base
 
-namespace service_manager {
-class Connector;
-}  // namespace service_manager
-
 namespace chromeos {
 
 class ErrorScreen;
@@ -149,6 +145,22 @@ class OobeUI : public ui::MojoWebUIController {
     return nullptr;
   }
 
+  // Instantiates implementor of the mojom::MultiDeviceSetup mojo interface
+  // passing the pending receiver that will be internally bound.
+  void BindInterface(
+      mojo::PendingReceiver<multidevice_setup::mojom::MultiDeviceSetup>
+          receiver);
+  // Instantiates implementor of the mojom::PrivilegedHostDeviceSetter mojo
+  // interface passing the pending receiver that will be internally bound.
+  void BindInterface(
+      mojo::PendingReceiver<
+          multidevice_setup::mojom::PrivilegedHostDeviceSetter> receiver);
+  // Instantiates implementor of the mojom::CrosNetworkConfig mojo
+  // interface passing the pending receiver that will be internally bound.
+  void BindInterface(
+      mojo::PendingReceiver<chromeos::network_config::mojom::CrosNetworkConfig>
+          receiver);
+
  private:
   void AddWebUIHandler(std::unique_ptr<BaseWebUIHandler> handler);
   void AddScreenHandler(std::unique_ptr<BaseScreenHandler> handler);
@@ -156,18 +168,6 @@ class OobeUI : public ui::MojoWebUIController {
   // Configures all the relevant screen shandlers and resources for OOBE/Login
   // display type.
   void ConfigureOobeDisplay();
-
-  // Adds Mojo receivers for this WebUIController.
-  service_manager::Connector* GetLoggedInUserMojoConnector();
-  void BindMultiDeviceSetup(
-      mojo::PendingReceiver<multidevice_setup::mojom::MultiDeviceSetup>
-          receiver);
-  void BindPrivilegedHostDeviceSetter(
-      mojo::PendingReceiver<
-          multidevice_setup::mojom::PrivilegedHostDeviceSetter> receiver);
-  void BindCrosNetworkConfig(
-      mojo::PendingReceiver<chromeos::network_config::mojom::CrosNetworkConfig>
-          receiver);
 
   // Type of UI.
   std::string display_type_;
@@ -210,6 +210,8 @@ class OobeUI : public ui::MojoWebUIController {
   // Store the deferred JS calls before the screen handler instance is
   // initialized.
   std::unique_ptr<JSCallsContainer> js_calls_container_;
+
+  WEB_UI_CONTROLLER_TYPE_DECL();
 
   DISALLOW_COPY_AND_ASSIGN(OobeUI);
 };

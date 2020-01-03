@@ -33,8 +33,6 @@
 #error "This file requires ARC support."
 #endif
 
-@class CRWSessionController;
-
 namespace {
 
 void SetNavigationItemInWKItem(WKBackForwardListItem* wk_item,
@@ -73,15 +71,7 @@ WKBasedNavigationManagerImpl::WKBasedNavigationManagerImpl()
 
 WKBasedNavigationManagerImpl::~WKBasedNavigationManagerImpl() = default;
 
-void WKBasedNavigationManagerImpl::SetSessionController(
-    CRWSessionController* session_controller) {}
-
 void WKBasedNavigationManagerImpl::InitializeSession() {}
-
-void WKBasedNavigationManagerImpl::OnNavigationItemsPruned(
-    size_t pruned_item_count) {
-  delegate_->OnNavigationItemsPruned(pruned_item_count);
-}
 
 void WKBasedNavigationManagerImpl::DetachFromWebView() {
   web_view_cache_.DetachFromWebView();
@@ -133,11 +123,6 @@ void WKBasedNavigationManagerImpl::FinalizeSessionRestore() {
   LoadIfNecessary();
 }
 
-CRWSessionController* WKBasedNavigationManagerImpl::GetSessionController()
-    const {
-  return nil;
-}
-
 void WKBasedNavigationManagerImpl::AddTransientItem(const GURL& url) {
   DCHECK(web_view_cache_.IsAttachedToWebView());
   NavigationItem* last_committed_item = GetLastCommittedItem();
@@ -161,7 +146,8 @@ void WKBasedNavigationManagerImpl::AddTransientItem(const GURL& url) {
   // only entry in back/forward history.
   if (item) {
     DCHECK(item->GetUserAgentType() != UserAgentType::NONE);
-    transient_item_->SetUserAgentType(item->GetUserAgentType());
+    transient_item_->SetUserAgentType(item->GetUserAgentForInheritance(),
+                                      /*update_inherited_user_agent =*/true);
   }
 }
 

@@ -104,6 +104,7 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
     case ui::NativeTheme::kColorId_FocusedMenuItemBackgroundColor:
       return GetBgColor("GtkMenu#menu GtkMenuItem#menuitem:hover");
     case ui::NativeTheme::kColorId_EnabledMenuItemForegroundColor:
+    case ui::NativeTheme::kColorId_MenuDropIndicator:
       return GetFgColor("GtkMenu#menu GtkMenuItem#menuitem GtkLabel");
     case ui::NativeTheme::kColorId_SelectedMenuItemForegroundColor:
       return GetFgColor("GtkMenu#menu GtkMenuItem#menuitem:hover GtkLabel");
@@ -132,6 +133,7 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
     case ui::NativeTheme::kColorId_LabelEnabledColor:
       return GetFgColor("GtkLabel");
     case ui::NativeTheme::kColorId_LabelDisabledColor:
+    case ui::NativeTheme::kColorId_LabelSecondaryColor:
       return GetFgColor("GtkLabel:disabled");
     case ui::NativeTheme::kColorId_LabelTextSelectionColor:
       return GetFgColor(GtkVersionCheck(3, 20) ? "GtkLabel #selection"
@@ -167,10 +169,25 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
         return ret_color;
       }
 #endif
-
       // Default color comes from gtklinkbutton.c.
       return SkColorSetRGB(0x00, 0x00, 0xEE);
     }
+
+    // Scrollbar
+    case ui::NativeTheme::kColorId_OverlayScrollbarThumbBackground:
+      return GetBgColor("#GtkScrollbar#scrollbar #trough");
+    case ui::NativeTheme::kColorId_OverlayScrollbarThumbForeground:
+      return GetBgColor("#GtkScrollbar#scrollbar #slider");
+
+    // Slider
+    case ui::NativeTheme::kColorId_SliderThumbDefault:
+      return GetBgColor("GtkScale#scale #highlight");
+    case ui::NativeTheme::kColorId_SliderTroughDefault:
+      return GetBgColor("GtkScale#scale #trough");
+    case ui::NativeTheme::kColorId_SliderThumbMinimal:
+      return GetBgColor("GtkScale#scale:disabled #highlight");
+    case ui::NativeTheme::kColorId_SliderTroughMinimal:
+      return GetBgColor("GtkScale#scale:disabled #trough");
 
     // Separator
     case ui::NativeTheme::kColorId_SeparatorColor:
@@ -178,6 +195,7 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
 
     // Button
     case ui::NativeTheme::kColorId_ButtonEnabledColor:
+    case ui::NativeTheme::kColorId_ButtonUncheckedColor:
       return GetFgColor("GtkButton#button.text-button GtkLabel");
     case ui::NativeTheme::kColorId_ButtonDisabledColor:
       return GetFgColor("GtkButton#button.text-button:disabled GtkLabel");
@@ -207,6 +225,10 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
     case ui::NativeTheme::kColorId_TabBottomBorder:
       return GetBorderColor(GtkVersionCheck(3, 20) ? "GtkFrame#frame #border"
                                                    : "GtkFrame#frame");
+    case ui::NativeTheme::kColorId_TabHighlightBackground:
+      return GetBgColor("GtkNotebook#notebook #tab:checked");
+    case ui::NativeTheme::kColorId_TabHighlightFocusedBackground:
+      return GetBgColor("GtkNotebook#notebook:focus #tab:checked");
 
     // Textfield
     case ui::NativeTheme::kColorId_TextfieldDefaultColor:
@@ -236,6 +258,10 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
     // Tooltips
     case ui::NativeTheme::kColorId_TooltipBackground:
       return GetBgColorFromStyleContext(GetTooltipContext());
+    case ui::NativeTheme::kColorId_TooltipIcon:
+      return GetFgColor("GtkButton#button.image-button");
+    case ui::NativeTheme::kColorId_TooltipIconHovered:
+      return GetFgColor("GtkButton#button.image-button:hover");
     case ui::NativeTheme::kColorId_TooltipText: {
       auto context = GetTooltipContext();
       context = AppendCssNodeToStyleContext(context, "GtkLabel");
@@ -293,8 +319,8 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
       // theme should be used.
       ui::NativeTheme* fallback_theme =
           color_utils::IsDark(GetBgColor(""))
-              ? ui::NativeTheme::GetInstanceForNativeUi()
-              : ui::NativeThemeDarkAura::instance();
+              ? ui::NativeThemeDarkAura::instance()
+              : ui::NativeTheme::GetInstanceForNativeUi();
       return fallback_theme->GetSystemColor(color_id);
     }
 

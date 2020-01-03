@@ -206,6 +206,8 @@ namespace autotestPrivate {
     long count;
   };
   dictionary Histogram {
+    // Sum of the all entries.
+    double sum;
     // Buckets containing samples.
     HistogramBucket[] buckets;
   };
@@ -278,21 +280,12 @@ namespace autotestPrivate {
     double height;
   };
 
-  dictionary ArcAppWindowInfo {
-    Bounds bounds;
-    DOMString displayId;
-    boolean isAnimating;
-    boolean isVisible;
-  };
-
   dictionary ArcAppTracingInfo {
     boolean success;
     double fps;
     double commitDeviation;
     double renderQuality;
   };
-
-  callback GetArcAppWindowInfoCallback = void (ArcAppWindowInfo info);
 
   callback LaunchArcAppCallback = void (boolean appLaunched);
 
@@ -603,6 +596,16 @@ namespace autotestPrivate {
     // |callback|: Called when the operation has completed.
     static void importCrostini(DOMString path, VoidCallback callback);
 
+    // Installs Plugin VM via the installer and then launches the VM.
+    // |imageUrl|: URL to the image to install.
+    // |imageHash|: Hash for the provided image.
+    // |licenseKey|: License key for Plugin VM.
+    // |callback|: Called when the operation has completed.
+    static void installPluginVM(DOMString imageUrl,
+                                DOMString imageHash,
+                                DOMString licenseKey,
+                                VoidCallback callback);
+
     // Register a component with CrOSComponentManager.
     // |name|: The name of the component.
     // |path|: Path to the component.
@@ -730,28 +733,6 @@ namespace autotestPrivate {
     // Show virtual keyboard of the current input method if it's available.
     static void showVirtualKeyboardIfEnabled();
 
-    // Send WM event to change the ARC app window's window state.
-    // |packageName|: the package name of the ARC app window.
-    // |change|: WM event type to send to the ARC app window.
-    // |callback|: called when the window state is changed.
-    [deprecated="Use setAppWindowState"] static void setArcAppWindowState(
-        DOMString packageName,
-        WindowStateChangeDict change,
-        WindowStateCallback callback);
-
-    // Get ARC app window's window state.
-    // |packageName|: the package name of the ARC app window.
-    // |callback| is invoked with the window state.
-    static void getArcAppWindowState(DOMString packageName,
-                                     WindowStateCallback callback);
-
-    // Get various information on an ARC window.
-    // |packageName|: the package name of the ARC app window.
-    // |callback|: called when the operation has completed.
-    [deprecated="Use getAppWindowList"] static void getArcAppWindowInfo(
-        DOMString packageName,
-        GetArcAppWindowInfoCallback callback);
-
     // Start ARC performance tracing for the active ARC app window.
     // |callback|: Called when the operation has completed.
     static void arcAppTracingStart(VoidCallback callback);
@@ -863,6 +844,11 @@ namespace autotestPrivate {
     static void mouseMove(Location location,
                           double duration_in_ms,
                           VoidCallback callback);
+
+    // Enable/disable metrics reporting in preferences.
+    // |enabled|: Enable metrics reporting.
+    // |callback|: Called when the operation has completed.
+    static void setMetricsEnabled(boolean enabled, VoidCallback callback);
   };
 
   interface Events {

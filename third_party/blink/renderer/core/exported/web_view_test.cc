@@ -48,15 +48,14 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_cursor_info.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
-#include "third_party/blink/public/platform/web_float_point.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/platform/web_keyboard_event.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/public_buildflags.h"
@@ -70,12 +69,12 @@
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_hit_test_result.h"
 #include "third_party/blink/public/web/web_input_method_controller.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_print_params.h"
 #include "third_party/blink/public/web/web_script_source.h"
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/public/web/web_tree_scope_type.h"
-#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/public/web/web_widget.h"
 #include "third_party/blink/public/web/web_widget_client.h"
@@ -100,6 +99,7 @@
 #include "third_party/blink/renderer/core/html/forms/external_date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/html/html_object_element.h"
 #include "third_party/blink/renderer/core/inspector/dev_tools_emulator.h"
@@ -209,11 +209,11 @@ class TapHandlingWebWidgetClient
   void DidHandleGestureEvent(const WebGestureEvent& event,
                              bool event_cancelled) override {
     if (event.GetType() == WebInputEvent::kGestureTap) {
-      tap_x_ = event.PositionInWidget().x;
-      tap_y_ = event.PositionInWidget().y;
+      tap_x_ = event.PositionInWidget().x();
+      tap_y_ = event.PositionInWidget().y();
     } else if (event.GetType() == WebInputEvent::kGestureLongPress) {
-      longpress_x_ = event.PositionInWidget().x;
-      longpress_y_ = event.PositionInWidget().y;
+      longpress_x_ = event.PositionInWidget().x();
+      longpress_y_ = event.PositionInWidget().y();
     }
   }
 
@@ -613,7 +613,7 @@ TEST_F(WebViewTest, FocusIsInactive) {
   web_view->MainFrameWidget()->SetFocus(true);
   web_view->SetIsActive(true);
   WebLocalFrameImpl* frame = web_view->MainFrameImpl();
-  EXPECT_TRUE(frame->GetFrame()->GetDocument()->IsHTMLDocument());
+  EXPECT_TRUE(IsA<HTMLDocument>(frame->GetFrame()->GetDocument()));
 
   Document* document = frame->GetFrame()->GetDocument();
   EXPECT_TRUE(document->hasFocus());
@@ -736,7 +736,7 @@ TEST_F(WebViewTest, HitTestResultAtWithPageScaleAndPan) {
   positive_result.Reset();
 
   // Pan around the zoomed in page so the image is not visible in viewport.
-  web_view->SetVisualViewportOffset(WebFloatPoint(100, 100));
+  web_view->SetVisualViewportOffset(gfx::PointF(100, 100));
   WebHitTestResult negative_result2 = web_view->HitTestResultAt(hit_point);
   EXPECT_FALSE(
       negative_result2.GetNode().To<WebElement>().HasHTMLTagName("img"));
@@ -794,7 +794,7 @@ TEST_F(WebViewTest, HitTestResultForTapWithTapAreaPageScaleAndPan) {
 
   // Zoom in and pan around the page so the image is not visible in viewport.
   web_view->SetPageScaleFactor(2.0f);
-  web_view->SetVisualViewportOffset(WebFloatPoint(100, 100));
+  web_view->SetVisualViewportOffset(gfx::PointF(100, 100));
   WebHitTestResult negative_result2 =
       web_view->HitTestResultForTap(hit_point, tap_area);
   EXPECT_FALSE(
@@ -934,7 +934,7 @@ void WebViewTest::TestTextInputType(WebTextInputType expected_type,
   web_view->SetInitialFocus(false);
   EXPECT_EQ(expected_type, controller->TextInputType());
   EXPECT_EQ(expected_type, controller->TextInputInfo().type);
-  web_view->ClearFocusedElement();
+  web_view->FocusedElement()->blur();
   EXPECT_EQ(kWebTextInputTypeNone, controller->TextInputType());
   EXPECT_EQ(kWebTextInputTypeNone, controller->TextInputInfo().type);
 }
@@ -1144,7 +1144,7 @@ TEST_F(WebViewTest, LongPressOutsideInputShouldNotSelectPlaceholderText) {
                         WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(100, 150));
+  event.SetPositionInWidget(gfx::PointF(100, 150));
   EXPECT_EQ(WebInputEventResult::kHandledSystem,
             web_view->MainFrameWidget()->HandleInputEvent(
                 WebCoalescedInputEvent(event)));
@@ -2407,6 +2407,8 @@ TEST_F(WebViewTest, BackForwardRestoreScroll) {
   main_frame_local->Loader().GetDocumentLoader()->CommitSameDocumentNavigation(
       item1->Url(), WebFrameLoadType::kBackForward, item1.Get(),
       ClientRedirectPolicy::kNotClientRedirect, nullptr, false, nullptr);
+  web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
+      WebWidget::LifecycleUpdateReason::kTest);
 
   // Click a different anchor
   main_frame_local->Loader().StartNavigation(FrameLoadRequest(
@@ -2414,15 +2416,23 @@ TEST_F(WebViewTest, BackForwardRestoreScroll) {
       ResourceRequest(main_frame_local->GetDocument()->CompleteURL("#b"))));
   Persistent<HistoryItem> item3 =
       main_frame_local->Loader().GetDocumentLoader()->GetHistoryItem();
+  web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
+      WebWidget::LifecycleUpdateReason::kTest);
 
   // Go back, then forward. The scroll position should be properly set on the
   // forward navigation.
   main_frame_local->Loader().GetDocumentLoader()->CommitSameDocumentNavigation(
       item1->Url(), WebFrameLoadType::kBackForward, item1.Get(),
       ClientRedirectPolicy::kNotClientRedirect, nullptr, false, nullptr);
+
   main_frame_local->Loader().GetDocumentLoader()->CommitSameDocumentNavigation(
       item3->Url(), WebFrameLoadType::kBackForward, item3.Get(),
       ClientRedirectPolicy::kNotClientRedirect, nullptr, false, nullptr);
+  // The scroll offset is only applied via invoking the anchor via the main
+  // lifecycle, or a forced layout.
+  // TODO(chrishtr): At the moment, WebLocalFrameImpl::GetScrollOffset() does
+  // not force a layout. Script-exposed scroll offset-reading methods do,
+  // however. It seems wrong not to force a layout.
   EXPECT_EQ(0, web_view_impl->MainFrameImpl()->GetScrollOffset().width);
   EXPECT_GT(web_view_impl->MainFrameImpl()->GetScrollOffset().height, 2000);
 }
@@ -2516,8 +2526,8 @@ static void DragAndDropURL(WebViewImpl* web_view, const std::string& url) {
   item.string_data = WebString::FromUTF8(url);
   drag_data.AddItem(item);
 
-  const WebFloatPoint client_point(0, 0);
-  const WebFloatPoint screen_point(0, 0);
+  const gfx::PointF client_point;
+  const gfx::PointF screen_point;
   WebFrameWidget* widget = web_view->MainFrameImpl()->FrameWidget();
   widget->DragTargetDragEnter(drag_data, client_point, screen_point,
                               kWebDragOperationCopy, 0);
@@ -2564,8 +2574,6 @@ bool WebViewTest::TapElement(WebInputEvent::Type type, Element* element) {
   DCHECK(web_view_helper_.GetWebView());
   element->scrollIntoViewIfNeeded();
 
-  // TODO(bokan): Technically incorrect, event positions should be in viewport
-  // space. crbug.com/371902.
   FloatPoint center(
       web_view_helper_.GetWebView()
           ->MainFrameImpl()
@@ -2616,14 +2624,14 @@ TEST_F(WebViewTest, ClientTapHandling) {
   WebGestureEvent event(WebInputEvent::kGestureTap, WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(3, 8));
+  event.SetPositionInWidget(gfx::PointF(3, 8));
   web_view->MainFrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
   RunPendingTasks();
   EXPECT_EQ(3, client.TapX());
   EXPECT_EQ(8, client.TapY());
   client.Reset();
   event.SetType(WebInputEvent::kGestureLongPress);
-  event.SetPositionInWidget(WebFloatPoint(25, 7));
+  event.SetPositionInWidget(gfx::PointF(25, 7));
   web_view->MainFrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
   RunPendingTasks();
   EXPECT_EQ(25, client.LongpressX());
@@ -2649,7 +2657,7 @@ TEST_F(WebViewTest, ClientTapHandlingNullWebViewClient) {
   WebGestureEvent event(WebInputEvent::kGestureTap, WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(3, 8));
+  event.SetPositionInWidget(gfx::PointF(3, 8));
   EXPECT_EQ(WebInputEventResult::kNotHandled,
             web_view->MainFrameWidget()->HandleInputEvent(
                 WebCoalescedInputEvent(event)));
@@ -2670,7 +2678,7 @@ TEST_F(WebViewTest, LongPressEmptyDiv) {
                         WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(250, 150));
+  event.SetPositionInWidget(gfx::PointF(250, 150));
 
   EXPECT_EQ(WebInputEventResult::kNotHandled,
             web_view->MainFrameWidget()->HandleInputEvent(
@@ -2691,7 +2699,7 @@ TEST_F(WebViewTest, LongPressEmptyDivAlwaysShow) {
                         WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(250, 150));
+  event.SetPositionInWidget(gfx::PointF(250, 150));
 
   EXPECT_EQ(WebInputEventResult::kHandledSystem,
             web_view->MainFrameWidget()->HandleInputEvent(
@@ -2712,7 +2720,7 @@ TEST_F(WebViewTest, LongPressObject) {
                         WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(10, 10));
+  event.SetPositionInWidget(gfx::PointF(10, 10));
 
   EXPECT_NE(WebInputEventResult::kHandledSystem,
             web_view->MainFrameWidget()->HandleInputEvent(
@@ -2737,7 +2745,7 @@ TEST_F(WebViewTest, LongPressObjectFallback) {
                         WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(10, 10));
+  event.SetPositionInWidget(gfx::PointF(10, 10));
 
   EXPECT_EQ(WebInputEventResult::kHandledSystem,
             web_view->MainFrameWidget()->HandleInputEvent(
@@ -2762,7 +2770,7 @@ TEST_F(WebViewTest, LongPressImage) {
                         WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(10, 10));
+  event.SetPositionInWidget(gfx::PointF(10, 10));
 
   EXPECT_EQ(WebInputEventResult::kHandledSystem,
             web_view->MainFrameWidget()->HandleInputEvent(
@@ -2787,7 +2795,7 @@ TEST_F(WebViewTest, LongPressVideo) {
                         WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(10, 10));
+  event.SetPositionInWidget(gfx::PointF(10, 10));
 
   EXPECT_EQ(WebInputEventResult::kHandledSystem,
             web_view->MainFrameWidget()->HandleInputEvent(
@@ -2808,7 +2816,7 @@ TEST_F(WebViewTest, LongPressLink) {
                         WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(500, 300));
+  event.SetPositionInWidget(gfx::PointF(500, 300));
 
   EXPECT_EQ(WebInputEventResult::kHandledSystem,
             web_view->MainFrameWidget()->HandleInputEvent(
@@ -2896,7 +2904,7 @@ TEST_F(WebViewTest, LongPressEmptyEditableSelection) {
                         WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(10, 10));
+  event.SetPositionInWidget(gfx::PointF(10, 10));
 
   EXPECT_EQ(WebInputEventResult::kHandledSystem,
             web_view->MainFrameWidget()->HandleInputEvent(
@@ -2916,7 +2924,7 @@ TEST_F(WebViewTest, LongPressEmptyNonEditableSelection) {
                         WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(300, 300));
+  event.SetPositionInWidget(gfx::PointF(300, 300));
   WebLocalFrameImpl* frame = web_view->MainFrameImpl();
 
   EXPECT_EQ(WebInputEventResult::kHandledSystem,
@@ -3001,16 +3009,15 @@ TEST_F(WebViewTest, TouchDoesntSelectEmptyTextarea) {
   WebGestureEvent event(WebInputEvent::kGestureTap, WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(100, 25));
+  event.SetPositionInWidget(gfx::PointF(100, 25));
   event.data.tap.tap_count = 2;
 
   web_view->MainFrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
   EXPECT_TRUE(frame->SelectionAsText().IsEmpty());
 
-  HTMLTextAreaElement* text_area_element =
-      ToHTMLTextAreaElement(static_cast<Node*>(
-          web_view->MainFrameImpl()->GetDocument().GetElementById(
-              blanklinestextbox)));
+  auto* text_area_element = To<HTMLTextAreaElement>(static_cast<Node*>(
+      web_view->MainFrameImpl()->GetDocument().GetElementById(
+          blanklinestextbox)));
   text_area_element->setValue("hello");
 
   // Long-press past last word of textbox.
@@ -3339,7 +3346,7 @@ TEST_F(WebViewTest, ShowPressOnTransformedLink) {
                         WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(20, 20));
+  event.SetPositionInWidget(gfx::PointF(20, 20));
 
   // Just make sure we don't hit any asserts.
   web_view_impl->MainFrameWidget()->HandleInputEvent(
@@ -3718,9 +3725,7 @@ TEST_F(WebViewTest, ChooseValueFromDateTimeChooser) {
   Document* document =
       web_view_impl->MainFrameImpl()->GetFrame()->GetDocument();
 
-  HTMLInputElement* input_element;
-
-  input_element = ToHTMLInputElement(document->getElementById("date"));
+  auto* input_element = To<HTMLInputElement>(document->getElementById("date"));
   OpenDateTimeChooser(web_view_impl, input_element);
   GetExternalDateTimeChooser(web_view_impl)->ResponseHandler(true, 0);
   EXPECT_EQ("1970-01-01", input_element->value());
@@ -3730,7 +3735,8 @@ TEST_F(WebViewTest, ChooseValueFromDateTimeChooser) {
       ->ResponseHandler(true, std::numeric_limits<double>::quiet_NaN());
   EXPECT_EQ("", input_element->value());
 
-  input_element = ToHTMLInputElement(document->getElementById("datetimelocal"));
+  input_element =
+      To<HTMLInputElement>(document->getElementById("datetimelocal"));
   OpenDateTimeChooser(web_view_impl, input_element);
   GetExternalDateTimeChooser(web_view_impl)->ResponseHandler(true, 0);
   EXPECT_EQ("1970-01-01T00:00", input_element->value());
@@ -3740,7 +3746,7 @@ TEST_F(WebViewTest, ChooseValueFromDateTimeChooser) {
       ->ResponseHandler(true, std::numeric_limits<double>::quiet_NaN());
   EXPECT_EQ("", input_element->value());
 
-  input_element = ToHTMLInputElement(document->getElementById("month"));
+  input_element = To<HTMLInputElement>(document->getElementById("month"));
   OpenDateTimeChooser(web_view_impl, input_element);
   GetExternalDateTimeChooser(web_view_impl)->ResponseHandler(true, 0);
   EXPECT_EQ("1970-01", input_element->value());
@@ -3750,7 +3756,7 @@ TEST_F(WebViewTest, ChooseValueFromDateTimeChooser) {
       ->ResponseHandler(true, std::numeric_limits<double>::quiet_NaN());
   EXPECT_EQ("", input_element->value());
 
-  input_element = ToHTMLInputElement(document->getElementById("time"));
+  input_element = To<HTMLInputElement>(document->getElementById("time"));
   OpenDateTimeChooser(web_view_impl, input_element);
   GetExternalDateTimeChooser(web_view_impl)->ResponseHandler(true, 0);
   EXPECT_EQ("00:00", input_element->value());
@@ -3760,7 +3766,7 @@ TEST_F(WebViewTest, ChooseValueFromDateTimeChooser) {
       ->ResponseHandler(true, std::numeric_limits<double>::quiet_NaN());
   EXPECT_EQ("", input_element->value());
 
-  input_element = ToHTMLInputElement(document->getElementById("week"));
+  input_element = To<HTMLInputElement>(document->getElementById("week"));
   OpenDateTimeChooser(web_view_impl, input_element);
   GetExternalDateTimeChooser(web_view_impl)->ResponseHandler(true, 0);
   EXPECT_EQ("1970-W01", input_element->value());
@@ -4076,8 +4082,7 @@ TEST_F(WebViewTest, TextInputFlags) {
   // (A) <input>
   // (A.1) Verifies autocorrect/autocomplete/spellcheck flags are Off and
   // autocapitalize is set to none.
-  HTMLInputElement* input_element =
-      ToHTMLInputElement(document->getElementById("input"));
+  auto* input_element = To<HTMLInputElement>(document->getElementById("input"));
   document->SetFocusedElement(
       input_element,
       FocusParams(SelectionBehaviorOnFocus::kNone, kWebFocusTypeNone, nullptr));
@@ -4090,7 +4095,7 @@ TEST_F(WebViewTest, TextInputFlags) {
 
   // (A.2) Verifies autocorrect/autocomplete/spellcheck flags are On and
   // autocapitalize is set to sentences.
-  input_element = ToHTMLInputElement(document->getElementById("input2"));
+  input_element = To<HTMLInputElement>(document->getElementById("input2"));
   document->SetFocusedElement(
       input_element,
       FocusParams(SelectionBehaviorOnFocus::kNone, kWebFocusTypeNone, nullptr));
@@ -4103,8 +4108,8 @@ TEST_F(WebViewTest, TextInputFlags) {
 
   // (B) <textarea> Verifies the default text input flags are
   // WebTextInputFlagAutocapitalizeSentences.
-  HTMLTextAreaElement* text_area_element =
-      ToHTMLTextAreaElement(document->getElementById("textarea"));
+  auto* text_area_element =
+      To<HTMLTextAreaElement>(document->getElementById("textarea"));
   document->SetFocusedElement(
       text_area_element,
       FocusParams(SelectionBehaviorOnFocus::kNone, kWebFocusTypeNone, nullptr));
@@ -4189,7 +4194,7 @@ TEST_F(WebViewTest, CompositionIsUserGesture) {
       frame->FrameWidget()->GetActiveWebInputMethodController()->SetComposition(
           WebString::FromUTF8(std::string("hello").c_str()),
           WebVector<WebImeTextSpan>(), WebRange(), 3, 3));
-  EXPECT_TRUE(WebUserGestureIndicator::IsProcessingUserGesture(frame));
+  EXPECT_TRUE(frame->HasTransientUserActivation());
   EXPECT_EQ(1, client.TextChanges());
   EXPECT_TRUE(frame->HasMarkedText());
 
@@ -4501,13 +4506,25 @@ TEST_F(ShowUnhandledTapTest, ShowUnhandledTapUIIfNeeded) {
   EXPECT_EQ(82, mock_notifier_.GetTappedYPos());
 
   // Test correct conversion of coordinates to viewport space under pinch-zoom.
-  web_view_->SetPageScaleFactor(2);
-  web_view_->SetVisualViewportOffset(WebFloatPoint(50, 20));
+  constexpr float scale = 1.5f;
+  constexpr float visual_x = 6.f;
+  constexpr float visual_y = 10.f;
+
+  web_view_->SetPageScaleFactor(scale);
+  web_view_->SetVisualViewportOffset(gfx::PointF(visual_x, visual_y));
 
   Tap("target");
+
+  // Ensure position didn't change as a result of scroll into view.
+  ASSERT_EQ(visual_x, web_view_->VisualViewportOffset().x());
+  ASSERT_EQ(visual_y, web_view_->VisualViewportOffset().y());
+
   EXPECT_TRUE(mock_notifier_.WasUnhandledTap());
-  EXPECT_EQ(188, mock_notifier_.GetTappedXPos());
-  EXPECT_EQ(124, mock_notifier_.GetTappedYPos());
+
+  constexpr float expected_x = 144 * scale - (scale * visual_x);
+  constexpr float expected_y = 82 * scale - (scale * visual_y);
+  EXPECT_EQ(expected_x, mock_notifier_.GetTappedXPos());
+  EXPECT_EQ(expected_y, mock_notifier_.GetTappedYPos());
   EXPECT_EQ(16, mock_notifier_.GetFontSize());
   EXPECT_EQ(28, mock_notifier_.GetElementTextRunLength());
 }
@@ -4715,7 +4732,7 @@ TEST_F(WebViewTest, PasswordFieldEditingIsUserGesture) {
       frame->FrameWidget()->GetActiveWebInputMethodController()->CommitText(
           WebString::FromUTF8(std::string("hello").c_str()),
           empty_ime_text_spans, WebRange(), 0));
-  EXPECT_TRUE(WebUserGestureIndicator::IsProcessingUserGesture(frame));
+  EXPECT_TRUE(frame->HasTransientUserActivation());
   EXPECT_EQ(1, client.TextChanges());
   frame->SetAutofillClient(nullptr);
 }
@@ -4848,7 +4865,7 @@ TEST_F(WebViewTest, ForceAndResetViewport) {
   // Override applies transform, sets visible rect, and disables
   // visual viewport clipping.
   TransformationMatrix matrix =
-      dev_tools_emulator->ForceViewportForTesting(WebFloatPoint(50, 55), 2.f);
+      dev_tools_emulator->ForceViewportForTesting(gfx::PointF(50, 55), 2.f);
   expected_matrix.MakeIdentity().Scale(2.f).Translate(-50, -55);
   EXPECT_EQ(expected_matrix, matrix);
   {
@@ -4858,8 +4875,8 @@ TEST_F(WebViewTest, ForceAndResetViewport) {
   }
 
   // Setting new override discards previous one.
-  matrix = dev_tools_emulator->ForceViewportForTesting(
-      WebFloatPoint(5.4f, 10.5f), 1.5f);
+  matrix = dev_tools_emulator->ForceViewportForTesting(gfx::PointF(5.4f, 10.5f),
+                                                       1.5f);
   expected_matrix.MakeIdentity().Scale(1.5f).Translate(-5.4f, -10.5f);
   EXPECT_EQ(expected_matrix, matrix);
   {
@@ -4897,7 +4914,7 @@ TEST_F(WebViewTest, ViewportOverrideIntegratesDeviceMetricsOffsetAndScale) {
   EXPECT_EQ(expected_matrix, web_view_impl->GetDeviceEmulationTransform());
 
   // Device metrics offset and scale are applied before viewport override.
-  emulation_params.viewport_offset = WebFloatPoint(5, 10);
+  emulation_params.viewport_offset = gfx::PointF(5, 10);
   emulation_params.viewport_scale = 1.5f;
   web_view_impl->EnableDeviceEmulation(emulation_params);
   expected_matrix.MakeIdentity()
@@ -4928,7 +4945,7 @@ TEST_F(WebViewTest, ViewportOverrideAdaptsToScaleAndScroll) {
       ScrollOffset(100, 150), kProgrammaticScroll, kScrollBehaviorInstant);
 
   WebDeviceEmulationParams emulation_params;
-  emulation_params.viewport_offset = WebFloatPoint(50, 55);
+  emulation_params.viewport_offset = gfx::PointF(50, 55);
   emulation_params.viewport_scale = 2.f;
   web_view_impl->EnableDeviceEmulation(emulation_params);
   expected_matrix.MakeIdentity()
@@ -5151,8 +5168,8 @@ TEST_F(WebViewTest, SetZoomLevelWhilePluginFocused) {
       base_url);
   // Verify the plugin is loaded.
   LocalFrame* main_frame = web_view->MainFrameImpl()->GetFrame();
-  HTMLObjectElement* plugin_element =
-      ToHTMLObjectElement(main_frame->GetDocument()->body()->firstChild());
+  auto* plugin_element =
+      To<HTMLObjectElement>(main_frame->GetDocument()->body()->firstChild());
   EXPECT_TRUE(plugin_element->OwnedPlugin());
   // Focus the plugin element, and then change the zoom level on the WebView.
   plugin_element->focus();
@@ -5215,8 +5232,8 @@ TEST_F(WebViewTest, DetachPluginInLayout) {
       base_url);
   // Verify the plugin is loaded.
   LocalFrame* main_frame = web_view->MainFrameImpl()->GetFrame();
-  HTMLObjectElement* plugin_element =
-      ToHTMLObjectElement(main_frame->GetDocument()->body()->firstChild());
+  auto* plugin_element =
+      To<HTMLObjectElement>(main_frame->GetDocument()->body()->firstChild());
   EXPECT_TRUE(plugin_element->OwnedPlugin());
 
   plugin_element->style()->setCSSText(main_frame->GetDocument(),
@@ -5797,7 +5814,7 @@ TEST_F(WebViewTest, LongPressImageAndThenLongTapImage) {
                         WebInputEvent::kNoModifiers,
                         WebInputEvent::GetStaticTimeStampForTests(),
                         WebGestureDevice::kTouchscreen);
-  event.SetPositionInWidget(WebFloatPoint(10, 10));
+  event.SetPositionInWidget(gfx::PointF(10, 10));
 
   EXPECT_EQ(WebInputEventResult::kHandledSystem,
             web_view->MainFrameWidget()->HandleInputEvent(
@@ -5811,7 +5828,7 @@ TEST_F(WebViewTest, LongPressImageAndThenLongTapImage) {
                             WebInputEvent::kNoModifiers,
                             WebInputEvent::GetStaticTimeStampForTests(),
                             WebGestureDevice::kTouchscreen);
-  tap_event.SetPositionInWidget(WebFloatPoint(10, 10));
+  tap_event.SetPositionInWidget(gfx::PointF(10, 10));
 
   EXPECT_EQ(WebInputEventResult::kNotHandled,
             web_view->MainFrameWidget()->HandleInputEvent(

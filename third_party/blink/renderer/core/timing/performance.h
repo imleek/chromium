@@ -99,8 +99,6 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   virtual ScriptPromise measureMemory(ScriptState*,
                                       MeasureMemoryOptions*) const;
 
-  virtual void UpdateLongTaskInstrumentation() {}
-
   // Reduce the resolution to prevent timing attacks. See:
   // http://www.w3.org/TR/hr-time-2/#privacy-security
   static double ClampTimeResolution(double time_seconds);
@@ -134,8 +132,9 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   PerformanceEntryVector getBufferedEntriesByType(
       const AtomicString& entry_type);
   PerformanceEntryVector getEntriesByType(const AtomicString& entry_type);
-  PerformanceEntryVector getEntriesByName(const AtomicString& name,
-                                          const AtomicString& entry_type);
+  PerformanceEntryVector getEntriesByName(
+      const AtomicString& name,
+      const AtomicString& entry_type = g_null_atom);
 
   void clearResourceTimings();
   void setResourceTimingBufferSize(unsigned);
@@ -146,9 +145,10 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   void AddLongTaskTiming(base::TimeTicks start_time,
                          base::TimeTicks end_time,
                          const AtomicString& name,
-                         const String& culprit_frame_src,
-                         const String& culprit_frame_id,
-                         const String& culprit_frame_name);
+                         const AtomicString& container_type,
+                         const String& container_src,
+                         const String& container_id,
+                         const String& container_name);
 
   // Generates and add a performance entry for the given ResourceTimingInfo.
   // |overridden_initiator_type| allows the initiator type to be overridden to
@@ -163,8 +163,11 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
       const SecurityOrigin& destination_origin,
       const ResourceTimingInfo&,
       ExecutionContext& context_for_use_counter);
-  void AddResourceTiming(const WebResourceTimingInfo&,
-                         const AtomicString& initiator_type);
+  void AddResourceTiming(
+      const WebResourceTimingInfo&,
+      const AtomicString& initiator_type,
+      mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
+          worker_timing_receiver);
 
   void NotifyNavigationTimingToObservers();
 
@@ -256,15 +259,27 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   void RegisterPerformanceObserver(PerformanceObserver&);
   void UpdatePerformanceObserverFilterOptions();
   void ActivateObserver(PerformanceObserver&);
-  void ResumeSuspendedObservers();
+  void SuspendObserver(PerformanceObserver&);
 
   bool HasObserverFor(PerformanceEntry::EntryType) const;
 
-  // TODO(npm): is the AtomicString parameter here actually needed?
-  static bool PassesTimingAllowCheck(const ResourceResponse&,
+  // Checks whether the single ResourceResponse passes the Timing-Allow-Origin
+  // check. The first parameter is the ResourceResponse being checked. The
+  // second parameter is the next ResourceResponse in the redirect chain, or is
+  // equal to the first parameter if there is no such response. This parameter
+  // is only introduced temporarily to enable computing a UseCounter within this
+  // method. The first bool parameter is
+  // https://fetch.spec.whatwg.org/#concept-request-response-tainting, while the
+  // second bool is
+  // https://fetch.spec.whatwg.org/#concept-request-tainted-origin.
+  // The next ResourceResponse and tainted origin flag are currently only being
+  // used in a UseCounter.
+  static bool PassesTimingAllowCheck(const ResourceResponse& response,
+                                     const ResourceResponse& next_response,
                                      const SecurityOrigin&,
                                      ExecutionContext*,
-                                     bool* tainted);
+                                     bool* response_tainting_not_basic,
+                                     bool* tainted_origin_flag);
 
   static bool AllowsTimingRedirect(const Vector<ResourceResponse>&,
                                    const ResourceResponse&,
@@ -329,7 +344,6 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   void FireResourceTimingBufferFull(TimerBase*);
 
   void NotifyObserversOfEntry(PerformanceEntry&) const;
-  void NotifyObserversOfEntries(PerformanceEntryVector&);
 
   void DeliverObservationsTimerFired(TimerBase*);
 
@@ -349,6 +363,7 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   unsigned element_timing_buffer_max_size_;
   PerformanceEntryVector layout_shift_buffer_;
   PerformanceEntryVector largest_contentful_paint_buffer_;
+  PerformanceEntryVector longtask_buffer_;
   Member<PerformanceEntry> navigation_timing_;
   Member<UserTiming> user_timing_;
   Member<PerformanceEntry> first_paint_timing_;

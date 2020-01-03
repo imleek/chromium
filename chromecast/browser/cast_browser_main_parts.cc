@@ -43,6 +43,7 @@
 #include "chromecast/browser/devtools/remote_debugging_server.h"
 #include "chromecast/browser/media/media_caps_impl.h"
 #include "chromecast/browser/metrics/cast_browser_metrics.h"
+#include "chromecast/browser/service_connector.h"
 #include "chromecast/browser/tts/tts_controller_impl.h"
 #include "chromecast/browser/tts/tts_platform_stub.h"
 #include "chromecast/browser/url_request_context_factory.h"
@@ -473,17 +474,19 @@ int CastBrowserMainParts::PreCreateThreads() {
       std::make_unique<crash_reporter::ChildProcessCrashObserver>());
 #endif
 
+  service_connector_ = cast_content_browser_client_->CreateServiceConnector();
+
   cast_browser_process_->SetPrefService(
       cast_content_browser_client_->GetCastFeatureListCreator()
           ->TakePrefService());
 
 #if defined(USE_AURA)
-  cast_browser_process_->SetCastScreen(std::make_unique<CastScreen>());
+  cast_screen_ = std::make_unique<CastScreen>();
+  cast_browser_process_->SetCastScreen(cast_screen_.get());
   DCHECK(!display::Screen::GetScreen());
-  display::Screen::SetScreenInstance(cast_browser_process_->cast_screen());
+  display::Screen::SetScreenInstance(cast_screen_.get());
   cast_browser_process_->SetDisplayConfigurator(
-      std::make_unique<CastDisplayConfigurator>(
-          cast_browser_process_->cast_screen()));
+      std::make_unique<CastDisplayConfigurator>(cast_screen_.get()));
 #endif  // defined(USE_AURA)
 
   content::ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
@@ -647,7 +650,7 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
   cast_browser_process_->cast_service()->Start();
 
   if (parameters_.ui_task) {
-    parameters_.ui_task->Run();
+    std::move(*parameters_.ui_task).Run();
     delete parameters_.ui_task;
     run_message_loop_ = false;
   }
@@ -724,11 +727,15 @@ void CastBrowserMainParts::PostMainMessageLoopRun() {
   // Android does not use native main MessageLoop.
   NOTREACHED();
 #else
-  window_manager_.reset();
-
   cast_browser_process_->cast_service()->Finalize();
   cast_browser_process_->cast_browser_metrics()->Finalize();
   cast_browser_process_.reset();
+
+  window_manager_.reset();
+#if defined(USE_AURA)
+  display::Screen::SetScreenInstance(nullptr);
+  cast_screen_.reset();
+#endif
 
 #if !defined(OS_FUCHSIA)
   DeregisterKillOnAlarm();

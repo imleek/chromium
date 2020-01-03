@@ -296,6 +296,12 @@ class PDFEngine {
     pp::FloatRect bounds;
   };
 
+  struct AccessibilityHighlightInfo {
+    int start_char_index = -1;
+    int char_count;
+    pp::FloatRect bounds;
+  };
+
   // Factory method to create an instance of the PDF Engine.
   static std::unique_ptr<PDFEngine> Create(Client* client,
                                            bool enable_javascript);
@@ -399,6 +405,11 @@ class PDFEngine {
   // For all the images in page |page_index|, get their alt texts and bounding
   // boxes.
   virtual std::vector<AccessibilityImageInfo> GetImageInfo(int page_index) = 0;
+  // For all the highlights in page |page_index|, get their underlying text
+  // ranges and bounding boxes.
+  virtual std::vector<AccessibilityHighlightInfo> GetHighlightInfo(
+      int page_index) = 0;
+
   // Gets the PDF document's print scaling preference. True if the document can
   // be scaled to fit.
   virtual bool GetPrintScaling() = 0;
@@ -517,6 +528,12 @@ class PDFEngineExports {
   virtual bool GetPDFDocInfo(base::span<const uint8_t> pdf_buffer,
                              int* page_count,
                              double* max_page_width) = 0;
+
+  // Whether the PDF is Tagged (see 10.7 "Tagged PDF" in PDF Reference 1.7).
+  // Returns true if it's a tagged (accessible) PDF, false if it's a valid
+  // PDF but untagged, and nullopt if the PDF can't be parsed.
+  virtual base::Optional<bool> IsPDFDocTagged(
+      base::span<const uint8_t> pdf_buffer) = 0;
 
   // See the definition of GetPDFPageSizeByIndex in pdf.cc for details.
   virtual bool GetPDFPageSizeByIndex(base::span<const uint8_t> pdf_buffer,

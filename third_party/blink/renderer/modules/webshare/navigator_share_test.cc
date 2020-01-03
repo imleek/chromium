@@ -9,7 +9,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/fileapi/file.h"
 #include "third_party/blink/renderer/core/fileapi/file_property_bag.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
@@ -17,6 +16,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/modules/webshare/share_data.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
@@ -89,11 +89,11 @@ class NavigatorShareTest : public testing::Test {
   }
 
   void Share(const ShareData& share_data) {
-    std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::NotifyUserActivation(&GetFrame());
+    LocalFrame::NotifyUserActivation(&GetFrame());
     Navigator* navigator = GetFrame().DomWindow()->navigator();
-    ScriptPromise promise =
-        NavigatorShare::share(GetScriptState(), *navigator, &share_data);
+    NonThrowableExceptionState exception_state;
+    ScriptPromise promise = NavigatorShare::share(GetScriptState(), *navigator,
+                                                  &share_data, exception_state);
     test::RunPendingTasks();
     EXPECT_EQ(mock_share_service_.error() == mojom::ShareError::OK
                   ? v8::Promise::kFulfilled

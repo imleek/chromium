@@ -9,6 +9,12 @@ import os
 import shutil
 import subprocess
 
+_DIR_SOURCE_ROOT = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
+_JAVA_PATH = os.path.join(_DIR_SOURCE_ROOT, 'third_party', 'jdk', 'current',
+                          'bin', 'java')
+
 logging.basicConfig(
     format='[%(asctime)s %(levelname)s] %(message)s', level=logging.DEBUG)
 
@@ -32,8 +38,6 @@ def _call_profdata_tool(profile_input_file_paths,
   Raises:
     CalledProcessError: An error occurred merging profiles.
   """
-  logging.info('Merging profiles.')
-
   try:
     subprocess_cmd = [
         profdata_tool_path, 'merge', '-o', profile_output_file_path,
@@ -115,8 +119,6 @@ def _validate_and_convert_profraws(profraw_files, profdata_tool_path):
       A list of *invalid* profraw files.
       A list of profraw files that have counter overflows.
   """
-  logging.info('Validating and converting .profraw files.')
-
   for profraw_file in profraw_files:
     if not profraw_file.endswith('.profraw'):
       raise RuntimeError('%r is expected to be a .profraw file.' % profraw_file)
@@ -129,6 +131,7 @@ def _validate_and_convert_profraws(profraw_files, profdata_tool_path):
   counter_overflows = multiprocessing.Manager().list()
 
   for profraw_file in profraw_files:
+    logging.info('Converting profraw file: %r', profraw_file)
     pool.apply_async(
         _validate_and_convert_profraw,
         (profraw_file, output_profdata_files, invalid_profraw_files,
@@ -162,13 +165,18 @@ def _validate_and_convert_profraw(profraw_file, output_profdata_files,
     # Redirecting stderr is required because when error happens, llvm-profdata
     # writes the error output to stderr and our error handling logic relies on
     # that output.
+    logging.info('Converting %r to %r', profraw_file, output_profdata_file)
     validation_output = subprocess.check_output(
         subprocess_cmd, stderr=subprocess.STDOUT)
+    logging.info('Validating and converting %r to %r succeeded with output: %r',
+                 profraw_file, output_profdata_file, validation_output)
     if 'Counter overflow' in validation_output:
       counter_overflow = True
     else:
       profile_valid = True
   except subprocess.CalledProcessError as error:
+    logging.warning('Validating and converting %r to %r failed with output: %r',
+                    profraw_file, output_profdata_file, error.output)
     validation_output = error.output
 
   # 2. Add the profile to the appropriate list(s).
@@ -209,7 +217,7 @@ def merge_java_exec_files(input_dir, output_path, jacococli_path):
     logging.info('No exec file found under %s', input_dir)
     return
 
-  cmd = ['java', '-jar', jacococli_path, 'merge']
+  cmd = [_JAVA_PATH, '-jar', jacococli_path, 'merge']
   cmd.extend(exec_input_file_paths)
   cmd.extend(['--destfile', output_path])
   output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)

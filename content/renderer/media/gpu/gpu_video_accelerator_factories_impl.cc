@@ -31,7 +31,6 @@
 #include "media/mojo/clients/mojo_video_encode_accelerator.h"
 #include "media/video/video_encode_accelerator.h"
 #include "mojo/public/cpp/base/shared_memory_utils.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/skia/include/core/SkPostConfig.h"
 
@@ -65,14 +64,15 @@ GpuVideoAcceleratorFactoriesImpl::Create(
     bool enable_video_accelerator,
     mojo::PendingRemote<media::mojom::InterfaceFactory>
         interface_factory_remote,
-    media::mojom::VideoEncodeAcceleratorProviderPtrInfo vea_provider_info) {
+    mojo::PendingRemote<media::mojom::VideoEncodeAcceleratorProvider>
+        vea_provider_remote) {
   RecordContextProviderPhaseUmaEnum(
       ContextProviderPhase::CONTEXT_PROVIDER_ACQUIRED);
   return base::WrapUnique(new GpuVideoAcceleratorFactoriesImpl(
       std::move(gpu_channel_host), main_thread_task_runner, task_runner,
       context_provider, enable_video_gpu_memory_buffers,
       enable_media_stream_gpu_memory_buffers, enable_video_accelerator,
-      std::move(interface_factory_remote), std::move(vea_provider_info)));
+      std::move(interface_factory_remote), std::move(vea_provider_remote)));
 }
 
 GpuVideoAcceleratorFactoriesImpl::GpuVideoAcceleratorFactoriesImpl(
@@ -85,7 +85,8 @@ GpuVideoAcceleratorFactoriesImpl::GpuVideoAcceleratorFactoriesImpl(
     bool enable_video_accelerator,
     mojo::PendingRemote<media::mojom::InterfaceFactory>
         interface_factory_remote,
-    media::mojom::VideoEncodeAcceleratorProviderPtrInfo vea_provider_info)
+    mojo::PendingRemote<media::mojom::VideoEncodeAcceleratorProvider>
+        vea_provider_remote)
     : main_thread_task_runner_(main_thread_task_runner),
       task_runner_(task_runner),
       gpu_channel_host_(std::move(gpu_channel_host)),
@@ -105,7 +106,7 @@ GpuVideoAcceleratorFactoriesImpl::GpuVideoAcceleratorFactoriesImpl(
       base::BindOnce(&GpuVideoAcceleratorFactoriesImpl::BindOnTaskRunner,
                      base::Unretained(this),
                      std::move(interface_factory_remote),
-                     std::move(vea_provider_info)));
+                     std::move(vea_provider_remote)));
 }
 
 GpuVideoAcceleratorFactoriesImpl::~GpuVideoAcceleratorFactoriesImpl() {}
@@ -113,12 +114,13 @@ GpuVideoAcceleratorFactoriesImpl::~GpuVideoAcceleratorFactoriesImpl() {}
 void GpuVideoAcceleratorFactoriesImpl::BindOnTaskRunner(
     mojo::PendingRemote<media::mojom::InterfaceFactory>
         interface_factory_remote,
-    media::mojom::VideoEncodeAcceleratorProviderPtrInfo vea_provider_info) {
+    mojo::PendingRemote<media::mojom::VideoEncodeAcceleratorProvider>
+        vea_provider_remote) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(context_provider_);
 
   interface_factory_.Bind(std::move(interface_factory_remote));
-  vea_provider_.Bind(std::move(vea_provider_info));
+  vea_provider_.Bind(std::move(vea_provider_remote));
 
   if (context_provider_->BindToCurrentThread() !=
       gpu::ContextResult::kSuccess) {
@@ -198,13 +200,14 @@ int32_t GpuVideoAcceleratorFactoriesImpl::GetCommandBufferRouteId() {
   return context_provider_->GetCommandBufferProxy()->route_id();
 }
 
-bool GpuVideoAcceleratorFactoriesImpl::IsDecoderConfigSupported(
+media::GpuVideoAcceleratorFactories::Supported
+GpuVideoAcceleratorFactoriesImpl::IsDecoderConfigSupported(
     media::VideoDecoderImplementation implementation,
     const media::VideoDecoderConfig& config) {
   // There is no support for alpha channel hardware decoding yet.
   if (config.alpha_mode() == media::VideoDecoderConfig::AlphaMode::kHasAlpha) {
     DVLOG(1) << "Alpha transparency formats are not supported.";
-    return false;
+    return Supported::kFalse;
   }
 
   base::AutoLock lock(supported_decoder_configs_lock_);
@@ -213,20 +216,20 @@ bool GpuVideoAcceleratorFactoriesImpl::IsDecoderConfigSupported(
   // that all configs are supported. Clients will find out that configs are not
   // supported when VideoDecoder::Initialize() fails.
   if (!supported_decoder_configs_)
-    return true;
+    return Supported::kUnknown;
 
   auto iter = supported_decoder_configs_->find(implementation);
   // If the decoder implementation wasn't listed, then fail.  This means that
   // there is no such decoder implementation.
   if (iter == supported_decoder_configs_->end())
-    return false;
+    return Supported::kFalse;
 
   // Iterate over the supported configs for |impl|.
   for (const auto& supported : iter->second) {
     if (supported.Matches(config))
-      return true;
+      return Supported::kTrue;
   }
-  return false;
+  return Supported::kFalse;
 }
 
 std::unique_ptr<media::VideoDecoder>
@@ -332,7 +335,7 @@ GpuVideoAcceleratorFactoriesImpl::VideoFrameOutputFormat(
     if (bit_depth == 10) {
       if (capabilities.image_xr30)
         return media::GpuVideoAcceleratorFactories::OutputFormat::XR30;
-      else if (capabilities.image_xb30)
+      else if (capabilities.image_ab30)
         return media::GpuVideoAcceleratorFactories::OutputFormat::XB30;
     }
 #endif

@@ -9,6 +9,7 @@ export class TestTabsApiProxy extends TestBrowserProxy {
     super([
       'activateTab',
       'closeTab',
+      'createNewTab',
       'getTabs',
       'moveTab',
       'setThumbnailTracked',
@@ -22,9 +23,13 @@ export class TestTabsApiProxy extends TestBrowserProxy {
     return Promise.resolve({active: true, id: tabId});
   }
 
-  closeTab(tabId) {
-    this.methodCalled('closeTab', tabId);
+  closeTab(tabId, closeTabAction) {
+    this.methodCalled('closeTab', [tabId, closeTabAction]);
     return Promise.resolve();
+  }
+
+  createNewTab() {
+    this.methodCalled('createNewTab');
   }
 
   getTabs() {

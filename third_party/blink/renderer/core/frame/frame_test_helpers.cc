@@ -312,8 +312,7 @@ WebRemoteFrameImpl* CreateRemoteChild(
   client->Bind(frame, std::move(owned_client));
   if (!security_origin)
     security_origin = SecurityOrigin::CreateUniqueOpaque();
-  frame->GetFrame()->GetSecurityContext()->SetReplicatedOrigin(
-      std::move(security_origin));
+  frame->GetFrame()->SetReplicatedOrigin(std::move(security_origin), false);
   return frame;
 }
 
@@ -399,6 +398,16 @@ WebViewImpl* WebViewHelper::InitializeAndLoad(
 }
 
 WebViewImpl* WebViewHelper::InitializeRemote(
+    TestWebRemoteFrameClient* client,
+    scoped_refptr<SecurityOrigin> security_origin,
+    TestWebViewClient* web_view_client,
+    TestWebWidgetClient* web_widget_client) {
+  return InitializeRemoteWithOpener(nullptr, client, security_origin,
+                                    web_view_client, web_widget_client);
+}
+
+WebViewImpl* WebViewHelper::InitializeRemoteWithOpener(
+    WebFrame* opener,
     TestWebRemoteFrameClient* web_remote_frame_client,
     scoped_refptr<SecurityOrigin> security_origin,
     TestWebViewClient* web_view_client,
@@ -413,13 +422,12 @@ WebViewImpl* WebViewHelper::InitializeRemote(
   WebRemoteFrameImpl* frame = WebRemoteFrameImpl::CreateMainFrame(
       web_view_, web_remote_frame_client,
       InterfaceRegistry::GetEmptyInterfaceRegistry(),
-      web_remote_frame_client->GetAssociatedInterfaceProvider(), nullptr);
+      web_remote_frame_client->GetAssociatedInterfaceProvider(), opener);
   web_remote_frame_client->Bind(frame,
                                 std::move(owned_web_remote_frame_client));
   if (!security_origin)
     security_origin = SecurityOrigin::CreateUniqueOpaque();
-  frame->GetFrame()->GetSecurityContext()->SetReplicatedOrigin(
-      std::move(security_origin));
+  frame->GetFrame()->SetReplicatedOrigin(std::move(security_origin), false);
 
   test_web_widget_client_ = CreateDefaultClientIfNeeded(
       web_widget_client, owned_test_web_widget_client_);
@@ -669,7 +677,7 @@ void TestWebWidgetClient::SetPageScaleStateAndLimits(
 
 void TestWebWidgetClient::InjectGestureScrollEvent(
     WebGestureDevice device,
-    const WebFloatSize& delta,
+    const gfx::Vector2dF& delta,
     ScrollGranularity granularity,
     cc::ElementId scrollable_area_element_id,
     WebInputEvent::Type injected_type) {
@@ -732,11 +740,9 @@ void TestWebWidgetClient::SetBrowserControlsShownRatio(float top_ratio,
   layer_tree_host()->SetBrowserControlsShownRatio(top_ratio, bottom_ratio);
 }
 
-void TestWebWidgetClient::SetBrowserControlsHeight(float top_height,
-                                                   float bottom_height,
-                                                   bool shrink_viewport) {
-  layer_tree_host()->SetBrowserControlsHeight(top_height, bottom_height,
-                                              shrink_viewport);
+void TestWebWidgetClient::SetBrowserControlsParams(
+    cc::BrowserControlsParams params) {
+  layer_tree_host()->SetBrowserControlsParams(params);
 }
 
 viz::FrameSinkId TestWebWidgetClient::GetFrameSinkId() {

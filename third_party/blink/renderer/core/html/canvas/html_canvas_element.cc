@@ -78,7 +78,6 @@
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_2d_layer_bridge.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_heuristic_parameters.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_dispatcher.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
@@ -178,8 +177,15 @@ void HTMLCanvasElement::ParseAttribute(
 LayoutObject* HTMLCanvasElement::CreateLayoutObject(const ComputedStyle& style,
                                                     LegacyLayout legacy) {
   LocalFrame* frame = GetDocument().GetFrame();
-  if (frame && GetDocument().CanExecuteScripts(kNotAboutToExecuteScript))
+  if (frame && GetDocument().CanExecuteScripts(kNotAboutToExecuteScript)) {
+    // Allocation of a layout object indicates that the canvas doesn't
+    // have display:none set, so is conceptually being displayed.
+    if (context_) {
+      context_->SetIsBeingDisplayed(style.Visibility() ==
+                                    EVisibility::kVisible);
+    }
     return new LayoutHTMLCanvas(this);
+  }
   return HTMLElement::CreateLayoutObject(style, legacy);
 }
 
@@ -315,10 +321,18 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContextInternal(
     UpdateMemoryUsage();
 
   LayoutObject* layout_object = GetLayoutObject();
-  if (layout_object && Is2d() && !context_->CreationAttributes().alpha) {
-    // In the alpha false case, canvas is initially opaque, so we need to
-    // trigger an invalidation.
-    DidDraw();
+  if (layout_object) {
+    const ComputedStyle* style = GetComputedStyle();
+    if (style) {
+      context_->SetIsBeingDisplayed(style->Visibility() ==
+                                    EVisibility::kVisible);
+    }
+
+    if (Is2d() && !context_->CreationAttributes().alpha) {
+      // In the alpha false case, canvas is initially opaque, so we need to
+      // trigger an invalidation.
+      DidDraw();
+    }
   }
 
   if (context_->CreationAttributes().desynchronized) {
@@ -335,7 +349,10 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContextInternal(
     UseCounter::Count(GetDocument(), WebFeature::kHTMLCanvasElementLowLatency);
   }
 
-  SetNeedsCompositingUpdate();
+  // A 2D context does not know before lazy creation whether or not it is
+  // direct composited. The Canvas2DLayerBridge will handle this
+  if (!Is2d())
+    SetNeedsCompositingUpdate();
 
   return context_.Get();
 }
@@ -403,40 +420,32 @@ void HTMLCanvasElement::PreFinalizeFrame() {
   if (resource_provider)
     resource_provider->ReleaseLockedImages();
 
-  // Low-latency 2d canvases produce their frames after the resource gets
-  // single buffered.
-  if (LowLatencyEnabled() && !dirty_rect_.IsEmpty()) {
-    if (GetOrCreateCanvasResourceProvider(kPreferAcceleration)) {
-      const bool webgl_overlay_enabled =
-          RuntimeEnabledFeatures::WebGLImageChromiumEnabled() ||
-          context_->UsingSwapChain();
-      // TryEnableSingleBuffering() the first time we finalize a frame.
-      if (!ResourceProvider()->IsSingleBuffered()) {
-        ResourceProvider()->TryEnableSingleBuffering();
-        if (Is3d() && webgl_overlay_enabled)
-          context_->ProvideBackBufferToResourceProvider();
-      }
-    }
+  // Low-latency 2d canvases produce their frames after the resource gets single
+  // buffered.
+  if (LowLatencyEnabled() && !dirty_rect_.IsEmpty() &&
+      GetOrCreateCanvasResourceProvider(kPreferAcceleration)) {
+    // TryEnableSingleBuffering() the first time we FinalizeFrame().  This is
+    // a nop if already single buffered or if single buffering is unsupported.
+    ResourceProvider()->TryEnableSingleBuffering();
   }
 }
 
 void HTMLCanvasElement::PostFinalizeFrame() {
-  if (LowLatencyEnabled() && !dirty_rect_.IsEmpty()) {
-    if (GetOrCreateCanvasResourceProvider(kPreferAcceleration)) {
-      const base::TimeTicks start_time = base::TimeTicks::Now();
-      const scoped_refptr<CanvasResource> canvas_resource =
-          ResourceProvider()->ProduceCanvasResource();
-      const FloatRect src_rect(0, 0, Size().Width(), Size().Height());
-      dirty_rect_.Intersect(src_rect);
-      const IntRect int_dirty = EnclosingIntRect(dirty_rect_);
-      const SkIRect damage_rect = SkIRect::MakeXYWH(
-          int_dirty.X(), int_dirty.Y(), int_dirty.Width(), int_dirty.Height());
-      const bool needs_vertical_flip = !RenderingContext()->IsOriginTopLeft();
-      frame_dispatcher_->DispatchFrame(std::move(canvas_resource), start_time,
-                                       damage_rect, needs_vertical_flip,
-                                       IsOpaque());
-      dirty_rect_ = FloatRect();
-    }
+  if (LowLatencyEnabled() && !dirty_rect_.IsEmpty() &&
+      GetOrCreateCanvasResourceProvider(kPreferAcceleration)) {
+    const base::TimeTicks start_time = base::TimeTicks::Now();
+    const scoped_refptr<CanvasResource> canvas_resource =
+        ResourceProvider()->ProduceCanvasResource();
+    const FloatRect src_rect(0, 0, Size().Width(), Size().Height());
+    dirty_rect_.Intersect(src_rect);
+    const IntRect int_dirty = EnclosingIntRect(dirty_rect_);
+    const SkIRect damage_rect = SkIRect::MakeXYWH(
+        int_dirty.X(), int_dirty.Y(), int_dirty.Width(), int_dirty.Height());
+    const bool needs_vertical_flip = !RenderingContext()->IsOriginTopLeft();
+    frame_dispatcher_->DispatchFrame(std::move(canvas_resource), start_time,
+                                     damage_rect, needs_vertical_flip,
+                                     IsOpaque());
+    dirty_rect_ = FloatRect();
   }
 
   // If the canvas is visible, notifying listeners is taken care of in
@@ -670,6 +679,10 @@ SkFilterQuality HTMLCanvasElement::FilterQuality() const {
   return (style && style->ImageRendering() == EImageRendering::kPixelated)
              ? kNone_SkFilterQuality
              : kLow_SkFilterQuality;
+}
+
+bool HTMLCanvasElement::LowLatencyEnabled() const {
+  return !!frame_dispatcher_;
 }
 
 // In some instances we don't actually want to paint to the parent layer
@@ -1161,7 +1174,7 @@ void HTMLCanvasElement::PageVisibilityChanged() {
   if (!context_)
     return;
 
-  context_->SetIsHidden(hidden);
+  context_->SetIsInHiddenPage(hidden);
   if (hidden && Is3d())
     DiscardResourceProvider();
 }
@@ -1177,6 +1190,13 @@ void HTMLCanvasElement::StyleDidChange(const ComputedStyle* old_style,
     context_->StyleDidChange(old_style, new_style);
 }
 
+void HTMLCanvasElement::LayoutObjectDestroyed() {
+  // If the canvas has no layout object then it definitely isn't being
+  // displayed any more.
+  if (context_)
+    context_->SetIsBeingDisplayed(false);
+}
+
 void HTMLCanvasElement::DidMoveToNewDocument(Document& old_document) {
   ContextLifecycleObserver::SetContext(&GetDocument());
   PageVisibilityObserver::SetContext(GetDocument().GetPage());
@@ -1184,8 +1204,7 @@ void HTMLCanvasElement::DidMoveToNewDocument(Document& old_document) {
 }
 
 void HTMLCanvasElement::WillDrawImageTo2DContext(CanvasImageSource* source) {
-  if (canvas_heuristic_parameters::kEnableAccelerationToAvoidReadbacks &&
-      SharedGpuContext::AllowSoftwareToAcceleratedCanvasUpgrade() &&
+  if (SharedGpuContext::AllowSoftwareToAcceleratedCanvasUpgrade() &&
       source->IsAccelerated() && GetOrCreateCanvas2DLayerBridge() &&
       !canvas2d_bridge_->IsAccelerated() &&
       ShouldAccelerate(kIgnoreResourceLimitCriteria)) {
@@ -1321,7 +1340,7 @@ bool HTMLCanvasElement::IsSupportedInteractiveCanvasFallback(
   // An input element whose type attribute is in one of the Checkbox or Radio
   // Button states.  An input element that is a button but its type attribute is
   // not in the Image Button state.
-  if (auto* input_element = ToHTMLInputElementOrNull(element)) {
+  if (auto* input_element = DynamicTo<HTMLInputElement>(element)) {
     if (input_element->type() == input_type_names::kCheckbox ||
         input_element->type() == input_type_names::kRadio ||
         input_element->IsTextButton()) {

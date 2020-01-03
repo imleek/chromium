@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/layout/ng/custom/layout_worklet_global_scope.h"
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_function.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_intrinsic_sizes_callback.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_layout_callback.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_no_argument_constructor.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_parser.h"
@@ -36,12 +37,12 @@ LayoutWorkletGlobalScope* LayoutWorkletGlobalScope::Create(
   auto* isolate = ToIsolate(frame);
   auto microtask_queue =
       v8::MicrotaskQueue::New(isolate, v8::MicrotasksPolicy::kScoped);
-  auto* agent = Agent::CreateForWorkerOrWorklet(
-      isolate,
-      creation_params->agent_cluster_id.is_empty()
-          ? base::UnguessableToken::Create()
-          : creation_params->agent_cluster_id,
-      std::move(microtask_queue));
+  auto* agent =
+      MakeGarbageCollected<Agent>(isolate,
+                                  creation_params->agent_cluster_id.is_empty()
+                                      ? base::UnguessableToken::Create()
+                                      : creation_params->agent_cluster_id,
+                                  std::move(microtask_queue));
   auto* global_scope = MakeGarbageCollected<LayoutWorkletGlobalScope>(
       frame, std::move(creation_params), reporting_proxy,
       pending_layout_registry, agent);
@@ -126,7 +127,8 @@ void LayoutWorkletGlobalScope::registerLayout(
       retriever.GetMethodOrThrow("intrinsicSizes", exception_state);
   if (exception_state.HadException())
     return;
-  V8Function* intrinsic_sizes = V8Function::Create(v8_intrinsic_sizes);
+  V8IntrinsicSizesCallback* intrinsic_sizes =
+      V8IntrinsicSizesCallback::Create(v8_intrinsic_sizes);
 
   v8::Local<v8::Function> v8_layout =
       retriever.GetMethodOrThrow("layout", exception_state);

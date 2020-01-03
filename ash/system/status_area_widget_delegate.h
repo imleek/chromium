@@ -8,6 +8,8 @@
 #include "ash/ash_export.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/shelf/shelf_layout_manager_observer.h"
+#include "ash/system/status_area_widget.h"
 #include "base/macros.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/accessible_pane_view.h"
@@ -20,7 +22,8 @@ class Shelf;
 // The View for the status area widget.
 class ASH_EXPORT StatusAreaWidgetDelegate : public views::AccessiblePaneView,
                                             public views::WidgetDelegate,
-                                            public ShelfConfig::Observer {
+                                            public ShelfConfig::Observer,
+                                            public ShelfLayoutManagerObserver {
  public:
   explicit StatusAreaWidgetDelegate(Shelf* shelf);
   ~StatusAreaWidgetDelegate() override;
@@ -35,6 +38,10 @@ class ASH_EXPORT StatusAreaWidgetDelegate : public views::AccessiblePaneView,
   // Returns true if status area widget delegate should focus out on the
   // designated focusing direction, otherwise false.
   bool ShouldFocusOut(bool reverse);
+
+  // Called by StatusAreaWidget when its collapse state changes.
+  void OnStatusAreaCollapseStateChanged(
+      StatusAreaWidget::CollapseState new_collapse_state);
 
   // Overridden from views::AccessiblePaneView.
   View* GetDefaultFocusableChild() override;
@@ -53,6 +60,10 @@ class ASH_EXPORT StatusAreaWidgetDelegate : public views::AccessiblePaneView,
 
   // Overridden from ShelfConfig::Observer:
   void OnShelfConfigUpdated() override;
+
+  // ShelfLayoutManagerObserver:
+  void OnHotseatStateChanged(HotseatState old_state,
+                             HotseatState new_state) override;
 
   void set_default_last_focusable_child(bool default_last_focusable_child) {
     default_last_focusable_child_ = default_last_focusable_child;

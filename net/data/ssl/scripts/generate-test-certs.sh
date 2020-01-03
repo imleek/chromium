@@ -95,6 +95,13 @@ openssl req \
   -reqexts req_localhost_san \
   -config ee.cnf
 
+openssl req \
+  -new \
+  -keyout out/test_names.key \
+  -out out/test_names.req \
+  -reqexts req_test_names \
+  -config ee.cnf
+
 # Generate the leaf certificates
 CA_NAME="req_ca_dn" \
   openssl ca \
@@ -175,6 +182,15 @@ CA_NAME="req_ca_dn" \
     -out out/bad_validity.pem \
     -config ca.cnf
 
+CA_NAME="req_ca_dn" \
+  openssl ca \
+    -batch \
+    -extensions user_cert \
+    -days 3650 \
+    -in out/test_names.req \
+    -out out/test_names.pem \
+    -config ca.cnf
+
 /bin/sh -c "cat out/ok_cert.key out/ok_cert.pem \
     > ../certificates/ok_cert.pem"
 /bin/sh -c "cat out/wildcard.key out/wildcard.pem \
@@ -199,6 +215,8 @@ CA_NAME="req_ca_dn" \
 /bin/sh -c "cat out/int/ok_cert.pem out/int/2048-sha256-int.pem \
     out/2048-sha256-root.pem \
     > ../certificates/x509_verify_results.chain.pem"
+/bin/sh -c "cat out/test_names.key out/test_names.pem \
+    > ../certificates/test_names.pem"
 
 # Now generate the one-off certs
 ## Self-signed cert for SPDY/QUIC/HTTP2 pooling testing
@@ -546,6 +564,25 @@ CA_NAME="req_ca_dn" \
     -out ../certificates/may_2018.pem \
     -config ca.cnf
 
+# Issued after 1 July 2019 (The macOS 10.15+ date for additional
+# policies for locally-trusted certificates - see
+# https://support.apple.com/en-us/HT210176 ) and valid for >825
+# days, even accounting for rounding issues.
+openssl req \
+  -config ../scripts/ee.cnf \
+  -newkey rsa:2048 \
+  -text \
+  -out out/900_days_after_2019_07_01.req
+CA_NAME="req_ca_dn" \
+  openssl ca \
+    -batch \
+    -extensions user_cert \
+    -startdate 190701000000Z \
+    -enddate   211217000000Z \
+    -in out/900_days_after_2019_07_01.req \
+    -out ../certificates/900_days_after_2019_07_01.pem \
+    -config ca.cnf
+
 # Regenerate CRLSets
 ## Block a leaf cert directly by SPKI
 python crlsetutil.py -o ../certificates/crlset_by_leaf_spki.raw \
@@ -617,3 +654,36 @@ python crlsetutil.py -o ../certificates/crlset_by_leaf_subject_no_spki.raw \
   }
 }
 CRLSETBYLEAFSUBJECTNOSPKI
+
+## Mark a given root as blocked for interception.
+python crlsetutil.py -o \
+  ../certificates/crlset_blocked_interception_by_root.raw \
+<<CRLSETINTERCEPTIONBYROOT
+{
+  "BlockedInterceptionSPKIs": [
+    "../certificates/root_ca_cert.pem"
+  ]
+}
+CRLSETINTERCEPTIONBYROOT
+
+## Mark a given intermediate as blocked for interception.
+python crlsetutil.py -o \
+  ../certificates/crlset_blocked_interception_by_intermediate.raw \
+<<CRLSETINTERCEPTIONBYINTERMEDIATE
+{
+  "BlockedInterceptionSPKIs": [
+    "../certificates/intermediate_ca_cert.pem"
+  ]
+}
+CRLSETINTERCEPTIONBYINTERMEDIATE
+
+## Mark a given root as known for interception, but not blocked.
+python crlsetutil.py -o \
+  ../certificates/crlset_known_interception_by_root.raw \
+<<CRLSETINTERCEPTIONBYROOT
+{
+  "KnownInterceptionSPKIs": [
+    "../certificates/root_ca_cert.pem"
+  ]
+}
+CRLSETINTERCEPTIONBYROOT

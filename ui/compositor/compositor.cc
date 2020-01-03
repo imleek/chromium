@@ -5,9 +5,9 @@
 #include "ui/compositor/compositor.h"
 
 #include <stddef.h>
-
 #include <algorithm>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -26,7 +26,6 @@
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
 #include "cc/metrics/begin_main_frame_metrics.h"
-#include "cc/trees/latency_info_swap_promise.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "components/viz/common/features.h"
@@ -103,8 +102,6 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
   // Use occlusion to allow more overlapping windows to take less memory.
   settings.use_occlusion_for_tile_prioritization = true;
   settings.main_frame_before_activation_enabled = false;
-  settings.delegated_sync_points_required =
-      context_factory_->SyncTokensRequiredForDisplayCompositor();
 
   // Disable edge anti-aliasing in order to increase support for HW overlays.
   settings.enable_edge_anti_aliasing = false;
@@ -155,7 +152,6 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
 
   settings.initial_debug_state.SetRecordRenderingStats(
       command_line->HasSwitch(cc::switches::kEnableGpuBenchmarking));
-  settings.build_hit_test_data = features::IsVizHitTestingSurfaceLayerEnabled();
 
   settings.use_zero_copy = IsUIZeroCopyEnabled();
 
@@ -207,6 +203,12 @@ Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
           features::kCompositorThreadedScrollbarScrolling)) {
     settings.compositor_threaded_scrollbar_scrolling = true;
   }
+
+#if DCHECK_IS_ON()
+  if (command_line->HasSwitch(cc::switches::kLogOnUIDoubleBackgroundBlur))
+    settings.log_on_ui_double_background_blur = true;
+#endif
+
   animation_host_ = cc::AnimationHost::CreateMainInstance();
 
   cc::LayerTreeHost::InitParams params;
@@ -365,12 +367,6 @@ void Compositor::ReenableSwap() {
   context_factory_private_->ResizeDisplay(this, size_);
 }
 
-void Compositor::SetLatencyInfo(const ui::LatencyInfo& latency_info) {
-  std::unique_ptr<cc::SwapPromise> swap_promise(
-      new cc::LatencyInfoSwapPromise(latency_info));
-  host_->QueueSwapPromise(std::move(swap_promise));
-}
-
 void Compositor::SetScaleAndSize(
     float scale,
     const gfx::Size& size_in_pixel,
@@ -456,12 +452,8 @@ void Compositor::SetDisplayColorSpace(const gfx::ColorSpace& color_space,
   }
 }
 
-void Compositor::SetDisplayTransformHint(gfx::OverlayTransform transform) {
-  if (display_transform_ == transform)
-    return;
-
-  display_transform_ = transform;
-  context_factory_private_->SetDisplayTransformHint(this, display_transform_);
+void Compositor::SetDisplayTransformHint(gfx::OverlayTransform hint) {
+  host_->set_display_transform_hint(hint);
 }
 
 void Compositor::SetBackgroundColor(SkColor color) {

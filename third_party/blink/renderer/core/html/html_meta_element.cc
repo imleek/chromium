@@ -574,6 +574,8 @@ void HTMLMetaElement::ProcessContent() {
     ProcessViewportContentAttribute(content_value,
                                     ViewportDescription::kViewportMeta);
   } else if (EqualIgnoringASCIICase(name_value, "referrer")) {
+    UseCounter::Count(&GetDocument(),
+                      WebFeature::kHTMLMetaElementReferrerPolicy);
     GetDocument().ParseAndSetReferrerPolicy(content_value,
                                             true /* support legacy keywords */);
   } else if (EqualIgnoringASCIICase(name_value, "handheldfriendly") &&
@@ -583,6 +585,14 @@ void HTMLMetaElement::ProcessContent() {
   } else if (EqualIgnoringASCIICase(name_value, "mobileoptimized")) {
     ProcessViewportContentAttribute("width=device-width, initial-scale=1",
                                     ViewportDescription::kMobileOptimizedMeta);
+  } else if (EqualIgnoringASCIICase(name_value, "monetization")) {
+    // TODO(1031476): The Web Monetization specification is an unofficial draft,
+    // available at https://webmonetization.org/specification.html
+    // For now, only use counters are implemented in Blink.
+    if (!GetDocument().ParentDocument()) {
+      UseCounter::Count(&GetDocument(),
+                        WebFeature::kHTMLMetaElementMonetization);
+    }
   }
 }
 
@@ -603,6 +613,6 @@ const AtomicString& HTMLMetaElement::HttpEquiv() const {
 }
 
 const AtomicString& HTMLMetaElement::GetName() const {
-  return GetNameAttribute();
+  return FastGetAttribute(html_names::kNameAttr);
 }
 }

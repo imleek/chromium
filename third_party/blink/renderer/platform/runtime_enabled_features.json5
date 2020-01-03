@@ -62,14 +62,30 @@
     // feature with the Origin Trials framework. The framework allows the
     // feature to be enabled at runtime on a per-page basis through a signed
     // token for the corresponding feature name. Declaring the
-    // origin_trial_feature_name will cause a static method to be generated in
-    // origin_trials.h/cpp. This static method allows the feature implementation
-    // to check if it is enabled for the current context.
+    // origin_trial_feature_name will modify the generation of the static
+    // methods in runtime_enabled_features.h/cpp. The static method then allows
+    // the feature implementation to check if the trial is enabled for the
+    // current context.
     origin_trial_feature_name: {
     },
+    // origin_trial_os specifies the platforms where the trial is available.
+    // The default is empty, meaning all platforms.
     origin_trial_os: {
       default: [],
       valid_type: "list",
+    },
+    // origin_trial_type specifies the unique type of the trial, when not the
+    // usual trial for a new experimental feature.
+    origin_trial_type: {
+      default: "",
+      valid_type: "str",
+      valid_values: ["deprecation", "intervention", ""],
+    },
+    // origin_trial_allows_insecure specifies whether the trial can be enabled
+    // in an insecure context, with default being false. This can only be set
+    // to true for a "deprecation" type trial.
+    origin_trial_allows_insecure: {
+      valid_type: "bool",
     },
 
     // settable_from_internals specifies whether a feature can be set from
@@ -235,12 +251,18 @@
       name: "BlockHTMLParserOnStyleSheets",
     },
     {
-      name: "BlockingDownloadsInSandboxWithoutUserActivation",
+      name: "BlockingDownloadsInSandbox",
       status: "test",
     },
     {
       name: "BlockingFocusWithoutUserActivation",
       status: "experimental",
+    },
+    {
+      name: "BrowserVerifiedUserActivationKeyboard",
+    },
+    {
+      name: "BrowserVerifiedUserActivationMouse",
     },
     {
       name: "BuiltInModuleAll",
@@ -268,6 +290,7 @@
     },
     {
       name: "CacheStorageCodeCacheHint",
+      origin_trial_feature_name: "CacheStorageCodeCacheHint",
       status: "experimental",
     },
     {
@@ -303,7 +326,7 @@
     },
     {
       name: "CloneableNativeFileSystemHandles",
-      status: "experimental",
+      status: {"Android": "test", "default": "experimental"},
       // NativeFileSystem is in Origin Trial, which doesn't support having
       // non-origin-trial-enabled features depend on it. https://crbug.com/1000486
       // depends_on: ["NativeFileSystem"]
@@ -320,10 +343,6 @@
       status: "test",
     },
     {
-      name: "CompressionStreams",
-      status: "experimental",
-    },
-    {
       name: "ComputedAccessibilityInfo",
       status: "experimental",
     },
@@ -332,16 +351,18 @@
     },
     {
       name: "ContactsManager",
-      origin_trial_feature_name: "ContactsManager",
+      status:  {"Android": "stable", "default": "test"},
+    },
+    {
+      name: "ContactsManagerExtraProperties",
+      origin_trial_feature_name: "ContactsManagerExtraProperties",
       origin_trial_os: ["android"],
       status: {"Android": "experimental", "default": "test"},
     },
     {
-      name: "ContactsManagerExtraProperties",
-      status: {"Android": "experimental", "default": "test"},
-    },
-    {
       name: "ContentIndex",
+      origin_trial_feature_name: "ContentIndex",
+      origin_trial_os: ["android"],
       status: "experimental",
     },
     {
@@ -388,10 +409,18 @@
     {
       name: "CSSCascade",
     },
-    // Support for the CSS color-scheme property from the css-color-adjust spec.
-    // https://drafts.csswg.org/css-color-adjust/#color-scheme-prop
     {
+      // Support for the CSS color-scheme property from the css-color-adjust spec.
+      // https://drafts.csswg.org/css-color-adjust/#color-scheme-prop
       name: "CSSColorScheme",
+    },
+    {
+      // When the color-scheme is supported via the CSS color-scheme property
+      // (CSSColorScheme) or the meta tag (MetaColorScheme), the only UA
+      // rendering change is for the canvas background and the :root element
+      // color property. Enabling this runtime flag will enable dark UA
+      // rendering for form controls, scrollbars, etc.
+      name: "CSSColorSchemeUARendering",
     },
     {
       // CSS min(), max() and clamp()
@@ -447,6 +476,10 @@
       status: "experimental",
     },
     {
+      name: "CSSModules",
+      status: "experimental",
+    },
+    {
       name: "CSSOffsetPathRay",
       status: "experimental",
     },
@@ -482,7 +515,7 @@
     },
     {
       name: "CSSRenderSubtree",
-      status: "test",
+      status: "experimental",
     },
     {
       name: "CSSSnapSize",
@@ -523,6 +556,8 @@
     {
       name: "CustomElementsV0",
       origin_trial_feature_name: "WebComponentsV0",
+      origin_trial_type: "deprecation",
+      origin_trial_allows_insecure: true,
       status: "test",
     },
     {
@@ -535,6 +570,7 @@
     },
     {
       name: "DecodeJpeg420ImagesToYUV",
+      status: "test",
     },
     {
       name: "DecodeLossyWebPImagesToYUV",
@@ -547,6 +583,10 @@
     {
       name: "DisableHardwareNoiseSuppression",
       origin_trial_feature_name: "DisableHardwareNoiseSuppression",
+      status: "experimental",
+    },
+    {
+      name: "DisallowDocumentAccess",
       status: "experimental",
     },
     {
@@ -661,10 +701,6 @@
       name: "FallbackCursorMode",
     },
     {
-      name: "FastBorderRadius",
-      status: "experimental",
-    },
-    {
       name: "FeaturePolicyForClientHints",
       status: "experimental",
     },
@@ -736,11 +772,6 @@
       name: "ForceTallerSelectPopup",
       status: {"ChromeOS": "stable"},
     },
-    // This is to communicate features::FormControlsRefresh from ui (and can be
-    // removed when the feature launches).
-    {
-      name: "FormControlsRefresh",
-    },
     {
       name: "FractionalMouseEvent",
     },
@@ -768,13 +799,15 @@
       name: "HrefTranslate",
       depends_on: ["TranslateService"],
       origin_trial_feature_name: "HrefTranslate",
-      status: "experimental",
+      status: "stable",
     },
     // TODO(937746): Web Components v0 is disabled by default, and will be
     // removed after M87.
     {
       name: "HTMLImports",
       origin_trial_feature_name: "WebComponentsV0",
+      origin_trial_type: "deprecation",
+      origin_trial_allows_insecure: true,
       status: "test",
     },
     {
@@ -795,7 +828,7 @@
     },
     {
       name: "ImageOrientation",
-      status: "test",
+      status: "stable",
     },
     {
       name: "ImplicitRootScroller",
@@ -817,8 +850,7 @@
     },
     {
       name: "InstalledApp",
-      origin_trial_feature_name: "InstalledApp",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "IntersectionObserverDocumentScrollingElementRoot",
@@ -842,9 +874,6 @@
       // If enabled, CSP checks use the isolated world CSP when in an isolated
       // world. See crbug.com/896041.
       name: "IsolatedWorldCSP"
-    },
-    {
-      name: "JSONModules",
     },
     {
       name: "KeyboardFocusableScrollers",
@@ -924,7 +953,8 @@
     },
     {
       name: "MathMLCore",
-      status:"test",
+      status:"experimental",
+      depends_on: ["LayoutNG"],
     },
     {
       name:"MeasureMemory",
@@ -936,8 +966,11 @@
     },
     {
       name: "MediaCapabilitiesEncryptedMedia",
-      origin_trial_feature_name: "MediaCapabilitiesEncryptedMedia",
-      status: "experimental",
+      status: "stable",
+    },
+    {
+      name: "MediaCapabilitiesSpatialAudio",
+      status: "test",
     },
     {
       name: "MediaCapture",
@@ -1020,9 +1053,6 @@
       name: "MediaSourceStable",
       status: "stable",
     },
-    {
-      name: "MergeBlockingNonBlockingPools",
-    },
     // Support for META tag for setting color-scheme used for opting into dark
     // UA theming and opting out of forced dark mode.
     // https://drafts.csswg.org/css-color-adjust/#color-scheme-meta
@@ -1034,10 +1064,6 @@
     {
       name: "MiddleClickAutoscroll",
       status: "test",
-    },
-    // Specific mime-types such as PDF are rendered in cross-process frames.
-    {
-      name: "MimeHandlerViewInCrossProcessFrame",
     },
     {
 
@@ -1069,7 +1095,7 @@
       // Also enabled when blink::features::kNativeFileSystemAPI is overridden
       // on the command line (or via chrome://flags).
       name: "NativeFileSystem",
-      status: "experimental",
+      status: {"Android": "test", "default": "experimental"},
       origin_trial_feature_name: "NativeFileSystem",
       origin_trial_os: ["win", "macosx", "linux", "chromeos"],
     },
@@ -1100,6 +1126,7 @@
     },
     {
       name: "NewSystemColors",
+      status: "stable",
     },
     {
       name: "NoIdleEncodingForWebTests",
@@ -1151,25 +1178,37 @@
       name: "OriginTrialsSampleAPI",
       origin_trial_feature_name: "Frobulate",
     },
+    // As above. Do not change this flag to stable, as it exists solely to
+    // generate code used by the origin trials sample API implementation.
     // TODO(yashard): Add tests for this feature.
     {
       name: "OriginTrialsSampleAPIDependent",
       depends_on: ["OriginTrialsSampleAPI"],
     },
-    // Define a sample API for testing integration with the Origin Trials
-    // Framework. The sample API is used in both unit and web tests for the
-    // Origin Trials Framework. Do not change this flag to stable, as it exists
-    // solely to generate code used by the sample API implementation.
+    // As above. Do not change this flag to stable, as it exists solely to
+    // generate code used by the origin trials sample API implementation.
+    {
+      name: "OriginTrialsSampleAPIDeprecation",
+      origin_trial_feature_name: "FrobulateDeprecation",
+      origin_trial_type: "deprecation",
+      origin_trial_allows_insecure: true,
+    },
+    // As above. Do not change this flag to stable, as it exists solely to
+    // generate code used by the origin trials sample API implementation.
     {
       name: "OriginTrialsSampleAPIImplied",
       origin_trial_feature_name: "FrobulateImplied",
       implied_by: ["OriginTrialsSampleAPI", "OriginTrialsSampleAPIInvalidOS"],
     },
+    // As above. Do not change this flag to stable, as it exists solely to
+    // generate code used by the origin trials sample API implementation.
     {
       name: "OriginTrialsSampleAPIInvalidOS",
       origin_trial_feature_name: "FrobulateInvalidOS",
       origin_trial_os: ["invalid"],
     },
+    // As above. Do not change this flag to stable, as it exists solely to
+    // generate code used by the origin trials sample API implementation.
     {
       name: "OriginTrialsSampleAPINavigation",
       origin_trial_feature_name: "FrobulateNavigation",
@@ -1219,7 +1258,6 @@
     // This is to add an option to enable the Reveal button on password inputs while waiting ::reveal gets standardized.
     {
       name: "PasswordReveal",
-      depends_on: ["FormControlsRefresh"],
     },
     {
       name: "PaymentApp",
@@ -1231,7 +1269,7 @@
     },
     {
       name: "PaymentHandlerHandlesShippingAndContact",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "PaymentMethodChangeEvent",
@@ -1254,17 +1292,8 @@
       name: "PerformanceManagerInstrumentation",
     },
     {
-      // Flag enabling the performance observers buffered flag. The buffered
-      // flag indicates whether or not the buffered entries should be loaded
-      // into the observer's buffer upon registration. See crbug.com/725567.
-      name: "PerformanceObserverBufferedFlag",
-      status: "stable",
-    },
-    {
       name: "PeriodicBackgroundSync",
-      origin_trial_feature_name: "PeriodicBackgroundSync",
-      settable_from_internals: true,
-      status: "test",
+      status: "stable",
     },
     {
       name: "PerMethodCanMakePaymentQuota",
@@ -1355,6 +1384,10 @@
     {
       name: "QuicTransport",
       status: "experimental",
+    },
+    {
+      // Enabled when blink::features::kRawClipboard is enabled.
+      name: "RawClipboard",
     },
     {
       name: "ReducedReferrerGranularity",
@@ -1468,6 +1501,10 @@
       name: "ScrollCustomization",
     },
     {
+      name: "ScrollSnapAfterLayout",
+      status: "experimental",
+    },
+    {
       name: "ScrollTimeline",
       status: "experimental",
       origin_trial_feature_name: "AnimationWorklet",
@@ -1513,6 +1550,8 @@
     {
       name: "ShadowDOMV0",
       origin_trial_feature_name: "WebComponentsV0",
+      origin_trial_type: "deprecation",
+      origin_trial_allows_insecure: true,
       status: "test",
     },
     {
@@ -1559,7 +1598,8 @@
     {
       name: "SmsReceiver",
       origin_trial_feature_name: "SmsReceiver",
-      status: {"Android": "experimental", "default": "test"},
+      origin_trial_os: ["android"],
+      status: {"default": "experimental"},
     },
     // Used as argument in attribute of stable-release functions/interfaces
     // where a runtime-enabled feature name is required for correct IDL syntax.
@@ -1691,6 +1731,15 @@
       name: "VideoFullscreenOrientationLock",
     },
     {
+      name: "VideoPlaybackQuality",
+      status: "stable",
+    },
+    {
+      // See https://crbug.com/1012063
+      name: "VideoRequestAnimationFrame",
+      status: "experimental",
+    },
+    {
       name: "VideoRotateToFullscreen",
     },
     {
@@ -1719,8 +1768,14 @@
       origin_trial_feature_name: "WebAssemblyThreads",
       status: "experimental",
     },
+    // WebAuth is disabled on Android versions prior to N (7.0) due to lack of
+    // supporting APIs, see runtime_features.cc.
     {
       name: "WebAuth",
+      status: "stable",
+    },
+    {
+      name: "WebAuthenticationFeaturePolicy",
       status: "experimental",
     },
     // WebBluetooth is enabled by default on Android, ChromeOS and Mac.
@@ -1737,6 +1792,10 @@
     {
       name: "WebBluetoothScanning",
       status: "experimental",
+    },
+    {
+      name: "WebCodecs",
+      status: "test",
     },
     {
       name: "WebGL2ComputeContext",
@@ -1760,10 +1819,6 @@
     {
       name: "WebHID",
       status: "experimental",
-    },
-    {
-      name: "WebkitBoxLayoutUsesFlexLayout",
-      status: "stable",
     },
     {
       name: "WebNFC",
@@ -1806,23 +1861,9 @@
       status: "stable",
     },
     {
-      name: "WebXRAnchors",
-      // depends_on: ["WebXRARModule"],  // TODO(https://crbug.com/954679): uncomment once bug is fixed
-    },
-    {
-      name: "WebXRARDOMOverlay",
-      // depends_on: ["WebXRARModule"],  // TODO(https://crbug.com/954679): uncomment once bug is fixed
-      status: "experimental",
-    },
-    {
       name: "WebXRARModule",
       depends_on: ["WebXR"],
       status: "experimental",
-    },
-    {
-      name: "WebXrGamepadModule",
-      // depends_on: ["WebXR"],  // TODO(https://crbug.com/954679): uncomment once bug is fixed
-      status: "stable",
     },
     {
       name: "WebXRHitTest",
@@ -1830,13 +1871,21 @@
       status: "experimental"
     },
     {
-      name: "WebXRPlaneDetection",
+      name: "WebXRIncubations",
       // depends_on: ["WebXRARModule"],  // TODO(https://crbug.com/954679): uncomment once bug is fixed
+      status: "experimental",
     },
     // Extends window placement functionality for multi-screen devices.
     {
       name: "WindowPlacement",
       status: "experimental",
+    },
+    {
+      name: "WritableFileStream",
+      status: "experimental",
+      // NativeFileSystem is in Origin Trial, which doesn't support having
+      // non-origin-trial-enabled features depend on it. https://crbug.com/1000486
+      // depends_on: ["NativeFileSystem"]
     },
     {
       name: "XSLT",

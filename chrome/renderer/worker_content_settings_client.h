@@ -37,6 +37,7 @@ class WorkerContentSettingsClient : public blink::WebContentSettingsClient {
                                    const blink::WebURL& url) override;
   bool AllowScriptFromSource(bool enabled_per_settings,
                              const blink::WebURL& script_url) override;
+  bool ShouldAutoupgradeMixedContent() override;
 
  private:
   explicit WorkerContentSettingsClient(
@@ -51,6 +52,7 @@ class WorkerContentSettingsClient : public blink::WebContentSettingsClient {
   GURL site_for_cookies_;
   url::Origin top_frame_origin_;
   bool allow_running_insecure_content_;
+  const int32_t render_frame_id_;
   const RendererContentSettingRules* content_setting_rules_;
 
   // Because instances of this class are created on the parent's thread (i.e,

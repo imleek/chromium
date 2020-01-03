@@ -81,7 +81,7 @@ WGPUTexture ExternalVkImageDawnRepresentation::BeginAccess(
     descriptor.waitFDs.push_back(handle.TakeHandle().release());
   }
 
-  texture_ = dawn_native::vulkan::WrapVulkanImageOpaqueFD(device_, &descriptor);
+  texture_ = dawn_native::vulkan::WrapVulkanImage(device_, &descriptor);
 
   if (texture_) {
     // Keep a reference to the texture so that it stays valid (its content
@@ -93,7 +93,7 @@ WGPUTexture ExternalVkImageDawnRepresentation::BeginAccess(
     // the result.
     // TODO(cwallez@chromium.org): This is incorrect and allows reading
     // uninitialized data. When !IsCleared we should tell dawn_native to
-    // consider the texture lazy-cleared.
+    // consider the texture lazy-cleared. crbug.com/1036080
     SetCleared();
   }
 

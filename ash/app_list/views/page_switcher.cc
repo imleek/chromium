@@ -33,8 +33,8 @@ namespace ash {
 
 namespace {
 
-constexpr int kNormalButtonRadius = 4;
-constexpr int kSelectedButtonRadius = 5;
+constexpr int kNormalButtonRadius = 3;
+constexpr int kSelectedButtonRadius = 4;
 constexpr int kInkDropRadiusForRootGrid = 16;
 constexpr int kInkDropRadiusForFolderGrid = 10;
 constexpr SkScalar kStrokeWidth = SkIntToScalar(2);
@@ -204,7 +204,7 @@ PageSwitcherButton* GetButtonByIndex(views::View* buttons, size_t index) {
 
 }  // namespace
 
-PageSwitcher::PageSwitcher(ash::PaginationModel* model,
+PageSwitcher::PageSwitcher(PaginationModel* model,
                            bool is_root_app_grid_page_switcher,
                            bool is_tablet_mode)
     : model_(model),

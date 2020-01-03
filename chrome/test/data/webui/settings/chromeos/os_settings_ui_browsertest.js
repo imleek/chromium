@@ -12,19 +12,12 @@ GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
 // https://crbug.com/1003483
 GEN('#if defined(NDEBUG)');
 
-GEN('#include "chromeos/constants/chromeos_features.h"');
-
 // Test fixture for the top-level OS settings UI.
 // eslint-disable-next-line no-var
 var OSSettingsUIBrowserTest = class extends PolymerTest {
   /** @override */
   get browsePreload() {
     return 'chrome://os-settings/';
-  }
-
-  /** @override */
-  get featureList() {
-    return {enabled: ['chromeos::features::kSplitSettings']};
   }
 
   /** @override */
@@ -215,6 +208,24 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
       searchField.setValue('   ');
       urlParams = settings.getQueryParameters();
       assertFalse(urlParams.has('search'));
+    });
+
+    // Test that navigating via the paper menu always clears the current
+    // search URL parameter.
+    test('clearsUrlSearchParam', function() {
+      const settingsMenu = ui.$$('os-settings-menu');
+
+      // As of iron-selector 2.x, need to force iron-selector to update before
+      // clicking items on it, or wait for 'iron-items-changed'
+      const ironSelector = settingsMenu.$$('iron-selector');
+      ironSelector.forceSynchronousItemUpdate();
+
+      const urlParams = new URLSearchParams('search=foo');
+      settings.navigateTo(settings.routes.BASIC, urlParams);
+      assertEquals(
+          urlParams.toString(), settings.getQueryParameters().toString());
+      settingsMenu.$.people.click();
+      assertEquals('', settings.getQueryParameters().toString());
     });
   });
 

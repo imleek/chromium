@@ -18,10 +18,10 @@ config("leveldb_config") {
 leveldb_sources = [
   "env_chromium.cc",
   "env_chromium.h",
-  "leveldb_features.h",
-  "leveldb_features.cc",
   "leveldb_chrome.cc",
   "leveldb_chrome.h",
+  "leveldb_features.cc",
+  "leveldb_features.h",
   "port/port_chromium.cc",
   "port/port_chromium.h",
   "src/db/builder.cc",
@@ -198,8 +198,6 @@ if (!is_ios && !is_android) {
     sources = [
       "src/util/histogram.cc",
       "src/util/histogram.h",
-      "src/util/testharness.cc",
-      "src/util/testharness.h",
       "src/util/testutil.cc",
       "src/util/testutil.h",
     ]
@@ -209,6 +207,8 @@ if (!is_ios && !is_android) {
 
     public_deps = [
       ":leveldb_static",
+      "//third_party/googletest:gmock",
+      "//third_party/googletest:gtest",
     ]
     deps = [
       "//base",
@@ -449,7 +449,5 @@ fuzzer_test("leveldb_put_get_delete_fuzzer") {
   ]
   deps = [
     ":leveldatabase",
-    ":leveldb_testutil",
-    "//base/test:test_support",
   ]
 }

@@ -12,14 +12,14 @@
 
 namespace ash {
 
-enum ShelfAlignment {
-  SHELF_ALIGNMENT_BOTTOM,
-  SHELF_ALIGNMENT_LEFT,
-  SHELF_ALIGNMENT_RIGHT,
+enum class ShelfAlignment {
+  kBottom,
+  kLeft,
+  kRight,
   // Top has never been supported.
 
   // The locked alignment is set temporarily and not saved to preferences.
-  SHELF_ALIGNMENT_BOTTOM_LOCKED,
+  kBottomLocked,
 };
 
 enum class HotseatState {
@@ -32,15 +32,10 @@ enum class HotseatState {
   kExtended,
 };
 
-enum ShelfAutoHideBehavior {
-  // Always auto-hide.
-  SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS,
-
-  // Never auto-hide.
-  SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
-
-  // Always hide.
-  SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
+enum class ShelfAutoHideBehavior {
+  kAlways,        // Always auto-hide.
+  kNever,         // Never auto-hide.
+  kAlwaysHidden,  // Always hide.
 };
 
 enum ShelfAutoHideState {
@@ -59,37 +54,40 @@ enum ShelfVisibilityState {
   SHELF_HIDDEN,
 };
 
-enum ShelfBackgroundType {
+enum class ShelfBackgroundType {
   // The default transparent background.
-  SHELF_BACKGROUND_DEFAULT,
+  kDefaultBg,
 
   // The background when a window is maximized or two windows are maximized
   // for a split view.
-  SHELF_BACKGROUND_MAXIMIZED,
+  kMaximized,
 
   // The background when the app list is visible in clamshell mode.
-  SHELF_BACKGROUND_APP_LIST,
+  kAppList,
 
   // The background when the app list is visible in tablet mode.
-  SHELF_BACKGROUND_HOME_LAUNCHER,
+  kHomeLauncher,
 
   // The background when a maximized window exists or two windows are maximized
   // for a split view, and the app list is visible. If the app list were not
-  // visible, the shelf would be in SHELF_BACKGROUND_MAXIMIZED state.
-  SHELF_BACKGROUND_MAXIMIZED_WITH_APP_LIST,
+  // visible, the shelf would be in ShelfBackgroundType::kMaximized state.
+  kMaximizedWithAppList,
 
   // The background when OOBE is active.
-  SHELF_BACKGROUND_OOBE,
+  kOobe,
 
   // The background when login/lock/user-add is active.
-  SHELF_BACKGROUND_LOGIN,
+  kLogin,
 
   // The background when login/lock/user-add is active and the wallpaper is not
   // blurred.
-  SHELF_BACKGROUND_LOGIN_NONBLURRED_WALLPAPER,
+  kLoginNonBlurredWallpaper,
 
   // The background when overview is active.
-  SHELF_BACKGROUND_OVERVIEW,
+  kOverview,
+
+  // The background for the in-app shelf in tablet mode.
+  kInApp,
 };
 
 // Source of the launch or activation request, for tracking.

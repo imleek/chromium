@@ -5,7 +5,7 @@
 Polymer({
   is: 'gaia-password-changed',
 
-  behaviors: [I18nBehavior],
+  behaviors: [OobeI18nBehavior],
 
   properties: {
     email: String,
@@ -30,13 +30,12 @@ Polymer({
   },
 
   invalidate: function() {
-    this.$.oldPasswordInput.isInvalid = true;
+    this.$.oldPasswordInput.invalid = true;
   },
 
   reset: function() {
     this.$.animatedPages.selected = 0;
     this.clearPassword();
-    this.$.oldPasswordInput.isInvalid = false;
     this.disabled = false;
     this.$.navigation.closeVisible = true;
     this.$.oldPasswordCard.classList.remove('disabled');
@@ -50,7 +49,7 @@ Polymer({
 
   /** @private */
   onPasswordSubmitted_: function() {
-    if (!this.$.oldPasswordInput.checkValidity())
+    if (!this.$.oldPasswordInput.validate())
       return;
     this.$.oldPasswordCard.classList.add('disabled');
     this.disabled = true;
@@ -65,7 +64,7 @@ Polymer({
 
   /** @private */
   onTryAgainClicked_: function() {
-    this.$.oldPasswordInput.isInvalid = false;
+    this.$.oldPasswordInput.invalid = false;
     this.$.animatedPages.selected -= 1;
   },
 
@@ -76,6 +75,7 @@ Polymer({
 
   clearPassword: function() {
     this.$.oldPasswordInput.value = '';
+    this.$.oldPasswordInput.invalid = false;
   },
 
   /** @private */

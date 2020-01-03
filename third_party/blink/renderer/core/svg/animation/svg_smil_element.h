@@ -55,12 +55,10 @@ class CORE_EXPORT SVGSMILElement : public SVGElement, public SVGTests {
   InsertionNotificationRequest InsertedInto(ContainerNode&) override;
   void RemovedFrom(ContainerNode&) override;
 
-  virtual bool HasValidTarget() const;
-
   SMILTimeContainer* TimeContainer() const { return time_container_.Get(); }
 
+  bool HasValidTarget() const;
   SVGElement* targetElement() const { return target_element_; }
-  const QualifiedName& AttributeName() const { return attribute_name_; }
 
   void BeginByLinkActivation();
 
@@ -85,21 +83,12 @@ class CORE_EXPORT SVGSMILElement : public SVGElement, public SVGTests {
 
   void UpdateInterval(SMILTime presentation_time);
   void UpdateActiveState(SMILTime elapsed);
-  // Updates the next interval time for this element. After calling this,
-  // SMILTimeContainer::Reschedule() should be called in close proximity to
-  // make sure the priority queue is up-to-date/correctly sorted.
-  void UpdateNextIntervalTime(SMILTime presentation_time);
   void UpdateProgressState(SMILTime presentation_time);
   bool IsHigherPriorityThan(const SVGSMILElement* other,
                             SMILTime presentation_time) const;
 
-  SMILTime NextIntervalTime() const { return next_interval_time_; }
   SMILTime ComputeNextIntervalTime(SMILTime presentation_time) const;
   SMILTime NextProgressTime(SMILTime elapsed) const;
-  void UpdateAnimatedValue(SVGSMILElement* result_element) {
-    UpdateAnimation(last_progress_.progress, last_progress_.repeat,
-                    result_element);
-  }
 
   void Reset();
 
@@ -113,19 +102,8 @@ class CORE_EXPORT SVGSMILElement : public SVGElement, public SVGTests {
 
   wtf_size_t& PriorityQueueHandle() { return queue_handle_; }
 
-  virtual void ResetAnimatedType() = 0;
-  virtual void ClearAnimatedType() = 0;
-  virtual void ApplyResultsToTarget() = 0;
-
-  // Returns true if this animation "sets" the
-  // value of the animation. Thus all previous
-  // animations are rendered useless.
-  virtual bool OverwritesUnderlyingAnimationValue() const = 0;
-
   void ScheduleEvent(const AtomicString& event_type);
   void ScheduleRepeatEvents();
-
-  virtual bool IsSVGDiscardElement() const { return false; }
 
   void Trace(blink::Visitor*) override;
 
@@ -140,7 +118,11 @@ class CORE_EXPORT SVGSMILElement : public SVGElement, public SVGTests {
   virtual void WillChangeAnimationTarget();
   virtual void DidChangeAnimationTarget();
 
-  QualifiedName attribute_name_;
+  struct ProgressState {
+    float progress;
+    unsigned repeat;
+  };
+  const ProgressState& GetProgressState() const { return last_progress_; }
 
  private:
   void BuildPendingResource() override;
@@ -149,17 +131,13 @@ class CORE_EXPORT SVGSMILElement : public SVGElement, public SVGTests {
 
   void StartedActiveInterval();
   void EndedActiveInterval();
-  virtual void UpdateAnimation(float percent,
-                               unsigned repeat,
-                               SVGSMILElement* result_element) = 0;
 
   bool LayoutObjectIsNeeded(const ComputedStyle&) const override {
     return false;
   }
 
-  SMILTime FindInstanceTime(BeginOrEnd,
-                            SMILTime minimum_time,
-                            bool equals_minimum_ok) const;
+  SMILTime NextAfter(BeginOrEnd, SMILTime time) const;
+
   SMILTime BeginTimeForPrioritization(SMILTime presentation_time) const;
 
   SMILInterval ResolveInterval(SMILTime begin_after, SMILTime end_after) const;
@@ -245,12 +223,9 @@ class CORE_EXPORT SVGSMILElement : public SVGElement, public SVGTests {
   ActiveState GetActiveState() const {
     return static_cast<ActiveState>(active_state_);
   }
-  ActiveState DetermineActiveState(SMILTime elapsed) const;
+  ActiveState DetermineActiveState(const SMILInterval& interval,
+                                   SMILTime elapsed) const;
 
-  struct ProgressState {
-    float progress;
-    unsigned repeat;
-  };
   ProgressState CalculateProgressState(SMILTime presentation_time) const;
 
   Member<SVGElement> target_element_;
@@ -275,7 +250,6 @@ class CORE_EXPORT SVGSMILElement : public SVGElement, public SVGTests {
   // This is the previous interval. It should always be non-overlapping and
   // "before" |interval_|.
   SMILInterval previous_interval_;
-  SMILTime next_interval_time_;
 
   unsigned active_state_ : 2;
   unsigned restart_ : 2;
@@ -299,23 +273,24 @@ class CORE_EXPORT SVGSMILElement : public SVGElement, public SVGTests {
   friend class ConditionEventListener;
 };
 
-inline bool IsSVGSMILElement(const SVGElement& element) {
-  return element.HasTagName(svg_names::kSetTag) ||
-         element.HasTagName(svg_names::kAnimateTag) ||
-         element.HasTagName(svg_names::kAnimateMotionTag) ||
-         element.HasTagName(svg_names::kAnimateTransformTag) ||
-         element.HasTagName((svg_names::kDiscardTag));
+template <>
+inline bool IsElementOfType<const SVGSMILElement>(const Node& node) {
+  return IsA<SVGSMILElement>(node);
 }
-
 template <>
 struct DowncastTraits<SVGSMILElement> {
   static bool AllowFrom(const Node& node) {
     auto* svg_element = DynamicTo<SVGElement>(node);
-    return svg_element && IsSVGSMILElement(*svg_element);
+    return svg_element && AllowFrom(*svg_element);
+  }
+  static bool AllowFrom(const SVGElement& svg_element) {
+    return svg_element.HasTagName(svg_names::kSetTag) ||
+           svg_element.HasTagName(svg_names::kAnimateTag) ||
+           svg_element.HasTagName(svg_names::kAnimateMotionTag) ||
+           svg_element.HasTagName(svg_names::kAnimateTransformTag);
   }
 };
 
-DEFINE_SVGELEMENT_TYPE_CASTS_WITH_FUNCTION(SVGSMILElement);
 }  // namespace blink
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_SVG_ANIMATION_SVG_SMIL_ELEMENT_H_

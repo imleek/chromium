@@ -15,7 +15,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import static org.chromium.chrome.browser.tabmodel.TabSelectionType.FROM_NEW;
+import static org.chromium.chrome.browser.tab.TabSelectionType.FROM_NEW;
 
 import android.content.Context;
 
@@ -33,9 +33,10 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 
 /**
  * Unit tests for OfflinePageUtils.
@@ -53,7 +54,8 @@ public class OfflinePageTabObserverTest {
     private TabModelSelector mTabModelSelector;
     @Mock private SnackbarManager mSnackbarManager;
     @Mock private SnackbarController mSnackbarController;
-    @Mock private Tab mTab;
+    @Mock
+    private TabImpl mTab;
     @Mock
     private OfflinePageUtils.Internal mOfflinePageUtils;
 

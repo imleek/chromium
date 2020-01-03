@@ -31,8 +31,7 @@ PaintRenderingContext2D::PaintRenderingContext2D(
 void PaintRenderingContext2D::InitializePaintRecorder() {
   paint_recorder_ = std::make_unique<PaintRecorder>();
   cc::PaintCanvas* canvas = paint_recorder_->beginRecording(
-      container_size_.Width() / effective_zoom_,
-      container_size_.Height() / effective_zoom_);
+      container_size_.Width(), container_size_.Height());
 
   // Always save an initial frame, to support resetting the top level matrix
   // and clip.
@@ -150,16 +149,19 @@ void PaintRenderingContext2D::setTransform(double m11,
                                            double dx,
                                            double dy) {
   BaseRenderingContext2D::setTransform(
-      m11 / device_scale_factor_, m12 / device_scale_factor_,
-      m21 / device_scale_factor_, m22 / device_scale_factor_,
-      dx / device_scale_factor_, dy / device_scale_factor_);
+      m11 * effective_zoom_, m12 * effective_zoom_, m21 * effective_zoom_,
+      m22 * effective_zoom_, dx * effective_zoom_, dy * effective_zoom_);
 }
 
 void PaintRenderingContext2D::setTransform(DOMMatrix2DInit* transform,
                                            ExceptionState& exception_state) {
-  // The PaintRenderingContext2D APIs are running on worklet thread, therefore
-  // it is not possible to construct a DOMMatrix.
-  NOTREACHED();
+  DOMMatrixReadOnly* m =
+      DOMMatrixReadOnly::fromMatrix2D(transform, exception_state);
+
+  if (!m)
+    return;
+
+  setTransform(m->m11(), m->m12(), m->m21(), m->m22(), m->m41(), m->m42());
 }
 
 sk_sp<PaintRecord> PaintRenderingContext2D::GetRecord() {

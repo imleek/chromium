@@ -293,6 +293,28 @@ TEST_F(AppLauncherTabHelperTest, InvalidUrls) {
   EXPECT_EQ(0U, delegate_.countOfAppsLaunched);
 }
 
+// Tests that when the last committed URL is invalid, the URL is only opened
+// when the last committed item is nil.
+TEST_F(AppLauncherTabHelperTest, ValidUrlInvalidCommittedURL) {
+  NSString* url_string = @"itms-apps://itunes.apple.com/us/app/appname/id123";
+  web_state_.SetCurrentURL(GURL());
+
+  std::unique_ptr<web::NavigationItem> item = web::NavigationItem::Create();
+  item->SetURL(GURL());
+
+  navigation_manager_->SetLastCommittedItem(item.get());
+  EXPECT_FALSE(TestShouldAllowRequest(url_string,
+                                      /*target_frame_is_main=*/true,
+                                      /*has_user_gesture=*/false));
+  EXPECT_EQ(0U, delegate_.countOfAppsLaunched);
+
+  navigation_manager_->SetLastCommittedItem(nullptr);
+  EXPECT_FALSE(TestShouldAllowRequest(url_string,
+                                      /*target_frame_is_main=*/true,
+                                      /*has_user_gesture=*/false));
+  EXPECT_EQ(1U, delegate_.countOfAppsLaunched);
+}
+
 // Tests that URLs with schemes that might be a security risk are blocked.
 TEST_F(AppLauncherTabHelperTest, InsecureUrls) {
   EXPECT_FALSE(TestShouldAllowRequest(@"app-settings://",
@@ -303,8 +325,8 @@ TEST_F(AppLauncherTabHelperTest, InsecureUrls) {
 
 // Tests that URLs with U2F schemes are handled correctly.
 // This test is using https://chromeiostesting-dot-u2fdemo.appspot.com URL which
-// is a whitelisted URL for the purpose of testing, but the test doesn't send
-// any request to the server.
+// is a URL allowed for the purpose of testing, but the test doesn't send any
+// requests to the server.
 TEST_F(AppLauncherTabHelperTest, U2FUrls) {
   // Add required tab helpers for the U2F check.
   TabIdTabHelper::CreateForWebState(&web_state_);

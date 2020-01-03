@@ -179,7 +179,7 @@ Node* AXObjectCacheImpl::FocusedElement() {
 
   // See if there's a page popup, for example a calendar picker.
   Element* adjusted_focused_element = document_->AdjustedFocusedElement();
-  if (auto* input = ToHTMLInputElementOrNull(adjusted_focused_element)) {
+  if (auto* input = DynamicTo<HTMLInputElement>(adjusted_focused_element)) {
     if (AXObject* ax_popup = input->PopupRootAXObject()) {
       if (Element* focused_element_in_popup =
               ax_popup->GetDocument()->FocusedElement())
@@ -414,8 +414,9 @@ AXObject* AXObjectCacheImpl::CreateFromRenderer(LayoutObject* layout_object) {
   if (IsA<HTMLOptionElement>(node))
     return MakeGarbageCollected<AXListBoxOption>(layout_object, *this);
 
-  if (IsHTMLInputElement(node) &&
-      ToHTMLInputElement(node)->type() == input_type_names::kRadio)
+  auto* html_input_element = DynamicTo<HTMLInputElement>(node);
+  if (html_input_element &&
+      html_input_element->type() == input_type_names::kRadio)
     return MakeGarbageCollected<AXRadioInput>(layout_object, *this);
 
   if (layout_object->IsSVGRoot())
@@ -615,7 +616,7 @@ void AXObjectCacheImpl::ContainingTableRowsOrColsMaybeChanged(Node* node) {
   // removal of a <tr> or <td>.
   // Get parent table from DOM, because AXObject/layout tree are incomplete.
   ContainerNode* containing_table = nullptr;
-  if (IsHTMLTableCellElement(node) || IsA<HTMLTableRowElement>(node))
+  if (IsA<HTMLTableCellElement>(node) || IsA<HTMLTableRowElement>(node))
     containing_table = FindParentTable(node);
 
   if (containing_table) {
@@ -1079,6 +1080,14 @@ void AXObjectCacheImpl::UpdateAriaOwns(
     const Vector<String>& id_vector,
     HeapVector<Member<AXObject>>& owned_children) {
   relation_cache_->UpdateAriaOwns(owner, id_vector, owned_children);
+}
+
+void AXObjectCacheImpl::UpdateAriaOwnsFromAttrAssociatedElements(
+    const AXObject* owner,
+    const HeapVector<Member<Element>>& attr_associated_elements,
+    HeapVector<Member<AXObject>>& owned_children) {
+  relation_cache_->UpdateAriaOwnsFromAttrAssociatedElements(
+      owner, attr_associated_elements, owned_children);
 }
 
 bool AXObjectCacheImpl::MayHaveHTMLLabel(const HTMLElement& elem) {
@@ -1636,8 +1645,12 @@ void AXObjectCacheImpl::HandleFocusedUIElementChanged(
     Element* new_focused_element) {
   RemoveValidationMessageObject();
 
-  if (!new_focused_element)
+  if (!new_focused_element) {
+    // When focus is cleared, implicitly focus the document by sending a blur.
+    DeferTreeUpdate(&AXObjectCacheImpl::HandleNodeLostFocusWithCleanLayout,
+                    GetDocument().documentElement());
     return;
+  }
 
   Page* page = new_focused_element->GetDocument().GetPage();
   if (!page)

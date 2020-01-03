@@ -98,7 +98,7 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
   std::string GetTopLevelPermanentItemId(syncer::ModelType model_type);
 
   // Returns all keystore keys from the server.
-  const std::vector<std::string>& GetKeystoreKeys() const;
+  const std::vector<std::vector<uint8_t>>& GetKeystoreKeys() const;
 
   // Triggers the keystore key rotation events on the server side: generating
   // new keystore key and touching the Nigori node.
@@ -184,6 +184,10 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
   // triggered error alternating was successful.
   bool EnableAlternatingTriggeredErrors();
 
+  // If called, all subsequent GetUpdatesResponses won't contain
+  // encryption_keys.
+  void DisallowSendingEncryptionKeys();
+
   // Adds |observer| to FakeServer's observer list. This should be called
   // before the Profile associated with |observer| is connected to the server.
   void AddObserver(Observer* observer);
@@ -209,6 +213,8 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
   void OnHistoryCommit(const std::string& url) override;
 
   const std::set<std::string>& GetCommittedHistoryURLs() const;
+
+  std::string GetStoreBirthday() const;
 
   // Returns the current FakeServer as a WeakPtr.
   base::WeakPtr<FakeServer> AsWeakPtr();
@@ -270,6 +276,10 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
   // lifetime.
   bool alternate_triggered_errors_;
   int request_counter_;
+
+  // If set to true all |this| will clear |encryption_keys| in all
+  // GetUpdateResponse's.
+  bool disallow_sending_encryption_keys_;
 
   // Client command to be included in every response.
   sync_pb::ClientCommand client_command_;

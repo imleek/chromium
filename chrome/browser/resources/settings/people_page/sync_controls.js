@@ -151,15 +151,6 @@ Polymer({
 
   /**
    * @param {boolean} syncAllDataTypes
-   * @param {boolean} enforced
-   * @return {boolean} Whether the sync checkbox should be disabled.
-   */
-  shouldSyncCheckboxBeDisabled_: function(syncAllDataTypes, enforced) {
-    return syncAllDataTypes || enforced;
-  },
-
-  /**
-   * @param {boolean} syncAllDataTypes
    * @param {boolean} autofillSynced
    * @return {boolean} Whether the sync checkbox should be disabled.
    */
@@ -191,7 +182,10 @@ Polymer({
     }
 
     return !!this.syncStatus.hasError &&
-        this.syncStatus.statusAction !== settings.StatusAction.ENTER_PASSPHRASE;
+        this.syncStatus.statusAction !==
+        settings.StatusAction.ENTER_PASSPHRASE &&
+        this.syncStatus.statusAction !==
+        settings.StatusAction.RETRIEVE_TRUSTED_VAULT_KEYS;
   },
 });
 })();

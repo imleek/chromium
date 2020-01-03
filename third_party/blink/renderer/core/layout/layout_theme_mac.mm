@@ -46,6 +46,7 @@
 #import "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #import "third_party/blink/renderer/platform/text/platform_locale.h"
 #import "third_party/blink/renderer/platform/web_test_support.h"
+#include "ui/base/ui_base_features.h"
 
 // This is a view whose sole purpose is to tell AppKit that it's flipped.
 @interface BlinkFlippedControl : NSControl
@@ -146,6 +147,15 @@ class LayoutThemeMacRefresh final : public LayoutThemeDefault {
   static scoped_refptr<LayoutTheme> Create() {
     return base::AdoptRef(new LayoutThemeMacRefresh());
   }
+
+  Color PlatformActiveSelectionBackgroundColor(
+      WebColorScheme color_scheme) const override;
+  Color PlatformInactiveSelectionBackgroundColor(
+      WebColorScheme color_scheme) const override;
+  Color PlatformActiveSelectionForegroundColor(
+      WebColorScheme color_scheme) const override;
+  Color PlatformSpellingMarkerUnderlineColor() const override;
+  Color PlatformGrammarMarkerUnderlineColor() const override;
 };
 
 // Inflate an IntRect to account for specific padding around margins.
@@ -274,6 +284,29 @@ Color LayoutThemeMac::PlatformFocusRingColor() const {
 Color LayoutThemeMac::PlatformInactiveListBoxSelectionBackgroundColor(
     WebColorScheme color_scheme) const {
   return PlatformInactiveSelectionBackgroundColor(color_scheme);
+}
+
+Color LayoutThemeMacRefresh::PlatformActiveSelectionBackgroundColor(
+    WebColorScheme color_scheme) const {
+  return GetSystemColor(MacSystemColorID::kSelectedTextBackground);
+}
+
+Color LayoutThemeMacRefresh::PlatformInactiveSelectionBackgroundColor(
+    WebColorScheme color_scheme) const {
+  return GetSystemColor(MacSystemColorID::kSecondarySelectedControl);
+}
+
+Color LayoutThemeMacRefresh::PlatformActiveSelectionForegroundColor(
+    WebColorScheme color_scheme) const {
+  return Color::kBlack;
+}
+
+Color LayoutThemeMacRefresh::PlatformSpellingMarkerUnderlineColor() const {
+  return Color(251, 45, 29);
+}
+
+Color LayoutThemeMacRefresh::PlatformGrammarMarkerUnderlineColor() const {
+  return Color(107, 107, 107);
 }
 
 static FontSelectionValue ToFontWeight(NSInteger app_kit_font_weight) {
@@ -1037,7 +1070,7 @@ NSView* FlippedView() {
 }
 
 LayoutTheme& LayoutTheme::NativeTheme() {
-  if (RuntimeEnabledFeatures::FormControlsRefreshEnabled()) {
+  if (features::IsFormControlsRefreshEnabled()) {
     DEFINE_STATIC_REF(LayoutTheme, layout_theme,
                       (LayoutThemeMacRefresh::Create()));
     return *layout_theme;

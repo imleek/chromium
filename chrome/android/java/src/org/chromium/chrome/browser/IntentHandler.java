@@ -42,10 +42,11 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinatorFactory;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.util.UrlConstants;
 import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.chrome.browser.webapps.WebappActivity;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -94,11 +95,6 @@ public class IntentHandler {
      * Tab ID to use when creating a new Tab.
      */
     public static final String EXTRA_TAB_ID = "com.android.chrome.tab_id";
-
-    /**
-     * Parcelable FullscreenOptions to use when creating a new Tab.
-     */
-    public static final String EXTRA_FULLSCREEN_OPTIONS = "com.android.chrome.fullscreen_options";
 
     /**
      * The tab id of the parent tab, if any.
@@ -780,6 +776,9 @@ public class IntentHandler {
 
         // We do some logging to determine what kinds of headers developers are inserting.
         IntentHeadersRecorder recorder = shouldLogHeaders ? new IntentHeadersRecorder() : null;
+        boolean firstParty = shouldLogHeaders
+                ? IntentHandler.notSecureIsIntentChromeOrFirstParty(intent)
+                : false;
 
         for (String key : bundleExtraHeaders.keySet()) {
             String value = bundleExtraHeaders.getString(key);
@@ -787,9 +786,9 @@ public class IntentHandler {
             // Strip the custom header that can only be added by ourselves.
             if ("x-chrome-intent-type".equals(key.toLowerCase(Locale.US))) continue;
 
-            if (shouldLogHeaders) recorder.recordHeader(key, value);
-
             if (!HttpUtil.isAllowedHeader(key, value)) continue;
+
+            if (shouldLogHeaders) recorder.recordHeader(key, value, firstParty);
 
             if (extraHeaders.length() != 0) extraHeaders.append("\n");
             extraHeaders.append(key);
@@ -797,9 +796,7 @@ public class IntentHandler {
             extraHeaders.append(value);
         }
 
-        if (shouldLogHeaders) {
-            recorder.report(IntentHandler.notSecureIsIntentChromeOrFirstParty(intent));
-        }
+        if (shouldLogHeaders) recorder.report(firstParty);
         return extraHeaders.length() == 0 ? null : extraHeaders.toString();
     }
 
@@ -1121,6 +1118,7 @@ public class IntentHandler {
         if (intent == null) return null;
         String url = getUrlFromVoiceSearchResult(intent);
         if (url == null) url = getUrlForCustomTab(intent);
+        if (url == null) url = getUrlForWebapp(intent);
         if (url == null) url = intent.getDataString();
         if (url == null) return null;
         url = url.trim();
@@ -1132,6 +1130,14 @@ public class IntentHandler {
         Uri data = intent.getData();
         return TextUtils.equals(data.getScheme(), UrlConstants.CUSTOM_TAB_SCHEME)
                 ? data.getQuery() : null;
+    }
+
+    private static String getUrlForWebapp(Intent intent) {
+        if (intent == null || intent.getData() == null) return null;
+        Uri data = intent.getData();
+        return TextUtils.equals(data.getScheme(), WebappActivity.WEBAPP_SCHEME)
+                ? IntentUtils.safeGetStringExtra(intent, ShortcutHelper.EXTRA_URL)
+                : null;
     }
 
     @VisibleForTesting

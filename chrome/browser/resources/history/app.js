@@ -2,36 +2,108 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/**
- * @typedef {{
- *   managed: boolean,
- *   otherFormsOfHistory: boolean,
- * }}
- */
-let FooterInfo;
+import {Polymer, html} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import {assert} from 'chrome://resources/js/assert.m.js';
+import {FindShortcutBehavior} from 'chrome://resources/js/find_shortcut_behavior.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
+import 'chrome://resources/polymer/v3_0/iron-media-query/iron-media-query.js';
+import 'chrome://resources/polymer/v3_0/iron-pages/iron-pages.js';
+import {IronScrollTargetBehavior} from 'chrome://resources/polymer/v3_0/iron-scroll-target-behavior/iron-scroll-target-behavior.js';
+import {BrowserService} from './browser_service.js';
+import {HistoryPageViewHistogram} from './constants.js';
+import {ForeignSession, QueryResult, QueryState} from './externs.js';
+import './history_list.js';
+import './history_toolbar.js';
+import './query_manager.js';
+import './router.js';
+import './shared_style.js';
+import {FooterInfo} from './side_bar.js';
+import './strings.js';
 
-cr.define('history', function() {
   let lazyLoadPromise = null;
-  function ensureLazyLoaded() {
+  export function ensureLazyLoaded() {
     if (!lazyLoadPromise) {
-      lazyLoadPromise = new Promise(function(resolve, reject) {
-        Polymer.Base.importHref('lazy_load.html', resolve, reject, true);
-      });
+      const script = document.createElement('script');
+      script.type = 'module';
+      script.src = './lazy_load.js';
+      document.body.appendChild(script);
+
+      lazyLoadPromise = Promise.all([
+        customElements.whenDefined('history-synced-device-manager'),
+        customElements.whenDefined('cr-action-menu'),
+        customElements.whenDefined('cr-button'),
+        customElements.whenDefined('cr-checkbox'),
+        customElements.whenDefined('cr-dialog'),
+        customElements.whenDefined('cr-drawer'),
+        customElements.whenDefined('cr-icon-button'),
+        customElements.whenDefined('cr-toolbar-selection-overlay'),
+      ]);
     }
     return lazyLoadPromise;
   }
 
-  return {
-    ensureLazyLoaded: ensureLazyLoaded,
-  };
-});
+  // Adds click/auxclick listeners for any link on the page. If the link points
+  // to a chrome: or file: url, then calls into the browser to do the
+  // navigation. Note: This method is *not* re-entrant. Every call to it, will
+  // re-add listeners on |document|. It's up to callers to ensure this is only
+  // called once.
+  export function listenForPrivilegedLinkClicks() {
+    ['click', 'auxclick'].forEach(function(eventName) {
+      document.addEventListener(eventName, function(e) {
+        // Ignore buttons other than left and middle.
+        if (e.button > 1 || e.defaultPrevented) {
+          return;
+        }
+
+        const eventPath = e.path;
+        let anchor = null;
+        if (eventPath) {
+          for (let i = 0; i < eventPath.length; i++) {
+            const element = eventPath[i];
+            if (element.tagName === 'A' && element.href) {
+              anchor = element;
+              break;
+            }
+          }
+        }
+
+        // Fallback if Event.path is not available.
+        let el = e.target;
+        if (!anchor && el.nodeType === Node.ELEMENT_NODE &&
+            el.webkitMatchesSelector('A, A *')) {
+          while (el.tagName !== 'A') {
+            el = el.parentElement;
+          }
+          anchor = el;
+        }
+
+        if (!anchor) {
+          return;
+        }
+
+        anchor = /** @type {!HTMLAnchorElement} */ (anchor);
+        if ((anchor.protocol === 'file:' || anchor.protocol === 'about:') &&
+            (e.button === 0 || e.button === 1)) {
+          BrowserService.getInstance().navigateToUrl(
+              anchor.href, anchor.target, /** @type {!MouseEvent} */ (e));
+          e.preventDefault();
+        }
+      });
+    });
+  }
 
 Polymer({
   is: 'history-app',
 
+  _template: html`{__html_template__}`,
+
   behaviors: [
     FindShortcutBehavior,
-    Polymer.IronScrollTargetBehavior,
+    IronScrollTargetBehavior,
+    WebUIListenerBehavior,
   ],
 
   properties: {
@@ -59,6 +131,9 @@ Polymer({
       // 'otherDevicesInitialized'.
       value: loadTimeData.getBoolean('isUserSignedIn'),
     },
+
+    /** @private */
+    pendingDelete_: Boolean,
 
     toolbarShadow_: {
       type: Boolean,
@@ -106,10 +181,10 @@ Polymer({
   },
 
   /** @private {?function(!Event)} */
-  boundOnCanExecute_: null,
+  boundOnKeyDown_: null,
 
-  /** @private {?function(!Event)} */
-  boundOnCommand_: null,
+  /** @private {?BrowserService} */
+  browserService_: null,
 
   /** @override */
   created: function() {
@@ -118,25 +193,36 @@ Polymer({
 
   /** @override */
   attached: function() {
-    cr.ui.decorate('command', cr.ui.Command);
-    this.boundOnCanExecute_ = this.onCanExecute_.bind(this);
-    this.boundOnCommand_ = this.onCommand_.bind(this);
-
-    document.addEventListener('canExecute', this.boundOnCanExecute_);
-    document.addEventListener('command', this.boundOnCommand_);
+    this.boundOnKeyDown_ = e => this.onKeyDown_(e);
+    document.addEventListener('keydown', this.boundOnKeyDown_);
+    this.addWebUIListener(
+        'sign-in-state-changed',
+        signedIn => this.onSignInStateChanged_(signedIn));
+    this.addWebUIListener(
+        'has-other-forms-changed',
+        hasOtherForms => this.onHasOtherFormsChanged_(hasOtherForms));
+    this.addWebUIListener(
+        'foreign-sessions-changed',
+        sessionList => this.setForeignSessions_(sessionList));
+    this.browserService_ = BrowserService.getInstance();
+    /** @type {!HistoryQueryManagerElement} */ (
+        this.$$('history-query-manager'))
+        .initialize();
+    this.browserService_.getForeignSessions().then(
+        sessionList => this.setForeignSessions_(sessionList));
   },
 
   /** @override */
   detached: function() {
-    document.removeEventListener('canExecute', this.boundOnCanExecute_);
-    document.removeEventListener('command', this.boundOnCommand_);
+    document.removeEventListener('keydown', this.boundOnKeyDown_);
+    this.boundOnKeyDown_ = null;
   },
 
-  onFirstRender: function() {
-    setTimeout(function() {
-      chrome.send(
-          'metricsHandler:recordTime',
-          ['History.ResultsRenderedTime', window.performance.now()]);
+  /** @private */
+  onFirstRender_: function() {
+    setTimeout(() => {
+      this.browserService_.recordTime(
+          'History.ResultsRenderedTime', window.performance.now());
     });
 
     // Focus the search field on load. Done here to ensure the history page
@@ -148,7 +234,7 @@ Polymer({
     }
 
     // Lazily load the remainder of the UI.
-    history.ensureLazyLoaded().then(function() {
+    ensureLazyLoaded().then(function() {
       window.requestIdleCallback(function() {
         document.fonts.load('bold 12px Roboto');
       });
@@ -158,7 +244,7 @@ Polymer({
   /** Overridden from IronScrollTargetBehavior */
   _scrollHandler: function() {
     if (this.scrollTarget) {
-      this.toolbarShadow_ = this.scrollTarget.scrollTop != 0;
+      this.toolbarShadow_ = this.scrollTarget.scrollTop !== 0;
     }
   },
 
@@ -169,7 +255,7 @@ Polymer({
 
   /** @private */
   onCrToolbarMenuPromoShown_: function() {
-    history.BrowserService.getInstance().menuPromoShown();
+    this.browserService_.menuPromoShown();
   },
 
   /** @private */
@@ -212,69 +298,85 @@ Polymer({
     this.$.history.deleteSelectedWithPrompt();
   },
 
-  /**
-   * @param {HistoryQuery} info An object containing information about the
-   *    query.
-   * @param {!Array<HistoryEntry>} results A list of results.
-   */
-  historyResult: function(info, results) {
-    this.set('queryState_.querying', false);
-    this.set('queryResult_.info', info);
-    this.set('queryResult_.results', results);
+  /** @private */
+  onQueryFinished_: function() {
     const list = /** @type {HistoryListElement} */ (this.$['history']);
-    list.historyResult(info, results);
-  },
-
-  /**
-   * @param {Event} e
-   * @private
-   */
-  onCanExecute_: function(e) {
-    e = /** @type {cr.ui.CanExecuteEvent} */ (e);
-    switch (e.command.id) {
-      case 'delete-command':
-        e.canExecute = this.$.toolbar.count > 0;
-        break;
-      case 'select-all-command':
-        e.canExecute = !this.$.toolbar.searchField.isSearchFocused() &&
-            !this.syncedTabsSelected_(this.selectedPage_);
-        break;
+    list.historyResult(
+        assert(this.queryResult_.info), assert(this.queryResult_.results));
+    if (document.body.classList.contains('loading')) {
+      document.body.classList.remove('loading');
+      this.onFirstRender_();
     }
   },
 
   /**
-   * @param {Event} e
+   * @param {!KeyboardEvent} e
    * @private
    */
-  onCommand_: function(e) {
-    if (e.command.id == 'delete-command') {
-      this.deleteSelected();
-    } else if (e.command.id == 'select-all-command') {
-      this.selectOrUnselectAll();
+  onKeyDown_: function(e) {
+    if ((e.key === 'Delete' || e.key === 'Backspace') &&
+        !(e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)) {
+      this.onDeleteCommand_();
+      return;
     }
+
+    if (e.key === 'a' && !e.altKey && !e.shiftKey) {
+      let hasTriggerModifier = e.ctrlKey && !e.metaKey;
+      // <if expr="is_macosx">
+      hasTriggerModifier = !e.ctrlKey && e.metaKey;
+      // </if>
+      if (hasTriggerModifier && this.onSelectAllCommand_()) {
+        e.preventDefault();
+      }
+    }
+  },
+
+  /** @private */
+  onDeleteCommand_: function() {
+    if (this.$.toolbar.count === 0 || this.pendingDelete_) {
+      return;
+    }
+    this.deleteSelected();
+  },
+
+  /**
+   * @return {boolean} Whether the command was actually triggered.
+   * @private
+   */
+  onSelectAllCommand_: function() {
+    if (this.$.toolbar.searchField.isSearchFocused() ||
+        this.syncedTabsSelected_(this.selectedPage_)) {
+      return false;
+    }
+    this.selectOrUnselectAll();
+    return true;
   },
 
   /**
    * @param {!Array<!ForeignSession>} sessionList Array of objects describing
    *     the sessions from other devices.
+   * @private
    */
-  setForeignSessions: function(sessionList) {
+  setForeignSessions_: function(sessionList) {
     this.set('queryResult_.sessionList', sessionList);
-  },
-
-  /**
-   * Called when browsing data is cleared.
-   */
-  historyDeleted: function() {
-    this.$.history.historyDeleted();
   },
 
   /**
    * Update sign in state of synced device manager after user logs in or out.
    * @param {boolean} isUserSignedIn
+   * @private
    */
-  updateSignInState: function(isUserSignedIn) {
+  onSignInStateChanged_: function(isUserSignedIn) {
     this.isUserSignedIn_ = isUserSignedIn;
+  },
+
+  /**
+   * Update sign in state of synced device manager after user logs in or out.
+   * @param {boolean} hasOtherForms
+   * @private
+   */
+  onHasOtherFormsChanged_: function(hasOtherForms) {
+    this.set('footerInfo.otherFormsOfHistory', hasOtherForms);
   },
 
   /**
@@ -283,7 +385,7 @@ Polymer({
    * @private
    */
   syncedTabsSelected_: function(selectedPage) {
-    return selectedPage == 'syncedTabs';
+    return selectedPage === 'syncedTabs';
   },
 
   /**
@@ -295,7 +397,7 @@ Polymer({
    * @private
    */
   shouldShowSpinner_: function(querying, incremental, searchTerm) {
-    return querying && !incremental && searchTerm != '';
+    return querying && !incremental && searchTerm !== '';
   },
 
   /** @private */
@@ -359,7 +461,7 @@ Polymer({
         break;
     }
 
-    history.BrowserService.getInstance().recordHistogram(
+    this.browserService_.recordHistogram(
         'History.HistoryPageView', histogramValue,
         HistoryPageViewHistogram.END);
   },

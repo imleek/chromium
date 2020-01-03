@@ -64,6 +64,7 @@
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_text.h"
+#include "third_party/blink/renderer/core/svg/svg_style_element.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -597,10 +598,10 @@ void ReplaceSelectionCommand::RemoveRedundantStylesAndKeepStyleSpanInline(
       // you're pasting into a quoted region, styles from blockquoteNode are
       // allowed to override those from the source document, see
       // <rdar://problem/4930986> and <rdar://problem/5089327>.
-      HTMLQuoteElement* blockquote_element =
+      auto* blockquote_element =
           !context
-              ? ToHTMLQuoteElement(context)
-              : ToHTMLQuoteElement(EnclosingNodeOfType(
+              ? To<HTMLQuoteElement>(context)
+              : To<HTMLQuoteElement>(EnclosingNodeOfType(
                     Position::FirstPositionInNode(*context),
                     IsMailHTMLBlockquoteElement, kCanCrossEditingBoundary));
 
@@ -854,8 +855,9 @@ VisiblePosition ReplaceSelectionCommand::PositionAtStartOfInsertedContent()
 static void RemoveHeadContents(ReplacementFragment& fragment) {
   Node* next = nullptr;
   for (Node* node = fragment.FirstChild(); node; node = next) {
-    if (IsA<HTMLBaseElement>(*node) || IsHTMLLinkElement(*node) ||
-        IsA<HTMLMetaElement>(*node) || IsA<HTMLTitleElement>(*node)) {
+    if (IsA<HTMLBaseElement>(*node) || IsA<HTMLLinkElement>(*node) ||
+        IsA<HTMLMetaElement>(*node) || IsA<HTMLStyleElement>(*node) ||
+        IsA<HTMLTitleElement>(*node) || IsA<SVGStyleElement>(*node)) {
       next = NodeTraversal::NextSkippingChildren(*node);
       fragment.RemoveNode(node);
     } else {
@@ -1714,8 +1716,9 @@ bool ReplaceSelectionCommand::ShouldPerformSmartReplace() const {
 
   TextControlElement* text_control =
       EnclosingTextControl(PositionAtStartOfInsertedContent().DeepEquivalent());
-  if (IsHTMLInputElement(text_control) &&
-      ToHTMLInputElement(text_control)->type() == input_type_names::kPassword)
+  auto* html_input_element = DynamicTo<HTMLInputElement>(text_control);
+  if (html_input_element &&
+      html_input_element->type() == input_type_names::kPassword)
     return false;  // Disable smart replace for password fields.
 
   return true;
@@ -2075,7 +2078,7 @@ bool ReplaceSelectionCommand::PerformTrivialReplace(
   if (node_after_insertion_pos && node_after_insertion_pos->parentNode() &&
       IsA<HTMLBRElement>(*node_after_insertion_pos) &&
       ShouldRemoveEndBR(
-          ToHTMLBRElement(node_after_insertion_pos),
+          To<HTMLBRElement>(node_after_insertion_pos),
           VisiblePosition::BeforeNode(*node_after_insertion_pos))) {
     RemoveNodeAndPruneAncestors(node_after_insertion_pos, editing_state);
     if (editing_state->IsAborted())

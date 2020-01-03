@@ -6,6 +6,7 @@
 
 #include "device/vr/openxr/openxr_api_wrapper.h"
 #include "device/vr/openxr/openxr_input_helper.h"
+#include "device/vr/util/stage_utils.h"
 #include "device/vr/util/transform_utils.h"
 #include "ui/gfx/geometry/angle_conversions.h"
 #include "ui/gfx/transform.h"
@@ -37,14 +38,15 @@ mojom::XRFrameDataPtr OpenXrRenderLoop::GetNextFrameData() {
   frame_data->time_delta =
       base::TimeDelta::FromNanoseconds(openxr_->GetPredictedDisplayTime());
 
-  frame_data->pose = mojom::VRPose::New();
-  frame_data->pose->input_state =
+  frame_data->input_state =
       input_helper_->GetInputState(openxr_->GetPredictedDisplayTime());
+
+  frame_data->pose = mojom::VRPose::New();
 
   base::Optional<gfx::Quaternion> orientation;
   base::Optional<gfx::Point3F> position;
-  if (XR_SUCCEEDED(openxr_->GetHeadPose(&orientation, &position))) {
-
+  if (XR_SUCCEEDED(openxr_->GetHeadPose(
+          &orientation, &position, &frame_data->pose->emulated_position))) {
     if (orientation.has_value())
       frame_data->pose->orientation = orientation;
 
@@ -107,9 +109,8 @@ bool OpenXrRenderLoop::StartRuntime() {
   openxr_->RegisterInteractionProfileChangeCallback(
       base::BindRepeating(&OpenXRInputHelper::OnInteractionProfileChanged,
                           input_helper_->GetWeakPtr()));
-
-  DCHECK(openxr_);
-  DCHECK(input_helper_);
+  openxr_->RegisterVisibilityChangeCallback(base::BindRepeating(
+      &OpenXrRenderLoop::SetVisibilityState, weak_ptr_factory_.GetWeakPtr()));
   InitializeDisplayInfo();
 
   return true;
@@ -234,11 +235,11 @@ bool OpenXrRenderLoop::UpdateStageParameters() {
       changed = true;
     }
 
-    if (current_display_info_->stage_parameters->size_x != stage_bounds.width ||
-        current_display_info_->stage_parameters->size_z !=
-            stage_bounds.height) {
-      current_display_info_->stage_parameters->size_x = stage_bounds.width;
-      current_display_info_->stage_parameters->size_z = stage_bounds.height;
+    if (current_stage_bounds_.width != stage_bounds.width ||
+        current_stage_bounds_.height != stage_bounds.height) {
+      current_display_info_->stage_parameters->bounds =
+          vr_utils::GetStageBoundsFromSize(stage_bounds.width,
+                                           stage_bounds.height);
       changed = true;
     }
 

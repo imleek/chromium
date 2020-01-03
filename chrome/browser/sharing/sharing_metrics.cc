@@ -4,19 +4,11 @@
 
 #include "chrome/browser/sharing/sharing_metrics.h"
 
-#include <string.h>
-#include <algorithm>
-
 #include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "chrome/browser/sharing/sharing_device_registration_result.h"
-#include "components/cast_channel/enum_table.h"
-#include "components/ukm/content/source_url_recorder.h"
-#include "content/public/browser/web_contents.h"
-#include "services/metrics/public/cpp/ukm_builders.h"
-#include "services/metrics/public/cpp/ukm_recorder.h"
-#include "services/metrics/public/cpp/ukm_source_id.h"
+#include "components/version_info/version_info.h"
 
 namespace {
 const char* GetEnumStringValue(SharingFeatureName feature) {
@@ -33,32 +25,25 @@ const char* GetEnumStringValue(SharingFeatureName feature) {
   }
 }
 
-// The returned values must match the values of the SharingClickToCallEntryPoint
-// suffixes defined in histograms.xml.
-const char* ClickToCallEntryPointToSuffix(
-    SharingClickToCallEntryPoint entry_point) {
-  switch (entry_point) {
-    case SharingClickToCallEntryPoint::kLeftClickLink:
-      return "LeftClickLink";
-    case SharingClickToCallEntryPoint::kRightClickLink:
-      return "RightClickLink";
-    case SharingClickToCallEntryPoint::kRightClickSelection:
-      return "RightClickSelection";
+// These value are mapped to histogram suffixes. Please keep in sync with
+// "SharingDevicePlatform" in src/tools/metrics/histograms/enums.xml.
+std::string DevicePlatformToString(SharingDevicePlatform device_platform) {
+  switch (device_platform) {
+    case SharingDevicePlatform::kAndroid:
+      return "Android";
+    case SharingDevicePlatform::kChromeOS:
+      return "ChromeOS";
+    case SharingDevicePlatform::kIOS:
+      return "iOS";
+    case SharingDevicePlatform::kLinux:
+      return "Linux";
+    case SharingDevicePlatform::kMac:
+      return "Mac";
+    case SharingDevicePlatform::kWindows:
+      return "Windows";
+    case SharingDevicePlatform::kUnknown:
+      return "Unknown";
   }
-}
-
-const char* PhoneNumberRegexVariantToSuffix(PhoneNumberRegexVariant variant) {
-  switch (variant) {
-    case PhoneNumberRegexVariant::kSimple:
-      // Keep the initial regex in the default metric.
-      return "";
-  }
-}
-
-// The returned values must match the values of the
-// SharingClickToCallSendToDevice suffixes defined in histograms.xml.
-const char* SendToDeviceToSuffix(bool send_to_device) {
-  return send_to_device ? "Sending" : "Showing";
 }
 
 const std::string& MessageTypeToMessageSuffix(
@@ -73,19 +58,19 @@ const std::string& MessageTypeToMessageSuffix(
   }
   return chrome_browser_sharing::MessageType_Name(message_type);
 }
+
+// Major Chrome version comparison with the receiver device.
+// These values are logged to UMA. Entries should not be renumbered and numeric
+// values should never be reused. Please keep in sync with
+// "SharingMajorVersionComparison" in enums.xml.
+enum class SharingMajorVersionComparison {
+  kUnknown = 0,
+  kSenderIsLower = 1,
+  kSame = 2,
+  kSenderIsHigher = 3,
+  kMaxValue = kSenderIsHigher,
+};
 }  // namespace
-
-ScopedUmaHistogramMicrosecondsTimer::ScopedUmaHistogramMicrosecondsTimer(
-    PhoneNumberRegexVariant variant)
-    : variant_(variant) {}
-
-ScopedUmaHistogramMicrosecondsTimer::~ScopedUmaHistogramMicrosecondsTimer() {
-  base::UmaHistogramCustomMicrosecondsTimes(
-      base::StrCat({"Sharing.ClickToCallContextMenuPhoneNumberParsingDelay",
-                    PhoneNumberRegexVariantToSuffix(variant_)}),
-      timer_.Elapsed(), base::TimeDelta::FromMicroseconds(1),
-      base::TimeDelta::FromSeconds(1), 50);
-}
 
 chrome_browser_sharing::MessageType SharingPayloadCaseToMessageType(
     chrome_browser_sharing::SharingMessage::PayloadCase payload_case) {
@@ -238,84 +223,135 @@ void LogSharingMessageAckTime(chrome_browser_sharing::MessageType message_type,
   }
 }
 
+void LogSharingDeviceLastUpdatedAge(
+    chrome_browser_sharing::MessageType message_type,
+    base::TimeDelta age) {
+  constexpr char kBase[] = "Sharing.DeviceLastUpdatedAge";
+  int hours = age.InHours();
+  base::UmaHistogramCounts1000(kBase, hours);
+  base::UmaHistogramCounts1000(
+      base::StrCat({kBase, ".", MessageTypeToMessageSuffix(message_type)}),
+      hours);
+}
+
+void LogSharingVersionComparison(
+    chrome_browser_sharing::MessageType message_type,
+    const std::string& receiver_version) {
+  int sender_major = 0;
+  base::StringToInt(version_info::GetMajorVersionNumber(), &sender_major);
+
+  // The |receiver_version| has optional modifiers e.g. "1.2.3.4 canary" so we
+  // do not parse it with base::Version.
+  int receiver_major = 0;
+  base::StringToInt(receiver_version, &receiver_major);
+
+  SharingMajorVersionComparison result;
+  if (sender_major == 0 || sender_major == INT_MIN || sender_major == INT_MAX ||
+      receiver_major == 0 || receiver_major == INT_MIN ||
+      receiver_major == INT_MAX) {
+    result = SharingMajorVersionComparison::kUnknown;
+  } else if (sender_major < receiver_major) {
+    result = SharingMajorVersionComparison::kSenderIsLower;
+  } else if (sender_major == receiver_major) {
+    result = SharingMajorVersionComparison::kSame;
+  } else {
+    result = SharingMajorVersionComparison::kSenderIsHigher;
+  }
+  constexpr char kBase[] = "Sharing.MajorVersionComparison";
+  base::UmaHistogramEnumeration(kBase, result);
+  base::UmaHistogramEnumeration(
+      base::StrCat({kBase, ".", MessageTypeToMessageSuffix(message_type)}),
+      result);
+}
+
 void LogSharingDialogShown(SharingFeatureName feature, SharingDialogType type) {
   base::UmaHistogramEnumeration(
       base::StrCat({"Sharing.", GetEnumStringValue(feature), "DialogShown"}),
       type);
 }
 
-void LogClickToCallHelpTextClicked(SharingDialogType type) {
-  base::UmaHistogramEnumeration("Sharing.ClickToCallHelpTextClicked", type);
-}
-
 void LogSendSharingMessageResult(
     chrome_browser_sharing::MessageType message_type,
+    SharingDevicePlatform receiving_device_platform,
     SharingSendMessageResult result) {
-  base::UmaHistogramEnumeration("Sharing.SendMessageResult", result);
+  const std::string metric_prefix = "Sharing.SendMessageResult";
+
+  base::UmaHistogramEnumeration(metric_prefix, result);
   base::UmaHistogramEnumeration(
-      base::StrCat({"Sharing.SendMessageResult.",
+      base::StrCat(
+          {metric_prefix, ".", MessageTypeToMessageSuffix(message_type)}),
+      result);
+
+  base::UmaHistogramEnumeration(
+      base::StrCat({metric_prefix, ".",
+                    DevicePlatformToString(receiving_device_platform)}),
+      result);
+  base::UmaHistogramEnumeration(
+      base::StrCat({metric_prefix, ".",
+                    DevicePlatformToString(receiving_device_platform), ".",
                     MessageTypeToMessageSuffix(message_type)}),
       result);
 }
 
 void LogSendSharingAckMessageResult(
     chrome_browser_sharing::MessageType message_type,
+    SharingDevicePlatform ack_receiver_device_type,
     SharingSendMessageResult result) {
-  base::UmaHistogramEnumeration("Sharing.SendAckMessageResult", result);
+  const std::string metric_prefix = "Sharing.SendAckMessageResult";
+
+  base::UmaHistogramEnumeration(metric_prefix, result);
   base::UmaHistogramEnumeration(
-      base::StrCat({"Sharing.SendAckMessageResult.",
+      base::StrCat(
+          {metric_prefix, ".", MessageTypeToMessageSuffix(message_type)}),
+      result);
+
+  base::UmaHistogramEnumeration(
+      base::StrCat({metric_prefix, ".",
+                    DevicePlatformToString(ack_receiver_device_type)}),
+      result);
+  base::UmaHistogramEnumeration(
+      base::StrCat({metric_prefix, ".",
+                    DevicePlatformToString(ack_receiver_device_type), ".",
                     MessageTypeToMessageSuffix(message_type)}),
       result);
 }
 
-void LogClickToCallUKM(content::WebContents* web_contents,
-                       SharingClickToCallEntryPoint entry_point,
-                       bool has_devices,
-                       bool has_apps,
-                       SharingClickToCallSelection selection) {
-  ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
-  if (!ukm_recorder)
-    return;
-
-  ukm::SourceId source_id =
-      ukm::GetSourceIdForWebContentsDocument(web_contents);
-  if (source_id == ukm::kInvalidSourceId)
-    return;
-
-  ukm::builders::Sharing_ClickToCall(source_id)
-      .SetEntryPoint(static_cast<int64_t>(entry_point))
-      .SetHasDevices(has_devices)
-      .SetHasApps(has_apps)
-      .SetSelection(static_cast<int64_t>(selection))
-      .Record(ukm_recorder);
-}
-
-void LogSharedClipboardSelectedTextSize(int text_size) {
-  UMA_HISTOGRAM_COUNTS_100000("Sharing.SharedClipboardSelectedTextSize",
-                              text_size);
-}
-
-void LogClickToCallPhoneNumberSize(const std::string& number,
-                                   SharingClickToCallEntryPoint entry_point,
-                                   bool send_to_device) {
-  int length = number.size();
-  int digits = std::count_if(number.begin(), number.end(),
-                             [](char c) { return std::isdigit(c); });
-
-  std::string suffix =
-      base::StrCat({ClickToCallEntryPointToSuffix(entry_point), ".",
-                    SendToDeviceToSuffix(send_to_device)});
-
-  base::UmaHistogramCounts100("Sharing.ClickToCallPhoneNumberLength", length);
-  base::UmaHistogramCounts100(
-      base::StrCat({"Sharing.ClickToCallPhoneNumberLength.", suffix}), length);
-
-  base::UmaHistogramCounts100("Sharing.ClickToCallPhoneNumberDigits", digits);
-  base::UmaHistogramCounts100(
-      base::StrCat({"Sharing.ClickToCallPhoneNumberDigits.", suffix}), digits);
+void LogSharedClipboardSelectedTextSize(size_t size) {
+  base::UmaHistogramCounts100000("Sharing.SharedClipboardSelectedTextSize",
+                                 size);
 }
 
 void LogRemoteCopyHandleMessageResult(RemoteCopyHandleMessageResult result) {
   base::UmaHistogramEnumeration("Sharing.RemoteCopyHandleMessageResult",
                                 result);
+}
+
+void LogRemoteCopyReceivedTextSize(size_t size) {
+  base::UmaHistogramCounts100000("Sharing.RemoteCopyReceivedTextSize", size);
+}
+
+void LogRemoteCopyReceivedImageSizeBeforeDecode(size_t size) {
+  base::UmaHistogramCounts10M("Sharing.RemoteCopyReceivedImageSizeBeforeDecode",
+                              size);
+}
+
+void LogRemoteCopyReceivedImageSizeAfterDecode(size_t size) {
+  base::UmaHistogramCustomCounts(
+      "Sharing.RemoteCopyReceivedImageSizeAfterDecode", size, 1, 100000000, 50);
+}
+
+void LogRemoteCopyLoadImageStatusCode(int code) {
+  base::UmaHistogramSparse("Sharing.RemoteCopyLoadImageStatusCode", code);
+}
+
+void LogRemoteCopyLoadImageTime(base::TimeDelta time) {
+  base::UmaHistogramMediumTimes("Sharing.RemoteCopyLoadImageTime", time);
+}
+
+void LogRemoteCopyDecodeImageTime(base::TimeDelta time) {
+  base::UmaHistogramMediumTimes("Sharing.RemoteCopyDecodeImageTime", time);
+}
+
+void LogRemoteCopyResizeImageTime(base::TimeDelta time) {
+  base::UmaHistogramMediumTimes("Sharing.RemoteCopyResizeImageTime", time);
 }

@@ -720,7 +720,25 @@ gfx::Point TableView::GetKeyboardContextMenuLocation() {
   return screen_loc;
 }
 
+void TableView::OnFocus() {
+  SchedulePaintForSelection();
+  focus_ring_->SchedulePaint();
+  needs_update_accessibility_focus_ = true;
+}
+
+void TableView::OnBlur() {
+  SchedulePaintForSelection();
+  focus_ring_->SchedulePaint();
+  needs_update_accessibility_focus_ = true;
+}
+
 void TableView::OnPaint(gfx::Canvas* canvas) {
+  OnPaintImpl(canvas);
+  if (needs_update_accessibility_focus_)
+    UpdateAccessibilityFocus();
+}
+
+void TableView::OnPaintImpl(gfx::Canvas* canvas) {
   // Don't invoke View::OnPaint so that we can render our own focus border.
 
   if (sort_on_paint_)
@@ -793,6 +811,8 @@ void TableView::OnPaint(gfx::Canvas* canvas) {
   cc::PaintFlags grouping_flags;
   grouping_flags.setColor(grouping_color);
   grouping_flags.setStyle(cc::PaintFlags::kFill_Style);
+  grouping_flags.setStrokeWidth(kGroupingIndicatorSize);
+  grouping_flags.setStrokeCap(cc::PaintFlags::kRound_Cap);
   grouping_flags.setAntiAlias(true);
   const int group_indicator_x = GetMirroredXInView(
       GetCellBounds(0, 0).x() + cell_margin + kGroupingIndicatorSize / 2);
@@ -805,36 +825,14 @@ void TableView::OnPaint(gfx::Canvas* canvas) {
     // to do this calculation.
     const int start = i - (model_index - range.start);
     const int last = start + range.length - 1;
-    const gfx::Rect start_cell_bounds(GetCellBounds(start, 0));
-    if (start != last) {
-      const gfx::Rect last_cell_bounds(GetCellBounds(last, 0));
-      canvas->FillRect(gfx::Rect(
-                           group_indicator_x - kGroupingIndicatorSize / 2,
-                           start_cell_bounds.CenterPoint().y(),
-                           kGroupingIndicatorSize,
-                           last_cell_bounds.y() - start_cell_bounds.y()),
-                       grouping_color);
-      canvas->DrawCircle(
-          gfx::Point(group_indicator_x, last_cell_bounds.CenterPoint().y()),
-          kGroupingIndicatorSize / 2, grouping_flags);
-    }
-    canvas->DrawCircle(
-        gfx::Point(group_indicator_x, start_cell_bounds.CenterPoint().y()),
-        kGroupingIndicatorSize / 2, grouping_flags);
+    const gfx::RectF start_cell_bounds(GetCellBounds(start, 0));
+    const gfx::RectF last_cell_bounds(GetCellBounds(last, 0));
+    canvas->DrawLine(
+        gfx::PointF(group_indicator_x, start_cell_bounds.CenterPoint().y()),
+        gfx::PointF(group_indicator_x, last_cell_bounds.CenterPoint().y()),
+        grouping_flags);
     i = last + 1;
   }
-}
-
-void TableView::OnFocus() {
-  SchedulePaintForSelection();
-  focus_ring_->SchedulePaint();
-  UpdateAccessibilityFocus();
-}
-
-void TableView::OnBlur() {
-  SchedulePaintForSelection();
-  focus_ring_->SchedulePaint();
-  UpdateAccessibilityFocus();
 }
 
 int TableView::GetCellMargin() const {
@@ -876,6 +874,7 @@ void TableView::SortItemsAndUpdateMapping(bool schedule_paint) {
       model_to_view_[view_to_model_[i]] = i;
     model_->ClearCollator();
   }
+
   UpdateVirtualAccessibilityChildren();
   if (schedule_paint)
     SchedulePaint();
@@ -1060,7 +1059,7 @@ void TableView::SetActiveVisibleColumnIndex(int index) {
   }
 
   focus_ring_->SchedulePaint();
-  UpdateAccessibilityFocus();
+  needs_update_accessibility_focus_ = true;
   OnPropertyChanged(&active_visible_column_index_, kPropertyEffectsNone);
 }
 
@@ -1101,7 +1100,7 @@ void TableView::SetSelectionModel(ui::ListSelectionModel new_selection) {
   }
 
   focus_ring_->SchedulePaint();
-  UpdateAccessibilityFocus();
+  needs_update_accessibility_focus_ = true;
   NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
   if (observer_)
     observer_->OnSelectionChanged();
@@ -1186,10 +1185,8 @@ GroupRange TableView::GetGroupRange(int model_index) const {
 
 void TableView::UpdateVirtualAccessibilityChildren() {
   GetViewAccessibility().RemoveAllVirtualChildViews();
-  if (!GetRowCount() || visible_columns_.empty()) {
-    NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged, true);
+  if (!GetRowCount() || visible_columns_.empty())
     return;
-  }
 
   const base::Optional<int> primary_sorted_column_id =
       sort_descriptors().empty()
@@ -1249,6 +1246,10 @@ void TableView::UpdateVirtualAccessibilityChildren() {
 
     if (!PlatformStyle::kTableViewSupportsKeyboardNavigationByCell) {
       row_data.AddState(ax::mojom::State::kFocusable);
+      row_data.AddAction(ax::mojom::Action::kFocus);
+      row_data.AddAction(ax::mojom::Action::kScrollToMakeVisible);
+      row_data.AddAction(ax::mojom::Action::kSetSelection);
+
       // When navigating using up / down cursor keys on the Mac, we read the
       // contents of the first cell. If the user needs to explore additional
       // cells, they can use VoiceOver shortcuts.
@@ -1264,19 +1265,19 @@ void TableView::UpdateVirtualAccessibilityChildren() {
     if (!single_selection_)
       row_data.AddState(ax::mojom::State::kMultiselectable);
 
-    base::RepeatingCallback<void(const View&, ui::AXNodeData*)> row_callback =
+    base::RepeatingCallback<void(ui::AXNodeData*)> row_callback =
         base::BindRepeating(
-            [](const int model_index, const gfx::Rect& row_bounds,
-               const View& view, ui::AXNodeData* data) {
-              auto& table = static_cast<const TableView&>(view);
-              if (!table.GetVisibleBounds().Intersects(row_bounds))
+            [](TableView* table, const int model_index,
+               const gfx::Rect& row_bounds, ui::AXNodeData* data) {
+              DCHECK(table);
+              if (!table->GetVisibleBounds().Intersects(row_bounds))
                 data->AddState(ax::mojom::State::kInvisible);
-              if (table.selection_model().IsSelected(model_index)) {
+              if (table->selection_model().IsSelected(model_index)) {
                 data->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected,
                                        true);
               }
             },
-            model_index, row_bounds);
+            base::Unretained(this), model_index, row_bounds);
     ax_row->SetPopulateDataCallback(std::move(row_callback));
 
     for (size_t visible_column_index = 0;
@@ -1288,8 +1289,14 @@ void TableView::UpdateVirtualAccessibilityChildren() {
       auto ax_cell = std::make_unique<AXVirtualView>();
       ui::AXNodeData& cell_data = ax_cell->GetCustomData();
       cell_data.role = ax::mojom::Role::kCell;
-      if (PlatformStyle::kTableViewSupportsKeyboardNavigationByCell)
+      if (PlatformStyle::kTableViewSupportsKeyboardNavigationByCell) {
         cell_data.AddState(ax::mojom::State::kFocusable);
+        cell_data.AddAction(ax::mojom::Action::kFocus);
+        cell_data.AddAction(ax::mojom::Action::kScrollLeft);
+        cell_data.AddAction(ax::mojom::Action::kScrollRight);
+        cell_data.AddAction(ax::mojom::Action::kScrollToMakeVisible);
+        cell_data.AddAction(ax::mojom::Action::kSetSelection);
+      }
       gfx::Rect cell_bounds = GetCellBounds(view_index, visible_column_index);
       cell_data.relative_bounds.bounds =
           AdjustRectForAXRelativeBounds(cell_bounds);
@@ -1318,24 +1325,25 @@ void TableView::UpdateVirtualAccessibilityChildren() {
       cell_data.AddIntAttribute(ax::mojom::IntAttribute::kSortDirection,
                                 static_cast<int32_t>(sort_direction));
 
-      base::RepeatingCallback<void(const View&, ui::AXNodeData*)>
-          cell_callback = base::BindRepeating(
-              [](const int model_index, const size_t visible_column_index,
-                 const gfx::Rect& cell_bounds, const View& view,
-                 ui::AXNodeData* data) {
-                auto& table = static_cast<const TableView&>(view);
-                if (!table.GetVisibleBounds().Intersects(cell_bounds))
+      base::RepeatingCallback<void(ui::AXNodeData*)> cell_callback =
+          base::BindRepeating(
+              [](TableView* table, const int model_index,
+                 const size_t visible_column_index,
+                 const gfx::Rect& cell_bounds, ui::AXNodeData* data) {
+                DCHECK(table);
+                if (!table->GetVisibleBounds().Intersects(cell_bounds))
                   data->AddState(ax::mojom::State::kInvisible);
                 if (PlatformStyle::kTableViewSupportsKeyboardNavigationByCell &&
                     static_cast<const int>(visible_column_index) ==
-                        table.GetActiveVisibleColumnIndex()) {
-                  if (table.selection_model().IsSelected(model_index)) {
+                        table->GetActiveVisibleColumnIndex()) {
+                  if (table->selection_model().IsSelected(model_index)) {
                     data->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected,
                                            true);
                   }
                 }
               },
-              model_index, visible_column_index, cell_bounds);
+              base::Unretained(this), model_index, visible_column_index,
+              cell_bounds);
       ax_cell->SetPopulateDataCallback(std::move(cell_callback));
 
       ax_row->AddChildView(std::move(ax_cell));
@@ -1343,18 +1351,16 @@ void TableView::UpdateVirtualAccessibilityChildren() {
 
     GetViewAccessibility().AddVirtualChildView(std::move(ax_row));
   }
-
-  NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged, true);
 }
 
 void TableView::UpdateAccessibilityFocus() {
+  needs_update_accessibility_focus_ = false;
   if (!HasFocus())
     return;
 
   if (selection_model_.active() == ui::ListSelectionModel::kUnselectedIndex ||
       active_visible_column_index_ == -1) {
     GetViewAccessibility().OverrideFocus(nullptr);
-    NotifyAccessibilityEvent(ax::mojom::Event::kFocus, true);
     return;
   }
 
@@ -1363,14 +1369,12 @@ void TableView::UpdateAccessibilityFocus() {
     AXVirtualView* ax_row = GetVirtualAccessibilityRow(active_row);
     if (ax_row) {
       GetViewAccessibility().OverrideFocus(ax_row);
-      ax_row->NotifyAccessibilityEvent(ax::mojom::Event::kFocus);
     }
   } else {
     AXVirtualView* ax_cell =
         GetVirtualAccessibilityCell(active_row, active_visible_column_index_);
     if (ax_cell) {
       GetViewAccessibility().OverrideFocus(ax_cell);
-      ax_cell->NotifyAccessibilityEvent(ax::mojom::Event::kFocus);
     }
   }
 }

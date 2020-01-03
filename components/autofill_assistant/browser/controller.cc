@@ -114,9 +114,14 @@ Controller::Controller(content::WebContents* web_contents,
       service_(service ? std::move(service)
                        : ServiceImpl::Create(web_contents->GetBrowserContext(),
                                              client_)),
-      navigating_to_new_document_(web_contents->IsWaitingForResponse()) {}
+      user_data_(std::make_unique<UserData>()),
+      navigating_to_new_document_(web_contents->IsWaitingForResponse()) {
+  user_model_.AddObserver(this);
+}
 
-Controller::~Controller() = default;
+Controller::~Controller() {
+  user_model_.RemoveObserver(this);
+}
 
 const ClientSettings& Controller::GetSettings() {
   return settings_;
@@ -172,6 +177,10 @@ content::WebContents* Controller::GetWebContents() {
 
 std::string Controller::GetAccountEmailAddress() {
   return client_->GetAccountEmailAddress();
+}
+
+std::string Controller::GetLocale() {
+  return client_->GetLocale();
 }
 
 void Controller::SetTouchableElementArea(const ElementAreaProto& area) {
@@ -351,10 +360,12 @@ const FormProto* Controller::GetForm() const {
 
 bool Controller::SetForm(
     std::unique_ptr<FormProto> form,
-    base::RepeatingCallback<void(const FormProto::Result*)> callback) {
+    base::RepeatingCallback<void(const FormProto::Result*)> changed_callback,
+    base::OnceCallback<void(const ClientStatus&)> cancel_callback) {
   form_.reset();
   form_result_.reset();
-  form_callback_ = base::DoNothing();
+  form_changed_callback_ = base::DoNothing();
+  form_cancel_callback_ = base::DoNothing::Once<const ClientStatus&>();
 
   if (!form) {
     for (ControllerObserver& observer : observers_) {
@@ -404,10 +415,11 @@ bool Controller::SetForm(
   // Form is valid.
   form_ = std::move(form);
   form_result_ = std::move(form_result);
-  form_callback_ = callback;
+  form_changed_callback_ = changed_callback;
+  form_cancel_callback_ = std::move(cancel_callback);
 
   // Call the callback with initial result.
-  form_callback_.Run(form_result_.get());
+  form_changed_callback_.Run(form_result_.get());
 
   for (ControllerObserver& observer : observers_) {
     observer.OnFormChanged(form_.get());
@@ -433,7 +445,7 @@ void Controller::SetCounterValue(int input_index,
   }
 
   input_result->mutable_counter()->set_values(counter_index, value);
-  form_callback_.Run(form_result_.get());
+  form_changed_callback_.Run(form_result_.get());
 }
 
 void Controller::SetChoiceSelected(int input_index,
@@ -454,7 +466,15 @@ void Controller::SetChoiceSelected(int input_index,
   }
 
   input_result->mutable_selection()->set_selected(choice_index, selected);
-  form_callback_.Run(form_result_.get());
+  form_changed_callback_.Run(form_result_.get());
+}
+
+UserModel* Controller::GetUserModel() {
+  return &user_model_;
+}
+
+EventHandler* Controller::GetEventHandler() {
+  return &event_handler_;
 }
 
 void Controller::AddObserver(ControllerObserver* observer) {
@@ -463,6 +483,11 @@ void Controller::AddObserver(ControllerObserver* observer) {
 
 void Controller::RemoveObserver(const ControllerObserver* observer) {
   observers_.RemoveObserver(observer);
+}
+
+void Controller::DispatchEvent(const EventHandler::EventKey& key,
+                               const ValueProto& value) {
+  event_handler_.DispatchEvent(key, value);
 }
 
 ViewportMode Controller::GetViewportMode() {
@@ -511,14 +536,14 @@ void Controller::EnterStoppedState() {
   ClearInfoBox();
   SetDetails(nullptr);
   SetUserActions(nullptr);
-  SetCollectUserDataOptions(nullptr, nullptr);
-  SetForm(nullptr, base::DoNothing());
+  SetCollectUserDataOptions(nullptr);
+  SetForm(nullptr, base::DoNothing(), base::DoNothing());
   EnterState(AutofillAssistantState::STOPPED);
 }
 
-void Controller::EnterState(AutofillAssistantState state) {
+bool Controller::EnterState(AutofillAssistantState state) {
   if (state_ == state)
-    return;
+    return false;
 
   DVLOG(2) << __func__ << ": " << state_ << " -> " << state;
 
@@ -544,6 +569,7 @@ void Controller::EnterState(AutofillAssistantState state) {
   } else {
     StopPeriodicScriptChecks();
   }
+  return true;
 }
 
 void Controller::SetWebControllerForTest(
@@ -948,7 +974,7 @@ std::string Controller::GetDebugContext() {
 }
 
 const CollectUserDataOptions* Controller::GetCollectUserDataOptions() const {
-  return collect_user_data_options_.get();
+  return collect_user_data_options_;
 }
 
 const UserData* Controller::GetUserData() const {
@@ -960,15 +986,14 @@ void Controller::OnCollectUserDataContinueButtonClicked() {
     return;
 
   auto callback = std::move(collect_user_data_options_->confirm_callback);
-  auto user_data = std::move(user_data_);
 
   // TODO(crbug.com/806868): succeed is currently always true, but we might want
   // to set it to false and propagate the result to CollectUserDataAction
   // when the user clicks "Cancel" during that action.
-  user_data->succeed = true;
+  user_data_->succeed = true;
 
-  SetCollectUserDataOptions(nullptr, nullptr);
-  std::move(callback).Run(std::move(user_data));
+  SetCollectUserDataOptions(nullptr);
+  std::move(callback).Run(user_data_.get(), &user_model_);
 }
 
 void Controller::OnCollectUserDataAdditionalActionTriggered(int index) {
@@ -977,7 +1002,7 @@ void Controller::OnCollectUserDataAdditionalActionTriggered(int index) {
 
   auto callback =
       std::move(collect_user_data_options_->additional_actions_callback);
-  SetCollectUserDataOptions(nullptr, nullptr);
+  SetCollectUserDataOptions(nullptr);
   std::move(callback).Run(index);
 }
 
@@ -986,8 +1011,16 @@ void Controller::OnTermsAndConditionsLinkClicked(int link) {
     return;
 
   auto callback = std::move(collect_user_data_options_->terms_link_callback);
-  SetCollectUserDataOptions(nullptr, nullptr);
+  SetCollectUserDataOptions(nullptr);
   std::move(callback).Run(link);
+}
+
+void Controller::OnFormActionLinkClicked(int link) {
+  if (form_cancel_callback_ && form_result_ != nullptr) {
+    form_result_->set_link(link);
+    form_changed_callback_.Run(form_result_.get());
+    std::move(form_cancel_callback_).Run(ClientStatus(ACTION_APPLIED));
+  }
 }
 
 void Controller::SetDateTimeRangeStart(int year,
@@ -1406,6 +1439,12 @@ void Controller::OnWebContentsFocused(
   }
 }
 
+void Controller::OnValueChanged(const std::string& identifier,
+                                const ValueProto& new_value) {
+  event_handler_.DispatchEvent({EventProto::kOnValueChanged, identifier},
+                               new_value);
+}
+
 void Controller::OnTouchableAreaChanged(
     const RectF& visual_viewport,
     const std::vector<RectF>& touchable_areas,
@@ -1416,9 +1455,7 @@ void Controller::OnTouchableAreaChanged(
   }
 }
 
-void Controller::SetCollectUserDataOptions(
-    std::unique_ptr<CollectUserDataOptions> options,
-    std::unique_ptr<UserData> information) {
+void Controller::SetCollectUserDataOptions(CollectUserDataOptions* options) {
   DCHECK(!options ||
          (options->confirm_callback && options->additional_actions_callback &&
           options->terms_link_callback));
@@ -1426,22 +1463,19 @@ void Controller::SetCollectUserDataOptions(
   if (collect_user_data_options_ == nullptr && options == nullptr)
     return;
 
-  collect_user_data_options_ = std::move(options);
-  user_data_ = std::move(information);
+  collect_user_data_options_ = options;
   UpdateCollectUserDataActions();
   for (ControllerObserver& observer : observers_) {
-    observer.OnCollectUserDataOptionsChanged(collect_user_data_options_.get());
+    observer.OnCollectUserDataOptionsChanged(collect_user_data_options_);
     observer.OnUserDataChanged(user_data_.get(), UserData::FieldChange::ALL);
   }
 }
 
 void Controller::WriteUserData(
-    base::OnceCallback<void(const CollectUserDataOptions*,
-                            UserData*,
-                            UserData::FieldChange*)> write_callback) {
+    base::OnceCallback<void(UserData*, UserData::FieldChange*)>
+        write_callback) {
   UserData::FieldChange field_change = UserData::FieldChange::NONE;
-  std::move(write_callback)
-      .Run(collect_user_data_options_.get(), user_data_.get(), &field_change);
+  std::move(write_callback).Run(user_data_.get(), &field_change);
   if (field_change == UserData::FieldChange::NONE) {
     return;
   }

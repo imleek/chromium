@@ -27,13 +27,13 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.autofill.CardUnmaskPrompt;
 import org.chromium.chrome.browser.autofill.CardUnmaskPrompt.CardUnmaskObserverForTest;
+import org.chromium.chrome.browser.autofill.prefeditor.EditorObserverForTest;
+import org.chromium.chrome.browser.autofill.prefeditor.EditorTextField;
 import org.chromium.chrome.browser.payments.PaymentRequestImpl.PaymentRequestServiceObserverForTest;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.OptionSection;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.OptionSection.OptionRow;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestUI;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestUI.PaymentRequestObserverForTest;
-import org.chromium.chrome.browser.widget.prefeditor.EditorObserverForTest;
-import org.chromium.chrome.browser.widget.prefeditor.EditorTextField;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
@@ -44,6 +44,8 @@ import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentItem;
 import org.chromium.payments.mojom.PaymentMethodData;
+import org.chromium.payments.mojom.PaymentOptions;
+import org.chromium.payments.mojom.PaymentShippingOption;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -1270,9 +1272,11 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
                 String iframeOrigin, byte[][] certificateChain,
                 Map<String, PaymentMethodData> methodData, PaymentItem total,
                 List<PaymentItem> displayItems, Map<String, PaymentDetailsModifier> modifiers,
+                PaymentOptions paymentOptions, List<PaymentShippingOption> shippingOptions,
                 InstrumentDetailsCallback detailsCallback) {
             detailsCallback.onInstrumentDetailsReady(mDefaultMethodName,
-                    "{\"transaction\": 1337, \"total\": \"" + total.amount.value + "\"}");
+                    "{\"transaction\": 1337, \"total\": \"" + total.amount.value + "\"}",
+                    new PayerData());
         }
 
         @Override

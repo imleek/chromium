@@ -27,6 +27,7 @@
 #include "services/network/cookie_settings.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "url/gurl.h"
 
 namespace network {
 
@@ -43,13 +44,15 @@ net::CookieOptions MakeOptionsForSet(mojom::RestrictedCookieManagerRole role,
     options.set_exclude_httponly();  // Default, but make it explicit here.
     options.set_same_site_cookie_context(
         net::cookie_util::ComputeSameSiteContextForScriptSet(
-            url, site_for_cookies, attach_same_site_cookies));
+            url, net::SiteForCookies::FromUrl(site_for_cookies),
+            attach_same_site_cookies));
   } else {
     // mojom::RestrictedCookieManagerRole::NETWORK
     options.set_include_httponly();
     options.set_same_site_cookie_context(
         net::cookie_util::ComputeSameSiteContextForSubresource(
-            url, site_for_cookies, attach_same_site_cookies));
+            url, net::SiteForCookies::FromUrl(site_for_cookies),
+            attach_same_site_cookies));
   }
   return options;
 }
@@ -66,14 +69,15 @@ net::CookieOptions MakeOptionsForGet(mojom::RestrictedCookieManagerRole role,
     options.set_exclude_httponly();  // Default, but make it explicit here.
     options.set_same_site_cookie_context(
         net::cookie_util::ComputeSameSiteContextForScriptGet(
-            url, site_for_cookies, base::nullopt /*initiator*/,
-            attach_same_site_cookies));
+            url, net::SiteForCookies::FromUrl(site_for_cookies),
+            base::nullopt /*initiator*/, attach_same_site_cookies));
   } else {
     // mojom::RestrictedCookieManagerRole::NETWORK
     options.set_include_httponly();
     options.set_same_site_cookie_context(
         net::cookie_util::ComputeSameSiteContextForSubresource(
-            url, site_for_cookies, attach_same_site_cookies));
+            url, net::SiteForCookies::FromUrl(site_for_cookies),
+            attach_same_site_cookies));
   }
   return options;
 }
@@ -354,10 +358,15 @@ void RestrictedCookieManager::SetCanonicalCookie(
 
   // Update the creation and last access times.
   base::Time now = base::Time::NowFromSystemTime();
+  // TODO(http://crbug.com/1024053): Log metrics
+  net::CookieSourceScheme source_scheme =
+      GURL::SchemeIsCryptographic(origin_.scheme())
+          ? net::CookieSourceScheme::kSecure
+          : net::CookieSourceScheme::kNonSecure;
   auto sanitized_cookie = std::make_unique<net::CanonicalCookie>(
       cookie.Name(), cookie.Value(), cookie.Domain(), cookie.Path(), now,
       cookie.ExpiryDate(), now, cookie.IsSecure(), cookie.IsHttpOnly(),
-      cookie.SameSite(), cookie.Priority());
+      cookie.SameSite(), cookie.Priority(), source_scheme);
   net::CanonicalCookie cookie_copy = *sanitized_cookie;
 
   net::CookieOptions options =
@@ -506,6 +515,9 @@ bool RestrictedCookieManager::ValidateAccessToCookiesAt(
     // rely on SameDomainOrHost because that function checks for the hosts being
     // non-empty and equal. This may also be different for tests because some
     // scheme-registering functions like RegisterContentSchemes are not called.
+    //
+    // This also shows up for regular file:/// URLs, when those have cookie
+    // support turned on (as they normally don't have a host name, either).
     site_for_cookies_ok =
         (site_for_cookies == site_for_cookies_) ||
         net::registry_controlled_domains::SameDomainOrHost(

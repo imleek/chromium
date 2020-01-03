@@ -113,7 +113,7 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
                              public views::BoundsAnimatorObserver,
                              public ApplicationDragAndDropHost,
                              public ShelfTooltipDelegate,
-                             public ash::TabletModeObserver,
+                             public TabletModeObserver,
                              public ShelfConfig::Observer {
  public:
   ShelfView(ShelfModel* model,
@@ -291,6 +291,14 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
 
   // Returns the ShelfAppButton associated with |id|.
   ShelfAppButton* GetShelfAppButton(const ShelfID& id);
+
+  // Updates |first_visible_index_| and |last_visible_index_| when the
+  // scrollable shelf is enabled.
+  void UpdateVisibleIndices();
+
+  // If there is animation associated with |view| in |bounds_animator_|,
+  // stops the animation.
+  void StopAnimatingViewIfAny(views::View* view);
 
   // Return the view model for test purposes.
   const views::ViewModel* view_model_for_test() const {
@@ -486,6 +494,7 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
 
   void AnnounceShelfAlignment();
   void AnnounceShelfAutohideBehavior();
+  void AnnouncePinUnpinEvent(const ShelfItem& item, bool pinned);
 
   // Overridden from ui::EventHandler:
   void OnGestureEvent(ui::GestureEvent* event) override;
@@ -561,10 +570,6 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
 
   // Different from GetTitleForView, |view| here must be a child view.
   base::string16 GetTitleForChildView(const views::View* view) const;
-
-  // Update |first_visible_index_| and |last_visible_index_| when the scrollable
-  // shelf is enabled.
-  void UpdateVisibleIndice();
 
   // The model; owned by Launcher.
   ShelfModel* model_;
@@ -651,7 +656,7 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
 
   // The image proxy for drag operations when a drag and drop host exists and
   // the item can be dragged outside the app grid.
-  std::unique_ptr<ash::DragImageView> drag_image_;
+  std::unique_ptr<DragImageView> drag_image_;
 
   // The cursor offset to the middle of the dragged item.
   gfx::Vector2d drag_image_offset_;
@@ -666,7 +671,7 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   bool dragged_to_another_shelf_ = false;
 
   // The rip off view when a snap back operation is underway.
-  views::View* snap_back_from_rip_off_view_ = nullptr;
+  ShelfAppButton* snap_back_from_rip_off_view_ = nullptr;
 
   // True when this ShelfView is used for Overflow Bubble.
   bool overflow_mode_ = false;
@@ -709,7 +714,7 @@ class ASH_EXPORT ShelfView : public views::AccessiblePaneView,
   // The AppListViewState recorded before a button press, used to record app
   // launching metrics. This allows an accurate AppListViewState to be recorded
   // before AppListViewState changes.
-  ash::AppListViewState recorded_app_list_view_state_;
+  AppListViewState recorded_app_list_view_state_;
 
   // Whether the applist was shown before a button press, used to record app
   // launching metrics. This is recorded because AppList visibility can change

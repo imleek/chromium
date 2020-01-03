@@ -159,6 +159,7 @@ bool StructTraits<network::mojom::TrustedUrlRequestParamsDataView,
   out->update_network_isolation_key_on_redirect =
       data.update_network_isolation_key_on_redirect();
   out->disable_secure_dns = data.disable_secure_dns();
+  out->has_user_activation = data.has_user_activation();
   return true;
 }
 
@@ -205,6 +206,7 @@ bool StructTraits<
   out->corb_detachable = data.corb_detachable();
   out->corb_excluded = data.corb_excluded();
   out->fetch_request_context_type = data.fetch_request_context_type();
+  out->destination = data.destination();
   out->keepalive = data.keepalive();
   out->has_user_gesture = data.has_user_gesture();
   out->enable_load_timing = data.enable_load_timing();

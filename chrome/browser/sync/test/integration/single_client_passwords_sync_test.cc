@@ -14,6 +14,7 @@
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/sync/password_sync_bridge.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
@@ -41,13 +42,9 @@ using testing::IsEmpty;
 const syncer::SyncFirstSetupCompleteSource kSetSourceFromTest =
     syncer::SyncFirstSetupCompleteSource::BASIC_FLOW;
 
-syncer::KeyParams KeystoreKeyParams(const std::string& key) {
-  // Due to mis-encode of keystore keys to base64 we have to always encode such
-  // keys to provide backward compatibility.
-  std::string encoded_key;
-  base::Base64Encode(key, &encoded_key);
+syncer::KeyParams KeystoreKeyParams(const std::vector<uint8_t>& key) {
   return {syncer::KeyDerivationParams::CreateForPbkdf2(),
-          std::move(encoded_key)};
+          base::Base64Encode(key)};
 }
 
 sync_pb::PasswordSpecifics EncryptPasswordSpecifics(
@@ -64,6 +61,18 @@ sync_pb::PasswordSpecifics EncryptPasswordSpecifics(
   DCHECK(result);
   return encrypted_specifics;
 }
+
+class PasswordSyncActiveChecker : public SingleClientStatusChangeChecker {
+ public:
+  explicit PasswordSyncActiveChecker(syncer::ProfileSyncService* service)
+      : SingleClientStatusChangeChecker(service) {}
+  ~PasswordSyncActiveChecker() override = default;
+
+  // SingleClientStatusChangeChecker.
+  bool IsExitConditionSatisfied(std::ostream* os) override {
+    return service()->GetActiveDataTypes().Has(syncer::PASSWORDS);
+  }
+};
 
 class SingleClientPasswordsSyncTest : public FeatureToggler, public SyncTest {
  public:
@@ -331,7 +340,7 @@ class SingleClientPasswordsWithAccountStorageSyncTest : public SyncTest {
   }
 
   void AddKeystoreNigoriToFakeServer() {
-    const std::vector<std::string>& keystore_keys =
+    const std::vector<std::vector<uint8_t>>& keystore_keys =
         GetFakeServer()->GetKeystoreKeys();
     ASSERT_TRUE(keystore_keys.size() == 1);
     const syncer::KeyParams key_params =
@@ -445,8 +454,13 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   // that Sync will start in transport mode).
   ASSERT_TRUE(GetClient(0)->SignInPrimaryAccount());
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
-
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
+
+  // Let the user opt in to the passwords account storage, and wait for it to
+  // become active.
+  password_manager_util::SetAccountStorageOptIn(GetProfile(0)->GetPrefs(),
+                                                GetSyncService(0), true);
+  PasswordSyncActiveChecker(GetSyncService(0)).Wait();
   ASSERT_TRUE(GetSyncService(0)->GetActiveDataTypes().Has(syncer::PASSWORDS));
 
   // Make sure the password showed up in the account store and not in the
@@ -474,8 +488,13 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   secondary_account_helper::SignInSecondaryAccount(
       GetProfile(0), &test_url_loader_factory_, "user@email.com");
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
-
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
+
+  // Let the user opt in to the passwords account storage, and wait for it to
+  // become active.
+  password_manager_util::SetAccountStorageOptIn(GetProfile(0)->GetPrefs(),
+                                                GetSyncService(0), true);
+  PasswordSyncActiveChecker(GetSyncService(0)).Wait();
   ASSERT_TRUE(GetSyncService(0)->GetActiveDataTypes().Has(syncer::PASSWORDS));
 
   // Make sure the password showed up in the account store and not in the
@@ -538,6 +557,12 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
 
+  // Let the user opt in to the passwords account storage, and wait for it to
+  // become active.
+  password_manager_util::SetAccountStorageOptIn(GetProfile(0)->GetPrefs(),
+                                                GetSyncService(0), true);
+  PasswordSyncActiveChecker(GetSyncService(0)).Wait();
+
   // Make sure the password showed up in the account store.
   password_manager::PasswordStore* account_store =
       passwords_helper::GetAccountPasswordStore(0);
@@ -571,6 +596,12 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
   ASSERT_TRUE(GetClient(0)->SignInPrimaryAccount());
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
+
+  // Let the user opt in to the passwords account storage, and wait for it to
+  // become active.
+  password_manager_util::SetAccountStorageOptIn(GetProfile(0)->GetPrefs(),
+                                                GetSyncService(0), true);
+  PasswordSyncActiveChecker(GetSyncService(0)).Wait();
 
   // Make sure the password showed up in the account store.
   password_manager::PasswordStore* account_store =
@@ -619,6 +650,12 @@ IN_PROC_BROWSER_TEST_F(SingleClientPasswordsWithAccountStorageSyncTest,
       GetProfile(0), &test_url_loader_factory_, "user@email.com");
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
+
+  // Let the user opt in to the passwords account storage, and wait for it to
+  // become active.
+  password_manager_util::SetAccountStorageOptIn(GetProfile(0)->GetPrefs(),
+                                                GetSyncService(0), true);
+  PasswordSyncActiveChecker(GetSyncService(0)).Wait();
 
   // Make sure the password showed up in the account store.
   password_manager::PasswordStore* account_store =

@@ -74,7 +74,13 @@ class CORE_EXPORT SVGAnimationElement : public SVGSMILElement {
   AnimationMode GetAnimationMode() const { return animation_mode_; }
   CalcMode GetCalcMode() const { return calc_mode_; }
 
-  bool OverwritesUnderlyingAnimationValue() const override;
+  virtual void ResetAnimatedType() = 0;
+  virtual void ClearAnimatedType() = 0;
+  virtual void ApplyResultsToTarget() = 0;
+  // Returns true if this animation "sets" the value of the animation. Thus all
+  // previous animations are rendered useless.
+  bool OverwritesUnderlyingAnimationValue() const;
+  void ApplyAnimation(SVGAnimationElement* result_element);
 
   void AnimateAdditiveNumber(float percentage,
                              unsigned repeat_count,
@@ -101,11 +107,6 @@ class CORE_EXPORT SVGAnimationElement : public SVGSMILElement {
 
   void ParseAttribute(const AttributeModificationParams&) override;
 
-  // from SVGSMILElement
-  void UpdateAnimation(float percent,
-                       unsigned repeat,
-                       SVGSMILElement* result_element) override;
-
   virtual void UpdateAnimationMode();
   void SetAnimationMode(AnimationMode animation_mode) {
     animation_mode_ = animation_mode;
@@ -114,6 +115,9 @@ class CORE_EXPORT SVGAnimationElement : public SVGSMILElement {
     use_paced_key_times_ = false;
     calc_mode_ = calc_mode;
   }
+  virtual bool HasValidAnimation() const = 0;
+  void UnregisterAnimation(const QualifiedName& attribute_name);
+  void RegisterAnimation(const QualifiedName& attribute_name);
 
   // Parses a list of values as specified by SVG, stripping leading
   // and trailing whitespace, and places them in result. If the
@@ -123,6 +127,7 @@ class CORE_EXPORT SVGAnimationElement : public SVGSMILElement {
   static bool ParseValues(const String&, Vector<String>& result);
 
   void WillChangeAnimationTarget() override;
+  void AnimationAttributeChanged();
 
  private:
   bool IsValid() const final { return SVGTests::IsValid(); }
@@ -131,7 +136,6 @@ class CORE_EXPORT SVGAnimationElement : public SVGSMILElement {
   String ByValue() const;
   String FromValue() const;
 
-  void AnimationAttributeChanged();
   bool CheckAnimationParameters();
   virtual bool CalculateToAtEndOfDurationValue(
       const String& to_at_end_of_duration_string) = 0;
@@ -176,6 +180,7 @@ class CORE_EXPORT SVGAnimationElement : public SVGSMILElement {
     kInvalid,
   };
   AnimationValidity animation_valid_;
+  bool registered_animation_;
   bool use_paced_key_times_;
 
   Vector<String> values_;

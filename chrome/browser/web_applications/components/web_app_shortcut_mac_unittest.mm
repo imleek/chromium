@@ -165,7 +165,7 @@ TEST_F(WebAppShortcutCreatorTest, CreateShortcuts) {
   EXPECT_TRUE(base::PathExists(strings_file));
 
   // Delete it here, just to test that it is not recreated.
-  EXPECT_TRUE(base::DeleteFile(strings_file, true));
+  EXPECT_TRUE(base::DeleteFileRecursively(strings_file));
 
   // Ensure the strings file wasn't recreated. It's not needed for any other
   // tests.
@@ -200,6 +200,115 @@ TEST_F(WebAppShortcutCreatorTest, CreateShortcuts) {
         << base::SysNSStringToUTF8(key) << ":"
         << base::SysNSStringToUTF8(value);
   }
+}
+
+TEST_F(WebAppShortcutCreatorTest, FileHandlers) {
+  const base::FilePath plist_path =
+      shim_path_.Append("Contents").Append("Info.plist");
+  NiceMock<WebAppShortcutCreatorMock> shortcut_creator(app_data_dir_,
+                                                       info_.get());
+
+  // kCFBundleDocumentTypesKey should not be set, because we set no file
+  // handlers.
+  EXPECT_TRUE(shortcut_creator.CreateShortcuts(SHORTCUT_CREATION_AUTOMATED,
+                                               ShortcutLocations()));
+  {
+    NSDictionary* plist = [NSDictionary
+        dictionaryWithContentsOfFile:base::mac::FilePathToNSString(plist_path)];
+    NSArray* doc_types_array =
+        [plist objectForKey:app_mode::kCFBundleDocumentTypesKey];
+    EXPECT_EQ(doc_types_array, nil);
+  }
+  EXPECT_TRUE(base::DeleteFileRecursively(shim_path_));
+
+  // Register 2 mime types. We should now have kCFBundleTypeMIMETypesKey but
+  // not kCFBundleTypeExtensionsKey.
+  info_->file_handler_mime_types.insert("foo/bar");
+  info_->file_handler_mime_types.insert("moo/cow");
+  EXPECT_TRUE(shortcut_creator.CreateShortcuts(SHORTCUT_CREATION_AUTOMATED,
+                                               ShortcutLocations()));
+  {
+    NSDictionary* plist = [NSDictionary
+        dictionaryWithContentsOfFile:base::mac::FilePathToNSString(plist_path)];
+    NSArray* doc_types_array =
+        [plist objectForKey:app_mode::kCFBundleDocumentTypesKey];
+    EXPECT_NE(doc_types_array, nil);
+    EXPECT_EQ(1u, [doc_types_array count]);
+    NSDictionary* doc_types_dict = [doc_types_array objectAtIndex:0];
+    EXPECT_NE(doc_types_dict, nil);
+    NSArray* mime_types =
+        [doc_types_dict objectForKey:app_mode::kCFBundleTypeMIMETypesKey];
+    EXPECT_NE(mime_types, nil);
+    NSArray* extensions =
+        [doc_types_dict objectForKey:app_mode::kCFBundleTypeExtensionsKey];
+    EXPECT_EQ(extensions, nil);
+
+    // The mime types should be listed in sorted order (note that sorted order
+    // does matter for correct behavior).
+    EXPECT_EQ(2u, [mime_types count]);
+    EXPECT_NSEQ([mime_types objectAtIndex:0], @"foo/bar");
+    EXPECT_NSEQ([mime_types objectAtIndex:1], @"moo/cow");
+  }
+  EXPECT_TRUE(base::DeleteFileRecursively(shim_path_));
+
+  // Register 3 extensions with the 2 mime types.
+  info_->file_handler_extensions.insert("cow");
+  info_->file_handler_extensions.insert("pig");
+  info_->file_handler_extensions.insert("bbq");
+  EXPECT_TRUE(shortcut_creator.CreateShortcuts(SHORTCUT_CREATION_AUTOMATED,
+                                               ShortcutLocations()));
+  {
+    NSDictionary* plist = [NSDictionary
+        dictionaryWithContentsOfFile:base::mac::FilePathToNSString(plist_path)];
+    NSArray* doc_types_array =
+        [plist objectForKey:app_mode::kCFBundleDocumentTypesKey];
+    EXPECT_NE(doc_types_array, nil);
+    EXPECT_EQ(1u, [doc_types_array count]);
+    NSDictionary* doc_types_dict = [doc_types_array objectAtIndex:0];
+    EXPECT_NE(doc_types_dict, nil);
+    NSArray* mime_types =
+        [doc_types_dict objectForKey:app_mode::kCFBundleTypeMIMETypesKey];
+    EXPECT_NE(mime_types, nil);
+    NSArray* extensions =
+        [doc_types_dict objectForKey:app_mode::kCFBundleTypeExtensionsKey];
+    EXPECT_NE(extensions, nil);
+
+    EXPECT_EQ(2u, [mime_types count]);
+    EXPECT_NSEQ([mime_types objectAtIndex:0], @"foo/bar");
+    EXPECT_NSEQ([mime_types objectAtIndex:1], @"moo/cow");
+    EXPECT_EQ(3u, [extensions count]);
+    EXPECT_NSEQ([extensions objectAtIndex:0], @"bbq");
+    EXPECT_NSEQ([extensions objectAtIndex:1], @"cow");
+    EXPECT_NSEQ([extensions objectAtIndex:2], @"pig");
+  }
+  EXPECT_TRUE(base::DeleteFileRecursively(shim_path_));
+
+  // Register just extensions.
+  info_->file_handler_mime_types.clear();
+  EXPECT_TRUE(shortcut_creator.CreateShortcuts(SHORTCUT_CREATION_AUTOMATED,
+                                               ShortcutLocations()));
+  {
+    NSDictionary* plist = [NSDictionary
+        dictionaryWithContentsOfFile:base::mac::FilePathToNSString(plist_path)];
+    NSArray* doc_types_array =
+        [plist objectForKey:app_mode::kCFBundleDocumentTypesKey];
+    EXPECT_NE(doc_types_array, nil);
+    EXPECT_EQ(1u, [doc_types_array count]);
+    NSDictionary* doc_types_dict = [doc_types_array objectAtIndex:0];
+    EXPECT_NE(doc_types_dict, nil);
+    NSArray* mime_types =
+        [doc_types_dict objectForKey:app_mode::kCFBundleTypeMIMETypesKey];
+    EXPECT_EQ(mime_types, nil);
+    NSArray* extensions =
+        [doc_types_dict objectForKey:app_mode::kCFBundleTypeExtensionsKey];
+    EXPECT_NE(extensions, nil);
+
+    EXPECT_EQ(3u, [extensions count]);
+    EXPECT_NSEQ([extensions objectAtIndex:0], @"bbq");
+    EXPECT_NSEQ([extensions objectAtIndex:1], @"cow");
+    EXPECT_NSEQ([extensions objectAtIndex:2], @"pig");
+  }
+  EXPECT_TRUE(base::DeleteFileRecursively(shim_path_));
 }
 
 TEST_F(WebAppShortcutCreatorTest, CreateShortcutsConflict) {
@@ -255,7 +364,7 @@ TEST_F(WebAppShortcutCreatorTest, UpdateShortcuts) {
 
   EXPECT_TRUE(shortcut_creator.BuildShortcut(other_shim_path));
 
-  EXPECT_TRUE(base::DeleteFile(other_shim_path.Append("Contents"), true));
+  EXPECT_TRUE(base::DeleteFileRecursively(other_shim_path.Append("Contents")));
 
   std::vector<base::FilePath> updated_paths;
   EXPECT_TRUE(shortcut_creator.UpdateShortcuts(false, &updated_paths));
@@ -272,7 +381,7 @@ TEST_F(WebAppShortcutCreatorTest, UpdateShortcuts) {
 
   EXPECT_TRUE(shortcut_creator.BuildShortcut(other_shim_path));
 
-  EXPECT_TRUE(base::DeleteFile(other_shim_path.Append("Contents"), true));
+  EXPECT_TRUE(base::DeleteFileRecursively(other_shim_path.Append("Contents")));
 
   updated_paths.clear();
   EXPECT_FALSE(shortcut_creator.UpdateShortcuts(false, &updated_paths));
@@ -311,7 +420,7 @@ TEST_F(WebAppShortcutCreatorTest, UpdateBookmarkAppShortcut) {
 
   EXPECT_TRUE(shortcut_creator.BuildShortcut(other_shim_path));
 
-  EXPECT_TRUE(base::DeleteFile(other_shim_path, true));
+  EXPECT_TRUE(base::DeleteFileRecursively(other_shim_path));
 
   // The original shim should be recreated.
   std::vector<base::FilePath> updated_paths;
@@ -320,19 +429,19 @@ TEST_F(WebAppShortcutCreatorTest, UpdateBookmarkAppShortcut) {
   EXPECT_FALSE(base::PathExists(other_shim_path.Append("Contents")));
 }
 
-TEST_F(WebAppShortcutCreatorTest, DeleteShortcuts) {
-  base::ScopedTempDir other_folder_temp_dir;
-  EXPECT_TRUE(other_folder_temp_dir.CreateUniqueTempDir());
-  base::FilePath other_folder = other_folder_temp_dir.GetPath();
-  base::FilePath other_shim_path = other_folder.Append(shim_base_name_);
+TEST_F(WebAppShortcutCreatorTest, DeleteShortcutsSingleProfile) {
+  base::test::ScopedFeatureList scoped_features;
+  scoped_features.InitWithFeatures(
+      /*enabled_features=*/{},
+      /*disabled_features=*/{features::kAppShimMultiProfile});
 
+  base::FilePath other_shim_path =
+      shim_path_.DirName().Append("Copy of Shim.app");
   NiceMock<WebAppShortcutCreatorMock> shortcut_creator(app_data_dir_,
                                                        info_.get());
 
   // Create an extra shim in another folder. It should be deleted since its
   // bundle id matches.
-  std::string expected_bundle_id = kFakeChromeBundleId;
-  expected_bundle_id += ".app.Profile-1-" + info_->extension_id;
   std::vector<base::FilePath> bundle_by_id_paths;
   bundle_by_id_paths.push_back(shim_path_);
   bundle_by_id_paths.push_back(other_shim_path);
@@ -344,7 +453,37 @@ TEST_F(WebAppShortcutCreatorTest, DeleteShortcuts) {
   // Ensure the paths were created, and that they are destroyed.
   EXPECT_TRUE(base::PathExists(shim_path_));
   EXPECT_TRUE(base::PathExists(other_shim_path));
-  shortcut_creator.DeleteShortcuts();
+  internals::DeleteMultiProfileShortcutsForApp(info_->extension_id);
+  EXPECT_TRUE(base::PathExists(shim_path_));
+  EXPECT_TRUE(base::PathExists(other_shim_path));
+  internals::DeletePlatformShortcuts(app_data_dir_, *info_);
+  EXPECT_FALSE(base::PathExists(shim_path_));
+  EXPECT_FALSE(base::PathExists(other_shim_path));
+}
+
+TEST_F(WebAppShortcutCreatorTest, DeleteShortcuts) {
+  base::FilePath other_shim_path =
+      shim_path_.DirName().Append("Copy of Shim.app");
+  NiceMock<WebAppShortcutCreatorMock> shortcut_creator(app_data_dir_,
+                                                       info_.get());
+
+  // Create an extra shim in another folder. It should be deleted since its
+  // bundle id matches.
+  std::vector<base::FilePath> bundle_by_id_paths;
+  bundle_by_id_paths.push_back(shim_path_);
+  bundle_by_id_paths.push_back(other_shim_path);
+  EXPECT_CALL(shortcut_creator, GetAppBundlesByIdUnsorted())
+      .WillRepeatedly(Return(bundle_by_id_paths));
+  EXPECT_TRUE(shortcut_creator.CreateShortcuts(SHORTCUT_CREATION_AUTOMATED,
+                                               ShortcutLocations()));
+
+  // Ensure the paths were created, and that they are destroyed.
+  EXPECT_TRUE(base::PathExists(shim_path_));
+  EXPECT_TRUE(base::PathExists(other_shim_path));
+  internals::DeletePlatformShortcuts(app_data_dir_, *info_);
+  EXPECT_TRUE(base::PathExists(shim_path_));
+  EXPECT_TRUE(base::PathExists(other_shim_path));
+  internals::DeleteMultiProfileShortcutsForApp(info_->extension_id);
   EXPECT_FALSE(base::PathExists(shim_path_));
   EXPECT_FALSE(base::PathExists(other_shim_path));
 }

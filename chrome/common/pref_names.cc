@@ -1168,6 +1168,13 @@ const char kAccessibilityImageLabelsEnabled[] =
 const char kAccessibilityImageLabelsOptInAccepted[] =
     "settings.a11y.enable_accessibility_image_labels_opt_in_accepted";
 
+// Whether the Live Caption feature is enabled.
+const char kLiveCaptionEnabled[] =
+    "accessibility.captions.live_caption_enabled";
+
+// The file path of the SODA installation directory.
+const char kSODAPath[] = "accessibility.captions.soda_path";
+
 #if defined(OS_MACOSX)
 // Boolean that indicates whether the application should show the info bar
 // asking the user to set up automatic updates when Keystone promotion is
@@ -1268,14 +1275,6 @@ const char kProfileUsingGAIAAvatar[] = "profile.using_gaia_avatar";
 // The supervised user ID.
 const char kSupervisedUserId[] = "profile.managed_user_id";
 
-// 64-bit integer serialization of the base::Time when the user's GAIA info
-// was last updated.
-const char kProfileGAIAInfoUpdateTime[] = "profile.gaia_info_update_time";
-
-// The URL from which the GAIA profile picture was downloaded. This is cached to
-// prevent the same picture from being downloaded multiple times.
-const char kProfileGAIAInfoPictureURL[] = "profile.gaia_info_picture_url";
-
 // Integer that specifies the number of times that we have shown the upgrade
 // tutorial card in the avatar menu bubble.
 const char kProfileAvatarTutorialShown[] =
@@ -1286,11 +1285,19 @@ const char kProfileAvatarTutorialShown[] =
 const char kInvertNotificationShown[] = "invert_notification_version_2_shown";
 
 // A pref holding the list of printer types to be disabled.
-const char kPrinterTypeBlacklist[] = "printing.printer_type_blacklist";
+const char kPrinterTypeDenyList[] = "printing.printer_type_deny_list";
 
-// The default value for the 'Headers and footers' checkbox, in Print Preview.
-// Takes priority over kPrintPreviewStickySettings if set.
+// The allowed/default value for the 'Headers and footers' checkbox, in Print
+// Preview.
 const char kPrintHeaderFooter[] = "printing.print_header_footer";
+
+// A pref holding the allowed background graphics printing modes.
+const char kPrintingAllowedBackgroundGraphicsModes[] =
+    "printing.allowed_background_graphics_modes";
+
+// A pref holding the default background graphics mode.
+const char kPrintingBackgroundGraphicsDefault[] =
+    "printing.background_graphics_default";
 
 // Boolean controlling whether printing is enabled.
 const char kPrintingEnabled[] = "printing.enabled";
@@ -1347,10 +1354,6 @@ const char kPrintingAllowedDuplexModes[] = "printing.allowed_duplex_modes";
 // A pref holding the allowed PIN printing modes.
 const char kPrintingAllowedPinModes[] = "printing.allowed_pin_modes";
 
-// A pref holding the allowed background graphics printing modes.
-const char kPrintingAllowedBackgroundGraphicsModes[] =
-    "printing.allowed_background_graphics_modes";
-
 // A pref holding the list of allowed printing duplex mode.
 // Empty list is no restriction.
 const char kPrintingAllowedPageSizes[] = "printing.allowed_page_sizes";
@@ -1363,10 +1366,6 @@ const char kPrintingDuplexDefault[] = "printing.duplex_default";
 
 // A pref holding the default PIN mode.
 const char kPrintingPinDefault[] = "printing.pin_default";
-
-// A pref holding the default background graphics mode.
-const char kPrintingBackgroundGraphicsDefault[] =
-    "printing.background_graphics_default";
 
 // A pref holding the default page size.
 const char kPrintingSizeDefault[] = "printing.size_default";
@@ -1401,6 +1400,10 @@ const char kMessageCenterDisabledExtensionIds[] =
 // Disabling fullscreen mode also makes kiosk mode unavailable on desktop
 // platforms.
 const char kFullscreenAllowed[] = "fullscreen.allowed";
+
+// Enable the local discovery UI (chrome://devices) which shows discoverable
+// devices near the user as well as cloud devices registered to them.
+const char kLocalDiscoveryEnabled[] = "local_discovery.enabled";
 
 // Enable notifications for new devices on the local network that can be
 // registered to the user's account, e.g. Google Cloud Print printers.
@@ -1485,6 +1488,27 @@ const char kHasSeenWelcomePage[] = "browser.has_seen_welcome_page";
 // finch group pinged to keep track of them for the experiment.
 const char kNaviOnboardGroup[] = "browser.navi_onboard_group";
 #endif  // defined(OS_WIN)
+
+// Boolean indicating whether the quiet UX is enabled for notification
+// permission requests.
+const char kEnableQuietNotificationPermissionUi[] =
+    "profile.content_settings.enable_quiet_permission_ui.notifications";
+
+// Boolean indicating whether to show a promo for the quiet notification
+// permission UI.
+const char kQuietNotificationPermissionShouldShowPromo[] =
+    "profile.content_settings.quiet_permission_ui_promo.should_show."
+    "notifications";
+
+// Boolean indicating whether the promo was shown for the quiet notification
+// permission UI.
+const char kQuietNotificationPermissionPromoWasShown[] =
+    "profile.content_settings.quiet_permission_ui_promo.was_shown."
+    "notifications";
+
+// List containing a history of past permission actions.
+const char kNotificationPermissionActions[] =
+    "profile.content_settings.permission_actions.notifications";
 
 // *************** LOCAL STATE ***************
 // These are attached to the machine/installation
@@ -1640,6 +1664,11 @@ const char kExcludedSchemes[] = "protocol_handler.excluded_schemes";
 // intranet_redirect_detector.h for more information.
 const char kLastKnownIntranetRedirectOrigin[] = "browser.last_redirect_origin";
 
+// Boolean specifying that the intranet redirect detector should be enabled.
+// Defaults to true.
+const char kDNSInterceptionChecksEnabled[] =
+    "browser.dns_interception_checks_enabled";
+
 // An enum value of how the browser was shut down (see browser_shutdown.h).
 const char kShutdownType[] = "shutdown.type";
 // Number of processes that were open when the user shut down.
@@ -1784,6 +1813,11 @@ const char kWebAppInstallMetrics[] = "web_app_install_metrics";
 // Dictionary that maps web app URLs to Chrome extension IDs.
 const char kWebAppsExtensionIDs[] = "web_apps.extension_ids";
 
+// Dictionary that maps web app ID to a dictionary of various preferences.
+// Used only in the new web applications system to store app preferences which
+// outlive the app installation and uninstallation.
+const char kWebAppsPreferences[] = "web_apps.web_app_ids";
+
 // A string representing the last version of Chrome that System Web Apps were
 // updated for.
 const char kSystemWebAppLastUpdateVersion[] =
@@ -1857,6 +1891,14 @@ const char kAllowCrossOriginAuthPrompt[] = "auth.allow_cross_origin_prompt";
 // by NetworkIsolationKey.
 const char kGloballyScopeHTTPAuthCacheEnabled[] =
     "auth.globally_scoped_http_auth_cache_enabled";
+
+// Integer specifying the cases where ambient authentication is enabled.
+// 0 - Only allow ambient authentication in regular sessions
+// 1 - Only allow ambient authentication in regular and incognito sessions
+// 2 - Only allow ambient authentication in regular and guest sessions
+// 3 - Allow ambient authentication in regular, incognito and guest sessions
+const char kAmbientAuthenticationInPrivateModesEnabled[] =
+    "auth.ambient_auth_in_private_modes";
 
 #if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
 // Boolean that specifies whether OK-AS-DELEGATE flag from KDC is respected
@@ -2791,12 +2833,12 @@ const char kEnterpriseHardwarePlatformAPIEnabled[] =
 const char kSignedHTTPExchangeEnabled[] = "web_package.signed_exchange.enabled";
 
 // Boolean that allows a page to show popups during its unloading.
-// TODO(https://crbug.com/937569): Remove this in Chrome 82.
+// TODO(https://crbug.com/937569): Remove this in Chrome 88.
 const char kAllowPopupsDuringPageUnload[] = "allow_popups_during_page_unload";
 
 // Boolean that allows a page to perform synchronous XHR requests during page
 // dismissal.
-// TODO(https://crbug.com/1003101): Remove this in Chrome 82.
+// TODO(https://crbug.com/1003101): Remove this in Chrome 88.
 const char kAllowSyncXHRInPageDismissal[] = "allow_sync_xhr_in_page_dismissal";
 
 #if defined(OS_CHROMEOS)
@@ -2849,5 +2891,13 @@ const char kExternalProtocolDialogShowAlwaysOpenCheckbox[] =
 // from M80 through M84.
 // TODO(937746): Remove this after M84.
 const char kWebComponentsV0Enabled[] = "web_components_v0_enabled";
+
+#if defined(OS_ANDROID)
+// Last time the known interception disclosure message was dismissed. Used to
+// ensure a cooldown period passes before the disclosure message is displayed
+// again.
+const char kKnownInterceptionDisclosureInfobarLastShown[] =
+    "known_interception_disclosure_infobar_last_shown";
+#endif
 
 }  // namespace prefs

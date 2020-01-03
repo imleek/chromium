@@ -21,8 +21,9 @@ import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
@@ -140,9 +141,8 @@ public class TabTest {
     @SmallTest
     @Feature({"Tab"})
     public void testTabSecurityLevel() {
-        TestThreadUtils.runOnUiThreadBlocking(
-                (Runnable) ()
-                        -> Assert.assertEquals(
-                                ConnectionSecurityLevel.NONE, mTab.getSecurityLevel()));
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertEquals(ConnectionSecurityLevel.NONE, ((TabImpl) mTab).getSecurityLevel());
+        });
     }
 }

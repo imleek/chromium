@@ -29,6 +29,7 @@
 #include "cc/test/fake_picture_layer_impl.h"
 #include "cc/test/geometry_test_utils.h"
 #include "cc/test/layer_tree_impl_test_base.h"
+#include "cc/test/property_tree_test_utils.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/draw_property_utils.h"
 #include "cc/trees/effect_node.h"
@@ -175,7 +176,6 @@ class DrawPropertiesDrawRectsTest : public DrawPropertiesTest {
     LayerImpl* drawing_layer = AddLayer<LayerImpl>();
 
     target->SetDrawsContent(true);
-    target->SetMasksToBounds(true);
     drawing_layer->SetDrawsContent(true);
 
     target->SetBounds(target_rect.size());
@@ -903,7 +903,6 @@ TEST_F(DrawPropertiesTest, TransformAboveRootLayer) {
   root->SetBounds(gfx::Size(100, 100));
   child->SetDrawsContent(true);
   child->SetBounds(gfx::Size(100, 100));
-  child->SetMasksToBounds(true);
 
   CopyProperties(root, child);
   CreateClipNode(child);
@@ -1137,7 +1136,6 @@ TEST_F(DrawPropertiesTest, ClipRectCullsRenderSurfaces) {
 
   root->SetBounds(gfx::Size(500, 500));
   child->SetBounds(gfx::Size(20, 20));
-  child->SetMasksToBounds(true);
   grand_child->SetBounds(gfx::Size(10, 10));
   great_grand_child->SetBounds(gfx::Size(10, 10));
   leaf_node1->SetBounds(gfx::Size(500, 500));
@@ -1187,7 +1185,6 @@ TEST_F(DrawPropertiesTest, ClipRectCullsSurfaceWithoutVisibleContent) {
   LayerImpl* grand_child = AddLayer<LayerImpl>();
   LayerImpl* leaf_node = AddLayer<LayerImpl>();
 
-  root->SetMasksToBounds(true);
   root->SetBounds(gfx::Size(100, 100));
   child->SetBounds(gfx::Size(20, 20));
   grand_child->SetBounds(gfx::Size(10, 10));
@@ -1278,7 +1275,6 @@ TEST_F(DrawPropertiesTest, IsClippedIsSetCorrectlyLayerImpl) {
   // surface are clipped. But layers that contribute to child2's surface are
   // not clipped explicitly because child2's surface already accounts for
   // that clip.
-  parent->SetMasksToBounds(true);
   CreateClipNode(parent);
   child1->SetClipTreeIndex(parent->clip_tree_index());
   grand_child->SetClipTreeIndex(parent->clip_tree_index());
@@ -1303,7 +1299,6 @@ TEST_F(DrawPropertiesTest, IsClippedIsSetCorrectlyLayerImpl) {
   EXPECT_TRUE(leaf_node1->is_clipped());
   EXPECT_FALSE(leaf_node2->is_clipped());
 
-  parent->SetMasksToBounds(false);
   parent->SetClipTreeIndex(root->clip_tree_index());
   child1->SetClipTreeIndex(root->clip_tree_index());
   grand_child->SetClipTreeIndex(root->clip_tree_index());
@@ -1314,7 +1309,6 @@ TEST_F(DrawPropertiesTest, IsClippedIsSetCorrectlyLayerImpl) {
 
   // Case 3: child2 MasksToBounds. The layer and subtree are clipped, and
   // child2's render surface is not clipped.
-  child2->SetMasksToBounds(true);
   CreateClipNode(child2);
   leaf_node2->SetClipTreeIndex(child2->clip_tree_index());
 
@@ -1348,7 +1342,6 @@ TEST_F(DrawPropertiesTest, UpdateClipRectCorrectly) {
   parent->SetDrawsContent(true);
   child->SetBounds(gfx::Size(100, 100));
   child->SetDrawsContent(true);
-  child->SetMasksToBounds(true);
 
   CopyProperties(root, parent);
   CopyProperties(parent, child);
@@ -1361,7 +1354,6 @@ TEST_F(DrawPropertiesTest, UpdateClipRectCorrectly) {
   EXPECT_TRUE(child->is_clipped());
   EXPECT_EQ(gfx::Rect(100, 100), child->clip_rect());
 
-  parent->SetMasksToBounds(true);
   CreateClipNode(parent);
   GetClipNode(child)->parent_id = parent->clip_tree_index();
   child->SetOffsetToTransformParent(gfx::Vector2dF(100.f, 100.f));
@@ -1398,14 +1390,12 @@ TEST_F(DrawPropertiesTest, DrawableContentRectForLayers) {
   LayerImpl* grand_child4 = AddLayer<LayerImpl>();
 
   parent->SetBounds(gfx::Size(500, 500));
-  child->SetMasksToBounds(true);
   child->SetBounds(gfx::Size(20, 20));
   grand_child1->SetBounds(gfx::Size(10, 10));
   grand_child1->SetDrawsContent(true);
   grand_child2->SetBounds(gfx::Size(10, 10));
   grand_child2->SetDrawsContent(true);
   grand_child3->SetBounds(gfx::Size(10, 10));
-  grand_child3->SetMasksToBounds(true);
   grand_child3->SetDrawsContent(true);
   grand_child4->SetBounds(gfx::Size(10, 10));
   grand_child4->SetDrawsContent(true);
@@ -1455,13 +1445,10 @@ TEST_F(DrawPropertiesTest, ClipRectIsPropagatedCorrectlyToSurfaces) {
 
   parent->SetBounds(gfx::Size(500, 500));
   child->SetBounds(gfx::Size(20, 20));
-  child->SetMasksToBounds(true);
   grand_child1->SetBounds(gfx::Size(10, 10));
   grand_child2->SetBounds(gfx::Size(10, 10));
   grand_child3->SetBounds(gfx::Size(10, 10));
-  grand_child3->SetMasksToBounds(true);
   grand_child4->SetBounds(gfx::Size(10, 10));
-  grand_child4->SetMasksToBounds(true);
   leaf_node1->SetBounds(gfx::Size(10, 10));
   leaf_node1->SetDrawsContent(true);
   leaf_node2->SetBounds(gfx::Size(10, 10));
@@ -2136,7 +2123,6 @@ TEST_F(DrawPropertiesTest,
 
   root->SetBounds(gfx::Size(100, 100));
   child->SetBounds(gfx::Size(100, 100));
-  child->SetMasksToBounds(true);
   grand_child1->SetBounds(gfx::Size(50, 50));
   grand_child1->SetDrawsContent(true);
   grand_child2->SetBounds(gfx::Size(50, 50));
@@ -2185,7 +2171,6 @@ TEST_F(DrawPropertiesTest, VisibleContentRectWithClippingAndScaling) {
 
   root->SetBounds(gfx::Size(100, 100));
   child->SetBounds(gfx::Size(10, 10));
-  child->SetMasksToBounds(true);
   grand_child->SetBounds(gfx::Size(100, 100));
   grand_child->SetDrawsContent(true);
 
@@ -2239,7 +2224,6 @@ TEST_F(DrawPropertiesTest, ClipRectWithClippedDescendantOfFilter) {
 
   root->SetBounds(gfx::Size(100, 100));
   clip->SetBounds(gfx::Size(10, 10));
-  clip->SetMasksToBounds(true);
   filter_grand_child->SetBounds(gfx::Size(20, 20));
   filter_grand_child->SetDrawsContent(true);
 
@@ -2568,7 +2552,6 @@ TEST_F(DrawPropertiesTest,
   LayerImpl* child3 = AddLayer<LayerImpl>();
 
   root->SetBounds(gfx::Size(100, 100));
-  root->SetMasksToBounds(true);
   render_surface->SetBounds(gfx::Size(3, 4));
   child1->SetBounds(gfx::Size(50, 50));
   child1->SetDrawsContent(true);
@@ -2626,7 +2609,6 @@ TEST_F(DrawPropertiesTest, DrawableAndVisibleContentRectsForSurfaceHierarchy) {
   LayerImpl* child3 = AddLayer<LayerImpl>();
 
   root->SetBounds(gfx::Size(100, 100));
-  root->SetMasksToBounds(true);
   render_surface1->SetBounds(gfx::Size(3, 4));
   render_surface2->SetBounds(gfx::Size(7, 13));
   child1->SetBounds(gfx::Size(50, 50));
@@ -2702,9 +2684,6 @@ TEST_F(DrawPropertiesTest,
   child2->SetDrawsContent(true);
   render_surface2->SetBounds(gfx::Size(1000, 1000));
   render_surface2->SetDrawsContent(true);
-
-  child1->SetMasksToBounds(true);
-  child2->SetMasksToBounds(true);
 
   CopyProperties(root, render_surface1);
   CreateEffectNode(render_surface1).render_surface_reason =
@@ -2980,7 +2959,6 @@ TEST_F(DrawPropertiesTest,
   child_rotation.Rotate(45.0);
 
   root->SetBounds(gfx::Size(50, 50));
-  root->SetMasksToBounds(true);
   render_surface->SetBounds(gfx::Size(3, 4));
   child1->SetBounds(gfx::Size(50, 50));
   child1->SetDrawsContent(true);
@@ -3028,7 +3006,6 @@ TEST_F(DrawPropertiesTest, DrawableAndVisibleContentRectsInHighDPI) {
   FakePictureLayerImpl* child3 = AddLayer<FakePictureLayerImpl>();
 
   root->SetBounds(gfx::Size(100, 100));
-  root->SetMasksToBounds(true);
   render_surface1->SetBounds(gfx::Size(3, 4));
   render_surface1->SetDrawsContent(true);
   render_surface2->SetBounds(gfx::Size(7, 13));
@@ -4891,9 +4868,9 @@ TEST_F(DrawPropertiesStickyPositionTest, StickyPositionTop) {
   sticky_position.is_anchored_top = true;
   sticky_position.top_offset = 10.0f;
   sticky_position.scroll_container_relative_sticky_box_rect =
-      gfx::Rect(10, 20, 10, 10);
+      gfx::RectF(10, 20, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
-      gfx::Rect(0, 0, 50, 50);
+      gfx::RectF(0, 0, 50, 50);
 
   CommitAndUpdateImplPointers();
 
@@ -4931,6 +4908,54 @@ TEST_F(DrawPropertiesStickyPositionTest, StickyPositionTop) {
       sticky_pos_impl_->ScreenSpaceTransform().To2dTranslation());
 }
 
+TEST_F(DrawPropertiesStickyPositionTest, StickyPositionTopRounded) {
+  CreateTree();
+
+  SetPostTranslation(sticky_pos_.get(), gfx::Vector2dF(10, 20));
+  auto& sticky_position = EnsureStickyData(sticky_pos_.get()).constraints;
+  sticky_position.is_anchored_top = true;
+  sticky_position.top_offset = 10.5f;
+  sticky_position.scroll_container_relative_sticky_box_rect =
+      gfx::RectF(10, 20, 10, 10);
+  sticky_position.scroll_container_relative_containing_block_rect =
+      gfx::RectF(0, 0, 50, 50);
+
+  CommitAndUpdateImplPointers();
+
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(10.f, 20.f),
+      sticky_pos_impl_->ScreenSpaceTransform().To2dTranslation());
+
+  // Scroll less than sticking point, sticky element should move with scroll as
+  // we haven't gotten to the initial sticky item location yet.
+  SetScrollOffsetDelta(scroller_impl_, gfx::Vector2dF(5.f, 5.f));
+
+  UpdateActiveTreeDrawProperties();
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(5.f, 15.f),
+      sticky_pos_impl_->ScreenSpaceTransform().To2dTranslation());
+
+  // Scroll past the sticking point, the Y coordinate should now be clamped.
+  SetScrollOffsetDelta(scroller_impl_, gfx::Vector2dF(15.f, 15.f));
+  UpdateActiveTreeDrawProperties();
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(-5.f, 11.f),
+      sticky_pos_impl_->ScreenSpaceTransform().To2dTranslation());
+  SetScrollOffsetDelta(scroller_impl_, gfx::Vector2dF(15.f, 25.f));
+  UpdateActiveTreeDrawProperties();
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(-5.f, 11.f),
+      sticky_pos_impl_->ScreenSpaceTransform().To2dTranslation());
+
+  // Scroll past the end of the sticky container (note: this element does not
+  // have its own layer as it does not need to be composited).
+  SetScrollOffsetDelta(scroller_impl_, gfx::Vector2dF(15.f, 50.f));
+  UpdateActiveTreeDrawProperties();
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(-5.f, -10.f),
+      sticky_pos_impl_->ScreenSpaceTransform().To2dTranslation());
+}
+
 TEST_F(DrawPropertiesStickyPositionTest, StickyPositionSubpixelScroll) {
   CreateTree();
 
@@ -4938,11 +4963,11 @@ TEST_F(DrawPropertiesStickyPositionTest, StickyPositionSubpixelScroll) {
   auto& sticky_position = EnsureStickyData(sticky_pos_.get()).constraints;
   sticky_position.is_anchored_bottom = true;
   sticky_position.bottom_offset = 10.0f;
-  sticky_position.constraint_box_rect = gfx::Rect(0, 0, 100, 100);
+  sticky_position.constraint_box_rect = gfx::RectF(0, 0, 100, 100);
   sticky_position.scroll_container_relative_sticky_box_rect =
-      gfx::Rect(0, 200, 10, 10);
+      gfx::RectF(0, 200, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
-      gfx::Rect(0, 0, 100, 500);
+      gfx::RectF(0, 0, 100, 500);
 
   CommitAndUpdateImplPointers();
 
@@ -4961,11 +4986,11 @@ TEST_F(DrawPropertiesStickyPositionTest, StickyPositionBottom) {
   auto& sticky_position = EnsureStickyData(sticky_pos_.get()).constraints;
   sticky_position.is_anchored_bottom = true;
   sticky_position.bottom_offset = 10.0f;
-  sticky_position.constraint_box_rect = gfx::Rect(0, 0, 100, 100);
+  sticky_position.constraint_box_rect = gfx::RectF(0, 0, 100, 100);
   sticky_position.scroll_container_relative_sticky_box_rect =
-      gfx::Rect(0, 150, 10, 10);
+      gfx::RectF(0, 150, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
-      gfx::Rect(0, 100, 50, 50);
+      gfx::RectF(0, 100, 50, 50);
 
   CommitAndUpdateImplPointers();
 
@@ -5001,6 +5026,46 @@ TEST_F(DrawPropertiesStickyPositionTest, StickyPositionBottom) {
       sticky_pos_impl_->ScreenSpaceTransform().To2dTranslation());
 }
 
+TEST_F(DrawPropertiesStickyPositionTest, StickyPositionBottomRounded) {
+  CreateTree();
+
+  SetPostTranslation(sticky_pos_.get(), gfx::Vector2dF(0, 150));
+  auto& sticky_position = EnsureStickyData(sticky_pos_.get()).constraints;
+  sticky_position.is_anchored_bottom = true;
+  sticky_position.bottom_offset = 10.5f;
+  sticky_position.constraint_box_rect = gfx::RectF(0, 0, 100, 100);
+  sticky_position.scroll_container_relative_sticky_box_rect =
+      gfx::RectF(0, 150, 10, 10);
+  sticky_position.scroll_container_relative_containing_block_rect =
+      gfx::RectF(0, 100, 50, 50);
+
+  CommitAndUpdateImplPointers();
+
+  // Initially the sticky element is moved up to the top of the container.
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 100.f),
+      sticky_pos_impl_->ScreenSpaceTransform().To2dTranslation());
+  SetScrollOffsetDelta(scroller_impl_, gfx::Vector2dF(0.f, 5.f));
+
+  UpdateActiveTreeDrawProperties();
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 95.f),
+      sticky_pos_impl_->ScreenSpaceTransform().To2dTranslation());
+
+  // Once we get past the top of the container it moves to be aligned 10px
+  // up from the the bottom of the scroller.
+  SetScrollOffsetDelta(scroller_impl_, gfx::Vector2dF(0.f, 25.f));
+  UpdateActiveTreeDrawProperties();
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 79.f),
+      sticky_pos_impl_->ScreenSpaceTransform().To2dTranslation());
+  SetScrollOffsetDelta(scroller_impl_, gfx::Vector2dF(0.f, 30.f));
+  UpdateActiveTreeDrawProperties();
+  EXPECT_VECTOR2DF_EQ(
+      gfx::Vector2dF(0.f, 79.f),
+      sticky_pos_impl_->ScreenSpaceTransform().To2dTranslation());
+}
+
 TEST_F(DrawPropertiesStickyPositionTest,
        StickyPositionBottomOuterViewportDelta) {
   CreateTree();
@@ -5014,11 +5079,11 @@ TEST_F(DrawPropertiesStickyPositionTest,
   auto& sticky_position = EnsureStickyData(sticky_pos_.get()).constraints;
   sticky_position.is_anchored_bottom = true;
   sticky_position.bottom_offset = 10.0f;
-  sticky_position.constraint_box_rect = gfx::Rect(0, 0, 100, 100);
+  sticky_position.constraint_box_rect = gfx::RectF(0, 0, 100, 100);
   sticky_position.scroll_container_relative_sticky_box_rect =
-      gfx::Rect(0, 70, 10, 10);
+      gfx::RectF(0, 70, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
-      gfx::Rect(0, 60, 100, 100);
+      gfx::RectF(0, 60, 100, 100);
 
   CommitAndUpdateImplPointers();
 
@@ -5066,11 +5131,11 @@ TEST_F(DrawPropertiesStickyPositionTest, StickyPositionLeftRight) {
   sticky_position.is_anchored_right = true;
   sticky_position.left_offset = 10.0f;
   sticky_position.right_offset = 10.0f;
-  sticky_position.constraint_box_rect = gfx::Rect(0, 0, 100, 100);
+  sticky_position.constraint_box_rect = gfx::RectF(0, 0, 100, 100);
   sticky_position.scroll_container_relative_sticky_box_rect =
-      gfx::Rect(145, 0, 10, 10);
+      gfx::RectF(145, 0, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
-      gfx::Rect(100, 0, 100, 100);
+      gfx::RectF(100, 0, 100, 100);
 
   CommitAndUpdateImplPointers();
 
@@ -5148,9 +5213,9 @@ TEST_F(DrawPropertiesStickyPositionTest, StickyPositionMainThreadUpdates) {
   sticky_position.is_anchored_top = true;
   sticky_position.top_offset = 10.0f;
   sticky_position.scroll_container_relative_sticky_box_rect =
-      gfx::Rect(10, 20, 10, 10);
+      gfx::RectF(10, 20, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
-      gfx::Rect(0, 0, 50, 50);
+      gfx::RectF(0, 0, 50, 50);
 
   CommitAndUpdateImplPointers();
 
@@ -5220,9 +5285,9 @@ TEST_F(DrawPropertiesStickyPositionTest, StickyPositionCompositedContainer) {
   sticky_position.is_anchored_top = true;
   sticky_position.top_offset = 10.0f;
   sticky_position.scroll_container_relative_sticky_box_rect =
-      gfx::Rect(20, 30, 10, 10);
+      gfx::RectF(20, 30, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
-      gfx::Rect(20, 20, 30, 30);
+      gfx::RectF(20, 20, 30, 30);
 
   CommitAndUpdateImplPointers();
 
@@ -5290,9 +5355,9 @@ TEST_F(DrawPropertiesStickyPositionTest, StickyPositionScaledStickyBox) {
   sticky_position.is_anchored_top = true;
   sticky_position.top_offset = 0.0f;
   sticky_position.scroll_container_relative_sticky_box_rect =
-      gfx::Rect(0, 20, 10, 10);
+      gfx::RectF(0, 20, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
-      gfx::Rect(0, 0, 50, 50);
+      gfx::RectF(0, 0, 50, 50);
 
   CommitAndUpdateImplPointers();
 
@@ -5347,9 +5412,9 @@ TEST_F(DrawPropertiesStickyPositionTest, StickyPositionScaledContainer) {
   sticky_position.is_anchored_top = true;
   sticky_position.top_offset = 0.0f;
   sticky_position.scroll_container_relative_sticky_box_rect =
-      gfx::Rect(0, 20, 10, 10);
+      gfx::RectF(0, 20, 10, 10);
   sticky_position.scroll_container_relative_containing_block_rect =
-      gfx::Rect(0, 0, 50, 50);
+      gfx::RectF(0, 0, 50, 50);
 
   CommitAndUpdateImplPointers();
 
@@ -5394,18 +5459,18 @@ TEST_F(DrawPropertiesStickyPositionTest, StickyPositionNested) {
   outer_sticky_pos.is_anchored_top = true;
   outer_sticky_pos.top_offset = 10.0f;
   outer_sticky_pos.scroll_container_relative_sticky_box_rect =
-      gfx::Rect(0, 50, 10, 50);
+      gfx::RectF(0, 50, 10, 50);
   outer_sticky_pos.scroll_container_relative_containing_block_rect =
-      gfx::Rect(0, 0, 50, 400);
+      gfx::RectF(0, 0, 50, 400);
 
   scoped_refptr<Layer> inner_sticky = CreateSticky(sticky_pos_.get());
   auto& inner_sticky_pos = EnsureStickyData(inner_sticky.get()).constraints;
   inner_sticky_pos.is_anchored_top = true;
   inner_sticky_pos.top_offset = 25.0f;
   inner_sticky_pos.scroll_container_relative_sticky_box_rect =
-      gfx::Rect(0, 50, 10, 10);
+      gfx::RectF(0, 50, 10, 10);
   inner_sticky_pos.scroll_container_relative_containing_block_rect =
-      gfx::Rect(0, 50, 10, 50);
+      gfx::RectF(0, 50, 10, 50);
   EnsureStickyData(inner_sticky.get()).nearest_node_shifting_containing_block =
       sticky_pos_->transform_tree_index();
 
@@ -6123,7 +6188,6 @@ TEST_F(DrawPropertiesTest, VisibleContentRectInChildRenderSurface) {
   root->SetBounds(gfx::Size(768 / 2, 3000));
   root->SetDrawsContent(true);
   clip->SetBounds(gfx::Size(768 / 2, 10000));
-  clip->SetMasksToBounds(true);
   content->SetBounds(gfx::Size(768 / 2, 10000));
   content->SetDrawsContent(true);
 
@@ -6159,8 +6223,7 @@ TEST_F(DrawPropertiesTest, ViewportBoundsDeltaAffectVisibleContentRect) {
 
   LayerTreeImpl* active_tree = host_impl()->active_tree();
   active_tree->SetDeviceViewportRect(device_viewport_rect);
-  active_tree->set_browser_controls_shrink_blink_size(true);
-  active_tree->SetTopControlsHeight(50);
+  active_tree->SetBrowserControlsParams({50, 0, 0, 0, false, true});
   active_tree->PushPageScaleFromMainThread(1.0f, 1.0f, 1.0f);
 
   LayerImpl* root = root_layer();
@@ -6225,7 +6288,6 @@ TEST_F(DrawPropertiesTest,
 
   root->SetBounds(gfx::Size(100, 100));
   clip->SetBounds(gfx::Size(10, 10));
-  clip->SetMasksToBounds(true);
   animated->SetBounds(gfx::Size(120, 120));
   surface->SetBounds(gfx::Size(100, 100));
   descendant_of_keyframe_model->SetBounds(gfx::Size(200, 200));
@@ -6798,9 +6860,7 @@ TEST_F(DrawPropertiesTest, TransformOfParentClipNodeAncestorOfTarget) {
 
   root->SetBounds(gfx::Size(30, 30));
   clip_layer->SetBounds(gfx::Size(30, 30));
-  clip_layer->SetMasksToBounds(true);
   target_layer->SetBounds(gfx::Size(30, 30));
-  target_layer->SetMasksToBounds(true);
   test_layer->SetBounds(gfx::Size(30, 30));
   test_layer->SetDrawsContent(true);
 
@@ -7096,12 +7156,11 @@ TEST_F(DrawPropertiesTest, LayerWithInputHandlerAndZeroOpacity) {
 
   root->SetBounds(gfx::Size(30, 30));
   render_surface->SetBounds(gfx::Size(30, 30));
-  render_surface->SetMasksToBounds(true);
   test_layer->SetBounds(gfx::Size(20, 20));
   test_layer->SetDrawsContent(true);
 
   TouchActionRegion touch_action_region;
-  touch_action_region.Union(kTouchActionNone, gfx::Rect(0, 0, 20, 20));
+  touch_action_region.Union(TouchAction::kNone, gfx::Rect(0, 0, 20, 20));
   test_layer->SetTouchActionRegion(std::move(touch_action_region));
 
   CopyProperties(root, render_surface);
@@ -7357,7 +7416,6 @@ TEST_F(DrawPropertiesTest, SublayerScaleWithTransformNodeBetweenTwoTargets) {
 
   // We want layer between the two targets to create a clip node and effect
   // node but it shouldn't create a render surface.
-  between_targets->SetMasksToBounds(true);
   CopyProperties(root, render_surface1);
   CreateTransformNode(render_surface1).local = scale;
   CreateEffectNode(render_surface1).render_surface_reason =
@@ -7425,7 +7483,6 @@ TEST_F(DrawPropertiesTest, LargeTransformTest) {
   LayerImpl* child = AddLayer<LayerImpl>();
 
   child->SetDrawsContent(true);
-  child->SetMasksToBounds(true);
 
   gfx::Transform large_transform;
   large_transform.Scale(99999999999999999999.f, 99999999999999999999.f);
@@ -7466,6 +7523,60 @@ TEST_F(DrawPropertiesTest, LargeTransformTest) {
   // The root layer should be in the RenderSurfaceList.
   EXPECT_TRUE(base::Contains(GetRenderSurfaceList(), GetRenderSurface(root)));
 }
+
+#if DCHECK_IS_ON()
+class DrawPropertiesTestDoubleBlurCheck : public DrawPropertiesTestBase,
+                                          public testing::Test {
+ public:
+  DrawPropertiesTestDoubleBlurCheck()
+      : DrawPropertiesTestBase(GetTestLayerTreeSettings()) {}
+
+ private:
+  static LayerTreeSettings GetTestLayerTreeSettings() {
+    LayerTreeSettings s;
+    s.log_on_ui_double_background_blur = true;
+    return s;
+  }
+};
+
+TEST_F(DrawPropertiesTestDoubleBlurCheck, CheckForNoDoubleBlurTest) {
+  auto root = Layer::Create();
+  host()->SetRootLayer(root);
+  auto child_1 = Layer::Create();
+  auto child_2 = Layer::Create();
+  root->AddChild(child_1);
+  root->AddChild(child_2);
+
+  child_1->SetIsDrawable(true);
+  child_2->SetIsDrawable(true);
+  root->SetBounds(gfx::Size(100, 100));
+  child_1->SetBounds(gfx::Size(10, 20));
+  child_2->SetBounds(gfx::Size(30, 30));
+
+  FilterOperations blur_filter;
+  blur_filter.Append(FilterOperation::CreateBlurFilter(2.0));
+  child_1->SetBackdropFilters(blur_filter);
+  child_2->SetBackdropFilters(blur_filter);
+
+  ASSERT_DEATH_IF_SUPPORTED(CommitAndActivate(), "");
+
+  gfx::Transform transform;
+  transform.Translate(gfx::Vector2dF(10.0f, 20.0f));
+  child_2->SetTransform(transform);
+
+  // There should be no crash here.
+  CommitAndActivate();
+
+  auto grandchild = Layer::Create();
+  grandchild->SetIsDrawable(true);
+  grandchild->SetBounds(gfx::Size(20, 10));
+  grandchild->SetBackdropFilters(blur_filter);
+  child_1->AddChild(grandchild);
+  grandchild->SetTransform(transform);
+
+  ASSERT_DEATH_IF_SUPPORTED(CommitAndActivate(), "");
+}
+#endif
 
 // In layer tree mode, not using impl-side PropertyTreeBuilder.
 TEST_F(DrawPropertiesTestWithLayerTree, OpacityAnimationsTrackingTest) {

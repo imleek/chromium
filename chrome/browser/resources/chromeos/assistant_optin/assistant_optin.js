@@ -4,8 +4,8 @@
 
 // <include src="../login/hd-iron-icon.js">
 // <include src="../login/oobe_types.js">
+// <include src="../login/oobe_i18n_behavior.js">
 // <include src="../login/oobe_buttons.js">
-// <include src="../login/oobe_change_picture.js">
 // <include src="../login/oobe_dialog_host_behavior.js">
 // <include src="../login/oobe_dialog.js">
 // <include src="assistant_optin_flow.js">

@@ -13,11 +13,13 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread.h"
+#include "base/time/time.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -25,6 +27,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
 #include "components/sync/base/bind_to_task_runner.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/base/stop_source.h"
 #include "components/sync/base/sync_base_switches.h"
@@ -48,6 +51,10 @@
 #include "crypto/ec_private_key.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
+#if defined(OS_CHROMEOS)
+#include "chromeos/constants/chromeos_features.h"
+#endif
+
 namespace syncer {
 
 namespace {
@@ -69,20 +76,22 @@ enum SyncInitialState {
   SYNC_INITIAL_STATE_LIMIT
 };
 
-void RecordSyncInitialState(int disable_reasons, bool first_setup_complete) {
+void RecordSyncInitialState(SyncService::DisableReasonSet disable_reasons,
+                            bool first_setup_complete) {
   SyncInitialState sync_state = CAN_START;
-  if (disable_reasons & ProfileSyncService::DISABLE_REASON_NOT_SIGNED_IN) {
+  if (disable_reasons.Has(ProfileSyncService::DISABLE_REASON_NOT_SIGNED_IN)) {
     sync_state = NOT_SIGNED_IN;
-  } else if (disable_reasons &
-             ProfileSyncService::DISABLE_REASON_ENTERPRISE_POLICY) {
+  } else if (disable_reasons.Has(
+                 ProfileSyncService::DISABLE_REASON_ENTERPRISE_POLICY)) {
     sync_state = NOT_ALLOWED_BY_POLICY;
-  } else if (disable_reasons &
-             ProfileSyncService::DISABLE_REASON_PLATFORM_OVERRIDE) {
+  } else if (disable_reasons.Has(
+                 ProfileSyncService::DISABLE_REASON_PLATFORM_OVERRIDE)) {
     // This case means Android's "MasterSync" toggle. However, that is not
     // plumbed into ProfileSyncService until after this method, so we never get
     // here. See http://crbug.com/568771.
     sync_state = NOT_ALLOWED_BY_PLATFORM;
-  } else if (disable_reasons & ProfileSyncService::DISABLE_REASON_USER_CHOICE) {
+  } else if (disable_reasons.Has(
+                 ProfileSyncService::DISABLE_REASON_USER_CHOICE)) {
     if (first_setup_complete) {
       sync_state = NOT_REQUESTED;
     } else {
@@ -127,12 +136,18 @@ DataTypeController::TypeMap BuildDataTypeControllerMap(
 
 std::unique_ptr<HttpPostProviderFactory> CreateHttpBridgeFactory(
     const std::string& user_agent,
-    std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-        url_loader_factory_info,
+    std::unique_ptr<network::PendingSharedURLLoaderFactory>
+        pending_url_loader_factory,
     const NetworkTimeUpdateCallback& network_time_update_callback) {
-  return std::make_unique<HttpBridgeFactory>(user_agent,
-                                             std::move(url_loader_factory_info),
-                                             network_time_update_callback);
+  return std::make_unique<HttpBridgeFactory>(
+      user_agent, std::move(pending_url_loader_factory),
+      network_time_update_callback);
+}
+
+void EmitUmaMetricWithEmitTimeMinutes(const std::string& histogram_name) {
+  base::Time::Exploded now_exploded;
+  base::Time::Now().UTCExplode(&now_exploded);
+  base::UmaHistogramExactLinear(histogram_name, now_exploded.minute, 60);
 }
 
 }  // namespace
@@ -254,6 +269,9 @@ void ProfileSyncService::Initialize() {
   if (HasDisableReason(DISABLE_REASON_ENTERPRISE_POLICY) ||
       (HasDisableReason(DISABLE_REASON_NOT_SIGNED_IN) &&
        auth_manager_->IsActiveAccountInfoFullyLoaded())) {
+    // TODO(crbug/1031162): Remove once traffic investigation is closed.
+    EmitUmaMetricWithEmitTimeMinutes(
+        "Sync.PeakAnalysis.StopOnSyncPermanentlyDisabled");
     StopImpl(CLEAR_DATA);
   }
 
@@ -312,6 +330,9 @@ void ProfileSyncService::AccountStateChanged() {
   if (!IsSignedIn()) {
     // The account was signed out, so shut down.
     sync_disabled_by_admin_ = false;
+    // TODO(crbug/1031162): Remove once traffic investigation is closed.
+    EmitUmaMetricWithEmitTimeMinutes(
+        "Sync.PeakAnalysis.StopAfterAccountStateChanged");
     StopImpl(CLEAR_DATA);
     DCHECK(!engine_);
   } else {
@@ -339,6 +360,9 @@ void ProfileSyncService::CredentialsChanged() {
   // then shut down. This happens when the user signs out on the web, i.e. we're
   // in the "Sync paused" state.
   if (!IsEngineAllowedToStart()) {
+    // TODO(crbug/1031162): Remove once traffic investigation is closed.
+    EmitUmaMetricWithEmitTimeMinutes(
+        "Sync.PeakAnalysis.StopAfterCredentialsChanged");
     // This will notify observers if appropriate.
     StopImpl(KEEP_DATA);
     return;
@@ -363,9 +387,10 @@ bool ProfileSyncService::IsEngineAllowedToStart() const {
   // USER_CHOICE (i.e. the Sync feature toggle) and PLATFORM_OVERRIDE (i.e.
   // Android's "MasterSync" toggle) do not prevent starting up the Sync
   // transport.
-  const int kDisableReasonMask =
-      ~(DISABLE_REASON_USER_CHOICE | DISABLE_REASON_PLATFORM_OVERRIDE);
-  return (GetDisableReasons() & kDisableReasonMask) == DISABLE_REASON_NONE;
+  auto disable_reasons = GetDisableReasons();
+  disable_reasons.RemoveAll(SyncService::DisableReasonSet(
+      DISABLE_REASON_USER_CHOICE, DISABLE_REASON_PLATFORM_OVERRIDE));
+  return disable_reasons.Empty();
 }
 
 void ProfileSyncService::OnProtocolEvent(const ProtocolEvent& event) {
@@ -660,35 +685,35 @@ const SyncUserSettings* ProfileSyncService::GetUserSettings() const {
   return user_settings_.get();
 }
 
-int ProfileSyncService::GetDisableReasons() const {
+SyncService::DisableReasonSet ProfileSyncService::GetDisableReasons() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // If Sync is disabled via command line flag, then ProfileSyncService
   // shouldn't even be instantiated.
   DCHECK(switches::IsSyncAllowedByFlag());
 
-  int result = DISABLE_REASON_NONE;
+  DisableReasonSet result;
   if (!user_settings_->IsSyncAllowedByPlatform()) {
-    result = result | DISABLE_REASON_PLATFORM_OVERRIDE;
+    result.Put(DISABLE_REASON_PLATFORM_OVERRIDE);
   }
   if (sync_prefs_.IsManaged() || sync_disabled_by_admin_) {
-    result = result | DISABLE_REASON_ENTERPRISE_POLICY;
+    result.Put(DISABLE_REASON_ENTERPRISE_POLICY);
   }
   // Local sync doesn't require sign-in.
   if (!IsSignedIn() && !IsLocalSyncEnabled()) {
-    result = result | DISABLE_REASON_NOT_SIGNED_IN;
+    result.Put(DISABLE_REASON_NOT_SIGNED_IN);
   }
   // When local sync is on sync should be considered requsted or otherwise it
   // will not resume after the policy or the flag has been removed.
   if (!user_settings_->IsSyncRequested() && !IsLocalSyncEnabled()) {
-    result = result | DISABLE_REASON_USER_CHOICE;
+    result.Put(DISABLE_REASON_USER_CHOICE);
   }
   if (unrecoverable_error_reason_ != ERROR_REASON_UNSET) {
-    result = result | DISABLE_REASON_UNRECOVERABLE_ERROR;
+    result.Put(DISABLE_REASON_UNRECOVERABLE_ERROR);
   }
   if (base::FeatureList::IsEnabled(switches::kStopSyncInPausedState)) {
     if (auth_manager_->IsSyncPaused()) {
-      result = result | DISABLE_REASON_PAUSED;
+      result.Put(DISABLE_REASON_PAUSED);
     }
   }
   return result;
@@ -698,8 +723,8 @@ SyncService::TransportState ProfileSyncService::GetTransportState() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!IsEngineAllowedToStart()) {
-    // We shouldn't have an engine while in a disabled state.
-    DCHECK(!engine_);
+    // We generally shouldn't have an engine while in a disabled state, but it
+    // can happen if this method gets called during ShutdownImpl().
     return TransportState::DISABLED;
   }
 
@@ -1314,30 +1339,7 @@ void ProfileSyncService::ConfigureDataTypeManager(ConfigureReason reason) {
   ModelTypeSet types = GetPreferredDataTypes();
   // In transport-only mode, only a subset of data types is supported.
   if (use_transport_only_mode) {
-    ModelTypeSet allowed_types = {USER_CONSENTS, SECURITY_EVENTS};
-
-    if (autofill_enable_account_wallet_storage_) {
-      if (!GetUserSettings()->IsUsingSecondaryPassphrase() ||
-          base::FeatureList::IsEnabled(
-              switches::
-                  kSyncAllowWalletDataInTransportModeWithCustomPassphrase)) {
-        allowed_types.Put(AUTOFILL_WALLET_DATA);
-      }
-    }
-
-    if (enable_passwords_account_storage_ &&
-        base::FeatureList::IsEnabled(switches::kSyncUSSPasswords)) {
-      if (!GetUserSettings()->IsUsingSecondaryPassphrase()) {
-        allowed_types.Put(PASSWORDS);
-      }
-    }
-
-    if (base::FeatureList::IsEnabled(
-            switches::kSyncDeviceInfoInTransportMode)) {
-      allowed_types.Put(DEVICE_INFO);
-    }
-
-    types = Intersection(types, allowed_types);
+    types = Intersection(types, GetModelTypesForTransportOnlyMode());
     configure_context.sync_mode = SyncMode::kTransportOnly;
   }
   data_type_manager_->Configure(types, configure_context);
@@ -1368,6 +1370,45 @@ void ProfileSyncService::ConfigureDataTypeManager(ConfigureReason reason) {
       }
     }
   }
+}
+
+ModelTypeSet ProfileSyncService::GetModelTypesForTransportOnlyMode() const {
+  ModelTypeSet allowed_types = {USER_CONSENTS, SECURITY_EVENTS};
+
+  if (autofill_enable_account_wallet_storage_) {
+    if (!GetUserSettings()->IsUsingSecondaryPassphrase() ||
+        base::FeatureList::IsEnabled(
+            switches::
+                kSyncAllowWalletDataInTransportModeWithCustomPassphrase)) {
+      allowed_types.Put(AUTOFILL_WALLET_DATA);
+    }
+  }
+
+  if (enable_passwords_account_storage_ &&
+      base::FeatureList::IsEnabled(switches::kSyncUSSPasswords)) {
+    if (!GetUserSettings()->IsUsingSecondaryPassphrase()) {
+      allowed_types.Put(PASSWORDS);
+    }
+  }
+
+  if (base::FeatureList::IsEnabled(switches::kSyncDeviceInfoInTransportMode)) {
+    allowed_types.Put(DEVICE_INFO);
+  }
+
+  // Outside the #if so non-Chrome OS developers will hit it before uploading.
+  static_assert(40 == ModelType::NUM_ENTRIES,
+                "If a new ModelType is Chrome OS-only and uses OS sync "
+                "consent, add it below.");
+#if defined(OS_CHROMEOS)
+  // Chrome OS system types are not tied to browser sync-the-feature.
+  if (chromeos::features::IsSplitSettingsSyncEnabled()) {
+    allowed_types.PutAll({APP_LIST, APP_SETTINGS, APPS, ARC_PACKAGE,
+                          OS_PREFERENCES, OS_PRIORITY_PREFERENCES, PRINTERS,
+                          WEB_APPS, WIFI_CONFIGURATIONS});
+  }
+#endif  // defined(OS_CHROMEOS)
+
+  return allowed_types;
 }
 
 UserShare* ProfileSyncService::GetUserShare() const {
@@ -1487,6 +1528,9 @@ bool ProfileSyncService::IsEncryptionPendingForTest() const {
 void ProfileSyncService::OnSyncManagedPrefChange(bool is_sync_managed) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (is_sync_managed) {
+    // TODO(crbug/1031162): Remove once traffic investigation is closed.
+    EmitUmaMetricWithEmitTimeMinutes(
+        "Sync.PeakAnalysis.StopOnSyncManagedPrefChange");
     StopImpl(CLEAR_DATA);
   } else {
     // Sync is no longer disabled by policy. Try starting it up if appropriate.
@@ -1536,12 +1580,12 @@ void ProfileSyncService::OnAccountsInCookieUpdated(
     const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
     const GoogleServiceAuthError& error) {
   OnAccountsInCookieUpdatedWithCallback(
-      accounts_in_cookie_jar_info.signed_in_accounts, base::Closure());
+      accounts_in_cookie_jar_info.signed_in_accounts, base::NullCallback());
 }
 
 void ProfileSyncService::OnAccountsInCookieUpdatedWithCallback(
     const std::vector<gaia::ListedAccount>& signed_in_accounts,
-    const base::Closure& callback) {
+    base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!engine_ || !engine_->IsInitialized())
     return;
@@ -1551,7 +1595,8 @@ void ProfileSyncService::OnAccountsInCookieUpdatedWithCallback(
 
   DVLOG(1) << "Cookie jar mismatch: " << cookie_jar_mismatch;
   DVLOG(1) << "Cookie jar empty: " << cookie_jar_empty;
-  engine_->OnCookieJarChanged(cookie_jar_mismatch, cookie_jar_empty, callback);
+  engine_->OnCookieJarChanged(cookie_jar_mismatch, cookie_jar_empty,
+                              std::move(callback));
 }
 
 bool ProfileSyncService::HasCookieJarMismatch(
@@ -1667,19 +1712,19 @@ void GetAllNodesRequestHelper::OnReceivedNodesForType(
 }  // namespace
 
 void ProfileSyncService::GetAllNodesForDebugging(
-    const base::Callback<void(std::unique_ptr<base::ListValue>)>& callback) {
+    base::OnceCallback<void(std::unique_ptr<base::ListValue>)> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // If the engine isn't initialized yet, then there are no nodes to return.
   if (!engine_ || !engine_->IsInitialized()) {
-    callback.Run(std::make_unique<base::ListValue>());
+    std::move(callback).Run(std::make_unique<base::ListValue>());
     return;
   }
 
   ModelTypeSet all_types = GetActiveDataTypes();
   all_types.PutAll(ControlTypes());
   scoped_refptr<GetAllNodesRequestHelper> helper =
-      new GetAllNodesRequestHelper(all_types, callback);
+      new GetAllNodesRequestHelper(all_types, std::move(callback));
 
   for (ModelType type : all_types) {
     const auto dtc_iter = data_type_controllers_.find(type);
@@ -1732,6 +1777,12 @@ void ProfileSyncService::SetInvalidationsForSessionsEnabled(bool enabled) {
   if (engine_ && engine_->IsInitialized()) {
     engine_->SetInvalidationsForSessionsEnabled(enabled);
   }
+}
+
+void ProfileSyncService::AddTrustedVaultDecryptionKeysFromWeb(
+    const std::string& gaia_id,
+    const std::vector<std::vector<uint8_t>>& keys) {
+  sync_client_->GetTrustedVaultClient()->StoreKeys(gaia_id, keys);
 }
 
 UserDemographicsResult ProfileSyncService::GetUserNoisedBirthYearAndGender(

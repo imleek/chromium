@@ -63,10 +63,10 @@ class ClipboardPromise final : public GarbageCollected<ClipboardPromise>,
   mojom::blink::PermissionService* GetPermissionService();
   void RequestPermission(
       mojom::blink::PermissionName permission,
+      bool allow_without_sanitization,
       base::OnceCallback<void(::blink::mojom::PermissionStatus)> callback);
 
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner();
-  bool IsFocusedDocument(ExecutionContext*);
 
   Member<ScriptState> script_state_;
   Member<ScriptPromiseResolver> script_promise_resolver_;
@@ -78,6 +78,7 @@ class ClipboardPromise final : public GarbageCollected<ClipboardPromise>,
   // Only for use in writeText().
   String plain_text_;
   HeapVector<std::pair<String, Member<Blob>>> clipboard_item_data_;
+  bool is_raw_;  // Corresponds to allowWithoutSanitization in ClipboardItem.
   // Index of clipboard representation currently being processed.
   wtf_size_t clipboard_representation_index_;
 

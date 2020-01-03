@@ -2012,12 +2012,27 @@ void PDFiumEngine::HandleAccessibilityAction(
     }
     case PP_PdfAccessibilityAction::PP_PDF_DO_DEFAULT_ACTION: {
       if (PageIndexInBounds(action_data.page_index)) {
-        PDFiumPage::LinkTarget target;
-        PDFiumPage::Area area =
-            pages_[action_data.page_index]->GetLinkTargetAtIndex(
-                action_data.link_index, &target);
-        NavigateToLinkDestination(area, target,
-                                  WindowOpenDisposition::CURRENT_TAB);
+        if (action_data.annotation_type ==
+            PP_PdfAccessibilityAnnotationType::PP_PDF_LINK) {
+          PDFiumPage::LinkTarget target;
+          PDFiumPage::Area area =
+              pages_[action_data.page_index]->GetLinkTargetAtIndex(
+                  action_data.annotation_index, &target);
+          NavigateToLinkDestination(area, target,
+                                    WindowOpenDisposition::CURRENT_TAB);
+        }
+      }
+      break;
+    }
+    case PP_PdfAccessibilityAction::PP_PDF_SCROLL_TO_GLOBAL_POINT: {
+      ScrollToGlobalPoint(action_data.target_rect, action_data.target_point);
+      break;
+    }
+    case PP_PdfAccessibilityAction::PP_PDF_SET_SELECTION: {
+      if (IsPageCharacterIndexInBounds(action_data.selection_start_index) &&
+          IsPageCharacterIndexInBounds(action_data.selection_end_index)) {
+        SetSelection(action_data.selection_start_index,
+                     action_data.selection_end_index);
       }
       break;
     }
@@ -2194,6 +2209,12 @@ void PDFiumEngine::ScrollBasedOnScrollAlignment(
   client_->ScrollBy(scroll_offset);
 }
 
+void PDFiumEngine::ScrollToGlobalPoint(const pp::Rect& target_rect,
+                                       const pp::Point& global_point) {
+  pp::Point scroll_offset = GetScreenRect(target_rect).point();
+  client_->ScrollBy(scroll_offset - global_point);
+}
+
 base::Optional<PDFEngine::NamedDestination> PDFiumEngine::GetNamedDestination(
     const std::string& destination) {
   // Look for the destination.
@@ -2299,6 +2320,12 @@ std::vector<PDFEngine::AccessibilityImageInfo> PDFiumEngine::GetImageInfo(
     int page_index) {
   DCHECK(PageIndexInBounds(page_index));
   return pages_[page_index]->GetImageInfo();
+}
+
+std::vector<PDFEngine::AccessibilityHighlightInfo>
+PDFiumEngine::GetHighlightInfo(int page_index) {
+  DCHECK(PageIndexInBounds(page_index));
+  return pages_[page_index]->GetHighlightInfo();
 }
 
 bool PDFiumEngine::GetPrintScaling() {
@@ -3501,8 +3528,9 @@ bool PDFiumEngine::IsPointInEditableFormTextArea(FPDF_PAGE page,
            form_type == FPDF_FORMFIELD_XFA_COMBOBOX;
 #endif  // defined(PDF_ENABLE_XFA)
 
+  const FS_POINTF point = {page_x, page_y};
   ScopedFPDFAnnotation annot(
-      FPDFAnnot_GetFormFieldAtPoint(form(), page, page_x, page_y));
+      FPDFAnnot_GetFormFieldAtPoint(form(), page, &point));
   if (!annot)
     return false;
 
@@ -3524,6 +3552,12 @@ bool PDFiumEngine::PageIndexInBounds(int index) const {
   return index >= 0 && index < static_cast<int>(pages_.size());
 }
 
+bool PDFiumEngine::IsPageCharacterIndexInBounds(
+    const PP_PdfPageCharacterIndex& index) const {
+  return PageIndexInBounds(index.page_index) &&
+         pages_[index.page_index]->IsCharIndexInBounds(index.char_index);
+}
+
 float PDFiumEngine::GetToolbarHeightInScreenCoords() {
   return client_->GetToolbarHeightInScreenCoords();
 }
@@ -3532,6 +3566,40 @@ FPDF_BOOL PDFiumEngine::Pause_NeedToPauseNow(IFSDK_PAUSE* param) {
   PDFiumEngine* engine = static_cast<PDFiumEngine*>(param);
   return base::Time::Now() - engine->last_progressive_start_time_ >
          engine->progressive_paint_timeout_;
+}
+
+void PDFiumEngine::SetSelection(
+    const PP_PdfPageCharacterIndex& selection_start_index,
+    const PP_PdfPageCharacterIndex& selection_end_index) {
+  SelectionChangeInvalidator selection_invalidator(this);
+  selection_.clear();
+
+  PP_PdfPageCharacterIndex sel_start_index = selection_start_index;
+  PP_PdfPageCharacterIndex sel_end_index = selection_end_index;
+  if (sel_end_index.page_index < sel_start_index.page_index) {
+    std::swap(sel_end_index.page_index, sel_start_index.page_index);
+    std::swap(sel_end_index.char_index, sel_start_index.char_index);
+  }
+
+  if (sel_end_index.page_index == sel_start_index.page_index &&
+      sel_end_index.char_index < sel_start_index.char_index) {
+    std::swap(sel_end_index.char_index, sel_start_index.char_index);
+  }
+
+  for (uint32_t i = sel_start_index.page_index; i <= sel_end_index.page_index;
+       ++i) {
+    int32_t char_count = pages_[i]->GetCharCount();
+    if (char_count <= 0)
+      continue;
+    int32_t start_char_index = 0;
+    int32_t end_char_index = char_count;
+    if (i == sel_start_index.page_index)
+      start_char_index = sel_start_index.char_index;
+    if (i == sel_end_index.page_index)
+      end_char_index = sel_end_index.char_index;
+    selection_.push_back(PDFiumRange(pages_[i].get(), start_char_index,
+                                     end_char_index - start_char_index));
+  }
 }
 
 void PDFiumEngine::SetCaretPosition(const pp::Point& position) {

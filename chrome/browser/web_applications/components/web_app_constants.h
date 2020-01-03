@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_WEB_APP_CONSTANTS_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_WEB_APP_CONSTANTS_H_
 
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 
 namespace web_app {
@@ -26,7 +27,7 @@ enum Type {
   // set.
   kSync,
   kDefault,
-  kMaxValue
+  kMaxValue = kDefault
 };
 }  // namespace Source
 
@@ -44,7 +45,6 @@ enum class InstallResultCode {
   kSuccessNewInstall = 0,
   kSuccessAlreadyInstalled = 1,
   // Failure category:
-  kFailedUnknownReason = 2,
   // An inter-process request to blink renderer failed.
   kGetWebApplicationInfoFailed = 3,
   // A user previously uninstalled the app, user doesn't want to see it again.
@@ -67,11 +67,26 @@ enum class InstallResultCode {
   kWebAppDisabled = 12,
   // The network request for the install URL was redirected.
   kInstallURLRedirected = 13,
-  // The network request for the install URL failed or timed out.
+  // The network request for the install URL failed.
   kInstallURLLoadFailed = 14,
   // The requested app_id check failed: actual resulting app_id doesn't match.
   kExpectedAppIdCheckFailed = 15,
-  kMaxValue = kExpectedAppIdCheckFailed
+  // The network request for the install URL timed out.
+  kInstallURLLoadTimeOut = 16,
+  // Placeholder uninstall fails (in PendingAppManager).
+  kFailedPlaceholderUninstall = 17,
+  // Web App is not considered installable, i.e. missing manifest fields, no
+  // service worker, etc.
+  kNotInstallable = 18,
+  // Bookmark App extension install or update fails.
+  kBookmarkExtensionInstallError = 19,
+  // Apk Web App install fails.
+  kApkWebAppInstallFailed = 20,
+  // App managers are shutting down. For example, when user logs out immediately
+  // after login.
+  kFailedShuttingDown = 21,
+
+  kMaxValue = kFailedShuttingDown
 };
 
 // Checks if InstallResultCode is not a failure.
@@ -145,6 +160,9 @@ using DisplayMode = blink::mojom::DisplayMode;
 // window (for app_display_mode 'browser' or 'minimal-ui').
 DisplayMode ResolveEffectiveDisplayMode(DisplayMode app_display_mode,
                                         DisplayMode user_display_mode);
+
+apps::mojom::LaunchContainer ConvertDisplayModeToAppLaunchContainer(
+    DisplayMode display_mode);
 
 }  // namespace web_app
 

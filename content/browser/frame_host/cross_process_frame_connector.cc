@@ -26,7 +26,7 @@
 #include "content/public/common/screen_info.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "gpu/ipc/common/gpu_messages.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/gfx/geometry/dip_util.h"
 
@@ -34,27 +34,11 @@ namespace content {
 
 namespace {
 
-// If |frame| is an iframe or a GuestView, returns its parent, null otherwise.
-RenderFrameHostImpl* ParentRenderFrameHost(RenderFrameHostImpl* frame) {
-  // Find the parent in the FrameTree (iframe).
-  if (frame->GetParent())
-    return frame->GetParent();
-
-  // Find the parent in the WebContentsTree (GuestView).
-  FrameTreeNode* frame_in_embedder =
-      frame->frame_tree_node()->render_manager()->GetOuterDelegateNode();
-  if (frame_in_embedder)
-    return frame_in_embedder->current_frame_host()->GetParent();
-
-  // No parent found.
-  return nullptr;
-}
-
 // Return the root RenderFrameHost in the outermost WebContents.
 RenderFrameHostImpl* RootRenderFrameHost(RenderFrameHostImpl* frame) {
   RenderFrameHostImpl* current = frame;
   while (true) {
-    RenderFrameHostImpl* parent = ParentRenderFrameHost(current);
+    RenderFrameHostImpl* parent = current->ParentOrOuterDelegateFrame();
     if (!parent)
       return current;
     current = parent;
@@ -404,7 +388,7 @@ RenderWidgetHostViewBase*
 CrossProcessFrameConnector::GetParentRenderWidgetHostView() {
   RenderFrameHostImpl* current =
       frame_proxy_in_parent_renderer_->frame_tree_node()->current_frame_host();
-  RenderFrameHostImpl* parent = ParentRenderFrameHost(current);
+  RenderFrameHostImpl* parent = current->ParentOrOuterDelegateFrame();
   return parent ? static_cast<RenderWidgetHostViewBase*>(parent->GetView())
                 : nullptr;
 }

@@ -3,14 +3,12 @@
 <translationbundle lang="nl">
 <translation id="1001534784610492198">Het archief van het installatieprogramma is beschadigd of ongeldig. Download Google Chrome opnieuw.</translation>
 <translation id="102763973188675173">Google Chrome aanpassen en beheren. Update is beschikbaar.</translation>
-<translation id="1035334672863811645">inloggen bij Chrome</translation>
 <translation id="1051826050538111504">Er staat schadelijke software op je computer. Chrome kan deze verwijderen, je instellingen herstellen en extensies uitschakelen, zodat je browser weer normaal werkt.</translation>
 <translation id="1065672644894730302">Je voorkeuren kunnen niet worden gelezen.
 
 Sommige functies zijn wellicht niet beschikbaar en wijzigingen in voorkeuren worden niet opgeslagen.</translation>
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> maakte eerder gebruik van Chrome</translation>
 <translation id="1097330777386562916">Cookies en sitegegevens wissen wanneer je Chrome sluit</translation>
-<translation id="1104959162601287462">Over &amp;Chrome OS</translation>
 <translation id="110877069173485804">Personaliseer jouw Chrome</translation>
 <translation id="1142745911746664600">Kan Chrome niet updaten</translation>
 <translation id="1154147086299354128">&amp;Openen in Chrome</translation>
@@ -53,6 +51,7 @@ Sommige functies zijn wellicht niet beschikbaar en wijzigingen in voorkeuren wor
 <translation id="2290014774651636340">Google API-sleutels ontbreken. Sommige functies van Google Chrome worden uitgeschakeld.</translation>
 <translation id="2290095356545025170">Weet je zeker dat je Google Chrome wilt verwijderen?</translation>
 <translation id="2309047409763057870">Dit is een tweede installatie van Google Chrome en kan niet als standaardbrowser worden ingesteld.</translation>
+<translation id="2341767445688917208">Chrome OS kan je wachtwoorden niet synchroniseren. Los dit nu op.</translation>
 <translation id="2348335408836342058">Chrome heeft toegangsrechten voor je camera en microfoon nodig voor deze site</translation>
 <translation id="2429317896000329049">Google Chrome kan je gegevens niet synchroniseren, omdat synchronisatie niet beschikbaar is voor je domein.</translation>
 <translation id="2467438592969358367">Google Chrome wil je wachtwoorden exporteren. Geef je Windows-wachtwoord op om dit toe te staan.</translation>
@@ -131,7 +130,6 @@ Sommige functies zijn wellicht niet beschikbaar en wijzigingen in voorkeuren wor
 <translation id="4953650215774548573">Google Chrome instellen als je standaardbrowser</translation>
 <translation id="495931528404527476">In Chrome</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
-<translation id="5028489144783860647">Google Chrome kan je gegevens niet synchroniseren. Update je synchronisatiewachtwoord.</translation>
 <translation id="5062123544085870375">Chrome OS opnieuw opstarten</translation>
 <translation id="5132929315877954718">Ontdek fantastische apps, games, extensies en thema's voor Google Chrome.</translation>
 <translation id="5170938038195470297">Je profiel kan niet worden gebruikt omdat dit afkomstig is van een nieuwere versie van Google Chrome.
@@ -212,6 +210,7 @@ Sommige functies zijn wellicht niet beschikbaar. Geef een andere profieldirector
 <translation id="7855730255114109580">Google Chrome is up-to-date</translation>
 <translation id="7890208801193284374">Als je een computer deelt, kunnen vrienden en familie afzonderlijk surfen en Chrome configureren zoals zij dat willen.</translation>
 <translation id="7896673875602241923">Iemand heeft eerder bij Chrome op deze computer ingelogd als <ph name="ACCOUNT_EMAIL_LAST" />. Maak een nieuwe Chrome-gebruiker om je informatie gescheiden te houden.</translation>
+<translation id="7916016681687251387">Chrome OS kan je gegevens niet synchroniseren. Los dit nu op.</translation>
 <translation id="7962410387636238736">Deze computer ontvangt geen Google Chrome-updates meer, omdat Windows XP en Windows Vista niet meer worden ondersteund</translation>
 <translation id="8008534537613507642">Chrome opnieuw installeren</translation>
 <translation id="8013993649590906847">Als een afbeelding geen nuttige beschrijving bevat, probeert Chrome je er een te geven. Afbeeldingen worden naar Google verzonden om beschrijvingen te maken.</translation>

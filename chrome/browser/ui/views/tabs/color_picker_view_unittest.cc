@@ -26,7 +26,7 @@
 
 class ColorPickerViewTest : public ChromeViewsTestBase {
  protected:
-  static const std::array<std::pair<SkColor, base::string16>, 3> kTestColors;
+  static const std::vector<std::pair<SkColor, base::string16>> kTestColors;
 
   void SetUp() override {
     ChromeViewsTestBase::SetUp();
@@ -38,8 +38,9 @@ class ColorPickerViewTest : public ChromeViewsTestBase {
     widget_ = std::make_unique<views::Widget>();
     widget_->Init(std::move(widget_params));
 
-    color_picker_ = new ColorPickerView(kTestColors, SK_ColorCYAN,
-                                        color_selected_callback_.Get());
+    color_picker_ =
+        new ColorPickerView(kTestColors, SK_ColorWHITE, SK_ColorCYAN,
+                            color_selected_callback_.Get());
     widget_->SetContentsView(color_picker_);
 
     color_picker_->SizeToPreferredSize();
@@ -81,15 +82,16 @@ class ColorPickerViewTest : public ChromeViewsTestBase {
 };
 
 // static
-const std::array<std::pair<SkColor, base::string16>, 3>
-    ColorPickerViewTest::kTestColors{{
-        {SK_ColorRED, base::ASCIIToUTF16("Red")},
-        {SK_ColorGREEN, base::ASCIIToUTF16("Green")},
-        {SK_ColorBLUE, base::ASCIIToUTF16("Blue")},
-    }};
+const std::vector<std::pair<SkColor, base::string16>>
+    ColorPickerViewTest::kTestColors =
+        std::vector<std::pair<SkColor, base::string16>>{
+            {SK_ColorRED, base::ASCIIToUTF16("Red")},
+            {SK_ColorGREEN, base::ASCIIToUTF16("Green")},
+            {SK_ColorBLUE, base::ASCIIToUTF16("Blue")},
+        };
 
 TEST_F(ColorPickerViewTest, NoColorSelectedByDefaultIfNotMatching) {
-  EXPECT_FALSE(color_picker_->GetSelectedColor().has_value());
+  EXPECT_FALSE(color_picker_->GetSelectedElement().has_value());
 }
 
 TEST_F(ColorPickerViewTest, ColorSelectedByDefaultIfMatching) {
@@ -102,30 +104,32 @@ TEST_F(ColorPickerViewTest, ColorSelectedByDefaultIfMatching) {
   std::unique_ptr<views::Widget> widget = std::make_unique<views::Widget>();
   widget->Init(std::move(widget_params));
 
-  ColorPickerView* color_picker = new ColorPickerView(
-      kTestColors, initial_color, color_selected_callback_.Get());
+  ColorPickerView* color_picker =
+      new ColorPickerView(kTestColors, SK_ColorWHITE, initial_color,
+                          color_selected_callback_.Get());
   widget->SetContentsView(color_picker);
 
   color_picker->SizeToPreferredSize();
 
-  EXPECT_TRUE(color_picker->GetSelectedColor().has_value());
-  EXPECT_EQ(color_picker->GetSelectedColor().value(), initial_color);
+  EXPECT_TRUE(color_picker->GetSelectedElement().has_value());
+  // Expect the index to match that of SK_ColorRED in kTestColors.
+  EXPECT_EQ(color_picker->GetSelectedElement().value(), 0);
 
   widget.reset();
 }
 
 TEST_F(ColorPickerViewTest, ClickingSelectsColor) {
   ClickColorAtIndex(0);
-  EXPECT_EQ(kTestColors[0].first, color_picker_->GetSelectedColor());
+  EXPECT_EQ(0, color_picker_->GetSelectedElement());
 
   ClickColorAtIndex(1);
-  EXPECT_EQ(kTestColors[1].first, color_picker_->GetSelectedColor());
+  EXPECT_EQ(1, color_picker_->GetSelectedElement());
 }
 
 TEST_F(ColorPickerViewTest, ColorNotDeselected) {
   ClickColorAtIndex(0);
   ClickColorAtIndex(0);
-  EXPECT_EQ(kTestColors[0].first, color_picker_->GetSelectedColor());
+  EXPECT_EQ(0, color_picker_->GetSelectedElement());
 }
 
 TEST_F(ColorPickerViewTest, SelectingColorNotifiesCallback) {

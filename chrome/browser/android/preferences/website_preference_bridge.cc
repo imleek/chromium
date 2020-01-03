@@ -35,7 +35,9 @@
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/permissions/permission_util.h"
+#include "chrome/browser/permissions/quiet_notification_permission_ui_state.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/storage/storage_info_fetcher.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
@@ -346,7 +348,7 @@ static void JNI_WebsitePreferenceBridge_GetClipboardOrigins(
     JNIEnv* env,
     const JavaParamRef<jobject>& list) {
   JNI_WebsitePreferenceBridge_GetOrigins(
-      env, ContentSettingsType::CLIPBOARD_READ,
+      env, ContentSettingsType::CLIPBOARD_READ_WRITE,
       &Java_WebsitePreferenceBridge_insertClipboardInfoIntoList, list, false);
 }
 
@@ -355,7 +357,8 @@ static jint JNI_WebsitePreferenceBridge_GetClipboardSettingForOrigin(
     const JavaParamRef<jstring>& origin,
     jboolean is_incognito) {
   return JNI_WebsitePreferenceBridge_GetSettingForOrigin(
-      env, ContentSettingsType::CLIPBOARD_READ, origin, origin, is_incognito);
+      env, ContentSettingsType::CLIPBOARD_READ_WRITE, origin, origin,
+      is_incognito);
 }
 
 static void JNI_WebsitePreferenceBridge_SetClipboardSettingForOrigin(
@@ -364,7 +367,7 @@ static void JNI_WebsitePreferenceBridge_SetClipboardSettingForOrigin(
     jint value,
     jboolean is_incognito) {
   JNI_WebsitePreferenceBridge_SetSettingForOrigin(
-      env, ContentSettingsType::CLIPBOARD_READ, origin, origin,
+      env, ContentSettingsType::CLIPBOARD_READ_WRITE, origin, origin,
       static_cast<ContentSetting>(value), is_incognito);
 }
 
@@ -960,7 +963,7 @@ static jboolean JNI_WebsitePreferenceBridge_IsContentSettingEnabled(
   DCHECK(type == ContentSettingsType::JAVASCRIPT ||
          type == ContentSettingsType::POPUPS ||
          type == ContentSettingsType::ADS ||
-         type == ContentSettingsType::CLIPBOARD_READ ||
+         type == ContentSettingsType::CLIPBOARD_READ_WRITE ||
          type == ContentSettingsType::USB_GUARD ||
          type == ContentSettingsType::BLUETOOTH_SCANNING);
   return GetBooleanForContentSetting(type);
@@ -999,13 +1002,20 @@ static void JNI_WebsitePreferenceBridge_SetContentSettingEnabled(
 static void JNI_WebsitePreferenceBridge_SetContentSettingForPattern(
     JNIEnv* env,
     int content_settings_type,
-    const JavaParamRef<jstring>& pattern,
+    const JavaParamRef<jstring>& primary_pattern,
+    const JavaParamRef<jstring>& secondary_pattern,
     int setting) {
+  std::string primary_pattern_string =
+      ConvertJavaStringToUTF8(env, primary_pattern);
+  std::string secondary_pattern_string =
+      ConvertJavaStringToUTF8(env, secondary_pattern);
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
   host_content_settings_map->SetContentSettingCustomScope(
-      ContentSettingsPattern::FromString(ConvertJavaStringToUTF8(env, pattern)),
-      ContentSettingsPattern::Wildcard(),
+      ContentSettingsPattern::FromString(primary_pattern_string),
+      secondary_pattern_string.empty()
+          ? ContentSettingsPattern::Wildcard()
+          : ContentSettingsPattern::FromString(secondary_pattern_string),
       static_cast<ContentSettingsType>(content_settings_type), std::string(),
       static_cast<ContentSetting>(setting));
 }
@@ -1023,6 +1033,7 @@ static void JNI_WebsitePreferenceBridge_GetContentSettingsExceptions(
     Java_WebsitePreferenceBridge_addContentSettingExceptionToList(
         env, list, content_settings_type,
         ConvertUTF8ToJavaString(env, entries[i].primary_pattern.ToString()),
+        ConvertUTF8ToJavaString(env, entries[i].secondary_pattern.ToString()),
         entries[i].GetContentSetting(),
         ConvertUTF8ToJavaString(env, entries[i].source));
   }
@@ -1061,10 +1072,6 @@ static jboolean JNI_WebsitePreferenceBridge_GetAcceptCookiesUserModifiable(
 static jboolean JNI_WebsitePreferenceBridge_GetAcceptCookiesManagedByCustodian(
     JNIEnv* env) {
   return IsContentSettingManagedByCustodian(ContentSettingsType::COOKIES);
-}
-
-static jboolean JNI_WebsitePreferenceBridge_GetAutoplayEnabled(JNIEnv* env) {
-  return GetBooleanForContentSetting(ContentSettingsType::AUTOPLAY);
 }
 
 static jboolean JNI_WebsitePreferenceBridge_GetNfcEnabled(JNIEnv* env) {
@@ -1120,21 +1127,12 @@ static jboolean JNI_WebsitePreferenceBridge_GetAllowLocationManagedByCustodian(
   return IsContentSettingManagedByCustodian(ContentSettingsType::GEOLOCATION);
 }
 
-static void JNI_WebsitePreferenceBridge_SetAutoplayEnabled(JNIEnv* env,
-                                                           jboolean allow) {
-  HostContentSettingsMap* host_content_settings_map =
-      HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
-  host_content_settings_map->SetDefaultContentSetting(
-      ContentSettingsType::AUTOPLAY,
-      allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
-}
-
 static void JNI_WebsitePreferenceBridge_SetClipboardEnabled(JNIEnv* env,
                                                             jboolean allow) {
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
   host_content_settings_map->SetDefaultContentSetting(
-      ContentSettingsType::CLIPBOARD_READ,
+      ContentSettingsType::CLIPBOARD_READ_WRITE,
       allow ? CONTENT_SETTING_ASK : CONTENT_SETTING_BLOCK);
 }
 
@@ -1268,6 +1266,26 @@ static jboolean JNI_WebsitePreferenceBridge_GetMicManagedByCustodian(
     JNIEnv* env) {
   return IsContentSettingManagedByCustodian(
       ContentSettingsType::MEDIASTREAM_MIC);
+}
+
+static jboolean JNI_WebsitePreferenceBridge_GetQuietNotificationsUiEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jprofile) {
+  return QuietNotificationPermissionUiState::IsQuietUiEnabledInPrefs(
+      ProfileAndroid::FromProfileAndroid(jprofile));
+}
+
+static void JNI_WebsitePreferenceBridge_SetQuietNotificationsUiEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jprofile,
+    jboolean enabled) {
+  if (enabled) {
+    QuietNotificationPermissionUiState::EnableQuietUiInPrefs(
+        ProfileAndroid::FromProfileAndroid(jprofile));
+  } else {
+    QuietNotificationPermissionUiState::DisableQuietUiInPrefs(
+        ProfileAndroid::FromProfileAndroid(jprofile));
+  }
 }
 
 // static

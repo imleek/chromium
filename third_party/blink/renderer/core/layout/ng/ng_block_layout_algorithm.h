@@ -102,11 +102,6 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
                               bool is_new_fc,
                               bool* margins_fully_resolved);
 
-  void StopMarginCollapsing(EMarginCollapse collapse_value,
-                            LayoutUnit this_margin,
-                            LayoutUnit* logical_block_offset,
-                            NGMarginStrut* margin_strut);
-
   // Creates a new constraint space for the current child.
   NGConstraintSpace CreateConstraintSpaceForChild(
       const NGLayoutInputNode child,
@@ -333,9 +328,16 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
       LayoutUnit child_bfc_line_offset,
       const base::Optional<LayoutUnit>& child_bfc_block_offset);
 
-  // Computes minimum size for HTML and BODY elements in quirks mode.
-  // Returns kIndefiniteSize in all other cases.
-  LayoutUnit CalculateMinimumBlockSize(const NGMarginStrut& end_margin_strut);
+  // In quirks mode the body element will stretch to fit the viewport.
+  //
+  // In order to determine the final block-size we need to take the available
+  // block-size minus the total block-direction margin.
+  //
+  // This block-direction margin is non-trivial to calculate for the body
+  // element, and is computed upfront for the |ClampIntrinsicBlockSize|
+  // function.
+  base::Optional<LayoutUnit> CalculateQuirkyBodyMarginBlockSum(
+      const NGMarginStrut& end_margin_strut);
 
   // Border + padding sum, resolved from the node's computed style.
   const NGBoxStrut border_padding_;
@@ -378,6 +380,12 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
   // in-flow child of a container. It is used to check if we're at a valid class
   // A or B breakpoint (between block-level siblings or line box siblings).
   bool has_processed_first_child_ = false;
+
+  // Set once we've inserted a break before a float. We need to know this, so
+  // that we don't attempt to lay out any more floats in the current
+  // fragmentainer. Floats aren't allowed have an earlier block-start offset
+  // than earlier floats.
+  bool broke_before_float_ = false;
 
   bool did_break_before_child_ = false;
 

@@ -327,6 +327,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_ButtonEnabledColor,
     kColorId_ButtonDisabledColor,
     kColorId_ButtonPressedShade,
+    kColorId_ButtonUncheckedColor,
     kColorId_ProminentButtonColor,
     kColorId_ProminentButtonFocusedColor,
     kColorId_ProminentButtonDisabledColor,
@@ -337,6 +338,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_DisabledMenuItemForegroundColor,
     kColorId_SelectedMenuItemForegroundColor,
     kColorId_FocusedMenuItemBackgroundColor,
+    kColorId_MenuDropIndicator,
     kColorId_MenuItemMinorTextColor,
     kColorId_MenuSeparatorColor,
     kColorId_MenuBackgroundColor,
@@ -347,18 +349,28 @@ class NATIVE_THEME_EXPORT NativeTheme {
     // Label
     kColorId_LabelEnabledColor,
     kColorId_LabelDisabledColor,
+    kColorId_LabelSecondaryColor,
     kColorId_LabelTextSelectionColor,
     kColorId_LabelTextSelectionBackgroundFocused,
     // Link
     kColorId_LinkDisabled,
     kColorId_LinkEnabled,
     kColorId_LinkPressed,
+    kColorId_OverlayScrollbarThumbBackground,
+    kColorId_OverlayScrollbarThumbForeground,
+    // Slider
+    kColorId_SliderThumbDefault,
+    kColorId_SliderTroughDefault,
+    kColorId_SliderThumbMinimal,
+    kColorId_SliderTroughMinimal,
     // Separator
     kColorId_SeparatorColor,
     // TabbedPane
     kColorId_TabTitleColorActive,
     kColorId_TabTitleColorInactive,
     kColorId_TabBottomBorder,
+    kColorId_TabHighlightBackground,
+    kColorId_TabHighlightFocusedBackground,
     // Textfield
     kColorId_TextfieldDefaultColor,
     kColorId_TextfieldDefaultBackground,
@@ -368,6 +380,8 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_TextfieldSelectionBackgroundFocused,
     // Tooltip
     kColorId_TooltipBackground,
+    kColorId_TooltipIcon,
+    kColorId_TooltipIconHovered,
     kColorId_TooltipText,
     // Tree
     kColorId_TreeBackground,

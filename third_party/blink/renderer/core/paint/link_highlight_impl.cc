@@ -33,7 +33,6 @@
 #include "cc/layers/picture_layer.h"
 #include "cc/paint/display_item_list.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_float_point.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/web/blink.h"
@@ -142,7 +141,6 @@ void LinkHighlightImpl::ReleaseResources() {
 
 LinkHighlightImpl::LinkHighlightFragment::LinkHighlightFragment() {
   layer_ = cc::PictureLayer::Create(this);
-  layer_->SetTransformOrigin(FloatPoint3D());
   layer_->SetIsDrawable(true);
   layer_->SetOpacity(kStartOpacity);
 }
@@ -266,8 +264,11 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
     return;
 
   const auto* object = node_->GetLayoutObject();
-  DCHECK(object);
-  DCHECK(!object->GetFrameView()->ShouldThrottleRendering());
+  // TODO(crbug.com/1016587): Change the CHECKs to DCHECKs after we address
+  // the cause of the bug.
+  CHECK(object);
+  CHECK(object->GetFrameView());
+  CHECK(!object->GetFrameView()->ShouldThrottleRendering());
 
   static const FloatSize rect_rounding_radii(3, 3);
   auto color = object->StyleRef().TapHighlightColor();
@@ -276,6 +277,7 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
   // otherwise we may sometimes get a chain of adjacent boxes (e.g. for text
   // nodes) which end up looking like sausage links: these should ideally be
   // merged into a single rect before creating the path.
+  CHECK(node_->GetDocument().GetSettings());
   bool use_rounded_rects = !node_->GetDocument()
                                 .GetSettings()
                                 ->GetMockGestureTapHighlightsEnabled() &&
@@ -298,7 +300,7 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
         new_path.AddRect(snapped_rect);
     }
 
-    DCHECK_LT(index, fragments_.size());
+    CHECK_LT(index, fragments_.size());
     auto& link_highlight_fragment = fragments_[index];
     link_highlight_fragment.SetColor(color);
 
@@ -306,6 +308,7 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
     new_path.Translate(-ToFloatSize(bounding_rect.Location()));
 
     auto* layer = link_highlight_fragment.Layer();
+    CHECK(layer);
     if (link_highlight_fragment.GetPath() != new_path) {
       link_highlight_fragment.SetPath(new_path);
       layer->SetBounds(gfx::Size(EnclosingIntRect(bounding_rect).Size()));

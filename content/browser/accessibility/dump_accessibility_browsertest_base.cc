@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
@@ -134,7 +135,7 @@ DumpAccessibilityTestBase::DumpUnfilteredAccessibilityTreeAsString() {
   formatter->SetPropertyFilters(property_filters);
   formatter->set_show_ids(true);
   base::string16 ax_tree_dump;
-  formatter->FormatAccessibilityTree(
+  formatter->FormatAccessibilityTreeForTesting(
       GetRootAccessibilityNode(shell()->web_contents()), &ax_tree_dump);
   return ax_tree_dump;
 }

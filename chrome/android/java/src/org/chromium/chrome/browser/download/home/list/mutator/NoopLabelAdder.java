@@ -5,22 +5,30 @@
 package org.chromium.chrome.browser.download.home.list.mutator;
 
 import org.chromium.chrome.browser.download.home.list.ListItem;
-import org.chromium.components.offline_items_collection.OfflineItem;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Implementation of {@link LabelAdder} that doesn't insert any extra labels.
+ * Implementation of {@link LabelAdder} that doesn't add any labels.
  */
-public class NoopLabelAdder implements DateOrderedListMutator.LabelAdder {
-    @Override
-    public List<ListItem> addLabels(List<OfflineItem> sortedList) {
-        List<ListItem> listItems = new ArrayList<>();
-        for (OfflineItem offlineItem : sortedList) {
-            listItems.add(new ListItem.OfflineItemListItem(offlineItem));
-        }
+public class NoopLabelAdder implements ListConsumer {
+    private ListConsumer mListConsumer;
 
-        return listItems;
+    public NoopLabelAdder() {}
+
+    @Override
+    public ListConsumer setListConsumer(ListConsumer consumer) {
+        mListConsumer = consumer;
+        return mListConsumer;
+    }
+
+    @Override
+    public void onListUpdated(List<ListItem> inputList) {
+        if (mListConsumer == null) return;
+        mListConsumer.onListUpdated(addLabels(inputList));
+    }
+
+    private List<ListItem> addLabels(List<ListItem> sortedList) {
+        return sortedList;
     }
 }

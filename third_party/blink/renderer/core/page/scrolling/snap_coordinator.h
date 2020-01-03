@@ -17,8 +17,7 @@ namespace blink {
 class LayoutBox;
 
 // Snap Coordinator keeps track of snap containers and all of their associated
-// snap areas. It also contains the logic to generate the list of valid snap
-// positions for a given snap container.
+// snap areas.
 //
 // Snap container:
 //   A scroll container that has 'scroll-snap-type' value other
@@ -55,6 +54,11 @@ class CORE_EXPORT SnapCoordinator final
   void UpdateAllSnapContainerData();
   void UpdateSnapContainerData(LayoutBox&);
 
+  // Resnaps all snap containers to their current snap target, or to the
+  // closest snap point if there is no target (e.g. on the initial layout or if
+  // the previous snapped target was removed).
+  void ReSnapAllContainers();
+
 #ifndef NDEBUG
   void ShowSnapAreaMap();
   void ShowSnapAreasFor(const LayoutBox*);
@@ -65,6 +69,11 @@ class CORE_EXPORT SnapCoordinator final
   friend class SnapCoordinatorTest;
 
   HashSet<LayoutBox*> snap_containers_;
+
+  // Used for reporting to UMA when snapping on the initial layout affects the
+  // initial scroll position.
+  bool did_first_resnap_all_containers_{false};
+
   DISALLOW_COPY_AND_ASSIGN(SnapCoordinator);
 };
 

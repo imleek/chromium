@@ -2,50 +2,48 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import <EarlGrey/EarlGrey.h>
-#import <XCTest/XCTest.h>
-
 #import "base/ios/block_types.h"
 #include "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #include "base/test/scoped_feature_list.h"
-#import "ios/chrome/app/main_controller.h"
-#include "ios/chrome/browser/system_flags.h"
-#import "ios/chrome/browser/tabs/tab_model.h"
-#import "ios/chrome/browser/ui/authentication/cells/signin_promo_view.h"
-#import "ios/chrome/browser/ui/authentication/chrome_signin_view_controller.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui.h"
 #import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils.h"
-#import "ios/chrome/browser/ui/authentication/unified_consent/identity_chooser/identity_chooser_cell.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_constants.h"
-#import "ios/chrome/browser/ui/settings/google_services/google_services_settings_view_controller.h"
+#import "ios/chrome/browser/ui/signin_interaction/signin_interaction_controller_app_interface.h"
 #import "ios/chrome/browser/ui/signin_interaction/signin_interaction_controller_egtest_util.h"
-#include "ios/chrome/browser/ui/util/ui_util.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #include "ios/chrome/grit/ios_strings.h"
-#import "ios/chrome/test/app/chrome_test_util.h"
+#import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
-#import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_interaction_manager.h"
-#import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service.h"
+#import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_interaction_manager_constants.h"
+#import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/testing/earl_grey/matchers.h"
-#import "ios/web/public/web_state.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
+#if defined(CHROME_EARL_GREY_2)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wc++98-compat-extra-semi"
+GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(SigninInteractionControllerAppInterface);
+#pragma clang diagnostic pop
+#endif  // defined(CHROME_EARL_GREY_2)
+
 using chrome_test_util::BookmarksNavigationBarDoneButton;
+using chrome_test_util::ButtonWithAccessibilityLabelId;
+using chrome_test_util::GoogleServicesSettingsView;
 using chrome_test_util::PrimarySignInButton;
 using chrome_test_util::SecondarySignInButton;
 using chrome_test_util::SettingsDoneButton;
+using chrome_test_util::SettingsImportDataContinueButton;
+using chrome_test_util::SettingsImportDataImportButton;
+using chrome_test_util::SettingsImportDataKeepSeparateButton;
+using chrome_test_util::StaticTextWithAccessibilityLabelId;
 using chrome_test_util::SyncSettingsConfirmButton;
 using l10n_util::GetNSString;
 using testing::ButtonWithAccessibilityLabel;
@@ -76,33 +74,50 @@ void TapOnPrimarySignInButtonInRecentTabs() {
   [interaction performAction:grey_tap()];
 }
 
-// Removes all browsing data.
-void RemoveBrowsingData() {
-  __block BOOL browsing_data_removed = NO;
-  [chrome_test_util::GetMainController().sceneController
-      removeBrowsingDataForBrowserState:chrome_test_util::
-                                            GetOriginalBrowserState()
-                             timePeriod:browsing_data::TimePeriod::ALL_TIME
-                             removeMask:BrowsingDataRemoveMask::REMOVE_ALL
-                        completionBlock:^{
-                          browsing_data_removed = YES;
-                        }];
-  GREYCondition* condition =
-      [GREYCondition conditionWithName:@"Wait for removing browsing data."
-                                 block:^BOOL {
-                                   return browsing_data_removed;
-                                 }];
-  GREYAssert(
-      [condition
-          waitWithTimeout:base::test::ios::kWaitForClearBrowsingDataTimeout],
-      @"Browsing data was not removed.");
-}
-
 // Returns a matcher for |userEmail| in IdentityChooserViewController.
 id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
   return grey_allOf(grey_accessibilityID(userEmail),
-                    grey_kindOfClass([IdentityChooserCell class]),
+                    grey_kindOfClassName(@"IdentityChooserCell"),
                     grey_sufficientlyVisible(), nil);
+}
+
+void ChooseImportOrKeepDataSepareteDialog(id<GREYMatcher> choiceButtonMatcher) {
+  // The ChromeSigninView's activity indicator must be hidden as the import
+  // data UI is presented on top of the activity indicator and Earl Grey cannot
+  // interact with any UI while an animation is active.
+  [SigninInteractionControllerAppInterface setActivityIndicatorShown:NO];
+
+  // Set up the fake identities.
+  FakeChromeIdentity* fakeIdentity1 = [SigninEarlGreyUtils fakeIdentity1];
+  FakeChromeIdentity* fakeIdentity2 = [SigninEarlGreyUtils fakeIdentity2];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity1];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity2];
+
+  // Sign in to |fakeIdentity1|.
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity1];
+  [SigninEarlGreyUI signOutWithManagedAccount:NO];
+
+  // Sign in with |fakeIdentity2|.
+  [ChromeEarlGreyUI openSettingsMenu];
+  [[EarlGrey selectElementWithMatcher:SecondarySignInButton()]
+      performAction:grey_tap()];
+  [SigninEarlGreyUI selectIdentityWithEmail:fakeIdentity2.userEmail];
+  [SigninEarlGreyUI confirmSigninConfirmationDialog];
+
+  // Switch Sync account to |fakeIdentity2| should ask whether date should be
+  // imported or kept separate. Choose to keep data separate.
+  [[EarlGrey selectElementWithMatcher:choiceButtonMatcher]
+      performAction:grey_tap()];
+
+  [[EarlGrey selectElementWithMatcher:SettingsImportDataContinueButton()]
+      performAction:grey_tap()];
+
+  // Check the signed-in user did change.
+  [SigninEarlGreyUtils checkSignedInWithFakeIdentity:fakeIdentity2];
+
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
+      performAction:grey_tap()];
+  [SigninInteractionControllerAppInterface setActivityIndicatorShown:YES];
 }
 
 }  // namespace
@@ -114,123 +129,52 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
 
 @implementation SigninInteractionControllerTestCase
 
+#if defined(CHROME_EARL_GREY_2)
++ (NSArray*)testInvocations {
+  // TODO(crbug.com/1037676): Fix and enable the tests for EG2.
+  return @[];
+}
+#endif
+
 - (void)setUp {
   [super setUp];
   // Remove closed tab history to make sure the sign-in promo is always visible
   // in recent tabs.
-  RemoveBrowsingData();
+  [ChromeEarlGreyUI clearAllBrowsingData];
 }
 
 // Tests that opening the sign-in screen from the Settings and signing in works
 // correctly when there is already an identity on the device.
 - (void)testSignInOneUser {
   // Set up a fake identity.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity];
 
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
-  // Check |identity| is signed-in.
-  [SigninEarlGreyUtils checkSignedInWithIdentity:identity];
+  // Check |fakeIdentity| is signed-in.
+  [SigninEarlGreyUtils checkSignedInWithFakeIdentity:fakeIdentity];
 }
 
 // Tests signing in with one account, switching sync account to a second and
 // choosing to keep the browsing data separate during the switch.
 - (void)testSignInSwitchAccountsAndKeepDataSeparate {
-  // The ChromeSigninView's activity indicator must be hidden as the import
-  // data UI is presented on top of the activity indicator and Earl Grey cannot
-  // interact with any UI while an animation is active.
-  std::unique_ptr<base::AutoReset<BOOL>> hideActivityMonitor =
-      [ChromeSigninViewController hideActivityIndicatorForTesting];
-
-  // Set up the fake identities.
-  ios::FakeChromeIdentityService* identity_service =
-      ios::FakeChromeIdentityService::GetInstanceFromChromeProvider();
-  ChromeIdentity* identity1 = [SigninEarlGreyUtils fakeIdentity1];
-  ChromeIdentity* identity2 = [SigninEarlGreyUtils fakeIdentity2];
-  identity_service->AddIdentity(identity1);
-  identity_service->AddIdentity(identity2);
-
-  [SigninEarlGreyUI signinWithIdentity:identity1];
-  [SigninEarlGreyUI signOutWithManagedAccount:NO];
-
-  // Sign in with |identity2|.
-  [ChromeEarlGreyUI openSettingsMenu];
-  [[EarlGrey selectElementWithMatcher:SecondarySignInButton()]
-      performAction:grey_tap()];
-  [SigninEarlGreyUI selectIdentityWithEmail:identity2.userEmail];
-  [SigninEarlGreyUI confirmSigninConfirmationDialog];
-
-  // Switch Sync account to |identity2| should ask whether date should be
-  // imported or kept separate. Choose to keep data separate.
-  [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::SettingsImportDataKeepSeparateButton()]
-      performAction:grey_tap()];
-
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::
-                                          SettingsImportDataContinueButton()]
-      performAction:grey_tap()];
-
-  // Check the signed-in user did change.
-  [SigninEarlGreyUtils checkSignedInWithIdentity:identity2];
-
-  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
-      performAction:grey_tap()];
+  ChooseImportOrKeepDataSepareteDialog(SettingsImportDataKeepSeparateButton());
 }
 
 // Tests signing in with one account, switching sync account to a second and
 // choosing to import the browsing data during the switch.
 - (void)testSignInSwitchAccountsAndImportData {
-  // The ChromeSigninView's activity indicator must be hidden as the import
-  // data UI is presented on top of the activity indicator and Earl Grey cannot
-  // interact with any UI while an animation is active.
-  std::unique_ptr<base::AutoReset<BOOL>> hideActivityMonitor =
-      [ChromeSigninViewController hideActivityIndicatorForTesting];
-
-  // Set up the fake identities.
-  ios::FakeChromeIdentityService* identity_service =
-      ios::FakeChromeIdentityService::GetInstanceFromChromeProvider();
-  ChromeIdentity* identity1 = [SigninEarlGreyUtils fakeIdentity1];
-  ChromeIdentity* identity2 = [SigninEarlGreyUtils fakeIdentity2];
-  identity_service->AddIdentity(identity1);
-  identity_service->AddIdentity(identity2);
-
-  // Sign in to |identity1|.
-  [SigninEarlGreyUI signinWithIdentity:identity1];
-  [SigninEarlGreyUI signOutWithManagedAccount:NO];
-
-  // Sign in with |identity2|.
-  [ChromeEarlGreyUI openSettingsMenu];
-  [[EarlGrey selectElementWithMatcher:SecondarySignInButton()]
-      performAction:grey_tap()];
-  [SigninEarlGreyUI selectIdentityWithEmail:identity2.userEmail];
-  [SigninEarlGreyUI confirmSigninConfirmationDialog];
-
-  // Switch Sync account to |identity2| should ask whether date should be
-  // imported or kept separate. Choose to import the data.
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::
-                                          SettingsImportDataImportButton()]
-      performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::
-                                          SettingsImportDataContinueButton()]
-      performAction:grey_tap()];
-
-  // Check the signed-in user did change.
-  [SigninEarlGreyUtils checkSignedInWithIdentity:identity2];
-
-  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
-      performAction:grey_tap()];
+  ChooseImportOrKeepDataSepareteDialog(SettingsImportDataImportButton());
 }
 
 // Tests that signing out from the Settings works correctly.
 - (void)testSignInDisconnectFromChrome {
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity];
 
-  // Sign in to |identity|.
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  // Sign in to |fakeIdentity|.
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   // Sign out.
   [SigninEarlGreyUI signOutWithManagedAccount:NO];
@@ -239,10 +183,10 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
 // Tests that signing out of a managed account from the Settings works
 // correctly.
 - (void)testSignInDisconnectFromChromeManaged {
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeManagedIdentity];
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeManagedIdentity];
 
   // Sign-in with a managed account.
-  [SigninEarlGreyUI signinWithIdentity:identity isManagedAccount:YES];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity isManagedAccount:YES];
 
   // Sign out.
   [SigninEarlGreyUI signOutWithManagedAccount:YES];
@@ -255,13 +199,12 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
 // and closing the Settings correctly leaves the user signed in without any
 // Settings shown.
 - (void)testSignInOpenSettings {
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity];
 
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  [SigninEarlGreyUI selectIdentityWithEmail:identity.userEmail];
+  [SigninEarlGreyUI selectIdentityWithEmail:fakeIdentity.userEmail];
 
   // Wait until the next screen appears.
   [SigninEarlGreyUI tapSettingsLink];
@@ -275,7 +218,7 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
           IDS_IOS_SETTINGS_TITLE);
   [[EarlGrey selectElementWithMatcher:settings_matcher]
       assertWithMatcher:grey_notVisible()];
-  [SigninEarlGreyUtils checkSignedInWithIdentity:identity];
+  [SigninEarlGreyUtils checkSignedInWithFakeIdentity:fakeIdentity];
 }
 
 // Opens the sign in screen and then cancel it by opening a new tab. Ensures
@@ -283,31 +226,32 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
 - (void)testSignInCancelIdentityPicker {
   // Add an identity to avoid arriving on the Add Account screen when opening
   // sign-in.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity];
 
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
 
   // Open new tab to cancel sign-in.
-  OpenNewTabCommand* command =
-      [OpenNewTabCommand commandWithURLFromChrome:GURL("about:blank")];
-  [chrome_test_util::DispatcherForActiveBrowserViewController()
-      openURLInNewTab:command];
-  // Wait until the page is opened.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGrey simulateExternalAppURLOpening];
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  [SigninEarlGreyUI selectIdentityWithEmail:identity.userEmail];
+  [SigninEarlGreyUI selectIdentityWithEmail:fakeIdentity.userEmail];
 
-  VerifyChromeSigninViewVisible();
+  // Verifies that the Chrome sign-in view is visible.
+  id<GREYMatcher> signin_matcher = StaticTextWithAccessibilityLabelId(
+      IDS_IOS_ACCOUNT_UNIFIED_CONSENT_SYNC_SUBTITLE);
+  [[EarlGrey selectElementWithMatcher:signin_matcher]
+      assertWithMatcher:grey_sufficientlyVisible()];
 
   // Close sign-in screen and Settings.
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SKIP_BUTTON);
+  [[EarlGrey selectElementWithMatcher:
+                 ButtonWithAccessibilityLabelId(
+                     IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SKIP_BUTTON)]
+      performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
@@ -317,49 +261,50 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
 // crbug.com/462202
 - (void)testSignInCancelAuthenticationFlow {
   // Set up the fake identities.
-  ios::FakeChromeIdentityService* identity_service =
-      ios::FakeChromeIdentityService::GetInstanceFromChromeProvider();
-  ChromeIdentity* identity1 = [SigninEarlGreyUtils fakeIdentity1];
-  ChromeIdentity* identity2 = [SigninEarlGreyUtils fakeIdentity2];
-  identity_service->AddIdentity(identity1);
-  identity_service->AddIdentity(identity2);
+  FakeChromeIdentity* fakeIdentity1 = [SigninEarlGreyUtils fakeIdentity1];
+  FakeChromeIdentity* fakeIdentity2 = [SigninEarlGreyUtils fakeIdentity2];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity1];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity2];
 
-  // This signs in |identity2| first, ensuring that the "Clear Data Before
+  // This signs in |fakeIdentity2| first, ensuring that the "Clear Data Before
   // Syncing" dialog is shown during the second sign-in. This dialog will
   // effectively block the authentication flow, ensuring that the authentication
   // flow is always still running when the sign-in is being cancelled.
-  [SigninEarlGreyUI signinWithIdentity:identity2];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity2];
 
   // Sign out.
   [SigninEarlGreyUI signOutWithManagedAccount:NO];
 
-  // Sign in with |identity1|.
+  // Sign in with |fakeIdentity1|.
   [ChromeEarlGreyUI openSettingsMenu];
   [[EarlGrey selectElementWithMatcher:SecondarySignInButton()]
       performAction:grey_tap()];
-  [SigninEarlGreyUI selectIdentityWithEmail:identity1.userEmail];
+  [SigninEarlGreyUI selectIdentityWithEmail:fakeIdentity1.userEmail];
   // The authentication flow is only created when the confirm button is
   // selected. Note that authentication flow actually blocks as the
   // "Clear Browsing Before Syncing" dialog is presented.
   [SigninEarlGreyUI confirmSigninConfirmationDialog];
 
   // Open new tab to cancel sign-in.
-  OpenNewTabCommand* command =
-      [OpenNewTabCommand commandWithURLFromChrome:GURL("about:blank")];
-  [chrome_test_util::DispatcherForActiveBrowserViewController()
-      openURLInNewTab:command];
-  // Wait until the page is opened.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGrey simulateExternalAppURLOpening];
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  [SigninEarlGreyUI selectIdentityWithEmail:identity1.userEmail];
-  VerifyChromeSigninViewVisible();
+  [SigninEarlGreyUI selectIdentityWithEmail:fakeIdentity1.userEmail];
+
+  // Verifies that the Chrome sign-in view is visible.
+  id<GREYMatcher> signin_matcher = StaticTextWithAccessibilityLabelId(
+      IDS_IOS_ACCOUNT_UNIFIED_CONSENT_SYNC_SUBTITLE);
+  [[EarlGrey selectElementWithMatcher:signin_matcher]
+      assertWithMatcher:grey_sufficientlyVisible()];
 
   // Close sign-in screen and Settings.
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SKIP_BUTTON);
+  [[EarlGrey selectElementWithMatcher:
+                 ButtonWithAccessibilityLabelId(
+                     IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SKIP_BUTTON)]
+      performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
   [SigninEarlGreyUtils checkSignedOut];
@@ -369,9 +314,8 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
 // done. Ensures that the sign in screen is correctly dismissed.
 // Regression test for crbug.com/596029.
 - (void)testSignInCancelFromBookmarks {
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity];
 
   // Open Bookmarks and tap on Sign In promo button.
   [ChromeEarlGreyUI openToolsMenu];
@@ -379,27 +323,33 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
   [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
 
   // Assert sign-in screen was shown.
-  [SigninEarlGreyUI selectIdentityWithEmail:identity.userEmail];
-  VerifyChromeSigninViewVisible();
+  [SigninEarlGreyUI selectIdentityWithEmail:fakeIdentity.userEmail];
+
+  // Verifies that the Chrome sign-in view is visible.
+  id<GREYMatcher> signin_matcher = StaticTextWithAccessibilityLabelId(
+      IDS_IOS_ACCOUNT_UNIFIED_CONSENT_SYNC_SUBTITLE);
+  [[EarlGrey selectElementWithMatcher:signin_matcher]
+      assertWithMatcher:grey_sufficientlyVisible()];
 
   // Open new tab to cancel sign-in.
-  OpenNewTabCommand* command =
-      [OpenNewTabCommand commandWithURLFromChrome:GURL("about:blank")];
-  [chrome_test_util::DispatcherForActiveBrowserViewController()
-      openURLInNewTab:command];
-  // Wait until the page is opened.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGrey simulateExternalAppURLOpening];
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
   [ChromeEarlGreyUI openToolsMenu];
   [ChromeEarlGreyUI tapToolsMenuButton:chrome_test_util::BookmarksMenuButton()];
   [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  [SigninEarlGreyUI selectIdentityWithEmail:identity.userEmail];
-  VerifyChromeSigninViewVisible();
+  [SigninEarlGreyUI selectIdentityWithEmail:fakeIdentity.userEmail];
+
+  // Verifies that the Chrome sign-in view is visible.
+  [[EarlGrey selectElementWithMatcher:signin_matcher]
+      assertWithMatcher:grey_sufficientlyVisible()];
 
   // Close sign-in screen and Bookmarks.
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SKIP_BUTTON);
+  [[EarlGrey selectElementWithMatcher:
+                 ButtonWithAccessibilityLabelId(
+                     IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SKIP_BUTTON)]
+      performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:BookmarksNavigationBarDoneButton()]
       performAction:grey_tap()];
 }
@@ -476,14 +426,11 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
   if (!base::ios::IsRunningOnOrLater(13, 0, 0)) {
     EARL_GREY_TEST_SKIPPED(@"Test disabled on iOS 12 and lower.");
   }
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity];
   [self openSigninFromView:OpenSigninMethodFromSettings tapSettingsLink:YES];
 
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(
-                                   kGoogleServicesSettingsViewIdentifier)]
+  [[EarlGrey selectElementWithMatcher:GoogleServicesSettingsView()]
       performAction:grey_swipeFastInDirection(kGREYDirectionDown)];
   [[EarlGrey
       selectElementWithMatcher:
@@ -539,25 +486,20 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
 // |tapSettingsLink| if YES, the setting link is tapped before opening the URL.
 - (void)assertOpenURLWhenSigninFromView:(OpenSigninMethod)openSigninMethod
                         tapSettingsLink:(BOOL)tapSettingsLink {
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity];
   [self openSigninFromView:openSigninMethod tapSettingsLink:tapSettingsLink];
   // Open the URL as if it was opened from another app.
-  UIApplication* application = UIApplication.sharedApplication;
-  id<UIApplicationDelegate> applicationDelegate = application.delegate;
-  NSURL* url = [NSURL URLWithString:@"http://www.example.com/"];
-  [applicationDelegate application:application openURL:url options:@{}];
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGrey simulateExternalAppURLOpening];
+
   // Check if the URL was opened.
-  web::WebState* webState = chrome_test_util::GetMainController()
-                                .interfaceProvider.mainInterface.tabModel
-                                .webStateList->GetActiveWebState();
-  GURL expectedString(url.absoluteString.UTF8String);
-  GREYAssertEqual(expectedString, webState->GetVisibleURL(), @"url not loaded");
+  const GURL expectedURL("http://www.example.com/");
+  GREYAssertEqual(expectedURL, [ChromeEarlGrey webStateVisibleURL],
+                  @"Didn't open new tab with example.com.");
+
   if (tapSettingsLink) {
     // Should be signed in.
-    [SigninEarlGreyUtils checkSignedInWithIdentity:identity];
+    [SigninEarlGreyUtils checkSignedInWithFakeIdentity:fakeIdentity];
   } else {
     // Should be not signed in.
     [SigninEarlGreyUtils checkSignedOut];
@@ -587,23 +529,21 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
 // Tests to remove the last identity in the identity chooser.
 - (void)testRemoveLastAccount {
   // Set up a fake identity.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity];
 
   // Open the identity chooser.
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  WaitForMatcher(identityChooserButtonMatcherWithEmail(identity.userEmail));
+  WaitForMatcher(identityChooserButtonMatcherWithEmail(fakeIdentity.userEmail));
 
   // Remove the fake identity.
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()
-      ->RemoveIdentity(identity);
+  [SigninEarlGreyUtils removeFakeIdentity:fakeIdentity];
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 
   // Check that the identity has been removed.
   [[EarlGrey selectElementWithMatcher:identityChooserButtonMatcherWithEmail(
-                                          identity.userEmail)]
+                                          fakeIdentity.userEmail)]
       assertWithMatcher:grey_notVisible()];
 }
 
@@ -615,9 +555,8 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
 - (void)DISABLED_testSignInCancelAddAccount {
   // Add an identity to avoid arriving on the Add Account screen when opening
   // sign-in.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity];
 
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
@@ -631,22 +570,25 @@ id<GREYMatcher> identityChooserButtonMatcherWithEmail(NSString* userEmail) {
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 
   // Open new tab to cancel sign-in.
-  OpenNewTabCommand* command =
-      [OpenNewTabCommand commandWithURLFromChrome:GURL("about:blank")];
-  [chrome_test_util::DispatcherForActiveBrowserViewController()
-      openURLInNewTab:command];
-  // Wait until the page is opened.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGrey simulateExternalAppURLOpening];
 
   // Re-open the sign-in screen. If it wasn't correctly dismissed previously,
   // this will fail.
   [ChromeEarlGreyUI openSettingsMenu];
   [ChromeEarlGreyUI tapSettingsMenuButton:SecondarySignInButton()];
-  [SigninEarlGreyUI selectIdentityWithEmail:identity.userEmail];
-  VerifyChromeSigninViewVisible();
+  [SigninEarlGreyUI selectIdentityWithEmail:fakeIdentity.userEmail];
+
+  // Verifies that the Chrome sign-in view is visible.
+  id<GREYMatcher> signin_matcher = StaticTextWithAccessibilityLabelId(
+      IDS_IOS_ACCOUNT_UNIFIED_CONSENT_SYNC_SUBTITLE);
+  [[EarlGrey selectElementWithMatcher:signin_matcher]
+      assertWithMatcher:grey_sufficientlyVisible()];
 
   // Close sign-in screen and Settings.
-  TapButtonWithLabelId(IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SKIP_BUTTON);
+  [[EarlGrey selectElementWithMatcher:
+                 ButtonWithAccessibilityLabelId(
+                     IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SKIP_BUTTON)]
+      performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }

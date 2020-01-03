@@ -33,6 +33,7 @@
     [PutForwards=value] readonly attribute DOMTokenList sandbox;
     // Note: The seamless attribute was once supported, but was removed.
     [CEReactions, Reflect] attribute boolean allowFullscreen;
+    [RuntimeEnabled=DisallowDocumentAccess, CEReactions, Reflect] attribute boolean disallowDocumentAccess;
     [CEReactions, Reflect] attribute DOMString width;
     [CEReactions, Reflect] attribute DOMString height;
 
@@ -47,6 +48,9 @@
     [CEReactions, Reflect] attribute DOMString allow;
     // https://w3c.github.io/webappsec-feature-policy/#the-policy-object
     [RuntimeEnabled=FeaturePolicyJavaScriptInterface] readonly attribute FeaturePolicy featurePolicy;
+
+    // Document Policy
+    [RuntimeEnabled=DocumentPolicy, CEReactions, Reflect] attribute DOMString policy;
 
     [RuntimeEnabled=LazyFrameLoading, CEReactions, Reflect, ReflectOnly=("lazy", "eager", "auto"), ReflectMissing="auto", ReflectInvalid="auto"] attribute DOMString loading;
 

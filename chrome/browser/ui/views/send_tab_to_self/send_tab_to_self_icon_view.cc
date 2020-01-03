@@ -20,8 +20,12 @@ namespace send_tab_to_self {
 
 SendTabToSelfIconView::SendTabToSelfIconView(
     CommandUpdater* command_updater,
-    PageActionIconView::Delegate* delegate)
-    : PageActionIconView(command_updater, IDC_SEND_TAB_TO_SELF, delegate) {
+    IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+    PageActionIconView::Delegate* page_action_icon_delegate)
+    : PageActionIconView(command_updater,
+                         IDC_SEND_TAB_TO_SELF,
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate) {
   SetVisible(false);
   SetLabel(l10n_util::GetStringUTF16(IDS_OMNIBOX_ICON_SEND_TAB_TO_SELF));
   SetUpForInOutAnimation();
@@ -39,33 +43,28 @@ views::BubbleDialogDelegateView* SendTabToSelfIconView::GetBubble() const {
       controller->send_tab_to_self_bubble_view());
 }
 
-bool SendTabToSelfIconView::Update() {
+void SendTabToSelfIconView::UpdateImpl() {
   content::WebContents* web_contents = GetWebContents();
   if (!send_tab_to_self::ShouldOfferOmniboxIcon(web_contents)) {
-    return false;
+    return;
   }
 
-  const bool was_visible = GetVisible();
   const OmniboxView* omnibox_view = delegate()->GetOmniboxView();
   if (!omnibox_view) {
-    return false;
+    return;
   }
 
-  if (was_visible) {
-    if (omnibox_view->model()->user_input_in_progress()) {
-      SetVisible(false);
-    } else {
-      SendTabToSelfBubbleController* controller = GetController();
-      if (controller && controller->show_message()) {
-        controller->set_show_message(false);
-        if (initial_animation_state_ == AnimationState::kShowing &&
-            label()->GetVisible()) {
-          initial_animation_state_ = AnimationState::kShown;
-          SetLabel(l10n_util::GetStringUTF16(
-              IDS_BROWSER_SHARING_OMNIBOX_SENDING_LABEL));
-        } else {
-          AnimateIn(IDS_BROWSER_SHARING_OMNIBOX_SENDING_LABEL);
-        }
+  if (GetVisible()) {
+    SendTabToSelfBubbleController* controller = GetController();
+    if (controller && controller->show_message()) {
+      controller->set_show_message(false);
+      if (initial_animation_state_ == AnimationState::kShowing &&
+          label()->GetVisible()) {
+        initial_animation_state_ = AnimationState::kShown;
+        SetLabel(l10n_util::GetStringUTF16(
+            IDS_BROWSER_SHARING_OMNIBOX_SENDING_LABEL));
+      } else {
+        AnimateIn(IDS_BROWSER_SHARING_OMNIBOX_SENDING_LABEL);
       }
     }
   } else if (omnibox_view->model()->has_focus() &&
@@ -77,8 +76,6 @@ bool SendTabToSelfIconView::Update() {
     }
     SetVisible(true);
   }
-
-  return was_visible != GetVisible();
 }
 
 void SendTabToSelfIconView::OnExecuting(
@@ -88,7 +85,11 @@ const gfx::VectorIcon& SendTabToSelfIconView::GetVectorIcon() const {
   return kSendTabToSelfIcon;
 }
 
-SkColor SendTabToSelfIconView::GetTextColor() const {
+const char* SendTabToSelfIconView::GetClassName() const {
+  return "SendTabToSelfIconView";
+}
+
+SkColor SendTabToSelfIconView::GetForegroundColor() const {
   return GetOmniboxColor(GetThemeProvider(),
                          OmniboxPart::LOCATION_BAR_TEXT_DEFAULT);
 }

@@ -28,10 +28,10 @@
 #include "third_party/blink/renderer/platform/scheduler/common/pollable_thread_safe_flag.h"
 #include "third_party/blink/renderer/platform/scheduler/common/thread_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/agent_interference_recorder.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/auto_advancing_virtual_time_domain.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/compositor_priority_experiments.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/deadline_task_runner.h"
-#include "third_party/blink/renderer/platform/scheduler/main_thread/frame_interference_recorder.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/idle_time_estimator.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_metrics_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_helper.h"
@@ -95,9 +95,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   struct SchedulingSettings {
     SchedulingSettings();
-
-    // High priority input experiment.
-    bool high_priority_input;
 
     // Background page priority experiment (crbug.com/848835).
     bool low_priority_background_page;
@@ -170,6 +167,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   // WebThreadScheduler implementation:
   std::unique_ptr<Thread> CreateMainThread() override;
+  std::unique_ptr<WebWidgetScheduler> CreateWidgetScheduler() override;
   // Note: this is also shared by the ThreadScheduler interface.
   scoped_refptr<base::SingleThreadTaskRunner> IPCTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> CleanupTaskRunner() override;
@@ -240,7 +238,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   // WebThreadScheduler implementation:
   scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner() override;
-  scoped_refptr<base::SingleThreadTaskRunner> InputTaskRunner() override;
 
   // The following functions are defined in both WebThreadScheduler and
   // ThreadScheduler, and have the same function signatures -- see above.
@@ -432,7 +429,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   scoped_refptr<MainThreadTaskQueue> ControlTaskQueue();
   scoped_refptr<MainThreadTaskQueue> DefaultTaskQueue();
   scoped_refptr<MainThreadTaskQueue> CompositorTaskQueue();
-  scoped_refptr<MainThreadTaskQueue> InputTaskQueue();
   scoped_refptr<MainThreadTaskQueue> V8TaskQueue();
   // A control task queue which also respects virtual time. Only available if
   // virtual time has been enabled.
@@ -647,6 +643,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       base::TimeTicks optional_now) const;
   void CreateTraceEventObjectSnapshotLocked() const;
 
+  std::string ToString() const;
+
   static bool ShouldPrioritizeInputEvent(const WebInputEvent& web_input_event);
 
   // The amount of time which idle periods can continue being scheduled when the
@@ -775,6 +773,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   // task.
   void DispatchOnTaskCompletionCallbacks();
 
+  void AsValueIntoLocked(base::trace_event::TracedValue*,
+                         base::TimeTicks optional_now) const;
+
   // Indicates that scheduler has been shutdown.
   // It should be accessed only on the main thread, but couldn't be a member
   // of MainThreadOnly struct because last might be destructed before we
@@ -801,12 +802,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   const scoped_refptr<MainThreadTaskQueue> control_task_queue_;
   const scoped_refptr<MainThreadTaskQueue> compositor_task_queue_;
-  const scoped_refptr<MainThreadTaskQueue> input_task_queue_;
   scoped_refptr<MainThreadTaskQueue> virtual_time_control_task_queue_;
   std::unique_ptr<base::sequence_manager::TaskQueue::QueueEnabledVoter>
       compositor_task_queue_enabled_voter_;
-  std::unique_ptr<base::sequence_manager::TaskQueue::QueueEnabledVoter>
-      input_task_queue_enabled_voter_;
 
   using TaskQueueVoterMap = std::map<
       scoped_refptr<MainThreadTaskQueue>,
@@ -822,7 +820,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   scoped_refptr<base::SingleThreadTaskRunner> v8_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> control_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> input_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> ipc_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> cleanup_task_runner_;
 
@@ -836,7 +833,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   CancelableClosureHolder end_renderer_hidden_idle_period_closure_;
 
   QueueingTimeEstimator queueing_time_estimator_;
-  FrameInterferenceRecorder frame_interference_recorder_;
+  AgentInterferenceRecorder agent_interference_recorder_;
 
   // We have decided to improve thread safety at the cost of some boilerplate
   // (the accessors) for the following data members.

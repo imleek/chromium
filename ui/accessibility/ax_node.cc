@@ -314,7 +314,7 @@ base::string16 AXNode::GetInheritedString16Attribute(
   return base::UTF8ToUTF16(GetInheritedStringAttribute(attribute));
 }
 
-AXLanguageInfo* AXNode::GetLanguageInfo() {
+AXLanguageInfo* AXNode::GetLanguageInfo() const {
   return language_info_.get();
 }
 
@@ -322,16 +322,27 @@ void AXNode::SetLanguageInfo(std::unique_ptr<AXLanguageInfo> lang_info) {
   language_info_ = std::move(lang_info);
 }
 
-std::string AXNode::GetLanguage() {
-  // If we have been labelled with language info then rely on that.
-  const AXLanguageInfo* lang_info = GetLanguageInfo();
-  if (lang_info && !lang_info->language.empty())
-    return lang_info->language;
+void AXNode::ClearLanguageInfo() {
+  language_info_.reset();
+}
 
-  // Otherwise fallback to kLanguage attribute.
-  const auto& lang_attr =
-      GetInheritedStringAttribute(ax::mojom::StringAttribute::kLanguage);
-  return lang_attr;
+std::string AXNode::GetLanguage() {
+  // Walk up tree considering both detected and author declared languages.
+  for (const AXNode* cur = this; cur; cur = cur->parent()) {
+    // If language detection has assigned a language then we prefer that.
+    const AXLanguageInfo* lang_info = cur->GetLanguageInfo();
+    if (lang_info && !lang_info->language.empty()) {
+      return lang_info->language;
+    }
+
+    // If the page author has declared a language attribute we fallback to that.
+    const AXNodeData& data = cur->data();
+    if (data.HasStringAttribute(ax::mojom::StringAttribute::kLanguage)) {
+      return data.GetStringAttribute(ax::mojom::StringAttribute::kLanguage);
+    }
+  }
+
+  return base::EmptyString();
 }
 
 std::ostream& operator<<(std::ostream& stream, const AXNode& node) {
@@ -483,6 +494,18 @@ base::Optional<int> AXNode::GetTableRowRowIndex() const {
   if (iter != table_info->row_id_to_index.end())
     return int{iter->second};
   return base::nullopt;
+}
+
+std::vector<AXNode::AXID> AXNode::GetTableRowNodeIds() const {
+  std::vector<AXNode::AXID> row_node_ids;
+  const AXTableInfo* table_info = GetAncestorTableInfo();
+  if (!table_info)
+    return row_node_ids;
+
+  for (AXNode* node : table_info->row_nodes)
+    row_node_ids.push_back(node->data().id);
+
+  return row_node_ids;
 }
 
 #if defined(OS_MACOSX)
@@ -741,12 +764,9 @@ base::Optional<int> AXNode::GetPosInSet() {
 base::Optional<int> AXNode::GetSetSize() {
   // Only allow this to be called on nodes that can hold set_size values, which
   // are defined in the ARIA spec.
-  if (!(IsOrderedSetItem() || IsOrderedSet()))
+  if (!(IsOrderedSetItem() || IsOrderedSet()) ||
+      data().HasState(ax::mojom::State::kIgnored))
     return base::nullopt;
-
-  if (data().HasState(ax::mojom::State::kIgnored)) {
-    return base::nullopt;
-  }
 
   // If node is item-like, find its outerlying ordered set. Otherwise,
   // this node is the ordered set.
@@ -761,7 +781,10 @@ base::Optional<int> AXNode::GetSetSize() {
     return base::nullopt;
 
   // See AXTree::GetSetSize
-  return tree_->GetSetSize(*this, ordered_set);
+  int32_t set_size = tree_->GetSetSize(*this, ordered_set);
+  if (set_size < 0)
+    return base::nullopt;
+  return set_size;
 }
 
 // Returns true if the role of ordered set matches the role of item.
@@ -795,7 +818,9 @@ bool AXNode::SetRoleMatchesItemRole(const AXNode* ordered_set) const {
       return item_role == ax::mojom::Role::kListBoxOption;
     case ax::mojom::Role::kMenuListPopup:
       return item_role == ax::mojom::Role::kMenuListOption ||
-             item_role == ax::mojom::Role::kMenuItem;
+             item_role == ax::mojom::Role::kMenuItem ||
+             item_role == ax::mojom::Role::kMenuItemRadio ||
+             item_role == ax::mojom::Role::kMenuItemCheckBox;
     case ax::mojom::Role::kRadioGroup:
       return item_role == ax::mojom::Role::kRadioButton;
     case ax::mojom::Role::kDescriptionList:
@@ -871,7 +896,33 @@ AXNode* AXNode::ComputeFirstUnignoredChildRecursive() const {
 }
 
 bool AXNode::IsIgnored() const {
-  return ui::IsIgnored(data());
+  return data().IsIgnored();
+}
+
+bool AXNode::IsInListMarker() const {
+  if (data().role == ax::mojom::Role::kListMarker)
+    return true;
+
+  // List marker node's children can only be text elements.
+  if (!IsText())
+    return false;
+
+  // There is no need to iterate over all the ancestors of the current anchor
+  // since a list marker node only has children on 2 levels.
+  // i.e.:
+  // AXLayoutObject role=kListMarker
+  // ++StaticText
+  // ++++InlineTextBox
+  AXNode* parent_node = GetUnignoredParent();
+  if (parent_node && parent_node->data().role == ax::mojom::Role::kListMarker)
+    return true;
+
+  AXNode* grandparent_node = parent_node->GetUnignoredParent();
+  if (grandparent_node &&
+      grandparent_node->data().role == ax::mojom::Role::kListMarker)
+    return true;
+
+  return false;
 }
 
 }  // namespace ui

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
@@ -146,7 +147,7 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
     formatter->SetPropertyFilters(property_filters_);
     formatter->SetNodeFilters(node_filters_);
     base::string16 actual_contents_utf16;
-    formatter->FormatAccessibilityTree(
+    formatter->FormatAccessibilityTreeForTesting(
         GetRootAccessibilityNode(shell()->web_contents()),
         &actual_contents_utf16);
     std::string actual_contents = base::UTF16ToUTF8(actual_contents_utf16);
@@ -215,7 +216,7 @@ struct DumpAccessibilityTreeTestPassToString {
 };
 
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     DumpAccessibilityTreeTest,
     ::testing::Range(size_t{0},
                      AccessibilityTreeFormatter::GetTestPasses().size()),
@@ -372,6 +373,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAOnclick) {
   RunHtmlTest(FILE_PATH_LITERAL("a-onclick.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityANestedStructure) {
+  RunHtmlTest(FILE_PATH_LITERAL("a-nested-structure.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAIsInteresting) {
   RunHtmlTest(FILE_PATH_LITERAL("isInteresting.html"));
 }
@@ -508,6 +514,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        MAYBE_AccessibilityAriaOnePointOneCombobox) {
   RunAriaTest(FILE_PATH_LITERAL("aria1.1-combobox.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaComment) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-comment.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
@@ -1011,6 +1021,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaTable) {
   RunAriaTest(FILE_PATH_LITERAL("aria-table.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaTableIllegalRoles) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-table-illegal-roles.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaTabList) {
   RunAriaTest(FILE_PATH_LITERAL("aria-tablist.html"));
 }
@@ -1421,6 +1436,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityHeading) {
   RunHtmlTest(FILE_PATH_LITERAL("heading.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityHeadingWithTabIndex) {
+  RunHtmlTest(FILE_PATH_LITERAL("heading-with-tabIndex.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityHidden) {
   RunAriaTest(FILE_PATH_LITERAL("hidden.html"));
 }
@@ -1782,6 +1802,21 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityList) {
   RunHtmlTest(FILE_PATH_LITERAL("list.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityListItemLevel) {
+  RunHtmlTest(FILE_PATH_LITERAL("list-item-level.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityListItemAriaSetsizeUnknown) {
+  RunHtmlTest(FILE_PATH_LITERAL("list-item-aria-setsize-unknown.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityListItemAriaSetsizeUnknownFlattened) {
+  RunHtmlTest(
+      FILE_PATH_LITERAL("list-item-aria-setsize-unknown-flattened.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityListMarkers) {

@@ -18,8 +18,14 @@ import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProv
 public class WebappInfo {
     protected final BrowserServicesIntentDataProvider mProvider;
 
+    protected static BrowserServicesIntentDataProvider createEmptyIntentDataProvider() {
+        return new WebappIntentDataProvider(WebappIntentDataProvider.getDefaultToolbarColor(),
+                false /* hasCustomToolbarColor */, WebappExtras.createEmpty(),
+                WebApkExtras.createEmpty());
+    }
+
     public static WebappInfo createEmpty() {
-        return new WebappInfo(WebappIntentDataProvider.createEmpty());
+        return new WebappInfo(createEmptyIntentDataProvider());
     }
 
     /**
@@ -27,7 +33,7 @@ public class WebappInfo {
      * @param intent Intent containing info about the app.
      */
     public static WebappInfo create(Intent intent) {
-        WebappIntentDataProvider provider = WebappIntentDataProvider.create(intent);
+        BrowserServicesIntentDataProvider provider = WebappIntentDataProviderFactory.create(intent);
         return (provider == null) ? null : new WebappInfo(provider);
     }
 
@@ -101,7 +107,7 @@ public class WebappInfo {
      * Returns whether the toolbar color specified in the Intent is valid.
      */
     public boolean hasValidToolbarColor() {
-        return getWebappExtras().hasCustomToolbarColor;
+        return mProvider.hasCustomToolbarColor();
     }
 
     /**
@@ -110,7 +116,7 @@ public class WebappInfo {
      * error state of ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING.
      */
     public long backgroundColor() {
-        return WebappIntentDataProvider.colorFromIntegerColor(getWebappExtras().backgroundColor);
+        return WebappIntentUtils.colorFromIntegerColor(getWebappExtras().backgroundColor);
     }
 
     /**

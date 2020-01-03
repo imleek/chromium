@@ -37,12 +37,11 @@
 #include "base/time/time.h"
 #include "services/network/public/cpp/request_mode.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/common/loader/request_destination.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
+#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
-#include "third_party/blink/public/platform/interface_provider.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
 #include "third_party/blink/public/platform/web_url.h"
@@ -235,8 +234,7 @@ ResourceLoadPriority AdjustPriorityWithPriorityHint(
       //     out-of-viewport images already have priority set to kLow
       // - Link preloads
       //     For this initial implementation we do a blanket demotion regardless
-      //     of `as` value/type. TODO(domfarolino): maybe discuss a more
-      //     granular approach with loading team
+      //     of `as` value/type.
       if (type == ResourceType::kImage ||
           resource_request.GetRequestContext() ==
               mojom::RequestContextType::FETCH ||
@@ -308,66 +306,20 @@ std::unique_ptr<TracedValue> ResourcePrioritySetData(
 void SetReferrer(
     ResourceRequest& request,
     const FetchClientSettingsObject& fetch_client_settings_object) {
-  if (!request.DidSetHttpReferrer()) {
-    String referrer_to_use = request.ReferrerString();
-    network::mojom::ReferrerPolicy referrer_policy_to_use =
-        request.GetReferrerPolicy();
+  String referrer_to_use = request.ReferrerString();
+  network::mojom::ReferrerPolicy referrer_policy_to_use =
+      request.GetReferrerPolicy();
 
-    if (referrer_to_use == Referrer::ClientReferrerString())
-      referrer_to_use = fetch_client_settings_object.GetOutgoingReferrer();
+  if (referrer_to_use == Referrer::ClientReferrerString())
+    referrer_to_use = fetch_client_settings_object.GetOutgoingReferrer();
 
-    if (referrer_policy_to_use == network::mojom::ReferrerPolicy::kDefault)
-      referrer_policy_to_use = fetch_client_settings_object.GetReferrerPolicy();
+  if (referrer_policy_to_use == network::mojom::ReferrerPolicy::kDefault)
+    referrer_policy_to_use = fetch_client_settings_object.GetReferrerPolicy();
 
-    request.SetReferrerString(referrer_to_use);
-    request.SetReferrerPolicy(referrer_policy_to_use);
-    // TODO(domfarolino): Stop storing ResourceRequest's referrer as a header
-    // and store it elsewhere. See https://crbug.com/850813.
-    request.SetHttpReferrer(SecurityPolicy::GenerateReferrer(
-        referrer_policy_to_use, request.RequestorOrigin(), request.Url(),
-        referrer_to_use));
-  } else {
-    // In the case of stale requests that are being revalidated, these requests
-    // will already have their HttpReferrer set, and we will end up here. We
-    // won't regenerate the referrer, but instead check that it's still correct.
-    CHECK_EQ(SecurityPolicy::GenerateReferrer(
-                 request.GetReferrerPolicy(), request.RequestorOrigin(),
-                 request.Url(), request.ReferrerString())
-                 .referrer,
-             request.HttpReferrer());
-  }
-}
-
-void SetSecFetchHeaders(
-    ResourceRequest& request,
-    const FetchClientSettingsObject& fetch_client_settings_object) {
-  scoped_refptr<SecurityOrigin> url_origin =
-      SecurityOrigin::Create(request.Url());
-  if (blink::RuntimeEnabledFeatures::FetchMetadataEnabled() &&
-      url_origin->IsPotentiallyTrustworthy()) {
-    const char* destination_value =
-        GetRequestDestinationFromContext(request.GetRequestContext());
-
-    // If the request's destination is the empty string (e.g. `fetch()`), then
-    // we'll use the identifier "empty" instead.
-    if (strlen(destination_value) == 0)
-      destination_value = "empty";
-
-    // We'll handle adding these headers to navigations outside of Blink.
-    if ((strncmp(destination_value, "document", 8) != 0 ||
-         strncmp(destination_value, "iframe", 6) != 0 ||
-         strncmp(destination_value, "frame", 5) != 0) &&
-        request.GetRequestContext() != mojom::RequestContextType::INTERNAL) {
-      if (blink::RuntimeEnabledFeatures::FetchMetadataDestinationEnabled()) {
-        request.SetHttpHeaderField("Sec-Fetch-Dest", destination_value);
-      }
-
-      // Note that the `Sec-Fetch-User` header is always false (and therefore
-      // omitted) for subresource requests. Likewise, note that we rely on
-      // Blink's embedder to set `Sec-Fetch-Site`, as we don't want to trust the
-      // renderer to assert its own origin. Ditto for `Sec-Fetch-Mode`.
-    }
-  }
+  Referrer generated_referrer = SecurityPolicy::GenerateReferrer(
+      referrer_policy_to_use, request.Url(), referrer_to_use);
+  request.SetReferrerString(generated_referrer.referrer);
+  request.SetReferrerPolicy(generated_referrer.referrer_policy);
 }
 
 }  // namespace
@@ -426,6 +378,40 @@ mojom::RequestContextType ResourceFetcher::DetermineRequestContext(
   }
   NOTREACHED();
   return mojom::RequestContextType::SUBRESOURCE;
+}
+
+network::mojom::RequestDestination ResourceFetcher::DetermineRequestDestination(
+    ResourceType type) {
+  switch (type) {
+    case ResourceType::kXSLStyleSheet:
+      DCHECK(RuntimeEnabledFeatures::XSLTEnabled());
+      FALLTHROUGH;
+    case ResourceType::kCSSStyleSheet:
+      return network::mojom::RequestDestination::kStyle;
+    case ResourceType::kScript:
+      return network::mojom::RequestDestination::kScript;
+    case ResourceType::kFont:
+      return network::mojom::RequestDestination::kFont;
+    case ResourceType::kImage:
+      return network::mojom::RequestDestination::kImage;
+    case ResourceType::kTextTrack:
+      return network::mojom::RequestDestination::kTrack;
+    case ResourceType::kSVGDocument:
+      return network::mojom::RequestDestination::kImage;
+    case ResourceType::kAudio:
+      return network::mojom::RequestDestination::kAudio;
+    case ResourceType::kVideo:
+      return network::mojom::RequestDestination::kVideo;
+    case ResourceType::kManifest:
+      return network::mojom::RequestDestination::kManifest;
+    case ResourceType::kRaw:
+    case ResourceType::kImportResource:
+    case ResourceType::kLinkPrefetch:
+    case ResourceType::kMock:
+      return network::mojom::RequestDestination::kEmpty;
+  }
+  NOTREACHED();
+  return network::mojom::RequestDestination::kEmpty;
 }
 
 // static
@@ -654,7 +640,8 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
     // Resources loaded from memory cache should be reported the first time
     // they're used.
     scoped_refptr<ResourceTimingInfo> info = ResourceTimingInfo::Create(
-        resource->Options().initiator_info.name, base::TimeTicks::Now());
+        resource->Options().initiator_info.name, base::TimeTicks::Now(),
+        request.GetRequestContext());
     // TODO(yoav): GetInitialUrlForResourceTiming() is only needed until
     // Out-of-Blink CORS lands: https://crbug.com/736308
     info->SetInitialURL(
@@ -869,6 +856,8 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
       mojom::RequestContextType::UNSPECIFIED) {
     resource_request.SetRequestContext(
         DetermineRequestContext(resource_type, kImageNotImageSet));
+    resource_request.SetRequestDestination(
+        DetermineRequestDestination(resource_type));
   }
   if (resource_type == ResourceType::kLinkPrefetch)
     resource_request.SetPurposeHeader("prefetch");
@@ -885,9 +874,6 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
 
   resource_request.SetExternalRequestStateFromRequestorAddressSpace(
       properties_->GetFetchClientSettingsObject().GetAddressSpace());
-
-  SetSecFetchHeaders(resource_request,
-                     properties_->GetFetchClientSettingsObject());
 
   Context().AddAdditionalRequestHeaders(resource_request);
 
@@ -987,20 +973,6 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
       "Blink.Fetch.RequestResourceTime");
   TRACE_EVENT1("blink", "ResourceFetcher::requestResource", "url",
                params.Url().GetString().Utf8());
-
-  // We need to attach an origin header when the request's method is neither
-  // GET nor HEAD. For requests made by an extension content scripts, we want to
-  // attach page's origin, whereas the request's origin is the content script's
-  // origin. See https://crbug.com/944704 for details.
-  // TODO(crbug.com/940068) Remove this.
-  if (resource_request.HttpMethod() != http_names::kGET &&
-      resource_request.HttpMethod() != http_names::kHEAD &&
-      resource_request.RequestorOrigin() &&
-      !resource_request.RequestorOrigin()->IsSameSchemeHostPort(
-          properties_->GetFetchClientSettingsObject().GetSecurityOrigin())) {
-    resource_request.SetHttpOriginIfNeeded(
-        properties_->GetFetchClientSettingsObject().GetSecurityOrigin());
-  }
 
   // |resource_request|'s origin can be null here, corresponding to the "client"
   // value in the spec. In that case client's origin is used.
@@ -1253,8 +1225,9 @@ void ResourceFetcher::StorePerformanceTimingInitiatorInformation(
   if (fetch_initiator == fetch_initiator_type_names::kInternal)
     return;
 
-  scoped_refptr<ResourceTimingInfo> info =
-      ResourceTimingInfo::Create(fetch_initiator, base::TimeTicks::Now());
+  scoped_refptr<ResourceTimingInfo> info = ResourceTimingInfo::Create(
+      fetch_initiator, base::TimeTicks::Now(),
+      resource->GetResourceRequest().GetRequestContext());
 
   resource_timing_info_map_.insert(resource, std::move(info));
 }
@@ -1816,6 +1789,9 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
       info->AddFinalTransferSize(
           encoded_data_length == -1 ? 0 : encoded_data_length);
 
+      auto receiver = Context().TakePendingWorkerTimingReceiver(
+          resource->GetResponse().RequestId());
+      info->SetWorkerTimingReceiver(std::move(receiver));
       if (resource->Options().request_initiator_context == kDocumentContext)
         Context().AddResourceTiming(*info);
     }
@@ -2036,8 +2012,11 @@ void ResourceFetcher::UpdateAllImageResourcePriorities() {
 
 String ResourceFetcher::GetCacheIdentifier() const {
   if (properties_->GetControllerServiceWorkerMode() !=
-      mojom::ControllerServiceWorkerMode::kNoController)
+      mojom::ControllerServiceWorkerMode::kNoController) {
     return String::Number(properties_->ServiceWorkerId());
+  }
+  if (properties_->WebBundlePhysicalUrl().IsValid())
+    return properties_->WebBundlePhysicalUrl().GetString();
   return MemoryCache::DefaultCacheIdentifier();
 }
 
@@ -2045,12 +2024,14 @@ void ResourceFetcher::EmulateLoadStartedForInspector(
     Resource* resource,
     const KURL& url,
     mojom::RequestContextType request_context,
+    network::mojom::RequestDestination request_destination,
     const AtomicString& initiator_name) {
   base::AutoReset<bool> r(&is_in_request_resource_, true);
   if (CachedResource(url))
     return;
   ResourceRequest resource_request(url);
   resource_request.SetRequestContext(request_context);
+  resource_request.SetRequestDestination(request_destination);
   if (!resource_request.PriorityHasBeenSet()) {
     resource_request.SetPriority(ComputeLoadPriority(
         resource->GetType(), resource_request, ResourcePriority::kNotVisible,
@@ -2134,7 +2115,7 @@ void ResourceFetcher::RevalidateStaleResource(Resource* stale_resource) {
 
 mojom::blink::BlobRegistry* ResourceFetcher::GetBlobRegistry() {
   if (!blob_registry_remote_) {
-    Platform::Current()->GetInterfaceProvider()->GetInterface(
+    Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
         blob_registry_remote_.BindNewPipeAndPassReceiver(task_runner_));
   }
   return blob_registry_remote_.get();

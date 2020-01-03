@@ -35,7 +35,6 @@
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/download/download_stats.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/media/router/media_router_dialog_controller.h"
@@ -43,7 +42,6 @@
 #include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/platform_util.h"
-#include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -60,11 +58,11 @@
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_desktop_util.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_context_menu_observer.h"
+#include "chrome/browser/sharing/click_to_call/click_to_call_metrics.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_utils.h"
 #include "chrome/browser/sharing/features.h"
 #include "chrome/browser/sharing/shared_clipboard/shared_clipboard_context_menu_observer.h"
 #include "chrome/browser/sharing/shared_clipboard/shared_clipboard_utils.h"
-#include "chrome/browser/sharing/sharing_metrics.h"
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
@@ -79,7 +77,7 @@
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/webui/foreign_session_handler.h"
+#include "chrome/browser/ui/webui/history/foreign_session_handler.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
@@ -122,7 +120,6 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/download_manager.h"
-#include "content/public/browser/guest_mode.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/picture_in_picture_window_controller.h"
@@ -134,8 +131,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/menu_item.h"
 #include "content/public/common/url_utils.h"
-#include "extensions/browser/extension_registry.h"
-#include "extensions/browser/extension_system.h"
 #include "extensions/buildflags/buildflags.h"
 #include "media/base/media_switches.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -178,6 +173,10 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/extension.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+#include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINTING)
@@ -829,13 +828,8 @@ void RenderViewContextMenu::InitMenu() {
     AppendLinkItems();
     if (params_.media_type != ContextMenuDataMediaType::kNone)
       menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-  } else {
-    // Shown when non link item is highlighted to avoid showing click to call
-    // twice when you highlight a link of the form <a
-    // href="tel:+9876543210">+9876543210</a> and right click on it.
-    MaybeAppendClickToCallItem();
-    AppendSharedClipboardItems();
   }
+
   bool media_image = content_type_->SupportsGroup(
       ContextMenuContentType::ITEM_GROUP_MEDIA_IMAGE);
   if (media_image)
@@ -877,6 +871,9 @@ void RenderViewContextMenu::InitMenu() {
     DCHECK(!editable);
     AppendCopyItem();
   }
+
+  if (!content_type_->SupportsGroup(ContextMenuContentType::ITEM_GROUP_LINK))
+    AppendSharingItems();
 
   if (content_type_->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_SEARCH_PROVIDER) &&
@@ -1270,11 +1267,13 @@ void RenderViewContextMenu::AppendLinkItems() {
       }
     }
 #endif  // !defined(OS_CHROMEOS)
+
+    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+
     if (browser && send_tab_to_self::ShouldOfferFeatureForLink(
                        active_web_contents, params_.link_url)) {
       send_tab_to_self::RecordSendTabToSelfClickResult(
           send_tab_to_self::kLinkMenu, SendTabToSelfClickResult::kShowItem);
-      menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
       if (send_tab_to_self::GetValidDeviceCount(GetBrowser()->profile()) == 1) {
 #if defined(OS_MACOSX)
         menu_model_.AddItem(IDC_CONTENT_LINK_SEND_TAB_TO_SELF_SINGLE_TARGET,
@@ -1314,7 +1313,7 @@ void RenderViewContextMenu::AppendLinkItems() {
       }
     }
 
-    MaybeAppendClickToCallItem();
+    AppendClickToCallItem();
 
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SAVELINKAS,
@@ -1600,19 +1599,6 @@ void RenderViewContextMenu::AppendCopyItem() {
                                   IDS_CONTENT_CONTEXT_COPY);
 }
 
-// Context menu item for shared clipboard on selected text.
-void RenderViewContextMenu::AppendSharedClipboardItems() {
-  if (!ShouldOfferSharedClipboard(browser_context_, params_.selection_text))
-    return;
-
-  if (!shared_clipboard_context_menu_observer_) {
-    shared_clipboard_context_menu_observer_ =
-        std::make_unique<SharedClipboardContextMenuObserver>(this);
-    observers_.AddObserver(shared_clipboard_context_menu_observer_.get());
-  }
-  shared_clipboard_context_menu_observer_->InitMenu(params_);
-}
-
 void RenderViewContextMenu::AppendPrintItem() {
   if (GetPrefs(browser_context_)->GetBoolean(prefs::kPrintingEnabled) &&
       (params_.media_type == ContextMenuDataMediaType::kNone ||
@@ -1844,16 +1830,37 @@ void RenderViewContextMenu::AppendPictureInPictureItem() {
                                          IDS_CONTENT_CONTEXT_PICTUREINPICTURE);
 }
 
-void RenderViewContextMenu::MaybeAppendClickToCallItem() {
+void RenderViewContextMenu::AppendSharingItems() {
+  int items_initial = menu_model_.GetItemCount();
+  menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+  // Check if the starting separator got added.
+  int items_before_sharing = menu_model_.GetItemCount();
+  bool starting_separator_added = items_before_sharing > items_initial;
+
+  AppendClickToCallItem();
+  AppendSharedClipboardItem();
+
+  // Add an ending separator if there are sharing items, otherwise remove the
+  // starting separator iff we added one above.
+  int sharing_items = menu_model_.GetItemCount() - items_before_sharing;
+  if (sharing_items > 0)
+    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+  else if (starting_separator_added)
+    menu_model_.RemoveItemAt(items_initial);
+}
+
+void RenderViewContextMenu::AppendClickToCallItem() {
   SharingClickToCallEntryPoint entry_point;
   base::Optional<std::string> phone_number;
+  std::string selection_text;
   if (ShouldOfferClickToCallForURL(browser_context_, params_.link_url)) {
     entry_point = SharingClickToCallEntryPoint::kRightClickLink;
     phone_number = GetUnescapedURLContent(params_.link_url);
   } else if (!params_.selection_text.empty()) {
     entry_point = SharingClickToCallEntryPoint::kRightClickSelection;
-    phone_number = ExtractPhoneNumberForClickToCall(
-        browser_context_, base::UTF16ToUTF8(params_.selection_text));
+    selection_text = base::UTF16ToUTF8(params_.selection_text);
+    phone_number =
+        ExtractPhoneNumberForClickToCall(browser_context_, selection_text);
   }
 
   if (!phone_number || phone_number->empty())
@@ -1865,7 +1872,20 @@ void RenderViewContextMenu::MaybeAppendClickToCallItem() {
     observers_.AddObserver(click_to_call_context_menu_observer_.get());
   }
 
-  click_to_call_context_menu_observer_->BuildMenu(*phone_number, entry_point);
+  click_to_call_context_menu_observer_->BuildMenu(*phone_number, selection_text,
+                                                  entry_point);
+}
+
+void RenderViewContextMenu::AppendSharedClipboardItem() {
+  if (!ShouldOfferSharedClipboard(browser_context_, params_.selection_text))
+    return;
+
+  if (!shared_clipboard_context_menu_observer_) {
+    shared_clipboard_context_menu_observer_ =
+        std::make_unique<SharedClipboardContextMenuObserver>(this);
+    observers_.AddObserver(shared_clipboard_context_menu_observer_.get());
+  }
+  shared_clipboard_context_menu_observer_->InitMenu(params_);
 }
 
 // Menu delegate functions -----------------------------------------------------
@@ -2788,7 +2808,8 @@ void RenderViewContextMenu::ExecSaveLinkAs() {
   auto dl_params = std::make_unique<DownloadUrlParameters>(
       url, render_frame_host->GetProcess()->GetID(),
       render_frame_host->GetRenderViewHost()->GetRoutingID(),
-      render_frame_host->GetRoutingID(), traffic_annotation);
+      render_frame_host->GetRoutingID(), traffic_annotation,
+      render_frame_host->GetNetworkIsolationKey());
   content::Referrer referrer = CreateReferrer(url, params_);
   dl_params->set_referrer(referrer.url);
   dl_params->set_referrer_policy(
@@ -2954,7 +2975,7 @@ void RenderViewContextMenu::ExecPrint() {
   }
 
   printing::StartPrint(
-      source_web_contents_, nullptr,
+      source_web_contents_, mojo::NullAssociatedRemote(),
       GetPrefs(browser_context_)->GetBoolean(prefs::kPrintPreviewDisabled),
       !params_.selection_text.empty());
 #endif  // BUILDFLAG(ENABLE_PRINTING)
@@ -2970,7 +2991,8 @@ void RenderViewContextMenu::ExecRouteMedia() {
   if (!dialog_controller)
     return;
 
-  dialog_controller->ShowMediaRouterDialog();
+  dialog_controller->ShowMediaRouterDialog(
+      media_router::MediaRouterDialogOpenOrigin::CONTEXTUAL_MENU);
   media_router::MediaRouterMetrics::RecordMediaRouterDialogOrigin(
       media_router::MediaRouterDialogOpenOrigin::CONTEXTUAL_MENU);
 }

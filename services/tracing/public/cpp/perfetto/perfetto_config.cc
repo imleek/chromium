@@ -12,6 +12,7 @@
 #include "base/trace_event/trace_config.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/chromecast_buildflags.h"
 #include "services/tracing/public/mojom/perfetto_service.mojom.h"
 
 namespace tracing {
@@ -42,7 +43,10 @@ perfetto::TraceConfig GetDefaultPerfettoConfig(
 
   size_t size_limit = chrome_config.GetTraceBufferSizeInKb();
   if (size_limit == 0) {
-    size_limit = 100 * 1024;
+    // TODO(eseckler): Reduce the default buffer size after benchmarks set what
+    // they require. Should also invest some time to reduce the overhead of
+    // begin/end pairs further.
+    size_limit = 200 * 1024;
   }
   auto* buffer_config = perfetto_config.add_buffers();
   buffer_config->set_size_kb(size_limit);
@@ -99,7 +103,7 @@ perfetto::TraceConfig GetDefaultPerfettoConfig(
 // Capture system trace events if supported and enabled. The datasources will
 // only emit events if system tracing is enabled in |chrome_config|.
   if (!privacy_filtering_enabled) {
-#if defined(OS_CHROMEOS) || (defined(IS_CHROMECAST) && defined(OS_LINUX))
+#if defined(OS_CHROMEOS) || (BUILDFLAG(IS_CHROMECAST) && defined(OS_LINUX))
     AddDataSourceConfig(&perfetto_config,
                         tracing::mojom::kSystemTraceDataSourceName,
                         chrome_config_string, privacy_filtering_enabled);
@@ -124,7 +128,7 @@ perfetto::TraceConfig GetDefaultPerfettoConfig(
   }
 
   if (chrome_config.IsCategoryGroupEnabled(
-          TRACE_DISABLED_BY_DEFAULT("java_heap_profiler"))) {
+          TRACE_DISABLED_BY_DEFAULT("java-heap-profiler"))) {
     AddDataSourceConfig(&perfetto_config,
                         tracing::mojom::kJavaHeapProfilerSourceName,
                         chrome_config_string, privacy_filtering_enabled);

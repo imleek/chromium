@@ -365,9 +365,11 @@ void FrameTreeNode::SetPendingFramePolicy(blink::FramePolicy frame_policy) {
   if (parent()) {
     // Subframes should always inherit their parent's sandbox flags.
     pending_frame_policy_.sandbox_flags |= parent()->active_sandbox_flags();
-    // This is only applied on subframes; container policy is not mutable on
-    // main frame.
+    // This is only applied on subframes; container policy and required document
+    // policy are not mutable on main frame.
     pending_frame_policy_.container_policy = frame_policy.container_policy;
+    pending_frame_policy_.required_document_policy =
+        frame_policy.required_document_policy;
   }
 }
 
@@ -395,21 +397,30 @@ bool FrameTreeNode::IsLoading() const {
   return current_frame_host->is_loading();
 }
 
-bool FrameTreeNode::CommitPendingFramePolicy() {
-  bool did_change_flags = pending_frame_policy_.sandbox_flags !=
+bool FrameTreeNode::CommitFramePolicy(
+    const blink::FramePolicy& new_frame_policy) {
+  bool did_change_flags = new_frame_policy.sandbox_flags !=
                           replication_state_.frame_policy.sandbox_flags;
   bool did_change_container_policy =
-      pending_frame_policy_.container_policy !=
+      new_frame_policy.container_policy !=
       replication_state_.frame_policy.container_policy;
+  bool did_change_required_document_policy =
+      pending_frame_policy_.required_document_policy !=
+      replication_state_.frame_policy.required_document_policy;
   if (did_change_flags)
     replication_state_.frame_policy.sandbox_flags =
-        pending_frame_policy_.sandbox_flags;
+        new_frame_policy.sandbox_flags;
   if (did_change_container_policy)
     replication_state_.frame_policy.container_policy =
-        pending_frame_policy_.container_policy;
-  UpdateFramePolicyHeaders(pending_frame_policy_.sandbox_flags,
+        new_frame_policy.container_policy;
+  if (did_change_required_document_policy)
+    replication_state_.frame_policy.required_document_policy =
+        new_frame_policy.required_document_policy;
+
+  UpdateFramePolicyHeaders(new_frame_policy.sandbox_flags,
                            replication_state_.feature_policy_header);
-  return did_change_flags || did_change_container_policy;
+  return did_change_flags || did_change_container_policy ||
+         did_change_required_document_policy;
 }
 
 void FrameTreeNode::TransferNavigationRequestOwnership(
@@ -504,15 +515,6 @@ void FrameTreeNode::DidStopLoading() {
   // Notify the WebContents.
   if (!frame_tree_->IsLoading())
     navigator()->GetDelegate()->DidStopLoading();
-
-  // Notify accessibility that the user is no longer trying to load or
-  // reload a page.
-  // TODO(domfarolino): Remove this in favor of notifying via the delegate's
-  // DidStopLoading() above.
-  BrowserAccessibilityManager* manager =
-      current_frame_host()->browser_accessibility_manager();
-  if (manager)
-    manager->DidStopLoading();
 }
 
 void FrameTreeNode::DidChangeLoadProgress(double load_progress) {
@@ -608,8 +610,11 @@ bool FrameTreeNode::ClearUserActivation() {
 }
 
 bool FrameTreeNode::VerifyUserActivation() {
-  if (!base::FeatureList::IsEnabled(features::kBrowserVerifiedUserActivation))
-    return true;
+  DCHECK(base::FeatureList::IsEnabled(
+             features::kBrowserVerifiedUserActivationMouse) ||
+         base::FeatureList::IsEnabled(
+             features::kBrowserVerifiedUserActivationKeyboard));
+
   return render_manager_.current_frame_host()
       ->GetRenderWidgetHost()
       ->RemovePendingUserActivationIfAvailable();
@@ -645,8 +650,8 @@ bool FrameTreeNode::UpdateUserActivationState(
   return update_result;
 }
 
-void FrameTreeNode::OnSetHasReceivedUserGestureBeforeNavigation(bool value) {
-  render_manager_.OnSetHasReceivedUserGestureBeforeNavigation(value);
+void FrameTreeNode::OnSetHadStickyUserActivationBeforeNavigation(bool value) {
+  render_manager_.OnSetHadStickyUserActivationBeforeNavigation(value);
   replication_state_.has_received_user_gesture_before_nav = value;
 }
 

@@ -65,6 +65,44 @@ suite('CupsAddPrinterDialogTests', function() {
     return dialog.canAddPrinter_();
   }
 
+  function mockAddPrinterInputKeyboardPress(crInputId) {
+    // Starts in discovery dialog, select add manually button.
+    const discoveryDialog = dialog.$$('add-printer-discovery-dialog');
+    assertTrue(!!discoveryDialog);
+    discoveryDialog.$.manuallyAddPrinterButton.click();
+    Polymer.dom.flush();
+
+    // Now we should be in the manually add dialog.
+    const addDialog = dialog.$$('add-printer-manually-dialog');
+    assertTrue(!!addDialog);
+
+    // Test that pressing Enter before all the fields are populated does not
+    // advance to the next dialog.
+    const input = addDialog.$$(crInputId);
+    MockInteractions.keyEventOn(input, 'keypress', /*keycode=*/13, [], 'Enter');
+    Polymer.dom.flush();
+
+    assertFalse(!!dialog.$$('add-printer-manufacturer-model-dialog'));
+    assertFalse(dialog.showManufacturerDialog_);
+    assertTrue(dialog.showManuallyAddDialog_);
+
+    // Add valid input into the dialog
+    fillAddManuallyDialog(addDialog);
+
+    // Test that key press on random key while in input field is not accepted as
+    // as valid Enter press.
+    MockInteractions.keyEventOn(input, 'keypress', /*keycode=*/16, [], 'Shift');
+    Polymer.dom.flush();
+
+    assertFalse(!!dialog.$$('add-printer-manufacturer-model-dialog'));
+    assertFalse(dialog.showManufacturerDialog_);
+    assertTrue(dialog.showManuallyAddDialog_);
+
+    // Now test Enter press with valid input.
+    MockInteractions.keyEventOn(input, 'keypress', /*keycode=*/13, [], 'Enter');
+    Polymer.dom.flush();
+  }
+
   let page = null;
   let dialog = null;
 
@@ -78,6 +116,8 @@ suite('CupsAddPrinterDialogTests', function() {
 
     PolymerTest.clearBody();
     page = document.createElement('settings-cups-printers');
+    // TODO(jimmyxgong): Remove this line when the feature flag is removed.
+    page.enableUpdatedUi_ = false;
     document.body.appendChild(page);
     assertTrue(!!page);
     dialog = page.$$('settings-cups-add-printer-dialog');
@@ -524,7 +564,10 @@ suite('CupsAddPrinterDialogTests', function() {
     addDialog.$$('.action-button').click();
     Polymer.dom.flush();
 
-    const eulaLink = 'google.com';
+    const eulaLink = 'google';
+    const path = window.location.pathname;
+    const expectedEulaLink = window.location.origin +
+        path.slice(0, path.lastIndexOf('/') + 1) + eulaLink;
     const expectedManufacturer = 'Google';
     const expectedModel = 'printer';
     const expectedModel2 = 'newPrinter';
@@ -555,6 +598,7 @@ suite('CupsAddPrinterDialogTests', function() {
         .then(function(args) {
           // Check that the EULA text is shown.
           assertFalse(urlElement.hidden);
+          assertEquals(expectedEulaLink, urlElement.querySelector('a').href);
 
           resetGetEulaUrl(cupsPrintersBrowserProxy, '' /* eulaUrl */);
 
@@ -576,6 +620,7 @@ suite('CupsAddPrinterDialogTests', function() {
         })
         .then(function(args) {
           assertFalse(urlElement.hidden);
+          assertEquals(expectedEulaLink, urlElement.querySelector('a').href);
         });
   });
 
@@ -617,6 +662,62 @@ suite('CupsAddPrinterDialogTests', function() {
           assertFalse(addButton.disabled);
           addButton.click();
           assertTrue(addButton.disabled);
+        });
+  });
+
+  /**
+   * The following tests check that clicking Enter button on the keyboard from
+   * each input text field on the add-printer-manually-dialog will advance to
+   * the next dialog.
+   */
+  test('PressEnterInPrinterNameInput', function() {
+    mockAddPrinterInputKeyboardPress('#printerNameInput');
+
+    // Upon rejection, show model.
+    return cupsPrintersBrowserProxy
+        .whenCalled('getCupsPrinterManufacturersList')
+        .then(function() {
+          return test_util.flushTasks();
+        })
+        .then(function() {
+          // Showing model selection.
+          assertTrue(!!dialog.$$('add-printer-manufacturer-model-dialog'));
+          assertTrue(dialog.showManufacturerDialog_);
+          assertFalse(dialog.showManuallyAddDialog_);
+        });
+  });
+
+  test('PressEnterInPrinterAddressInput', function() {
+    mockAddPrinterInputKeyboardPress('#printerAddressInput');
+
+    // Upon rejection, show model.
+    return cupsPrintersBrowserProxy
+        .whenCalled('getCupsPrinterManufacturersList')
+        .then(function() {
+          return test_util.flushTasks();
+        })
+        .then(function() {
+          // Showing model selection.
+          assertFalse(!!dialog.$$('add-printer-configuring-dialog'));
+          assertTrue(dialog.showManufacturerDialog_);
+          assertFalse(dialog.showManuallyAddDialog_);
+        });
+  });
+
+  test('PressEnterInPrinterQueueInput', function() {
+    mockAddPrinterInputKeyboardPress('#printerQueueInput');
+
+    // Upon rejection, show model.
+    return cupsPrintersBrowserProxy
+        .whenCalled('getCupsPrinterManufacturersList')
+        .then(function() {
+          return test_util.flushTasks();
+        })
+        .then(function() {
+          // Showing model selection.
+          assertTrue(!!dialog.$$('add-printer-manufacturer-model-dialog'));
+          assertTrue(dialog.showManufacturerDialog_);
+          assertFalse(dialog.showManuallyAddDialog_);
         });
   });
 });

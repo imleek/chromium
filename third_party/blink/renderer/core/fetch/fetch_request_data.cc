@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/core/loader/threadable_loader.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/fetch/bytes_consumer.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loader_options.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
@@ -67,15 +68,11 @@ bool IsExcludedHeaderForServiceWorkerFetchEvent(const String& header_name) {
 
 }  // namespace
 
-FetchRequestData* FetchRequestData::Create() {
-  return MakeGarbageCollected<FetchRequestData>();
-}
-
 FetchRequestData* FetchRequestData::Create(
     ScriptState* script_state,
     const mojom::blink::FetchAPIRequest& fetch_api_request,
     ForServiceWorkerFetchEvent for_service_worker_fetch_event) {
-  FetchRequestData* request = FetchRequestData::Create();
+  FetchRequestData* request = MakeGarbageCollected<FetchRequestData>();
   request->url_ = fetch_api_request.url;
   request->method_ = AtomicString(fetch_api_request.method);
   for (const auto& pair : fetch_api_request.headers) {
@@ -92,13 +89,13 @@ FetchRequestData* FetchRequestData::Create(
 
   if (fetch_api_request.blob) {
     DCHECK(!fetch_api_request.body);
-    request->SetBuffer(MakeGarbageCollected<BodyStreamBuffer>(
+    request->SetBuffer(BodyStreamBuffer::Create(
         script_state,
         MakeGarbageCollected<BlobBytesConsumer>(
             ExecutionContext::From(script_state), fetch_api_request.blob),
         nullptr /* AbortSignal */));
   } else if (fetch_api_request.body) {
-    request->SetBuffer(MakeGarbageCollected<BodyStreamBuffer>(
+    request->SetBuffer(BodyStreamBuffer::Create(
         script_state,
         MakeGarbageCollected<FormDataBytesConsumer>(
             ExecutionContext::From(script_state), fetch_api_request.body),
@@ -106,6 +103,7 @@ FetchRequestData* FetchRequestData::Create(
   }
 
   request->SetContext(fetch_api_request.request_context_type);
+  request->SetDestination(fetch_api_request.destination);
   request->SetReferrerString(AtomicString(Referrer::NoReferrer()));
   if (fetch_api_request.referrer) {
     if (!fetch_api_request.referrer->url.IsEmpty())
@@ -128,13 +126,14 @@ FetchRequestData* FetchRequestData::Create(
 }
 
 FetchRequestData* FetchRequestData::CloneExceptBody() {
-  FetchRequestData* request = FetchRequestData::Create();
+  auto* request = MakeGarbageCollected<FetchRequestData>();
   request->url_ = url_;
   request->method_ = method_;
   request->header_list_ = header_list_->Clone();
   request->origin_ = origin_;
   request->isolated_world_origin_ = isolated_world_origin_;
   request->context_ = context_;
+  request->destination_ = destination_;
   request->referrer_string_ = referrer_string_;
   request->referrer_policy_ = referrer_policy_;
   request->mode_ = mode_;
@@ -176,7 +175,7 @@ FetchRequestData* FetchRequestData::Pass(ScriptState* script_state,
   FetchRequestData* request = FetchRequestData::CloneExceptBody();
   if (buffer_) {
     request->buffer_ = buffer_;
-    buffer_ = MakeGarbageCollected<BodyStreamBuffer>(
+    buffer_ = BodyStreamBuffer::Create(
         script_state, BytesConsumer::CreateClosed(), nullptr /* AbortSignal */);
     buffer_->CloseAndLockAndDisturb(exception_state);
     if (exception_state.HadException())
@@ -192,6 +191,7 @@ FetchRequestData::FetchRequestData()
     : method_(http_names::kGET),
       header_list_(MakeGarbageCollected<FetchHeaderList>()),
       context_(mojom::RequestContextType::UNSPECIFIED),
+      destination_(network::mojom::RequestDestination::kEmpty),
       referrer_string_(Referrer::ClientReferrerString()),
       referrer_policy_(network::mojom::ReferrerPolicy::kDefault),
       mode_(network::mojom::RequestMode::kNoCors),

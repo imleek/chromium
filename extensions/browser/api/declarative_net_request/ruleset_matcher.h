@@ -11,7 +11,8 @@
 
 #include "extensions/browser/api/declarative_net_request/extension_url_pattern_index_matcher.h"
 #include "extensions/browser/api/declarative_net_request/flat/extension_ruleset_generated.h"
-#include "extensions/browser/api/declarative_net_request/ruleset_matcher_interface.h"
+#include "extensions/browser/api/declarative_net_request/regex_rules_matcher.h"
+#include "extensions/browser/api/declarative_net_request/ruleset_matcher_base.h"
 
 namespace extensions {
 
@@ -26,7 +27,7 @@ struct UrlRuleMetadata;
 // RulesetMatcher encapsulates the Declarative Net Request API ruleset
 // corresponding to a single RulesetSource. Since this class is immutable, it is
 // thread-safe.
-class RulesetMatcher : public RulesetMatcherInterface {
+class RulesetMatcher final : public RulesetMatcherBase {
  public:
   // Describes the result of creating a RulesetMatcher instance.
   // This is logged as part of UMA. Hence existing values should not be re-
@@ -63,9 +64,8 @@ class RulesetMatcher : public RulesetMatcherInterface {
       int expected_ruleset_checksum,
       std::unique_ptr<RulesetMatcher>* matcher);
 
-  // RulesetMatcherInterface overrides:
+  // RulesetMatcherBase overrides:
   ~RulesetMatcher() override;
-
   base::Optional<RequestAction> GetBlockOrCollapseAction(
       const RequestParams& params) const override;
   base::Optional<RequestAction> GetAllowAction(
@@ -76,7 +76,7 @@ class RulesetMatcher : public RulesetMatcherInterface {
       const RequestParams& params) const override;
   uint8_t GetRemoveHeadersMask(
       const RequestParams& params,
-      uint8_t ignored_mask,
+      uint8_t excluded_remove_headers_mask,
       std::vector<RequestAction>* remove_headers_actions) const override;
   bool IsExtraHeadersMatcher() const override;
 
@@ -111,6 +111,9 @@ class RulesetMatcher : public RulesetMatcherInterface {
   // Underlying matcher for filter-list style rules supported using the
   // |url_pattern_index| component.
   const ExtensionUrlPatternIndexMatcher url_pattern_index_matcher_;
+
+  // Underlying matcher for regex rules.
+  const RegexRulesMatcher regex_matcher_;
 
   DISALLOW_COPY_AND_ASSIGN(RulesetMatcher);
 };

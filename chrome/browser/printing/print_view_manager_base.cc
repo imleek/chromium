@@ -10,8 +10,8 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/memory/shared_memory.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -161,9 +161,14 @@ void PrintViewManagerBase::PrintDocument(
     const gfx::Rect& content_area,
     const gfx::Point& offsets) {
 #if defined(OS_WIN)
-  print_job_->StartConversionToNativeFormat(print_data, page_size, content_area,
-                                            offsets);
-#else
+  if (!print_job_->ShouldPrintUsingXps()) {
+    // Print using GDI, which first requires conversion to EMF.
+    print_job_->StartConversionToNativeFormat(print_data, page_size,
+                                              content_area, offsets);
+    return;
+  }
+#endif
+
   std::unique_ptr<MetafileSkia> metafile = std::make_unique<MetafileSkia>();
   CHECK(metafile->InitFromData(print_data->front(), print_data->size()));
 
@@ -171,7 +176,6 @@ void PrintViewManagerBase::PrintDocument(
   PrintedDocument* document = print_job_->document();
   document->SetDocument(std::move(metafile), page_size, content_area);
   ShouldQuitFromInnerMessageLoop();
-#endif
 }
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)

@@ -50,6 +50,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/navigation_policy.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/fake_local_frame.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_context.h"
@@ -332,6 +333,12 @@ class TestWebContentsObserver : public WebContentsObserver {
     last_vertical_scroll_direction_ = scroll_direction;
   }
 
+  void OnIsConnectedToBluetoothDeviceChanged(
+      bool is_connected_to_bluetooth_device) override {
+    ++num_is_connected_to_bluetooth_device_changed_;
+    last_is_connected_to_bluetooth_device_ = is_connected_to_bluetooth_device;
+  }
+
   const GURL& last_url() const { return last_url_; }
   base::Optional<SkColor> last_theme_color() const { return last_theme_color_; }
   base::Optional<viz::VerticalScrollDirection> last_vertical_scroll_direction()
@@ -341,12 +348,20 @@ class TestWebContentsObserver : public WebContentsObserver {
   bool observed_did_first_visually_non_empty_paint() const {
     return observed_did_first_visually_non_empty_paint_;
   }
+  int num_is_connected_to_bluetooth_device_changed() const {
+    return num_is_connected_to_bluetooth_device_changed_;
+  }
+  bool last_is_connected_to_bluetooth_device() const {
+    return last_is_connected_to_bluetooth_device_;
+  }
 
  private:
   GURL last_url_;
   base::Optional<SkColor> last_theme_color_;
   base::Optional<viz::VerticalScrollDirection> last_vertical_scroll_direction_;
   bool observed_did_first_visually_non_empty_paint_ = false;
+  int num_is_connected_to_bluetooth_device_changed_ = 0;
+  bool last_is_connected_to_bluetooth_device_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TestWebContentsObserver);
 };
@@ -460,19 +475,43 @@ TEST_F(WebContentsImplTest, UseTitleFromPendingEntryIfSet) {
   EXPECT_EQ(title, contents()->GetTitle());
 }
 
+// Stub out local frame mojo binding. Intercepts calls to EnableViewSourceMode
+// and marks the message as received. This class attaches to the first
+// RenderFrameHostImpl created.
+class EnableViewSourceLocalFrame : public content::FakeLocalFrame,
+                                   public WebContentsObserver {
+ public:
+  explicit EnableViewSourceLocalFrame(WebContents* web_contents)
+      : WebContentsObserver(web_contents) {}
+
+  void RenderFrameCreated(RenderFrameHost* render_frame_host) override {
+    if (!initialized_) {
+      initialized_ = true;
+      Init(render_frame_host->GetRemoteAssociatedInterfaces());
+    }
+  }
+
+  void EnableViewSourceMode() final { enabled_view_source_ = true; }
+
+  bool IsViewSourceModeEnabled() const { return enabled_view_source_; }
+
+ private:
+  bool enabled_view_source_ = false;
+  bool initialized_ = false;
+};
+
 // Browser initiated navigations to view-source URLs of WebUI pages should work.
 TEST_F(WebContentsImplTest, DirectNavigationToViewSourceWebUI) {
   const GURL kGURL("view-source:" + GetWebUIURLString("blah/"));
   // NavigationControllerImpl rewrites view-source URLs, simulating that here.
   const GURL kRewrittenURL(GetWebUIURL("blah"));
 
-  process()->sink().ClearMessages();
-
+  EnableViewSourceLocalFrame local_frame(contents());
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), kGURL);
 
   // Did we get the expected message?
-  EXPECT_TRUE(process()->sink().GetFirstMessageMatching(
-      FrameMsg_EnableViewSourceMode::ID));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(local_frame.IsViewSourceModeEnabled());
 
   // This is the virtual URL.
   EXPECT_EQ(
@@ -3557,6 +3596,54 @@ TEST_F(WebContentsImplTest, RegisterProtocolHandlerDataURL) {
   }
 
   contents()->SetDelegate(nullptr);
+}
+
+TEST_F(WebContentsImplTest, Bluetooth) {
+  TestWebContentsObserver observer(contents());
+  EXPECT_EQ(observer.num_is_connected_to_bluetooth_device_changed(), 0);
+  EXPECT_FALSE(contents()->IsConnectedToBluetoothDevice());
+
+  contents()->TestIncrementBluetoothConnectedDeviceCount();
+  EXPECT_EQ(observer.num_is_connected_to_bluetooth_device_changed(), 1);
+  EXPECT_TRUE(observer.last_is_connected_to_bluetooth_device());
+  EXPECT_TRUE(contents()->IsConnectedToBluetoothDevice());
+
+  contents()->TestDecrementBluetoothConnectedDeviceCount();
+  EXPECT_EQ(observer.num_is_connected_to_bluetooth_device_changed(), 2);
+  EXPECT_FALSE(observer.last_is_connected_to_bluetooth_device());
+  EXPECT_FALSE(contents()->IsConnectedToBluetoothDevice());
+}
+
+TEST_F(WebContentsImplTest, FaviconURLsSet) {
+  const FaviconURL kFavicon(GURL("https://example.com/favicon.ico"),
+                            FaviconURL::IconType::kFavicon, {});
+
+  contents()->NavigateAndCommit(GURL("https://example.com"));
+  EXPECT_EQ(0u, contents()->GetFaviconURLs().size());
+
+  contents()->OnUpdateFaviconURL(contents()->GetMainFrame(), {kFavicon});
+  EXPECT_EQ(1u, contents()->GetFaviconURLs().size());
+
+  contents()->OnUpdateFaviconURL(contents()->GetMainFrame(),
+                                 {kFavicon, kFavicon});
+  EXPECT_EQ(2u, contents()->GetFaviconURLs().size());
+
+  contents()->OnUpdateFaviconURL(contents()->GetMainFrame(), {kFavicon});
+  EXPECT_EQ(1u, contents()->GetFaviconURLs().size());
+}
+
+TEST_F(WebContentsImplTest, FaviconURLsResetWithNavigation) {
+  const FaviconURL kFavicon(GURL("https://example.com/favicon.ico"),
+                            FaviconURL::IconType::kFavicon, {});
+
+  contents()->NavigateAndCommit(GURL("https://example.com"));
+  EXPECT_EQ(0u, contents()->GetFaviconURLs().size());
+
+  contents()->OnUpdateFaviconURL(contents()->GetMainFrame(), {kFavicon});
+  EXPECT_EQ(1u, contents()->GetFaviconURLs().size());
+
+  contents()->NavigateAndCommit(GURL("https://example.com/navigation.html"));
+  EXPECT_EQ(0u, contents()->GetFaviconURLs().size());
 }
 
 }  // namespace content

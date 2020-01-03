@@ -8,7 +8,6 @@
 #include <map>
 #include <vector>
 
-#include "base/macros.h"
 #include "extensions/common/api/declarative_net_request.h"
 #include "extensions/common/extension_id.h"
 
@@ -28,6 +27,8 @@ class ActionTracker {
  public:
   explicit ActionTracker(content::BrowserContext* browser_context);
   ~ActionTracker();
+  ActionTracker(const ActionTracker& other) = delete;
+  ActionTracker& operator=(const ActionTracker& other) = delete;
 
   // Called whenever a request matches with a rule.
   void OnRuleMatched(const RequestAction& request_action,
@@ -46,30 +47,59 @@ class ActionTracker {
   // Called when the tab has been closed.
   void ClearTabData(int tab_id);
 
-  // Sets the action count for every extension for the specified |tab_id| to 0
-  // and notifies the extension action to set the badge text to 0 for that tab.
-  // Called when the a main-frame navigation to a different document finishes on
-  // the tab.
-  void ResetActionCountForTab(int tab_id);
+  // Clears the pending action count for every extension in
+  // |pending_navigation_actions_| for the specified |navigation_id|.
+  void ClearPendingNavigation(int64_t navigation_id);
+
+  // Called when a main-frame navigation to a different document commits.
+  // Updates the badge count for all extensions for the given |tab_id|.
+  void ResetActionCountForTab(int tab_id, int64_t navigation_id);
 
  private:
+  // Template key type used for TrackedInfo, specified by an extension_id and
+  // another ID.
+  template <typename T>
+  struct TrackedInfoContextKey {
+    TrackedInfoContextKey(ExtensionId extension_id, T secondary_id);
+    TrackedInfoContextKey(const TrackedInfoContextKey& other) = delete;
+    TrackedInfoContextKey& operator=(const TrackedInfoContextKey& other) =
+        delete;
+    TrackedInfoContextKey(TrackedInfoContextKey&&);
+    TrackedInfoContextKey& operator=(TrackedInfoContextKey&&);
+
+    ExtensionId extension_id;
+    T secondary_id;
+
+    bool operator<(const TrackedInfoContextKey& other) const;
+  };
+
+  using ExtensionTabIdKey = TrackedInfoContextKey<int>;
+  using ExtensionNavigationIdKey = TrackedInfoContextKey<int64_t>;
+
+  // Info tracked for each ExtensionTabIdKey or ExtensionNavigationIdKey.
+  struct TrackedInfo {
+    size_t action_count = 0;
+  };
+
   // Called from OnRuleMatched. Dispatches a OnRuleMatchedDebug event to the
   // observer for the extension specified by |request_action.extension_id|.
   void DispatchOnRuleMatchedDebugIfNeeded(
       const RequestAction& request_action,
       api::declarative_net_request::RequestDetails request_details);
 
-  using ExtensionTabKey = std::pair<ExtensionId, int>;
-
   // Maps a pair of (extension ID, tab ID) to the number of actions matched for
   // the extension and tab specified.
-  std::map<ExtensionTabKey, int> actions_matched_;
+  std::map<ExtensionTabIdKey, TrackedInfo> actions_matched_;
+
+  // Maps a pair of (extension ID, navigation ID) to the number of actions
+  // matched for the main-frame request associated with the navigation ID in the
+  // key. These actions are added to |actions_matched_| once the navigation
+  // commits.
+  std::map<ExtensionNavigationIdKey, TrackedInfo> pending_navigation_actions_;
 
   content::BrowserContext* browser_context_;
 
   ExtensionPrefs* extension_prefs_;
-
-  DISALLOW_COPY_AND_ASSIGN(ActionTracker);
 };
 
 }  // namespace declarative_net_request

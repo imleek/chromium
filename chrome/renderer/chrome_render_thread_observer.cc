@@ -35,7 +35,7 @@
 #include "chrome/common/net/net_resource_provider.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/common/url_constants.h"
-#include "components/visitedlink/renderer/visitedlink_slave.h"
+#include "components/visitedlink/renderer/visitedlink_reader.h"
 #include "content/public/child/child_thread.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/resource_usage_reporter_type_converters.h"
@@ -46,6 +46,7 @@
 #include "extensions/buildflags/buildflags.h"
 #include "ipc/ipc_sync_channel.h"
 #include "media/base/localized_strings.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_module.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
@@ -110,7 +111,8 @@ class RendererResourceDelegate : public content::ResourceDispatcherDelegate {
     cache_stats_recorder_->RecordCacheStats(stats.capacity, stats.size);
   }
 
-  chrome::mojom::CacheStatsRecorderAssociatedPtr cache_stats_recorder_;
+  mojo::AssociatedRemote<chrome::mojom::CacheStatsRecorder>
+      cache_stats_recorder_;
 
   base::WeakPtrFactory<RendererResourceDelegate> weak_factory_{this};
 
@@ -187,7 +189,7 @@ chrome::mojom::DynamicParams* GetDynamicConfigParams() {
 }
 
 ChromeRenderThreadObserver::ChromeRenderThreadObserver()
-    : visited_link_slave_(new visitedlink::VisitedLinkSlave) {
+    : visited_link_reader_(new visitedlink::VisitedLinkReader) {
   RenderThread* thread = RenderThread::Get();
   resource_delegate_.reset(new RendererResourceDelegate());
   thread->SetResourceDispatcherDelegate(resource_delegate_.get());
@@ -195,18 +197,6 @@ ChromeRenderThreadObserver::ChromeRenderThreadObserver()
   // Configure modules that need access to resources.
   net::NetModule::SetResourceProvider(ChromeNetResourceProvider);
   media::SetLocalizedStringProvider(ChromeMediaLocalizedStringProvider);
-
-  // chrome-native: is a scheme used for placeholder navigations that allow
-  // UIs to be drawn with platform native widgets instead of HTML.  These pages
-  // should not be accessible.  No code should be runnable in these pages,
-  // so it should not need to access anything nor should it allow javascript
-  // URLs since it should never be visible to the user.
-  // See also ChromeContentClient::AddAdditionalSchemes that adds it as an
-  // empty document scheme.
-  WebString native_scheme(WebString::FromASCII(chrome::kChromeNativeScheme));
-  WebSecurityPolicy::RegisterURLSchemeAsDisplayIsolated(native_scheme);
-  WebSecurityPolicy::RegisterURLSchemeAsNotAllowingJavascriptURLs(
-      native_scheme);
 }
 
 ChromeRenderThreadObserver::~ChromeRenderThreadObserver() {}

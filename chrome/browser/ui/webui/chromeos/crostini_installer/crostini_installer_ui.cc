@@ -12,7 +12,7 @@
 #include "chrome/browser/chromeos/crostini/crostini_installer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/chromeos/crostini_installer/crostini_installer_page_handler.h"
-#include "chrome/browser/ui/webui/localized_string.h"
+#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/browser_resources.h"
@@ -31,7 +31,7 @@
 
 namespace {
 void AddStringResources(content::WebUIDataSource* source) {
-  static constexpr LocalizedString kStrings[] = {
+  static constexpr webui::LocalizedString kStrings[] = {
       {"install", IDS_CROSTINI_INSTALLER_INSTALL_BUTTON},
       {"retry", IDS_CROSTINI_INSTALLER_RETRY_BUTTON},
       {"close", IDS_APP_CLOSE},
@@ -47,9 +47,12 @@ void AddStringResources(content::WebUIDataSource* source) {
       {"createDiskImageError", IDS_CROSTINI_INSTALLER_CREATE_DISK_IMAGE_ERROR},
       {"startTerminaVmError", IDS_CROSTINI_INSTALLER_START_TERMINA_VM_ERROR},
       {"startContainerError", IDS_CROSTINI_INSTALLER_START_CONTAINER_ERROR},
+      {"configureContainerError",
+       IDS_CROSTINI_INSTALLER_CONFIGURE_CONTAINER_ERROR},
       {"fetchSshKeysError", IDS_CROSTINI_INSTALLER_FETCH_SSH_KEYS_ERROR},
       {"mountContainerError", IDS_CROSTINI_INSTALLER_MOUNT_CONTAINER_ERROR},
       {"setupContainerError", IDS_CROSTINI_INSTALLER_SETUP_CONTAINER_ERROR},
+      {"unknownError", IDS_CROSTINI_INSTALLER_UNKNOWN_ERROR},
 
       {"loadTerminaMessage", IDS_CROSTINI_INSTALLER_LOAD_TERMINA_MESSAGE},
       {"startConciergeMessage", IDS_CROSTINI_INSTALLER_START_CONCIERGE_MESSAGE},
@@ -58,12 +61,14 @@ void AddStringResources(content::WebUIDataSource* source) {
       {"startTerminaVmMessage",
        IDS_CROSTINI_INSTALLER_START_TERMINA_VM_MESSAGE},
       {"startContainerMessage", IDS_CROSTINI_INSTALLER_START_CONTAINER_MESSAGE},
+      {"configureContainerMessage",
+       IDS_CROSTINI_INSTALLER_CONFIGURE_CONTAINER_MESSAGE},
       {"setupContainerMessage", IDS_CROSTINI_INSTALLER_SETUP_CONTAINER_MESSAGE},
       {"fetchSshKeysMessage", IDS_CROSTINI_INSTALLER_FETCH_SSH_KEYS_MESSAGE},
       {"mountContainerMessage", IDS_CROSTINI_INSTALLER_MOUNT_CONTAINER_MESSAGE},
       {"cancelingMessage", IDS_CROSTINI_INSTALLER_CANCELING},
   };
-  AddLocalizedStringsBulk(source, kStrings, base::size(kStrings));
+  AddLocalizedStringsBulk(source, kStrings);
 
   base::string16 device_name = ui::GetChromeOSDeviceName();
 
@@ -97,11 +102,6 @@ void AddStringResources(content::WebUIDataSource* source) {
 
 namespace chromeos {
 
-bool CrostiniInstallerUI::IsEnabled() {
-  return base::FeatureList::IsEnabled(
-      chromeos::features::kCrostiniWebUIInstaller);
-}
-
 CrostiniInstallerUI::CrostiniInstallerUI(content::WebUI* web_ui)
     : ui::MojoWebDialogUI{web_ui} {
   content::WebUIDataSource* source =
@@ -126,9 +126,6 @@ CrostiniInstallerUI::CrostiniInstallerUI(content::WebUI* web_ui)
   source->EnableReplaceI18nInJS();
 
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source);
-
-  AddHandlerToRegistry(base::BindRepeating(
-      &CrostiniInstallerUI::BindPageHandlerFactory, base::Unretained(this)));
 }
 
 CrostiniInstallerUI::~CrostiniInstallerUI() = default;
@@ -137,7 +134,14 @@ bool CrostiniInstallerUI::can_close() {
   return can_close_;
 }
 
-void CrostiniInstallerUI::BindPageHandlerFactory(
+void CrostiniInstallerUI::ClickInstallForTesting() {
+  web_ui()->GetWebContents()->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::ASCIIToUTF16("document.querySelector('crostini-installer-app')"
+                         ".$$('.action-button').click()"),
+      base::NullCallback());
+}
+
+void CrostiniInstallerUI::BindInterface(
     mojo::PendingReceiver<
         chromeos::crostini_installer::mojom::PageHandlerFactory>
         pending_receiver) {
@@ -169,5 +173,7 @@ void CrostiniInstallerUI::OnWebUICloseDialog() {
   // access the page using the URL directly, which is not supported).
   ui::MojoWebDialogUI::CloseDialog(nullptr);
 }
+
+WEB_UI_CONTROLLER_TYPE_IMPL(CrostiniInstallerUI)
 
 }  // namespace chromeos

@@ -229,9 +229,9 @@ class CONTENT_EXPORT FrameTreeNode {
     return replication_state_.frame_policy;
   }
 
-  // Set any pending sandbox flags and container policy as active, and return
-  // true if either was changed.
-  bool CommitPendingFramePolicy();
+  // Set the frame_policy provided in function parameter as active frame policy,
+  // while leaving pending_frame_policy_ untouched.
+  bool CommitFramePolicy(const blink::FramePolicy& frame_policy);
 
   const FrameOwnerProperties& frame_owner_properties() {
     return frame_owner_properties_;
@@ -330,7 +330,7 @@ class CONTENT_EXPORT FrameTreeNode {
   // the comment on user_activation_state_ below.
   bool UpdateUserActivationState(blink::UserActivationUpdateType update_type);
 
-  void OnSetHasReceivedUserGestureBeforeNavigation(bool value);
+  void OnSetHadStickyUserActivationBeforeNavigation(bool value);
 
   // Returns the sandbox flags currently in effect for this frame. This includes
   // flags inherited from parent frames, the currently active flags from the
@@ -376,7 +376,7 @@ class CONTENT_EXPORT FrameTreeNode {
 
   // Returns the sticky bit of the User Activation v2 state of the
   // |FrameTreeNode|.
-  bool HasBeenActivated() const {
+  bool HasStickyUserActivation() const {
     return user_activation_state_.HasBeenActive();
   }
 

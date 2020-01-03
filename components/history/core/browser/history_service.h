@@ -319,6 +319,16 @@ class HistoryService : public KeyedService {
   void CountUniqueHostsVisitedLastMonth(GetHistoryCountCallback callback,
                                         base::CancelableTaskTracker* tracker);
 
+  // For each of the continuous |number_of_days_to_report| midnights
+  // immediately preceding |report_time| (inclusive), report (a subset of) the
+  // last 1-day, 7-day and 28-day domain visit counts ending at that midnight.
+  // The subset of metric types to report is specified by |metric_type_bitmask|.
+  void GetDomainDiversity(base::Time report_time,
+                          int number_of_days_to_report,
+                          DomainMetricBitmaskType metric_type_bitmask,
+                          DomainDiversityCallback callback,
+                          base::CancelableTaskTracker* tracker);
+
   using GetLastVisitToHostCallback =
       base::OnceCallback<void(HistoryLastVisitToHostResult)>;
 
@@ -484,7 +494,7 @@ class HistoryService : public KeyedService {
   // Testing -------------------------------------------------------------------
 
   // Runs |flushed| after bouncing off the history thread.
-  void FlushForTest(const base::Closure& flushed);
+  void FlushForTest(base::OnceClosure flushed);
 
   // Designed for unit tests, this passes the given task on to the history
   // backend to be called once the history backend has terminated. This allows
@@ -495,7 +505,7 @@ class HistoryService : public KeyedService {
   // There can be only one closing task, so this will override any previously
   // set task. We will take ownership of the pointer and delete it when done.
   // The task will be run on the calling thread (this function is threadsafe).
-  void SetOnBackendDestroyTask(const base::Closure& task);
+  void SetOnBackendDestroyTask(base::OnceClosure task);
 
   // Used for unit testing and potentially importing to get known information
   // into the database. This assumes the URL doesn't exist in the database
@@ -836,9 +846,7 @@ class HistoryService : public KeyedService {
   void NotifyFaviconsChanged(const std::set<GURL>& page_urls,
                              const GURL& icon_url);
 
-  // TODO(crbug.com/1009795): Replace with THREAD_CHECKER() once crasher is
-  // addressed.
-  base::ThreadCheckerImpl thread_checker_;
+  base::ThreadChecker thread_checker_;
 
   // The thread used by the history service to run HistoryBackend operations.
   // Intentionally not a BrowserThread because the sync integration unit tests

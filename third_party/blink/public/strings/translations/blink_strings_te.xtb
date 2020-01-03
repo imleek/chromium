@@ -82,7 +82,6 @@
 <translation id="3822383571486410024">దయచేసి ఈ వచనాన్ని <ph name="MIN_CHARACTERS" /> లేదా అంతకంటే ఎక్కువ అక్షరాలకు పొడిగించండి (ప్రస్తుతం మీరు <ph name="CURRENT_LENGTH" /> అక్షరాలను ఉపయోగిస్తున్నారు).</translation>
 <translation id="383465348367842624">'<ph name="ATSIGN" />'కి ముందు ఉన్న భాగంలో '<ph name="INVALIDCHARACTER" />' చిహ్నం ఉండకూడదు.</translation>
 <translation id="3846214748874656680">పూర్తి స్క్రీన్ నుండి నిష్క్రమించు</translation>
-<translation id="3889183436948184105">పునర్విమర్శ</translation>
 <translation id="3920932319529768807">ముగింపు</translation>
 <translation id="3924558731517983934">అప్లికేషన్‌</translation>
 <translation id="3944740393230681990">ప్రారంభం</translation>
@@ -114,9 +113,12 @@
 <translation id="479989351350248267">search</translation>
 <translation id="4812940957355064477">దయచేసి సంఖ్యను నమోదు చేయండి.</translation>
 <translation id="4912536737030637138">వివరణపట్టి నమోదు</translation>
+<translation id="492244087561876220">కామెంట్‌</translation>
+<translation id="4971739861736909480"><ph name="ACCNAME" /> ఎంచుకోబడింది</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> ఎంచుకోబడ్డాయి</translation>
 <translation id="4992066212339426712">అన్‌మ్యూట్ చేయి</translation>
 <translation id="49969490063480558">దయచేసి '<ph name="ATSIGN" />'కి తర్వాత ఉన్న భాగాన్ని నమోదు చేయండి. '<ph name="INVALIDADDRESS" />' అసంపూర్ణంగా ఉంది.</translation>
+<translation id="5022314756875057021">అడ్డు వరుసల గుంపు</translation>
 <translation id="5034860022980953847">ప్రోగ్రెస్ సూచిక</translation>
 <translation id="5090250355906949916">వీడియో సమయ స్క్రబ్బర్</translation>
 <translation id="5093189678851173835">పరిచయ వాక్యం</translation>
@@ -217,6 +219,7 @@
 <translation id="7888071071722539607">దయచేసి ఇమెయిల్ చిరునామాలో '<ph name="ATSIGN" />'ని చేర్చండి. '<ph name="INVALIDADDRESS" />'లో '<ph name="ATSIGN" />' లేదు.</translation>
 <translation id="7891486169920085145">విభజన</translation>
 <translation id="795667975304826397">ఫైల్ ఏదీ ఎంచుకోలేదు</translation>
+<translation id="7962328325860248200"><ph name="ACCNAME" /> ఎంచుకోబడలేదు</translation>
 <translation id="8034303206267677282">ప్రబలమైనది</translation>
 <translation id="8053789581856978548">శోధన వచనం ఫీల్డ్</translation>
 <translation id="8057695513531652401">గమనిక</translation>

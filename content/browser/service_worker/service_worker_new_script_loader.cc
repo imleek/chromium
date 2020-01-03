@@ -23,7 +23,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_status_flags.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 
 namespace content {
@@ -150,9 +150,9 @@ ServiceWorkerNewScriptLoader::ServiceWorkerNewScriptLoader(
   options &= ~network::mojom::kURLLoadOptionSniffMimeType;
 
   loader_factory_->CreateLoaderAndStart(
-      mojo::MakeRequest(&network_loader_), routing_id, request_id, options,
-      resource_request, network_client_receiver_.BindNewPipeAndPassRemote(),
-      traffic_annotation);
+      network_loader_.BindNewPipeAndPassReceiver(), routing_id, request_id,
+      options, resource_request,
+      network_client_receiver_.BindNewPipeAndPassRemote(), traffic_annotation);
   DCHECK_EQ(LoaderState::kNotStarted, network_loader_state_);
   network_loader_state_ = LoaderState::kLoadingHeader;
 }
@@ -201,7 +201,7 @@ void ServiceWorkerNewScriptLoader::OnReceiveResponse(
   std::string error_message;
   std::unique_ptr<net::HttpResponseInfo> response_info =
       service_worker_loader_helpers::CreateHttpResponseInfoAndCheckHeaders(
-          response_head, &service_worker_state, &completion_status,
+          *response_head, &service_worker_state, &completion_status,
           &error_message);
   if (!response_info) {
     DCHECK_NE(net::OK, completion_status.error_code);

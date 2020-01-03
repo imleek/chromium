@@ -238,6 +238,9 @@ id<GREYMatcher> ContentSettingsButton();
 // screen.
 id<GREYMatcher> GoogleServicesSettingsButton();
 
+// Returns matcher for the Google Services Settings view.
+id<GREYMatcher> GoogleServicesSettingsView();
+
 // Returns matcher for the back button on a settings menu.
 id<GREYMatcher> SettingsMenuBackButton();
 
@@ -275,6 +278,10 @@ id<GREYMatcher> ClearCacheButton();
 // Returns matcher for the clear saved passwords cell on the clear browsing data
 // panel.
 id<GREYMatcher> ClearSavedPasswordsButton();
+
+// Returns matcher for the clear saved passwords cell on the clear browsing data
+// panel.
+id<GREYMatcher> ClearAutofillButton();
 
 // Returns matcher for the collection view of content suggestion.
 id<GREYMatcher> ContentSuggestionCollectionView();
@@ -389,6 +396,19 @@ id<GREYMatcher> SettingsBottomToolbarDeleteButton();
 
 // Returns a matcher for an autofill suggestion view.
 id<GREYMatcher> AutofillSuggestionViewMatcher();
+
+// Returns a matcher to test whether the element is a scroll view with a content
+// smaller than the scroll view bounds.
+id<GREYMatcher> ContentViewSmallerThanScrollView();
+
+// Returns a matcher for the infobar asking to save a credit card locally.
+id<GREYMatcher> AutofillSaveCardLocallyInfobar();
+
+// Returns a matcher for the infobar asking to upload a credit card.
+id<GREYMatcher> AutofillUploadCardInfobar();
+
+// Returns a matcher for a history entry with |url| and |title|.
+id<GREYMatcher> HistoryEntry(const std::string& url, const std::string& title);
 
 #pragma mark - Manual Fallback
 

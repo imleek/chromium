@@ -5,10 +5,12 @@
 #include "chrome/browser/sharing/sharing_message_sender.h"
 #include "base/guid.h"
 #include "base/task/post_task.h"
+#include "chrome/browser/sharing/sharing_constants.h"
 #include "chrome/browser/sharing/sharing_fcm_sender.h"
 #include "chrome/browser/sharing/sharing_metrics.h"
 #include "chrome/browser/sharing/sharing_sync_preference.h"
 #include "chrome/browser/sharing/sharing_utils.h"
+#include "components/send_tab_to_self/target_device_info.h"
 #include "components/sync_device_info/local_device_info_provider.h"
 #include "content/public/browser/browser_task_traits.h"
 
@@ -23,7 +25,7 @@ SharingMessageSender::SharingMessageSender(
 SharingMessageSender::~SharingMessageSender() = default;
 
 void SharingMessageSender::SendMessageToDevice(
-    const std::string& device_guid,
+    const syncer::DeviceInfo& device,
     base::TimeDelta response_timeout,
     chrome_browser_sharing::SharingMessage message,
     ResponseCallback callback) {
@@ -35,6 +37,9 @@ void SharingMessageSender::SendMessageToDevice(
   chrome_browser_sharing::MessageType message_type =
       SharingPayloadCaseToMessageType(message.payload_case());
 
+  receiver_device_platform_.emplace(
+      message_guid, sync_prefs_->GetDevicePlatform(device.guid()));
+
   base::PostDelayedTask(
       FROM_HERE, {base::TaskPriority::USER_VISIBLE, content::BrowserThread::UI},
       base::BindOnce(&SharingMessageSender::InvokeSendMessageCallback,
@@ -43,11 +48,11 @@ void SharingMessageSender::SendMessageToDevice(
                      /*response=*/nullptr),
       response_timeout);
 
-  // TODO(crbug/1015411): Here we assume caller gets |device_guid| from
+  // TODO(crbug/1015411): Here we assume the caller gets the device guid from
   // GetDeviceCandidates, so both DeviceInfoTracker and LocalDeviceInfoProvider
   // are already ready. It's better to queue up the message and wait until
   // DeviceInfoTracker and LocalDeviceInfoProvider are ready.
-  auto target_info = sync_prefs_->GetTargetInfo(device_guid);
+  auto target_info = sync_prefs_->GetTargetInfo(device.guid());
   if (!target_info) {
     InvokeSendMessageCallback(message_guid, message_type,
                               SharingSendMessageResult::kDeviceNotFound,
@@ -73,9 +78,13 @@ void SharingMessageSender::SendMessageToDevice(
     return;
   }
 
+  LogSharingDeviceLastUpdatedAge(
+      message_type, base::Time::Now() - device.last_updated_timestamp());
+  LogSharingVersionComparison(message_type, device.chrome_version());
+
   message.set_sender_guid(local_device_info->guid());
   message.set_sender_device_name(
-      GetSharingDeviceNames(local_device_info).full_name);
+      send_tab_to_self::GetSharingDeviceNames(local_device_info).full_name);
 
   auto* sender_info = message.mutable_sender_info();
   sender_info->set_fcm_token(sharing_info->vapid_target_info.fcm_token);
@@ -141,5 +150,12 @@ void SharingMessageSender::InvokeSendMessageCallback(
   ResponseCallback callback = std::move(iter->second);
   send_message_callbacks_.erase(iter);
   std::move(callback).Run(result, std::move(response));
-  LogSendSharingMessageResult(message_type, result);
+
+  auto device_platform_iter = receiver_device_platform_.find(message_guid);
+  DCHECK(device_platform_iter != receiver_device_platform_.end());
+
+  SharingDevicePlatform device_platform = device_platform_iter->second;
+  receiver_device_platform_.erase(device_platform_iter);
+
+  LogSendSharingMessageResult(message_type, device_platform, result);
 }

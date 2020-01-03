@@ -2,20 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/mac/rules.gni")
+
 group("mac") {
   deps = [
-    ":updater",
-  ]
-}
-
-executable("updater") {
-  sources = [
-    "main.cc",
-  ]
-
-  deps = [
-    ":network_fetcher_sources",
-    "//chrome/updater:common",
+    ":updater_bundle",
+    ":updater_setup",
   ]
 }
 
@@ -49,21 +41,39 @@ source_set("updater_tests") {
   ]
 }
 
-bundle_data("info_plist") {
+mac_app_bundle("updater_bundle") {
+  info_plist = "Info.plist"
+  output_name = "GoogleUpdate"
+
   sources = [
-    "Info.plist",
+    "main.cc",
   ]
-  outputs = [
-    "{{bundle_contents_dir}}/Info.plist",
+  deps = [
+    ":network_fetcher_sources",
+    "//chrome/updater:common",
   ]
 }
 
-create_bundle("GoogleUpdate.bundle") {
-  deps = [
-    ":info_plist",
+executable("updater_setup") {
+  sources = [
+    "updater_setup/main.cc",
+    "updater_setup/updater_setup.h",
+    "updater_setup/updater_setup.mm",
   ]
-  bundle_root_dir = "${root_build_dir}/GoogleUpdate.bundle"
-  bundle_contents_dir = "${bundle_root_dir}/Contents"
-  bundle_resources_dir = "${bundle_contents_dir}/Resources"
-  bundle_executable_dir = "${bundle_contents_dir}/MacOS"
+
+  deps = [
+    ":network_fetcher_sources",
+    ":updater_bundle",
+    "//base",
+    "//chrome/common",
+    "//chrome/common/importer",
+    "//chrome/updater:common",
+    "//mojo/public/cpp/platform",
+  ]
+
+  libs = [
+    "AppKit.framework",
+    "CoreServices.framework",
+    "ServiceManagement.framework",
+  ]
 }

@@ -179,6 +179,10 @@
              file="cr_elements/cr_view_manager/cr_view_manager.js"
              type="chrome_html" />
   <if expr="chromeos">
+    <structure name="IDR_CR_ELEMENTS_CHROMEOS_CROS_COLOR_OVERRIDES_HTML"
+               file="cr_elements/chromeos/cros_color_overrides.html"
+               type="chrome_html"
+               compress="gzip" />
     <structure name="IDR_CR_ELEMENTS_CHROMEOS_CR_PICTURE_CR_CAMERA_HTML"
                file="cr_elements/chromeos/cr_picture/cr_camera.html"
                type="chrome_html"
@@ -221,14 +225,6 @@
                compress="gzip" />
     <structure name="IDR_CR_ELEMENTS_CHROMEOS_CR_PICTURE_ICONS_HTML"
                file="cr_elements/chromeos/cr_picture/icons.html"
-               type="chrome_html"
-               compress="gzip" />
-    <structure name="IDR_CR_ELEMENTS_CHROMEOS_CR_ONC_STRINGS_HTML"
-               file="cr_elements/chromeos/network/cr_onc_strings.html"
-               type="chrome_html"
-               compress="gzip" />
-    <structure name="IDR_CR_ELEMENTS_CHROMEOS_CR_ONC_STRINGS_JS"
-               file="cr_elements/chromeos/network/cr_onc_strings.js"
                type="chrome_html"
                compress="gzip" />
     <structure name="IDR_CR_ELEMENTS_CHROMEOS_CR_LOTTIE_HTML"

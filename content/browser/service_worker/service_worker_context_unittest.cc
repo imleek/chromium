@@ -14,6 +14,7 @@
 #include "base/time/time.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/fake_embedded_worker_instance_client.h"
+#include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_core_observer.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -167,7 +168,14 @@ class ServiceWorkerContextTest : public ServiceWorkerContextCoreObserver,
     helper_->context_wrapper()->AddObserver(this);
   }
 
-  void TearDown() override { helper_.reset(); }
+  void TearDown() override {
+    helper_.reset();
+    // The helper may post tasks to release resources in |temp_dir_|. Allow
+    // them to run now so that the directory may be deleted.
+    task_environment_.RunUntilIdle();
+    EXPECT_TRUE(!temp_dir_.IsValid() || temp_dir_.Delete())
+        << temp_dir_.GetPath();
+  }
 
   // ServiceWorkerContextCoreObserver overrides.
   void OnRegistrationCompleted(int64_t registration_id,
@@ -204,8 +212,14 @@ class ServiceWorkerContextTest : public ServiceWorkerContextCoreObserver,
   ServiceWorkerContextWrapper* context_wrapper() {
     return helper_->context_wrapper();
   }
+  void GetTemporaryDirectory(base::FilePath* temp_dir) {
+    ASSERT_FALSE(temp_dir_.IsValid());
+    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
+    *temp_dir = temp_dir_.GetPath();
+  }
 
  protected:
+  base::ScopedTempDir temp_dir_;
   BrowserTaskEnvironment task_environment_;
   std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
   std::vector<NotificationLog> notifications_;
@@ -409,12 +423,12 @@ TEST_F(ServiceWorkerContextTest, NoControlleesObserver) {
       CreateProviderHostForWindow(helper_->mock_render_process_id(), true,
                                   context()->AsWeakPtr(), &endpoint);
 
-  version->AddControllee(host.get());
+  version->AddControllee(host->container_host());
   base::RunLoop().RunUntilIdle();
 
   TestServiceWorkerContextObserver observer(context_wrapper());
 
-  version->RemoveControllee(host->client_uuid());
+  version->RemoveControllee(host->container_host()->client_uuid());
   base::RunLoop().RunUntilIdle();
 
   ASSERT_EQ(1u, observer.events().size());
@@ -955,7 +969,7 @@ TEST_F(ServiceWorkerContextTest, RegisterDuplicateScript) {
   EXPECT_EQ(old_registration_id, notifications_[2].registration_id);
 }
 
-TEST_F(ServiceWorkerContextTest, ProviderHostIterator) {
+TEST_F(ServiceWorkerContextTest, ContainerHostIterator) {
   const int kRenderProcessId1 = 1;
   const int kRenderProcessId2 = 2;
   const GURL kOrigin1 = GURL("https://www.example.com/");
@@ -967,21 +981,27 @@ TEST_F(ServiceWorkerContextTest, ProviderHostIterator) {
   base::WeakPtr<ServiceWorkerProviderHost> host1 = CreateProviderHostForWindow(
       kRenderProcessId1, true /* is_parent_frame_secure */,
       context()->AsWeakPtr(), &remote_endpoints.back());
-  host1->UpdateUrls(kOrigin1, kOrigin1, url::Origin::Create(kOrigin1));
+  host1->container_host()->UpdateUrls(kOrigin1,
+                                      net::SiteForCookies::FromUrl(kOrigin1),
+                                      url::Origin::Create(kOrigin1));
 
   // Host2 : process_id=2, origin2.
   remote_endpoints.emplace_back();
   base::WeakPtr<ServiceWorkerProviderHost> host2 = CreateProviderHostForWindow(
       kRenderProcessId2, true /* is_parent_frame_secure */,
       context()->AsWeakPtr(), &remote_endpoints.back());
-  host2->UpdateUrls(kOrigin2, kOrigin2, url::Origin::Create(kOrigin2));
+  host2->container_host()->UpdateUrls(kOrigin2,
+                                      net::SiteForCookies::FromUrl(kOrigin2),
+                                      url::Origin::Create(kOrigin2));
 
   // Host3 : process_id=2, origin1.
   remote_endpoints.emplace_back();
   base::WeakPtr<ServiceWorkerProviderHost> host3 = CreateProviderHostForWindow(
       kRenderProcessId2, true /* is_parent_frame_secure */,
       context()->AsWeakPtr(), &remote_endpoints.back());
-  host3->UpdateUrls(kOrigin1, kOrigin1, url::Origin::Create(kOrigin1));
+  host3->container_host()->UpdateUrls(kOrigin1,
+                                      net::SiteForCookies::FromUrl(kOrigin1),
+                                      url::Origin::Create(kOrigin1));
 
   // Host4 : process_id=2, origin2, for ServiceWorker.
   blink::mojom::ServiceWorkerRegistrationOptions registration_opt;
@@ -1001,43 +1021,39 @@ TEST_F(ServiceWorkerContextTest, ProviderHostIterator) {
       CreateProviderHostForServiceWorkerContext(
           kRenderProcessId2, true /* is_parent_frame_secure */, version.get(),
           context()->AsWeakPtr(), &remote_endpoints.back());
-  const int host4_provider_id = host4->provider_id();
-  EXPECT_NE(host4_provider_id, blink::kInvalidServiceWorkerProviderId);
+  EXPECT_NE(host4->provider_id(), blink::kInvalidServiceWorkerProviderId);
 
-  ServiceWorkerProviderHost* host1_raw = host1.get();
-  ServiceWorkerProviderHost* host2_raw = host2.get();
-  ServiceWorkerProviderHost* host3_raw = host3.get();
-  ASSERT_TRUE(context()->GetProviderHost(host1->provider_id()));
-  ASSERT_TRUE(context()->GetProviderHost(host2->provider_id()));
-  ASSERT_TRUE(context()->GetProviderHost(host3->provider_id()));
-  ASSERT_TRUE(context()->GetProviderHost(host4->provider_id()));
+  ASSERT_TRUE(host1);
+  ASSERT_TRUE(host2);
+  ASSERT_TRUE(host3);
+  ASSERT_TRUE(host4);
 
-  // Iterate over the client provider hosts that belong to kOrigin1.
-  std::set<ServiceWorkerProviderHost*> results;
-  for (auto it = context()->GetClientProviderHostIterator(
+  // Iterate over the client container hosts that belong to kOrigin1.
+  std::set<ServiceWorkerContainerHost*> results;
+  for (auto it = context()->GetClientContainerHostIterator(
            kOrigin1, true /* include_reserved_clients */);
        !it->IsAtEnd(); it->Advance()) {
-    results.insert(it->GetProviderHost());
+    results.insert(it->GetContainerHost());
   }
   EXPECT_EQ(2u, results.size());
-  EXPECT_TRUE(base::Contains(results, host1_raw));
-  EXPECT_TRUE(base::Contains(results, host3_raw));
+  EXPECT_TRUE(base::Contains(results, host1->container_host()));
+  EXPECT_TRUE(base::Contains(results, host3->container_host()));
 
-  // Iterate over the provider hosts that belong to kOrigin2.
+  // Iterate over the container hosts that belong to kOrigin2.
   // (This should not include host4 as it's not for controllee.)
   results.clear();
-  for (auto it = context()->GetClientProviderHostIterator(
+  for (auto it = context()->GetClientContainerHostIterator(
            kOrigin2, true /* include_reserved_clients */);
        !it->IsAtEnd(); it->Advance()) {
-    results.insert(it->GetProviderHost());
+    results.insert(it->GetContainerHost());
   }
   EXPECT_EQ(1u, results.size());
-  EXPECT_TRUE(base::Contains(results, host2_raw));
+  EXPECT_TRUE(base::Contains(results, host2->container_host()));
 
   context()->RemoveProviderHost(host1->provider_id());
   context()->RemoveProviderHost(host2->provider_id());
   context()->RemoveProviderHost(host3->provider_id());
-  context()->RemoveProviderHost(host4_provider_id);
+  context()->RemoveProviderHost(host4->provider_id());
 }
 
 class ServiceWorkerContextRecoveryTest
@@ -1059,9 +1075,9 @@ TEST_P(ServiceWorkerContextRecoveryTest, DeleteAndStartOver) {
 
   if (is_storage_on_disk()) {
     // Reinitialize the helper to test on-disk storage.
-    base::ScopedTempDir user_data_directory;
-    ASSERT_TRUE(user_data_directory.CreateUniqueTempDir());
-    helper_.reset(new EmbeddedWorkerTestHelper(user_data_directory.GetPath()));
+    base::FilePath user_data_directory;
+    ASSERT_NO_FATAL_FAILURE(GetTemporaryDirectory(&user_data_directory));
+    helper_.reset(new EmbeddedWorkerTestHelper(user_data_directory));
     helper_->context_wrapper()->AddObserver(this);
   }
 

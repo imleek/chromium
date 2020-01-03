@@ -67,7 +67,7 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/point.h"
 
@@ -395,7 +395,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, LoginFailed) {
   EXPECT_FALSE(prompt_observer->IsSavePromptShownAutomatically());
 }
 
-IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, Redirects) {
+// Disabled due to flakiness: https://crbug.com/1030579.
+IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, DISABLED_Redirects) {
   NavigateToFile("/password/password_form.html");
 
   // Fill a form and submit through a <input type="submit"> button. The form
@@ -1500,9 +1501,11 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
 
 // Tests whether a attempted submission of a malicious credentials gets blocked.
 // This simulates a case which is described in http://crbug.com/571580.
+//
+// Disabled due to flakiness: https://crbug.com/1030579.
 IN_PROC_BROWSER_TEST_F(
     PasswordManagerBrowserTest,
-    NoPromptForSeperateLoginFormWhenSwitchingFromHttpsToHttp) {
+    DISABLED_NoPromptForSeperateLoginFormWhenSwitchingFromHttpsToHttp) {
   std::string path = "/password/password_form.html";
   GURL https_url(https_test_server().GetURL(path));
   ASSERT_TRUE(https_url.SchemeIs(url::kHttpsScheme));
@@ -2290,8 +2293,10 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
 
 // Check that a password form in an iframe of same origin will not be
 // filled in until user interact with the iframe.
+//
+// Disabled due to flakiness: https://crbug.com/1030579.
 IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
-                       SameOriginIframeAutoFillTest) {
+                       DISABLED_SameOriginIframeAutoFillTest) {
   // Visit the sign-up form to store a password for autofill later
   NavigateToFile("/password/password_form_in_same_origin_iframe.html");
   NavigationObserver observer(WebContents());
@@ -3334,7 +3339,6 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   password_store->AddLogin(signin_form);
   signin_form.username_value = base::ASCIIToUTF16("last_used_username");
   signin_form.password_value = base::ASCIIToUTF16("last_used_password");
-  signin_form.preferred = true;
   password_store->AddLogin(signin_form);
   WaitForPasswordStore();
 
@@ -3704,8 +3708,10 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
 // TODO(crbug.com/862930) If the inconsistency is fixed, please ensure that the
 // code for removing duplicates in password_manager_util.cc is updated and does
 // not remove blacklisted credentials which are no longer duplicates.
+//
+// Disabled due to flakiness: https://crbug.com/1030579.
 IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
-                       HTMLLoginAfterHTTPAuthIsBlacklisted) {
+                       DISABLED_HTMLLoginAfterHTTPAuthIsBlacklisted) {
   for (bool is_realm_empty : {false, true}) {
     scoped_refptr<password_manager::TestPasswordStore> password_store =
         static_cast<password_manager::TestPasswordStore*>(
@@ -3861,12 +3867,10 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   admin_form.origin = embedded_test_server()->base_url();
   admin_form.username_value = base::ASCIIToUTF16("admin");
   admin_form.password_value = base::ASCIIToUTF16("random_secret");
-  admin_form.preferred = true;
   password_store->AddLogin(admin_form);
 
   autofill::PasswordForm user_form = admin_form;
   user_form.username_value = base::ASCIIToUTF16("user");
-  user_form.preferred = false;
   password_store->AddLogin(user_form);
 
   NavigateToFile("/password/password_form.html");

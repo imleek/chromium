@@ -18,7 +18,7 @@
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_fence_handle.h"
-#include "ui/ozone/common/linux/gbm_buffer.h"
+#include "ui/gfx/linux/gbm_buffer.h"
 #include "ui/ozone/platform/drm/gpu/crtc_controller.h"
 #include "ui/ozone/platform/drm/gpu/drm_framebuffer.h"
 #include "ui/ozone/platform/drm/gpu/drm_gpu_util.h"
@@ -780,16 +780,16 @@ TEST_P(HardwareDisplayPlaneManagerTest,
       crtc_properties_, plane_properties_, property_names_, use_atomic_));
 }
 
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+INSTANTIATE_TEST_SUITE_P(All,
                          HardwareDisplayPlaneManagerTest,
                          testing::Values(false, true));
 
 // TODO(dnicoara): Migrate as many tests as possible to the general list above.
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+INSTANTIATE_TEST_SUITE_P(All,
                          HardwareDisplayPlaneManagerLegacyTest,
                          testing::Values(false));
 
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+INSTANTIATE_TEST_SUITE_P(All,
                          HardwareDisplayPlaneManagerAtomicTest,
                          testing::Values(true));
 

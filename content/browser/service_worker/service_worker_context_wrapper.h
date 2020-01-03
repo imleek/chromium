@@ -182,13 +182,13 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   std::vector<ServiceWorkerVersionInfo> GetAllLiveVersionInfo();
 
   // May be called from any thread, and the callback is called on that thread.
-  void HasMainFrameProviderHost(const GURL& origin,
+  void HasMainFrameWindowClient(const GURL& origin,
                                 BoolCallback callback) const;
 
-  // Returns all frame ids for the given |origin|. Must be called on the core
-  // thread.
-  std::unique_ptr<std::vector<GlobalFrameRoutingId>> GetProviderHostIds(
-      const GURL& origin) const;
+  // Returns all frame routing ids for the given |origin|. Must be called on the
+  // core thread.
+  std::unique_ptr<std::vector<GlobalFrameRoutingId>>
+  GetWindowClientFrameRoutingIds(const GURL& origin) const;
 
   // Returns the registration whose scope longest matches |client_url|. It is
   // guaranteed that the returned registration has the activated worker.
@@ -352,8 +352,8 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       storage::SpecialStoragePolicy* special_storage_policy,
       ChromeBlobStorageContext* blob_context,
       URLLoaderFactoryGetter* url_loader_factory_getter,
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
-          non_network_loader_factory_bundle_info_for_update_check);
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
+          non_network_pending_loader_factory_bundle_for_update_check);
   void ShutdownOnCoreThread();
 
   // If |include_installing_version| is true, |callback| is called if there is
@@ -427,8 +427,8 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       blink::ServiceWorkerStatusCode service_worker_status);
 
   // Called when ServiceWorkerImportedScriptUpdateCheck is enabled.
-  std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
-  CreateNonNetworkURLLoaderFactoryBundleInfoForUpdateCheck(
+  std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
+  CreateNonNetworkPendingURLLoaderFactoryBundleForUpdateCheck(
       BrowserContext* browser_context);
 
   void SetUpLoaderFactoryForUpdateCheckOnUI(
@@ -482,7 +482,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       bool include_installing_version,
       FindRegistrationCallback callback,
       scoped_refptr<base::TaskRunner> callback_runner);
-  void HasMainFrameProviderHostOnCoreThread(
+  void HasMainFrameWindowClientOnCoreThread(
       const GURL& origin,
       BoolCallback callback,
       scoped_refptr<base::TaskRunner> callback_runner) const;

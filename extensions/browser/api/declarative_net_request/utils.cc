@@ -37,7 +37,7 @@ namespace dnr_api = api::declarative_net_request;
 // url_pattern_index.fbs. Whenever an extension with an indexed ruleset format
 // version different from the one currently used by Chrome is loaded, the
 // extension ruleset will be reindexed.
-constexpr int kIndexedRulesetFormatVersion = 12;
+constexpr int kIndexedRulesetFormatVersion = 13;
 
 // This static assert is meant to catch cases where
 // url_pattern_index::kUrlPatternIndexFormatVersion is incremented without
@@ -219,6 +219,23 @@ dnr_api::RequestDetails CreateRequestDetails(const WebRequestInfo& request) {
   details.tab_id = request.frame_data.tab_id;
   details.type = GetDNRResourceType(request.type);
   return details;
+}
+
+re2::RE2::Options CreateRE2Options(bool is_case_sensitive,
+                                   bool require_capturing) {
+  re2::RE2::Options options;
+
+  // RE2 supports UTF-8 and Latin1 encoding. We only need to support ASCII, so
+  // use Latin1 encoding. This should also be more efficient than UTF-8.
+  // Note: Latin1 is an 8 bit extension to ASCII.
+  options.set_encoding(re2::RE2::Options::EncodingLatin1);
+
+  options.set_case_sensitive(is_case_sensitive);
+
+  // Don't capture unless needed, for efficiency.
+  options.set_never_capture(!require_capturing);
+
+  return options;
 }
 
 }  // namespace declarative_net_request

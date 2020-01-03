@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromecast_build.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
@@ -215,8 +216,6 @@ jumbo_static_library("content_shell_lib") {
     "common/shell_origin_trial_policy.h",
     "common/shell_switches.cc",
     "common/shell_switches.h",
-    "common/web_test/web_test_content_client.cc",
-    "common/web_test/web_test_content_client.h",
     "gpu/shell_content_gpu_client.cc",
     "gpu/shell_content_gpu_client.h",
     "renderer/shell_content_renderer_client.cc",
@@ -227,10 +226,6 @@ jumbo_static_library("content_shell_lib") {
     "renderer/web_test/blink_test_helpers.h",
     "renderer/web_test/blink_test_runner.cc",
     "renderer/web_test/blink_test_runner.h",
-    "renderer/web_test/test_media_stream_renderer_factory.cc",
-    "renderer/web_test/test_media_stream_renderer_factory.h",
-    "renderer/web_test/test_media_stream_video_renderer.cc",
-    "renderer/web_test/test_media_stream_video_renderer.h",
     "renderer/web_test/test_websocket_handshake_throttle_provider.cc",
     "renderer/web_test/test_websocket_handshake_throttle_provider.h",
     "renderer/web_test/web_test_content_renderer_client.cc",
@@ -363,7 +358,7 @@ jumbo_static_library("content_shell_lib") {
       "//components/crash/content/app:test_support",
       "//components/crash/content/browser",
     ]
-    deps += [ "//third_party/fuchsia-sdk/sdk:ui_policy" ]
+    deps += [ "//third_party/fuchsia-sdk/sdk:fuchsia-ui-policy" ]
   }
 
   # Annoyingly, this target and web_test_support have circular includes.
@@ -384,11 +379,8 @@ jumbo_static_library("content_shell_lib") {
       "//gpu/vulkan/init",
     ]
   }
-  if (mojo_media_host == "browser") {
-    deps += [
-      "//media/mojo/mojom:constants",
-      "//media/mojo/services",
-    ]
+  if (enable_cast_renderer) {
+    deps += [ "//media/mojo/services" ]
   }
 
   if (is_win) {
@@ -481,10 +473,6 @@ jumbo_static_library("content_shell_lib") {
       "browser/shell_plugin_service_filter.h",
     ]
   }
-
-  if (enable_cast_renderer) {
-    deps += [ "//media/mojo/mojom:constants" ]
-  }
 }
 
 static_library("client_hints_util") {
@@ -541,6 +529,7 @@ repack("pak") {
 
   sources = [
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
+    "$root_gen_dir/content/browser/resources/media/media_internals_resources.pak",
     "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
     "$root_gen_dir/content/browser/webrtc/resources/webrtc_internals_resources.pak",
     "$root_gen_dir/content/content_resources.pak",
@@ -560,6 +549,7 @@ repack("pak") {
     ":resources",
     "//content:resources",
     "//content/app/resources",
+    "//content/browser/resources/media:media_internals_resources",
     "//content/browser/tracing:resources",
     "//content/browser/webrtc/resources",
     "//mojo/public/js:resources",

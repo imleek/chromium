@@ -13,6 +13,7 @@ import org.chromium.weblayer_private.interfaces.BrowsingDataType;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
 import org.chromium.weblayer_private.interfaces.IProfile;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
+import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,18 +23,22 @@ import java.util.List;
  */
 @JNINamespace("weblayer")
 public final class ProfileImpl extends IProfile.Stub {
-    private final String mPath;
+    private final String mName;
     private long mNativeProfile;
     private Runnable mOnDestroyCallback;
 
-    ProfileImpl(String path, Runnable onDestroyCallback) {
-        mPath = path;
-        mNativeProfile = ProfileImplJni.get().createProfile(path);
+    ProfileImpl(String name, Runnable onDestroyCallback) {
+        if (!name.matches("^\\w*$")) {
+            throw new IllegalArgumentException("Name can only contain words: " + name);
+        }
+        mName = name;
+        mNativeProfile = ProfileImplJni.get().createProfile(name);
         mOnDestroyCallback = onDestroyCallback;
     }
 
     @Override
     public void destroy() {
+        StrictModeWorkaround.apply();
         ProfileImplJni.get().deleteProfile(mNativeProfile);
         mNativeProfile = 0;
         mOnDestroyCallback.run();
@@ -41,13 +46,15 @@ public final class ProfileImpl extends IProfile.Stub {
     }
 
     @Override
-    public String getPath() {
-        return mPath;
+    public String getName() {
+        StrictModeWorkaround.apply();
+        return mName;
     }
 
     @Override
     public void clearBrowsingData(@NonNull @BrowsingDataType int[] dataTypes, long fromMillis,
             long toMillis, @NonNull IObjectWrapper completionCallback) {
+        StrictModeWorkaround.apply();
         Runnable callback = ObjectWrapper.unwrap(completionCallback, Runnable.class);
         ProfileImplJni.get().clearBrowsingData(
                 mNativeProfile, mapBrowsingDataTypes(dataTypes), fromMillis, toMillis, callback);
@@ -79,7 +86,7 @@ public final class ProfileImpl extends IProfile.Stub {
 
     @NativeMethods
     interface Natives {
-        long createProfile(String path);
+        long createProfile(String name);
         void deleteProfile(long profile);
         void clearBrowsingData(long nativeProfileImpl, @ImplBrowsingDataType int[] dataTypes,
                 long fromMillis, long toMillis, Runnable callback);

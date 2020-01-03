@@ -75,6 +75,10 @@ const char kEnableProtectedVideoBuffers[] = "enable-protected-video-buffers";
 // --enable-protected-video-buffers is also specified.
 const char kForceProtectedVideoOutputBuffers[] =
     "force-protected-video-output-buffers";
+
+// Enables fuchsia.media.AudioConsumer to be used to render audio streams.
+const char kEnableFuchsiaAudioConsumer[] = "enable-fuchsia-audio-consumer";
+
 #endif  // defined(OS_FUCHSIA)
 
 #if defined(USE_CRAS)
@@ -178,10 +182,6 @@ const char kOverrideEnabledCdmInterfaceVersion[] =
 const char kOverrideHardwareSecureCodecsForTesting[] =
     "override-hardware-secure-codecs-for-testing";
 
-// Enables GpuMemoryBuffer-based buffer pool.
-const char kVideoCaptureUseGpuMemoryBuffer[] =
-    "video-capture-use-gpu-memory-buffer";
-
 namespace autoplay {
 
 // Autoplay policy that requires a document user activation.
@@ -273,7 +273,7 @@ const base::Feature kMemoryPressureBasedSourceBufferGC{
 // thread creation of the object URL and the main thread usage of the object URL
 // for starting attachment to HTMLME.
 const base::Feature kRevokeMediaSourceObjectURLOnAttach{
-    "RevokeMediaSourceObjectURLOnAttach", base::FEATURE_DISABLED_BY_DEFAULT};
+    "RevokeMediaSourceObjectURLOnAttach", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable the instance from ChromeosVideoDecoderFactory in
 // MojoVideoDecoderService, replacing VdaVideoDecoder at Chrome OS platform.
@@ -371,11 +371,6 @@ const base::Feature kUseR16Texture{"use-r16-texture",
 const base::Feature kUnifiedAutoplay{"UnifiedAutoplay",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
-// If enabled, use SurfaceLayer instead of VideoLayer for all playbacks that
-// aren't MediaStream.
-const base::Feature kUseSurfaceLayerForVideo{"UseSurfaceLayerForVideo",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Enable VA-API hardware encode acceleration for H264 on AMD.
 const base::Feature kVaapiH264AMDEncoder{"VaapiH264AMDEncoder",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
@@ -407,6 +402,10 @@ const base::Feature kVideoBlitColorAccuracy{"video-blit-color-accuracy",
 // no effect.
 const base::Feature kExternalClearKeyForTesting{
     "ExternalClearKeyForTesting", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables the LiveCaption feature.
+const base::Feature kLiveCaption{"LiveCaption",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Prevents UrlProvisionFetcher from making a provisioning request. If
 // specified, any provisioning request made will not be sent to the provisioning

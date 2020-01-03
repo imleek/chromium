@@ -32,6 +32,11 @@
         line-height: 22px;
         padding: 16px 24px;
       }
+      @media (prefers-color-scheme: dark) {
+        .top-title-bar {
+          color: var(--cr-primary-text-color);
+        }
+      }
 
       #closeButton {
         margin-inline-start: 8px;
@@ -46,7 +51,6 @@
     </style>
     <div class="container">
       <div class="top-title-bar" id='dialogTitle'>
-          $i18n{signinEmailConfirmationTitle}
       </div>
       <div class="details">
         <cr-radio-group selected="createNewUser">
@@ -57,7 +61,6 @@
             </div>
             <div class="radio-button-subtitle-container"
                 id="createNewUserRadioButtonSubtitle">
-              $i18n{signinEmailConfirmationCreateProfileButtonSubtitle}
             </div>
           </cr-radio-button>
           <cr-radio-button id="startSyncRadioButton" name="startSync">
@@ -66,7 +69,6 @@
             </div>
             <div class="radio-button-subtitle-container"
                 id="startSyncRadioButtonSubtitle">
-              $i18n{signinEmailConfirmationStartSyncButtonSubtitle}
             </div>
           </cr-radio-button>
         </cr-radio-group>

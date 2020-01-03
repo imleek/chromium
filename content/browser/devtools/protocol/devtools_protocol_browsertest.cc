@@ -1918,7 +1918,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, CertificateExplanations) {
   std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
   params = WaitForMatchingNotification(
       "Security.securityStateChanged",
-      base::Bind(&SecurityStateChangedHasCertificateExplanation));
+      base::BindRepeating(&SecurityStateChangedHasCertificateExplanation));
 
   // There should be one explanation containing the server's certificate chain.
   net::SHA256HashValue cert_chain_fingerprint =
@@ -2038,33 +2038,6 @@ class CountingDownloadFileFactory : public download::DownloadFileFactory {
   }
 };
 
-class TestShellDownloadManagerDelegate : public ShellDownloadManagerDelegate {
- public:
-  TestShellDownloadManagerDelegate() : delay_download_open_(false) {}
-  ~TestShellDownloadManagerDelegate() override {}
-
-  bool ShouldOpenDownload(
-      download::DownloadItem* item,
-      const DownloadOpenDelayedCallback& callback) override {
-    if (delay_download_open_) {
-      delayed_callbacks_.push_back(callback);
-      return false;
-    }
-    return true;
-  }
-
-  void SetDelayedOpen(bool delay) { delay_download_open_ = delay; }
-
-  void GetDelayedCallbacks(
-      std::vector<DownloadOpenDelayedCallback>* callbacks) {
-    callbacks->swap(delayed_callbacks_);
-  }
-
- private:
-  bool delay_download_open_;
-  std::vector<DownloadOpenDelayedCallback> delayed_callbacks_;
-};
-
 // Get the next created download.
 class DownloadCreateObserver : DownloadManager::Observer {
  public:
@@ -2118,7 +2091,7 @@ class DownloadCreateObserver : DownloadManager::Observer {
   DownloadManager* manager_;
   download::DownloadItem* item_;
   bool received_item_response_;
-  base::Closure completion_closure_;
+  base::OnceClosure completion_closure_;
 };
 
 bool IsDownloadInState(download::DownloadItem::DownloadState state,
@@ -2133,7 +2106,7 @@ class DevToolsDownloadContentTest : public DevToolsProtocolTest {
     ASSERT_TRUE(downloads_directory_.CreateUniqueTempDir());
 
     // Set shell default download manager to test proxy reset behavior.
-    test_delegate_.reset(new TestShellDownloadManagerDelegate());
+    test_delegate_.reset(new ShellDownloadManagerDelegate());
     test_delegate_->SetDownloadBehaviorForTesting(
         downloads_directory_.GetPath());
     DownloadManager* manager = DownloadManagerForShell(shell());
@@ -2182,8 +2155,8 @@ class DevToolsDownloadContentTest : public DevToolsProtocolTest {
 
   void WaitForCompletion(download::DownloadItem* download) {
     DownloadUpdatedObserver(
-        download,
-        base::Bind(&IsDownloadInState, download::DownloadItem::COMPLETE))
+        download, base::BindRepeating(&IsDownloadInState,
+                                      download::DownloadItem::COMPLETE))
         .WaitForEvent();
   }
 
@@ -2234,7 +2207,7 @@ class DevToolsDownloadContentTest : public DevToolsProtocolTest {
  private:
   // Location of the downloads directory for these tests
   base::ScopedTempDir downloads_directory_;
-  std::unique_ptr<TestShellDownloadManagerDelegate> test_delegate_;
+  std::unique_ptr<ShellDownloadManagerDelegate> test_delegate_;
 };
 
 }  // namespace
@@ -2410,7 +2383,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsDownloadContentTest, MAYBE_MultiDownload) {
   std::unique_ptr<DownloadTestObserver> observer2(CreateWaiter(shell(), 1));
   EXPECT_TRUE(NavigateToURL(
       shell(), embedded_test_server()->GetURL(
-                   content::SlowDownloadHttpResponse::kFinishDownloadUrl)));
+                   content::SlowDownloadHttpResponse::kFinishSlowResponseUrl)));
   observer2->WaitForFinished();  // Wait for the third request.
   EXPECT_EQ(
       1u, observer2->NumDownloadsSeenInState(download::DownloadItem::COMPLETE));
@@ -2424,8 +2397,9 @@ IN_PROC_BROWSER_TEST_F(DevToolsDownloadContentTest, MAYBE_MultiDownload) {
   // source file.
   base::FilePath file1(download1->GetTargetFilePath());
   ASSERT_EQ(file1.DirName().MaybeAsASCII(), download1_path);
-  size_t file_size1 = content::SlowDownloadHttpResponse::kFirstDownloadSize +
-                      content::SlowDownloadHttpResponse::kSecondDownloadSize;
+  size_t file_size1 =
+      content::SlowDownloadHttpResponse::kFirstResponsePartSize +
+      content::SlowDownloadHttpResponse::kSecondResponsePartSize;
   std::string expected_contents(file_size1, '*');
   ASSERT_TRUE(VerifyFile(file1, expected_contents, file_size1));
 

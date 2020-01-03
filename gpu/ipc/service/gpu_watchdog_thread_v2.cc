@@ -4,91 +4,33 @@
 
 #include "gpu/ipc/service/gpu_watchdog_thread_v2.h"
 
-#if defined(OS_WIN)
-#include <d3d9.h>
-#include <dxgi.h>
-#endif
-
 #include "base/atomicops.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/bit_cast.h"
 #include "base/debug/alias.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/message_loop/message_loop_current.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/metrics/persistent_histogram_allocator.h"
 #include "base/native_library.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "gpu/config/gpu_crash_keys.h"
 
 namespace gpu {
-namespace {
-
-// For crash_keys::gpu_watchdog_slow_system_type
-enum GpuWatchdogCrashType {
-  kGpuHang = 0,
-  kSlow = 1,
-  kSlowFileAccess = 2,
-  kSlowThreads = 3,
-};
-
-#if defined(OS_WIN)
-bool LoadAndUnloadAFile(
-    base::NativeLibraryLoadError* native_library_load_error) {
-  // Try loading d3d9.dll first
-  base::NativeLibrary d3d9_library = base::LoadNativeLibrary(
-      base::FilePath(L"d3d9.dll"), native_library_load_error);
-  if (d3d9_library) {
-    typedef IDirect3D9Ex*(__stdcall * PFNDIRECT3DCREATE9EX)(unsigned int,
-                                                            IDirect3D9Ex**);
-    PFNDIRECT3DCREATE9EX direct3d_create9ex;
-    direct3d_create9ex =
-        (PFNDIRECT3DCREATE9EX)GetProcAddress(d3d9_library, "Direct3DCreate9Ex");
-
-    base::UnloadNativeLibrary(d3d9_library);
-    return true;
-  }
-
-  // if d3d9.dll is not available, try dxgi.dll
-  base::NativeLibrary dxgi_library = base::LoadNativeLibrary(
-      base::FilePath(L"dxgi.dll"), native_library_load_error);
-  if (dxgi_library) {
-    typedef HRESULT(WINAPI * PFNCREATEDXGIFACTORY1)(REFIID riid,
-                                                    void** ppFactory);
-    PFNCREATEDXGIFACTORY1 create_dxgi_factory1;
-    create_dxgi_factory1 = (PFNCREATEDXGIFACTORY1)GetProcAddress(
-        dxgi_library, "CreateDXGIFactory1");
-
-    base::UnloadNativeLibrary(dxgi_library);
-    return true;
-  }
-
-  return false;
-}
-
-bool CreateAndDestroyAThread() {
-  auto thread = base::WrapUnique(new base::Thread("GpuWatchdogKill"));
-  base::Thread::Options options;
-  // BACKGROUND: for threads that shouldn't disrupt high priority work.
-  options.priority = base::ThreadPriority::BACKGROUND;
-  options.timer_slack = base::TIMER_SLACK_MAXIMUM;
-  bool successful = thread->StartWithOptions(options);
-
-  if (successful) {
-    successful = thread->WaitUntilThreadStarted();
-    thread->Stop();
-  }
-  return successful;
-}
-#endif
-}  // namespace
 
 GpuWatchdogThreadImplV2::GpuWatchdogThreadImplV2(base::TimeDelta timeout,
+                                                 base::TimeDelta max_wait_time,
                                                  bool is_test_mode)
     : watchdog_timeout_(timeout),
+      in_gpu_initialization_(true),
+      max_wait_time_(max_wait_time),
       is_test_mode_(is_test_mode),
       watched_gpu_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
   base::MessageLoopCurrent::Get()->AddTaskObserver(this);
@@ -101,6 +43,12 @@ GpuWatchdogThreadImplV2::GpuWatchdogThreadImplV2(base::TimeDelta timeout,
                        THREAD_QUERY_INFORMATION, FALSE, 0)) {
     watched_thread_handle_ = nullptr;
   }
+#endif
+
+#if defined(USE_X11)
+  tty_file_ = base::OpenFile(
+      base::FilePath(FILE_PATH_LITERAL("/sys/class/tty/tty0/active")), "r");
+  host_tty_ = GetActiveTTY();
 #endif
 
   Arm();
@@ -117,15 +65,21 @@ GpuWatchdogThreadImplV2::~GpuWatchdogThreadImplV2() {
   if (watched_thread_handle_)
     CloseHandle(watched_thread_handle_);
 #endif
+
+#if defined(USE_X11)
+  if (tty_file_)
+    fclose(tty_file_);
+#endif
 }
 
 // static
 std::unique_ptr<GpuWatchdogThreadImplV2> GpuWatchdogThreadImplV2::Create(
     bool start_backgrounded,
     base::TimeDelta timeout,
+    base::TimeDelta max_wait_time,
     bool is_test_mode) {
-  auto watchdog_thread =
-      base::WrapUnique(new GpuWatchdogThreadImplV2(timeout, is_test_mode));
+  auto watchdog_thread = base::WrapUnique(
+      new GpuWatchdogThreadImplV2(timeout, max_wait_time, is_test_mode));
   base::Thread::Options options;
   options.timer_slack = base::TIMER_SLACK_MAXIMUM;
   watchdog_thread->StartWithOptions(options);
@@ -137,7 +91,7 @@ std::unique_ptr<GpuWatchdogThreadImplV2> GpuWatchdogThreadImplV2::Create(
 // static
 std::unique_ptr<GpuWatchdogThreadImplV2> GpuWatchdogThreadImplV2::Create(
     bool start_backgrounded) {
-  return Create(start_backgrounded, kGpuWatchdogTimeout, false);
+  return Create(start_backgrounded, kGpuWatchdogTimeout, kMaxWaitTime, false);
 }
 
 // Do not add power observer during watchdog init, PowerMonitor might not be up
@@ -154,25 +108,30 @@ void GpuWatchdogThreadImplV2::AddPowerObserver() {
                                 base::Unretained(this)));
 }
 
-// Called from the gpu thread.
+// Android Chrome goes to the background. Called from the gpu thread.
 void GpuWatchdogThreadImplV2::OnBackgrounded() {
   task_runner()->PostTask(
       FROM_HERE,
-      base::BindOnce(&GpuWatchdogThreadImplV2::OnWatchdogBackgrounded,
-                     base::Unretained(this)));
+      base::BindOnce(&GpuWatchdogThreadImplV2::StopWatchdogTimeoutTask,
+                     base::Unretained(this), kAndroidBackgroundForeground));
 }
 
-// Called from the gpu thread.
+// Android Chrome goes to the foreground. Called from the gpu thread.
 void GpuWatchdogThreadImplV2::OnForegrounded() {
   task_runner()->PostTask(
       FROM_HERE,
-      base::BindOnce(&GpuWatchdogThreadImplV2::OnWatchdogForegrounded,
-                     base::Unretained(this)));
+      base::BindOnce(&GpuWatchdogThreadImplV2::RestartWatchdogTimeoutTask,
+                     base::Unretained(this), kAndroidBackgroundForeground));
 }
 
 // Called from the gpu thread when gpu init has completed.
 void GpuWatchdogThreadImplV2::OnInitComplete() {
   DCHECK(watched_gpu_task_runner_->BelongsToCurrentThread());
+
+  task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&GpuWatchdogThreadImplV2::UpdateInitializationFlag,
+                     base::Unretained(this)));
   Disarm();
 }
 
@@ -186,6 +145,26 @@ void GpuWatchdogThreadImplV2::OnGpuProcessTearDown() {
   in_gpu_process_teardown_ = true;
   if (!IsArmed())
     Arm();
+}
+
+// Called from the gpu main thread.
+void GpuWatchdogThreadImplV2::PauseWatchdog() {
+  DCHECK(watched_gpu_task_runner_->BelongsToCurrentThread());
+
+  task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&GpuWatchdogThreadImplV2::StopWatchdogTimeoutTask,
+                     base::Unretained(this), kGeneralGpuFlow));
+}
+
+// Called from the gpu main thread.
+void GpuWatchdogThreadImplV2::ResumeWatchdog() {
+  DCHECK(watched_gpu_task_runner_->BelongsToCurrentThread());
+
+  task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&GpuWatchdogThreadImplV2::RestartWatchdogTimeoutTask,
+                     base::Unretained(this), kGeneralGpuFlow));
 }
 
 // Running on the watchdog thread.
@@ -206,6 +185,7 @@ void GpuWatchdogThreadImplV2::Init() {
   last_arm_disarm_counter_ = base::subtle::NoBarrier_Load(&arm_disarm_counter_);
   watchdog_start_timeticks_ = base::TimeTicks::Now();
   last_on_watchdog_timeout_timeticks_ = watchdog_start_timeticks_;
+
 #if defined(OS_WIN)
   if (watched_thread_handle_) {
     if (base::ThreadTicks::IsSupported())
@@ -214,8 +194,6 @@ void GpuWatchdogThreadImplV2::Init() {
     remaining_watched_thread_ticks_ = timeout;
   }
 #endif
-
-  GpuWatchdogHistogram(GpuWatchdogThreadEvent::kGpuWatchdogStart);
 }
 
 // Running on the watchdog thread.
@@ -230,7 +208,8 @@ void GpuWatchdogThreadImplV2::ReportProgress() {
 }
 
 void GpuWatchdogThreadImplV2::WillProcessTask(
-    const base::PendingTask& pending_task) {
+    const base::PendingTask& pending_task,
+    bool was_blocked_or_low_priority) {
   DCHECK(watched_gpu_task_runner_->BelongsToCurrentThread());
 
   // The watchdog is armed at the beginning of the gpu process teardown.
@@ -252,23 +231,14 @@ void GpuWatchdogThreadImplV2::DidProcessTask(
     Disarm();
 }
 
-// Running on the watchdog thread.
+// Power Suspends. Running on the watchdog thread.
 void GpuWatchdogThreadImplV2::OnSuspend() {
-  DCHECK(watchdog_thread_task_runner_->BelongsToCurrentThread());
-  in_power_suspension_ = true;
-  // Revoke any pending watchdog timeout task
-  weak_factory_.InvalidateWeakPtrs();
-  suspend_timeticks_ = base::TimeTicks::Now();
+  StopWatchdogTimeoutTask(kPowerSuspendResume);
 }
 
-// Running on the watchdog thread.
+// Power Resumes. Running on the watchdog thread.
 void GpuWatchdogThreadImplV2::OnResume() {
-  DCHECK(watchdog_thread_task_runner_->BelongsToCurrentThread());
-
-  in_power_suspension_ = false;
-  RestartWatchdogTimeoutTask();
-  resume_timeticks_ = base::TimeTicks::Now();
-  is_first_timeout_after_power_resume = true;
+  RestartWatchdogTimeoutTask(kPowerSuspendResume);
 }
 
 // Running on the watchdog thread.
@@ -280,38 +250,48 @@ void GpuWatchdogThreadImplV2::OnAddPowerObserver() {
 }
 
 // Running on the watchdog thread.
-void GpuWatchdogThreadImplV2::OnWatchdogBackgrounded() {
+void GpuWatchdogThreadImplV2::RestartWatchdogTimeoutTask(
+    PauseResumeSource source_of_request) {
   DCHECK(watchdog_thread_task_runner_->BelongsToCurrentThread());
+  base::TimeDelta timeout;
 
-  is_backgrounded_ = true;
-  // Revoke any pending watchdog timeout task
-  weak_factory_.InvalidateWeakPtrs();
-  backgrounded_timeticks_ = base::TimeTicks::Now();
-}
+  switch (source_of_request) {
+    case kAndroidBackgroundForeground:
+      if (!is_backgrounded_)
+        return;
+      is_backgrounded_ = false;
+      timeout = watchdog_timeout_ * kRestartFactor;
+      foregrounded_timeticks_ = base::TimeTicks::Now();
+      foregrounded_event_ = true;
+      num_of_timeout_after_foregrounded_ = 0;
+      break;
+    case kPowerSuspendResume:
+      if (!in_power_suspension_)
+        return;
+      in_power_suspension_ = false;
+      timeout = watchdog_timeout_ * kRestartFactor;
+      power_resume_timeticks_ = base::TimeTicks::Now();
+      power_resumed_event_ = true;
+      num_of_timeout_after_power_resume_ = 0;
+      break;
+    case kGeneralGpuFlow:
+      if (!is_paused_)
+        return;
+      is_paused_ = false;
+      timeout = watchdog_timeout_ * kInitFactor;
+      watchdog_resume_timeticks_ = base::TimeTicks::Now();
+      break;
+  }
 
-// Running on the watchdog thread.
-void GpuWatchdogThreadImplV2::OnWatchdogForegrounded() {
-  DCHECK(watchdog_thread_task_runner_->BelongsToCurrentThread());
-
-  is_backgrounded_ = false;
-  RestartWatchdogTimeoutTask();
-  foregrounded_timeticks_ = base::TimeTicks::Now();
-}
-
-// Running on the watchdog thread.
-void GpuWatchdogThreadImplV2::RestartWatchdogTimeoutTask() {
-  DCHECK(watchdog_thread_task_runner_->BelongsToCurrentThread());
-
-  if (!is_backgrounded_ && !in_power_suspension_) {
-    // Make the timeout twice long. The system/gpu might be very slow right
-    // after resume or foregrounded.
+  if (!is_backgrounded_ && !in_power_suspension_ && !is_paused_) {
     weak_ptr_ = weak_factory_.GetWeakPtr();
-    base::TimeDelta timeout = watchdog_timeout_ * kRestartFactor;
     task_runner()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&GpuWatchdogThreadImplV2::OnWatchdogTimeout, weak_ptr_),
         timeout);
     last_on_watchdog_timeout_timeticks_ = base::TimeTicks::Now();
+    last_arm_disarm_counter_ =
+        base::subtle::NoBarrier_Load(&arm_disarm_counter_);
 #if defined(OS_WIN)
     if (watched_thread_handle_) {
       last_on_watchdog_timeout_thread_ticks_ = GetWatchedThreadTime();
@@ -319,6 +299,41 @@ void GpuWatchdogThreadImplV2::RestartWatchdogTimeoutTask() {
     }
 #endif
   }
+}
+
+void GpuWatchdogThreadImplV2::StopWatchdogTimeoutTask(
+    PauseResumeSource source_of_request) {
+  DCHECK(watchdog_thread_task_runner_->BelongsToCurrentThread());
+
+  switch (source_of_request) {
+    case kAndroidBackgroundForeground:
+      if (is_backgrounded_)
+        return;
+      is_backgrounded_ = true;
+      backgrounded_timeticks_ = base::TimeTicks::Now();
+      foregrounded_event_ = false;
+      break;
+    case kPowerSuspendResume:
+      if (in_power_suspension_)
+        return;
+      in_power_suspension_ = true;
+      power_suspend_timeticks_ = base::TimeTicks::Now();
+      power_resumed_event_ = false;
+      break;
+    case kGeneralGpuFlow:
+      if (is_paused_)
+        return;
+      is_paused_ = true;
+      watchdog_pause_timeticks_ = base::TimeTicks::Now();
+      break;
+  }
+
+  // Revoke any pending watchdog timeout task
+  weak_factory_.InvalidateWeakPtrs();
+}
+
+void GpuWatchdogThreadImplV2::UpdateInitializationFlag() {
+  in_gpu_initialization_ = false;
 }
 
 // Called from the gpu main thread.
@@ -362,20 +377,55 @@ void GpuWatchdogThreadImplV2::OnWatchdogTimeout() {
   DCHECK(watchdog_thread_task_runner_->BelongsToCurrentThread());
   DCHECK(!is_backgrounded_);
   DCHECK(!in_power_suspension_);
+  DCHECK(!is_paused_);
+
+  base::TimeTicks on_watchdog_timeout_start = base::TimeTicks::Now();
+
+  // If this metric is added too early (eg. watchdog creation time), it cannot
+  // be persistent. The histogram data will be lost after crash or browser exit.
+  // Delay the recording of kGpuWatchdogStart until the firs
+  // OnWatchdogTimeout() to ensure this metric is created in the persistent
+  // memory.
+  if (!is_watchdog_start_histogram_recorded) {
+    is_watchdog_start_histogram_recorded = true;
+    GpuWatchdogHistogram(GpuWatchdogThreadEvent::kGpuWatchdogStart);
+  }
+
   base::subtle::Atomic32 arm_disarm_counter =
       base::subtle::NoBarrier_Load(&arm_disarm_counter_);
+  GpuWatchdogTimeoutHistogram(GpuWatchdogTimeoutEvent::kTimeout);
+  if (power_resumed_event_)
+    num_of_timeout_after_power_resume_++;
+  if (foregrounded_event_)
+    num_of_timeout_after_foregrounded_++;
 
   // Collect all needed info for gpu hang detection.
   bool disarmed = arm_disarm_counter % 2 == 0;  // even number
   bool gpu_makes_progress = arm_disarm_counter != last_arm_disarm_counter_;
-  last_arm_disarm_counter_ = arm_disarm_counter;
-  bool gpu_thread_needs_more_time =
+  bool watched_thread_needs_more_time =
       WatchedThreadNeedsMoreTime(disarmed || gpu_makes_progress);
 
   // No gpu hang is detected. Continue with another OnWatchdogTimeout task
-  if (disarmed || gpu_makes_progress || gpu_thread_needs_more_time) {
+  if (disarmed || gpu_makes_progress || watched_thread_needs_more_time ||
+      ContinueOnNonHostX11ServerTty()) {
     last_on_watchdog_timeout_timeticks_ = base::TimeTicks::Now();
-    is_first_timeout_after_power_resume = false;
+    last_arm_disarm_counter_ =
+        base::subtle::NoBarrier_Load(&arm_disarm_counter_);
+
+    task_runner()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&GpuWatchdogThreadImplV2::OnWatchdogTimeout, weak_ptr_),
+        watchdog_timeout_);
+    return;
+  }
+
+  // An experiment for all platforms: Wait for max_wait_time_ and see if GPU
+  // will response.
+  GpuWatchdogTimeoutHistogram(GpuWatchdogTimeoutEvent::kTimeoutWait);
+  if (GpuRespondsAfterWaiting(on_watchdog_timeout_start)) {
+    last_on_watchdog_timeout_timeticks_ = base::TimeTicks::Now();
+    last_arm_disarm_counter_ =
+        base::subtle::NoBarrier_Load(&arm_disarm_counter_);
 
     task_runner()->PostDelayedTask(
         FROM_HERE,
@@ -385,6 +435,7 @@ void GpuWatchdogThreadImplV2::OnWatchdogTimeout() {
   }
 
   // Still armed without any progress. GPU possibly hangs.
+  GpuWatchdogTimeoutHistogram(GpuWatchdogTimeoutEvent::kKill);
   DeliberatelyTerminateToRecoverFromHang();
 }
 
@@ -402,6 +453,19 @@ bool GpuWatchdogThreadImplV2::WatchedThreadNeedsMoreTime(
   if (!watched_thread_handle_)
     return false;
 
+  // For metrics only - If count_of_more_gpu_thread_time_allowed_ > 0, we know
+  // extra time was extended in the previous OnWatchdogTimeout(). Now we find
+  // gpu makes progress. Record this case.
+  if (no_gpu_hang_detected && count_of_more_gpu_thread_time_allowed_ > 0) {
+    GpuWatchdogTimeoutHistogram(
+        GpuWatchdogTimeoutEvent::kProgressAfterMoreThreadTime);
+    WindowsNumOfExtraTimeoutsHistogram();
+  }
+  // For metrics only - The extra time was give in timeouts.
+  time_in_extra_timeouts_ =
+      count_of_more_gpu_thread_time_allowed_ * watchdog_timeout_;
+
+  // Calculate how many thread ticks the watched thread spent doing the work.
   base::ThreadTicks now = GetWatchedThreadTime();
   base::TimeDelta thread_time_elapsed =
       now - last_on_watchdog_timeout_thread_ticks_;
@@ -409,16 +473,21 @@ bool GpuWatchdogThreadImplV2::WatchedThreadNeedsMoreTime(
   remaining_watched_thread_ticks_ -= thread_time_elapsed;
 
   if (no_gpu_hang_detected ||
-      count_of_more_gpu_thread_time_allowed >=
+      count_of_more_gpu_thread_time_allowed_ >=
           kMaxCountOfMoreGpuThreadTimeAllowed ||
       thread_time_elapsed < base::TimeDelta() /* bogus data */ ||
       remaining_watched_thread_ticks_ <= base::TimeDelta()) {
     // Reset the remaining thread ticks.
     remaining_watched_thread_ticks_ = watchdog_timeout_;
-    count_of_more_gpu_thread_time_allowed = 0;
+    count_of_more_gpu_thread_time_allowed_ = 0;
     return false;
   } else {
-    count_of_more_gpu_thread_time_allowed++;
+    count_of_more_gpu_thread_time_allowed_++;
+    // Only record it once for all extenteded timeout on the same detected gpu
+    // hang, so we know this is equivlent one crash in our crash reports.
+    if (count_of_more_gpu_thread_time_allowed_ == 1)
+      GpuWatchdogTimeoutHistogram(GpuWatchdogTimeoutEvent::kMoreThreadTime);
+
     return true;
   }
 #else
@@ -456,6 +525,27 @@ base::ThreadTicks GpuWatchdogThreadImplV2::GetWatchedThreadTime() {
 }
 #endif
 
+// This is an experiment on all platforms to see whether GPU will response
+// after waiting longer.
+bool GpuWatchdogThreadImplV2::GpuRespondsAfterWaiting(
+    base::TimeTicks on_watchdog_timeout_start) {
+  base::TimeDelta duration;
+
+  while (duration < max_wait_time_) {
+    // Sleep for 1 seconds each time and check if the GPU makes a progress.
+    base::PlatformThread::Sleep(base::TimeDelta::FromSeconds(1));
+    duration = base::TimeTicks::Now() - on_watchdog_timeout_start;
+
+    if (GpuIsAlive()) {
+      GpuWatchdogTimeoutHistogram(GpuWatchdogTimeoutEvent::kProgressAfterWait);
+      GpuWatchdogWaitTimeHistogram(duration);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void GpuWatchdogThreadImplV2::DeliberatelyTerminateToRecoverFromHang() {
   DCHECK(watchdog_thread_task_runner_->BelongsToCurrentThread());
   // If this is for gpu testing, do not terminate the gpu process.
@@ -471,15 +561,18 @@ void GpuWatchdogThreadImplV2::DeliberatelyTerminateToRecoverFromHang() {
 
   // Store variables so they're available in crash dumps to help determine the
   // cause of any hang.
-  bool in_gpu_init = base::subtle::NoBarrier_Load(&arm_disarm_counter_) == 1;
   base::TimeTicks function_begin_timeticks = base::TimeTicks::Now();
-  base::debug::Alias(&in_gpu_init);
+  base::debug::Alias(&in_gpu_initialization_);
+  base::debug::Alias(&num_of_timeout_after_power_resume_);
+  base::debug::Alias(&num_of_timeout_after_foregrounded_);
   base::debug::Alias(&function_begin_timeticks);
   base::debug::Alias(&watchdog_start_timeticks_);
-  base::debug::Alias(&suspend_timeticks_);
-  base::debug::Alias(&resume_timeticks_);
+  base::debug::Alias(&power_suspend_timeticks_);
+  base::debug::Alias(&power_resume_timeticks_);
   base::debug::Alias(&backgrounded_timeticks_);
   base::debug::Alias(&foregrounded_timeticks_);
+  base::debug::Alias(&watchdog_pause_timeticks_);
+  base::debug::Alias(&watchdog_resume_timeticks_);
   base::debug::Alias(&in_power_suspension_);
   base::debug::Alias(&in_gpu_process_teardown_);
   base::debug::Alias(&is_backgrounded_);
@@ -489,99 +582,17 @@ void GpuWatchdogThreadImplV2::DeliberatelyTerminateToRecoverFromHang() {
   base::TimeDelta timeticks_elapses =
       function_begin_timeticks - last_on_watchdog_timeout_timeticks_;
   base::debug::Alias(&timeticks_elapses);
-
 #if defined(OS_WIN)
   base::debug::Alias(&remaining_watched_thread_ticks_);
 #endif
 
   GpuWatchdogHistogram(GpuWatchdogThreadEvent::kGpuWatchdogKill);
 
-#if defined(OS_WIN)
-  base::TimeDelta extra_time_to_survive;
-  int crash_key_type = kGpuHang;
-
-  if (GpuIsAlive()) {
-    extra_time_to_survive = base::TimeTicks::Now() - function_begin_timeticks;
-    crash_key_type = kSlow;
-  }
-
-  // (1)  Check how long it takes to load and unload a library from disk.
-  base::TimeTicks loading_start = base::TimeTicks::Now();
-  base::NativeLibraryLoadError native_library_load_error;
-  bool loading_successful = false;
-  base::TimeDelta file_loading_total;
-
-  // See if the gpu makes any progress after loading a file from disk
-  if (crash_key_type == kGpuHang) {
-    loading_successful = LoadAndUnloadAFile(&native_library_load_error);
-    file_loading_total = base::TimeTicks::Now() - loading_start;
-
-    if (GpuIsAlive()) {
-      extra_time_to_survive = base::TimeTicks::Now() - function_begin_timeticks;
-      if (loading_successful)
-        crash_key_type = kSlowFileAccess;
-      else
-        crash_key_type = kSlow;
-    }
-  }
-
-  base::debug::Alias(&loading_start);
-  base::debug::Alias(&native_library_load_error);
-  base::debug::Alias(&loading_successful);
-  base::debug::Alias(&file_loading_total);
-
-  // (2) Check how long it takes to create and destroy a new thread.
-  bool thread_successful = false;
-  base::TimeTicks thread_start = base::TimeTicks::Now();
-  base::TimeDelta thread_total;
-
-  if (crash_key_type == kGpuHang) {
-    thread_successful = CreateAndDestroyAThread();
-    thread_total = base::TimeTicks::Now() - thread_start;
-
-    // See if the gpu makes any progress after creating a new thread.
-    if (GpuIsAlive()) {
-      extra_time_to_survive = base::TimeTicks::Now() - function_begin_timeticks;
-      if (thread_successful)
-        crash_key_type = kSlowThreads;
-      else
-        crash_key_type = kSlow;
-    }
-  }
-  base::debug::Alias(&thread_successful);
-  base::debug::Alias(&thread_total);
-
-  // (3) Continue waiting until 60 seconds has passed in this funtion.
-  base::TimeTicks wait_start = base::TimeTicks::Now();
-  base::debug::Alias(&wait_start);
-
-  if (crash_key_type == kGpuHang) {
-    while (base::TimeTicks::Now() - function_begin_timeticks <
-           base::TimeDelta::FromSeconds(60)) {
-      // Sleep for 5 seconds each time and check if the GPU has made a progress.
-      base::PlatformThread::Sleep(base::TimeDelta::FromSeconds(5));
-
-      if (GpuIsAlive()) {
-        extra_time_to_survive =
-            base::TimeTicks::Now() - function_begin_timeticks;
-        crash_key_type = kSlow;
-        break;
-      }
-    }
-  }
-
-  base::debug::Alias(&crash_key_type);
-  base::debug::Alias(&extra_time_to_survive);
-
-  crash_keys::gpu_watchdog_crashed_in_gpu_init.Set(in_gpu_init ? "1" : "0");
-  crash_keys::gpu_watchdog_slow_system_type.Set(
-      base::NumberToString(crash_key_type));
-  crash_keys::gpu_watchdog_extra_seconds_needed.Set(
-      base::NumberToString(extra_time_to_survive.InSeconds()));
-#endif
+  crash_keys::gpu_watchdog_crashed_in_gpu_init.Set(
+      in_gpu_initialization_ ? "1" : "0");
 
   crash_keys::gpu_watchdog_kill_after_power_resume.Set(
-      is_first_timeout_after_power_resume ? "1" : "0");
+      WithinOneMinFromPowerResumed() ? "1" : "0");
 
   // Deliberately crash the process to create a crash dump.
   *((volatile int*)0) = 0xdeadface;
@@ -589,8 +600,158 @@ void GpuWatchdogThreadImplV2::DeliberatelyTerminateToRecoverFromHang() {
 
 void GpuWatchdogThreadImplV2::GpuWatchdogHistogram(
     GpuWatchdogThreadEvent thread_event) {
-  UMA_HISTOGRAM_ENUMERATION("GPU.WatchdogThread.Event.V2", thread_event);
-  UMA_HISTOGRAM_ENUMERATION("GPU.WatchdogThread.Event", thread_event);
+  base::UmaHistogramEnumeration("GPU.WatchdogThread.Event.V2", thread_event);
+  base::UmaHistogramEnumeration("GPU.WatchdogThread.Event", thread_event);
+}
+
+void GpuWatchdogThreadImplV2::GpuWatchdogTimeoutHistogram(
+    GpuWatchdogTimeoutEvent timeout_event) {
+  base::UmaHistogramEnumeration("GPU.WatchdogThread.Timeout", timeout_event);
+
+  bool recorded = false;
+  if (in_gpu_initialization_) {
+    base::UmaHistogramEnumeration("GPU.WatchdogThread.Timeout.Init",
+                                  timeout_event);
+    recorded = true;
+  }
+
+  if (WithinOneMinFromPowerResumed()) {
+    base::UmaHistogramEnumeration("GPU.WatchdogThread.Timeout.PowerResume",
+                                  timeout_event);
+    recorded = true;
+  }
+
+  if (WithinOneMinFromForegrounded()) {
+    base::UmaHistogramEnumeration("GPU.WatchdogThread.Timeout.Foregrounded",
+                                  timeout_event);
+    recorded = true;
+  }
+
+  if (!recorded) {
+    base::UmaHistogramEnumeration("GPU.WatchdogThread.Timeout.Normal",
+                                  timeout_event);
+  }
+}
+
+#if defined(OS_WIN)
+void GpuWatchdogThreadImplV2::WindowsNumOfExtraTimeoutsHistogram() {
+  // Record the number of timeouts the GPU main thread needs to make a progress
+  // after GPU OnWatchdogTimeout() is triggered. The maximum count is 6 which
+  // is more  than kMaxCountOfMoreGpuThreadTimeAllowed(4);
+  constexpr int kMin = 1;
+  constexpr int kMax = 6;
+  constexpr int kBuckets = 6;
+  int count = count_of_more_gpu_thread_time_allowed_;
+  bool recorded = false;
+
+  base::UmaHistogramCustomCounts("GPU.WatchdogThread.ExtraThreadTime", count,
+                                 kMin, kMax, kBuckets);
+
+  if (in_gpu_initialization_) {
+    base::UmaHistogramCustomCounts("GPU.WatchdogThread.ExtraThreadTime.Init",
+                                   count, kMin, kMax, kBuckets);
+    recorded = true;
+  }
+
+  if (WithinOneMinFromPowerResumed()) {
+    base::UmaHistogramCustomCounts(
+        "GPU.WatchdogThread.ExtraThreadTime.PowerResume", count, kMin, kMax,
+        kBuckets);
+    recorded = true;
+  }
+
+  if (WithinOneMinFromForegrounded()) {
+    base::UmaHistogramCustomCounts(
+        "GPU.WatchdogThread.ExtraThreadTime.Foregrounded", count, kMin, kMax,
+        kBuckets);
+    recorded = true;
+  }
+
+  if (!recorded) {
+    base::UmaHistogramCustomCounts("GPU.WatchdogThread.ExtraThreadTime.Normal",
+                                   count, kMin, kMax, kBuckets);
+  }
+}
+#endif
+
+void GpuWatchdogThreadImplV2::GpuWatchdogWaitTimeHistogram(
+    base::TimeDelta wait_time) {
+#if defined(OS_WIN)
+  // Add the time the GPU thread was given for full thread time.
+  wait_time += time_in_extra_timeouts_;
+#endif
+
+  // Record the wait time in OnWatchdogTimeout() for the GPU main thread to
+  // make a progress. The maximum recodrding time is 150 seconds because
+  // Windows need to add the time spent before reaching here (max 60 sec).
+  constexpr base::TimeDelta kMin = base::TimeDelta::FromSeconds(1);
+  constexpr base::TimeDelta kMax = base::TimeDelta::FromSeconds(150);
+  constexpr int kBuckets = 50;
+  bool recorded = false;
+
+  base::UmaHistogramCustomTimes("GPU.WatchdogThread.WaitTime", wait_time, kMin,
+                                kMax, kBuckets);
+
+  if (in_gpu_initialization_) {
+    base::UmaHistogramCustomTimes("GPU.WatchdogThread.WaitTime.Init", wait_time,
+                                  kMin, kMax, kBuckets);
+    recorded = true;
+  }
+
+  if (WithinOneMinFromPowerResumed()) {
+    base::UmaHistogramCustomTimes("GPU.WatchdogThread.WaitTime.PowerResume",
+                                  wait_time, kMin, kMax, kBuckets);
+    recorded = true;
+  }
+
+  if (WithinOneMinFromForegrounded()) {
+    base::UmaHistogramCustomTimes("GPU.WatchdogThread.WaitTime.Foregrounded",
+                                  wait_time, kMin, kMax, kBuckets);
+    recorded = true;
+  }
+
+  if (!recorded) {
+    base::UmaHistogramCustomTimes("GPU.WatchdogThread.WaitTime.Normal",
+                                  wait_time, kMin, kMax, kBuckets);
+  }
+}
+
+bool GpuWatchdogThreadImplV2::WithinOneMinFromPowerResumed() {
+  size_t count = base::TimeDelta::FromSeconds(60) / watchdog_timeout_;
+  return power_resumed_event_ && num_of_timeout_after_power_resume_ <= count;
+}
+
+bool GpuWatchdogThreadImplV2::WithinOneMinFromForegrounded() {
+  size_t count = base::TimeDelta::FromSeconds(60) / watchdog_timeout_;
+  return foregrounded_event_ && num_of_timeout_after_foregrounded_ <= count;
+}
+
+#if defined(USE_X11)
+int GpuWatchdogThreadImplV2::GetActiveTTY() {
+  char tty_string[8] = {0};
+  if (tty_file_ && !fseek(tty_file_, 0, SEEK_SET) &&
+      fread(tty_string, 1, 7, tty_file_)) {
+    int tty_number;
+    if (sscanf(tty_string, "tty%d\n", &tty_number) == 1)
+      return tty_number;
+  }
+  return -1;
+}
+#endif
+
+bool GpuWatchdogThreadImplV2::ContinueOnNonHostX11ServerTty() {
+#if defined(USE_X11)
+  int active_tty = GetActiveTTY();
+  bool is_on_host_tty = host_tty_ == active_tty;
+
+  // Don't crash if we're not on the TTY of our host X11 server.
+  if (host_tty_ != -1 && active_tty != -1 && !is_on_host_tty) {
+    GpuWatchdogTimeoutHistogram(
+        GpuWatchdogTimeoutEvent::kContinueOnNonHostServerTty);
+    return true;
+  }
+#endif
+  return false;
 }
 
 // For gpu testing only. Return whether a GPU hang was detected or not.
@@ -615,5 +776,4 @@ void GpuWatchdogThreadImplV2::WaitForPowerObserverAddedForTesting() {
       base::BindOnce(&base::WaitableEvent::Signal, base::Unretained(&event)));
   event.Wait();
 }
-
 }  // namespace gpu

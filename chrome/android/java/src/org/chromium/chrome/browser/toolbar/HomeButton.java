@@ -14,8 +14,6 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnCreateContextMenuListener;
-import android.view.ViewGroup;
-import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
@@ -24,6 +22,7 @@ import org.chromium.chrome.browser.ActivityTabProvider.ActivityTabTabObserver;
 import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.ThemeColorProvider.TintObserver;
 import org.chromium.chrome.browser.flags.FeatureUtilities;
+import org.chromium.chrome.browser.homepage.HomepagePolicyManager;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
 import org.chromium.chrome.browser.tab.Tab;
@@ -46,40 +45,13 @@ public class HomeButton extends ChromeImageButton
     /** The {@link ActivityTabProvider} used to know if the active tab is on the NTP. */
     private ActivityTabProvider mActivityTabProvider;
 
-    /** The home button text label. */
-    private TextView mLabel;
-
-    /** The wrapper View that contains the home button and the label. */
-    private View mWrapper;
-
     public HomeButton(Context context, AttributeSet attrs) {
         super(context, attrs);
 
         final int homeButtonIcon = R.drawable.btn_toolbar_home;
         setImageDrawable(ContextCompat.getDrawable(context, homeButtonIcon));
-        if (!FeatureUtilities.isBottomToolbarEnabled()) {
-            setOnCreateContextMenuListener(this);
-        }
-
         HomepageManager.getInstance().addListener(this);
-    }
-
-    /**
-     * @param wrapper The wrapping View of this button.
-     */
-    public void setWrapperView(ViewGroup wrapper) {
-        mWrapper = wrapper;
-        mLabel = mWrapper.findViewById(R.id.home_button_label);
-        if (FeatureUtilities.isLabeledBottomToolbarEnabled()) mLabel.setVisibility(View.VISIBLE);
-    }
-
-    @Override
-    public void setOnClickListener(OnClickListener listener) {
-        if (mWrapper != null) {
-            mWrapper.setOnClickListener(listener);
-        } else {
-            super.setOnClickListener(listener);
-        }
+        updateContextMenuListener();
     }
 
     public void destroy() {
@@ -104,7 +76,6 @@ public class HomeButton extends ChromeImageButton
     @Override
     public void onTintChanged(ColorStateList tint, boolean useLight) {
         ApiCompatibilityUtils.setImageTintList(this, tint);
-        if (mLabel != null) mLabel.setTextColor(tint);
     }
 
     @Override
@@ -115,6 +86,7 @@ public class HomeButton extends ChromeImageButton
     @Override
     public boolean onMenuItemClick(MenuItem item) {
         assert item.getItemId() == ID_REMOVE;
+        assert !isManagedByPolicy();
         HomepageManager.getInstance().setPrefHomepageEnabled(false);
         return true;
     }
@@ -164,8 +136,7 @@ public class HomeButton extends ChromeImageButton
             isEnabled = !isTabNTP(tab);
         }
         setEnabled(isEnabled);
-        if (mWrapper != null) mWrapper.setEnabled(isEnabled);
-        if (mLabel != null) mLabel.setEnabled(isEnabled);
+        updateContextMenuListener();
     }
 
     /**
@@ -184,5 +155,18 @@ public class HomeButton extends ChromeImageButton
         if (mActivityTabProvider == null) return null;
 
         return mActivityTabProvider.get();
+    }
+
+    private boolean isManagedByPolicy() {
+        return HomepagePolicyManager.isHomepageManagedByPolicy();
+    }
+
+    private void updateContextMenuListener() {
+        if (!FeatureUtilities.isBottomToolbarEnabled() && !isManagedByPolicy()) {
+            setOnCreateContextMenuListener(this);
+        } else {
+            setOnCreateContextMenuListener(null);
+            setLongClickable(false);
+        }
     }
 }

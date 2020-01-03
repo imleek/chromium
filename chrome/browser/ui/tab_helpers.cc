@@ -85,7 +85,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_manager.h"
-#include "components/dom_distiller/content/browser/web_contents_main_frame_observer.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
 #include "components/download/content/factory/navigation_monitor_factory.h"
 #include "components/download/content/public/download_navigation_observer.h"
@@ -93,14 +92,14 @@
 #include "components/history/core/browser/top_sites.h"
 #include "components/offline_pages/buildflags/buildflags.h"
 #include "components/password_manager/core/browser/password_manager.h"
-#include "components/performance_manager/performance_manager_tab_helper.h"
-#include "components/performance_manager/public/performance_manager.h"
+#include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
 #include "media/base/media_switches.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 
 #if defined(OS_ANDROID)
@@ -112,10 +111,9 @@
 #include "chrome/browser/ui/android/view_android_helper.h"
 #else
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
-#include "chrome/browser/plugins/plugin_observer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_tab_observer.h"
+#include "chrome/browser/tab_contents/form_interaction_tab_helper.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
-#include "chrome/browser/ui/hung_plugin_tab_helper.h"
 #include "chrome/browser/ui/intent_picker_tab_helper.h"
 #include "chrome/browser/ui/sad_tab_helper.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
@@ -131,12 +129,6 @@
 #include "chrome/browser/ui/hats/hats_helper.h"
 #endif
 
-#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
-#include "chrome/browser/offline_pages/android/auto_fetch_page_load_watcher.h"
-#include "chrome/browser/offline_pages/offline_page_tab_helper.h"
-#include "chrome/browser/offline_pages/recent_tab_helper.h"
-#endif
-
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
 #include "chrome/browser/captive_portal/captive_portal_tab_helper.h"
 #endif
@@ -150,12 +142,23 @@
 #include "extensions/browser/view_type_utils.h"
 #endif
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+#include "chrome/browser/offline_pages/android/auto_fetch_page_load_watcher.h"
+#include "chrome/browser/offline_pages/offline_page_tab_helper.h"
+#include "chrome/browser/offline_pages/recent_tab_helper.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+#include "chrome/browser/plugins/plugin_observer.h"
+#include "chrome/browser/ui/hung_plugin_tab_helper.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINTING)
 #include "chrome/browser/printing/printing_init.h"
+#endif
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+#include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
 #endif
 
 using content::WebContents;
@@ -300,14 +303,13 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
       web_contents);
   extensions::WebNavigationTabObserver::CreateForWebContents(web_contents);
+  FormInteractionTabHelper::CreateForWebContents(web_contents);
   FramebustBlockTabHelper::CreateForWebContents(web_contents);
-  HungPluginTabHelper::CreateForWebContents(web_contents);
   IntentPickerTabHelper::CreateForWebContents(web_contents);
   JavaScriptDialogTabHelper::CreateForWebContents(web_contents);
   ManagePasswordsUIController::CreateForWebContents(web_contents);
   pdf::PDFWebContentsHelper::CreateForWebContentsWithClient(
       web_contents, std::make_unique<ChromePDFWebContentsHelperClient>());
-  PluginObserver::CreateForWebContents(web_contents);
   SadTabHelper::CreateForWebContents(web_contents);
   safe_browsing::SafeBrowsingTabObserver::CreateForWebContents(web_contents);
   SearchTabHelper::CreateForWebContents(web_contents);
@@ -315,12 +317,8 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
     SyncEncryptionKeysTabHelper::CreateForWebContents(web_contents);
   }
   TabDialogs::CreateForWebContents(web_contents);
-#if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
   if (base::FeatureList::IsEnabled(features::kTabHoverCardImages) ||
       base::FeatureList::IsEnabled(features::kWebUITabStrip)) {
-#else
-  if (base::FeatureList::IsEnabled(features::kTabHoverCardImages)) {
-#endif
     ThumbnailTabHelper::CreateForWebContents(web_contents);
   }
   web_modal::WebContentsModalDialogManager::CreateForWebContents(web_contents);
@@ -342,12 +340,6 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
 
   // --- Feature tab helpers behind flags ---
 
-#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
-  offline_pages::OfflinePageTabHelper::CreateForWebContents(web_contents);
-  offline_pages::RecentTabHelper::CreateForWebContents(web_contents);
-  offline_pages::AutoFetchPageLoadWatcher::CreateForWebContents(web_contents);
-#endif
-
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
   CaptivePortalTabHelper::CreateForWebContents(web_contents);
 #endif
@@ -360,18 +352,23 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
     web_app::WebAppMetrics::Get(profile);
 #endif
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  SupervisedUserNavigationObserver::CreateForWebContents(web_contents);
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+  offline_pages::OfflinePageTabHelper::CreateForWebContents(web_contents);
+  offline_pages::RecentTabHelper::CreateForWebContents(web_contents);
+  offline_pages::AutoFetchPageLoadWatcher::CreateForWebContents(web_contents);
 #endif
 
+#if BUILDFLAG(ENABLE_PLUGINS)
+  HungPluginTabHelper::CreateForWebContents(web_contents);
+  PluginObserver::CreateForWebContents(web_contents);
+#endif
 #if BUILDFLAG(ENABLE_PRINTING)
   printing::InitializePrinting(web_contents);
 #endif
 
-  if (dom_distiller::IsDomDistillerEnabled()) {
-    dom_distiller::WebContentsMainFrameObserver::CreateForWebContents(
-        web_contents);
-  }
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  SupervisedUserNavigationObserver::CreateForWebContents(web_contents);
+#endif
 
   if (predictors::LoadingPredictorFactory::GetForProfile(profile))
     predictors::LoadingPredictorTabHelper::CreateForWebContents(web_contents);
@@ -385,9 +382,9 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   if (base::FeatureList::IsEnabled(media::kUseMediaHistoryStore))
     MediaHistoryContentsObserver::CreateForWebContents(web_contents);
 
-  if (performance_manager::PerformanceManager::IsAvailable()) {
-    performance_manager::PerformanceManagerTabHelper::CreateForWebContents(
-        web_contents);
+  if (auto* performance_manager_registry =
+          performance_manager::PerformanceManagerRegistry::GetInstance()) {
+    performance_manager_registry->CreatePageNodeForWebContents(web_contents);
   }
 
   // TODO(siggi): Remove this once the Resource Coordinator refactoring is done.

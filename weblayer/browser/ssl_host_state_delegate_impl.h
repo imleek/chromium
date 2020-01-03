@@ -53,16 +53,18 @@ class SSLHostStateDelegateImpl : public content::SSLHostStateDelegate {
   // a specified |error| type.
   void AllowCert(const std::string& host,
                  const net::X509Certificate& cert,
-                 int error) override;
+                 int error,
+                 content::WebContents* web_contents) override;
 
   void Clear(
-      const base::Callback<bool(const std::string&)>& host_filter) override;
+      base::RepeatingCallback<bool(const std::string&)> host_filter) override;
 
   // content::SSLHostStateDelegate:
   content::SSLHostStateDelegate::CertJudgment QueryPolicy(
       const std::string& host,
       const net::X509Certificate& cert,
-      int error) override;
+      int error,
+      content::WebContents* web_contents) override;
   void HostRanInsecureContent(const std::string& host,
                               int child_id,
                               InsecureContentType content_type) override;
@@ -70,7 +72,8 @@ class SSLHostStateDelegateImpl : public content::SSLHostStateDelegate {
                                  int child_id,
                                  InsecureContentType content_type) override;
   void RevokeUserAllowExceptions(const std::string& host) override;
-  bool HasAllowException(const std::string& host) override;
+  bool HasAllowException(const std::string& host,
+                         content::WebContents* web_contents) override;
 
  private:
   // Certificate policies for each host.

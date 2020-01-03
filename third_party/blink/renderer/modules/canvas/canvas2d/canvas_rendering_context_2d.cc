@@ -64,8 +64,6 @@
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/fonts/text_run_paint_info.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_2d_layer_bridge.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_heuristic_parameters.h"
-#include "third_party/blink/renderer/platform/graphics/draw_looper_builder.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_flags.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
@@ -618,6 +616,9 @@ void CanvasRenderingContext2D::PruneLocalFontCache(size_t target_size) {
 
 void CanvasRenderingContext2D::StyleDidChange(const ComputedStyle* old_style,
                                               const ComputedStyle& new_style) {
+  // Only the visibility flag is considered here. display:none is
+  // handled via creation and destruction of the LayoutObject.
+  SetIsBeingDisplayed(new_style.Visibility() == EVisibility::kVisible);
   if (old_style && old_style->GetFont() == new_style.GetFont())
     return;
   PruneLocalFontCache(0);
@@ -933,11 +934,16 @@ const Font& CanvasRenderingContext2D::AccessFont() {
   return GetState().GetFont();
 }
 
-void CanvasRenderingContext2D::SetIsHidden(bool hidden) {
+void CanvasRenderingContext2D::SetIsInHiddenPage(bool hidden) {
   if (IsPaintable())
-    canvas()->GetCanvas2DLayerBridge()->SetIsHidden(hidden);
+    canvas()->GetCanvas2DLayerBridge()->SetIsInHiddenPage(hidden);
   if (hidden)
     PruneLocalFontCache(0);
+}
+
+void CanvasRenderingContext2D::SetIsBeingDisplayed(bool displayed) {
+  if (IsPaintable())
+    canvas()->GetCanvas2DLayerBridge()->SetIsBeingDisplayed(displayed);
 }
 
 bool CanvasRenderingContext2D::IsTransformInvertible() const {
@@ -961,7 +967,7 @@ CanvasRenderingContext2D::getContextAttributes() const {
     settings->setColorSpace(ColorSpaceAsString());
     settings->setPixelFormat(PixelFormatAsString());
   }
-  settings->setDesynchronized(canvas()->LowLatencyEnabled());
+  settings->setDesynchronized(Host()->LowLatencyEnabled());
   return settings;
 }
 
@@ -1137,13 +1143,6 @@ bool CanvasRenderingContext2D::IsCanvas2DBufferValid() const {
     return canvas()->GetCanvas2DLayerBridge()->IsValid();
   }
   return false;
-}
-
-bool CanvasRenderingContext2D::IsDeferralEnabled() const {
-  Canvas2DLayerBridge* layer_bridge = canvas()->GetCanvas2DLayerBridge();
-  if (!layer_bridge)
-    return false;
-  return layer_bridge->IsDeferralEnabled();
 }
 
 }  // namespace blink

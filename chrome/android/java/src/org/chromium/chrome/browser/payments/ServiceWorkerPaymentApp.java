@@ -17,7 +17,9 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentItem;
 import org.chromium.payments.mojom.PaymentMethodData;
+import org.chromium.payments.mojom.PaymentOptions;
 import org.chromium.payments.mojom.PaymentRequestDetailsUpdate;
+import org.chromium.payments.mojom.PaymentShippingOption;
 
 import java.net.URI;
 import java.util.Arrays;
@@ -98,30 +100,6 @@ public class ServiceWorkerPaymentApp extends PaymentInstrument implements Paymen
          */
         /* package */ int[] getSupportedCardTypes() {
             return mSupportedCardTypes;
-        }
-    }
-
-    /**
-     * This class represents the supported delegations of a service worker based payment app.
-     */
-    protected static class SupportedDelegations {
-        private final boolean mShippingAddress;
-        private final boolean mPayerName;
-        private final boolean mPayerPhone;
-        private final boolean mPayerEmail;
-
-        SupportedDelegations(boolean shippingAddress, boolean payerName, boolean payerPhone,
-                boolean payerEmail) {
-            mShippingAddress = shippingAddress;
-            mPayerName = payerName;
-            mPayerPhone = payerPhone;
-            mPayerEmail = payerEmail;
-        }
-        SupportedDelegations() {
-            mShippingAddress = false;
-            mPayerName = false;
-            mPayerPhone = false;
-            mPayerEmail = false;
         }
     }
 
@@ -388,39 +366,42 @@ public class ServiceWorkerPaymentApp extends PaymentInstrument implements Paymen
     public void invokePaymentApp(String id, String merchantName, String origin, String iframeOrigin,
             byte[][] unusedCertificateChain, Map<String, PaymentMethodData> methodData,
             PaymentItem total, List<PaymentItem> displayItems,
-            Map<String, PaymentDetailsModifier> modifiers, InstrumentDetailsCallback callback) {
+            Map<String, PaymentDetailsModifier> modifiers, PaymentOptions paymentOptions,
+            List<PaymentShippingOption> shippingOptions, InstrumentDetailsCallback callback) {
         assert mPaymentHandlerHost != null;
         if (mNeedsInstallation) {
             assert !mIsMicrotransaction;
             BitmapDrawable icon = (BitmapDrawable) getDrawableIcon();
             ServiceWorkerPaymentAppBridge.installAndInvokePaymentApp(mWebContents, origin,
                     iframeOrigin, id, new HashSet<>(methodData.values()), total,
-                    new HashSet<>(modifiers.values()), mPaymentHandlerHost, callback, mAppName,
-                    icon == null ? null : icon.getBitmap(), mSwUri, mScope, mUseCache,
-                    mMethodNames.toArray(new String[0])[0]);
+                    new HashSet<>(modifiers.values()), paymentOptions, shippingOptions,
+                    mPaymentHandlerHost, callback, mAppName, icon == null ? null : icon.getBitmap(),
+                    mSwUri, mScope, mUseCache, mMethodNames.toArray(new String[0])[0],
+                    mSupportedDelegations);
         } else {
             ServiceWorkerPaymentAppBridge.invokePaymentApp(mWebContents, mRegistrationId,
                     mScope.toString(), origin, iframeOrigin, id, new HashSet<>(methodData.values()),
-                    total, new HashSet<>(modifiers.values()), mPaymentHandlerHost,
-                    mIsMicrotransaction, callback);
+                    total, new HashSet<>(modifiers.values()), paymentOptions, shippingOptions,
+                    mPaymentHandlerHost, mIsMicrotransaction, callback);
         }
     }
 
     @Override
     public void updateWith(PaymentRequestDetailsUpdate response) {
-        assert isChangingPaymentMethod();
+        assert isWaitingForPaymentDetailsUpdate();
         mPaymentHandlerHost.updateWith(response);
     }
 
     @Override
-    public void noUpdatedPaymentDetails() {
-        assert isChangingPaymentMethod();
-        mPaymentHandlerHost.noUpdatedPaymentDetails();
+    public void onPaymentDetailsNotUpdated() {
+        assert isWaitingForPaymentDetailsUpdate();
+        mPaymentHandlerHost.onPaymentDetailsNotUpdated();
     }
 
     @Override
-    public boolean isChangingPaymentMethod() {
-        return mPaymentHandlerHost != null && mPaymentHandlerHost.isChangingPaymentMethod();
+    public boolean isWaitingForPaymentDetailsUpdate() {
+        return mPaymentHandlerHost != null
+                && mPaymentHandlerHost.isWaitingForPaymentDetailsUpdate();
     }
 
     @Override
@@ -439,22 +420,22 @@ public class ServiceWorkerPaymentApp extends PaymentInstrument implements Paymen
 
     @Override
     public boolean handlesShippingAddress() {
-        return mSupportedDelegations.mShippingAddress;
+        return mSupportedDelegations.getShippingAddress();
     }
 
     @Override
     public boolean handlesPayerName() {
-        return mSupportedDelegations.mPayerName;
+        return mSupportedDelegations.getPayerName();
     }
 
     @Override
     public boolean handlesPayerEmail() {
-        return mSupportedDelegations.mPayerEmail;
+        return mSupportedDelegations.getPayerEmail();
     }
 
     @Override
     public boolean handlesPayerPhone() {
-        return mSupportedDelegations.mPayerPhone;
+        return mSupportedDelegations.getPayerPhone();
     }
 
     @Override

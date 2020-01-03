@@ -35,7 +35,6 @@ class WebAppRegistrar : public AppRegistrar {
   // AppRegistrar:
   bool IsInstalled(const AppId& app_id) const override;
   bool IsLocallyInstalled(const AppId& app_id) const override;
-  bool WasExternalAppUninstalledByUser(const AppId& app_id) const override;
   bool WasInstalledByUser(const AppId& app_id) const override;
   int CountUserInstalledApps() const override;
   std::string GetAppShortName(const AppId& app_id) const override;
@@ -45,7 +44,10 @@ class WebAppRegistrar : public AppRegistrar {
   base::Optional<GURL> GetAppScope(const AppId& app_id) const override;
   DisplayMode GetAppDisplayMode(const AppId& app_id) const override;
   DisplayMode GetAppUserDisplayMode(const AppId& app_id) const override;
+  std::vector<WebApplicationIconInfo> GetAppIconInfos(
+      const AppId& app_id) const override;
   std::vector<AppId> GetAppIds() const override;
+  WebAppRegistrar* AsWebAppRegistrar() override;
 
   // Only range-based |for| loop supported. Don't use AppSet directly.
   // Doesn't support registration and unregistration of WebApp while iterating.

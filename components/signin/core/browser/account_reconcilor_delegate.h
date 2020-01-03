@@ -57,13 +57,6 @@ class AccountReconcilorDelegate {
   // changes to the accounts are made. Defaults to false.
   virtual bool IsAccountConsistencyEnforced() const;
 
-  // Computes inconsistency reason and uploads it to UMA.
-  virtual void MaybeLogInconsistencyReason(
-      const CoreAccountId& primary_account,
-      const std::vector<CoreAccountId>& chrome_accounts,
-      const std::vector<gaia::ListedAccount>& gaia_accounts,
-      bool first_execution) const;
-
   // Returns the value to set in the "source" parameter for Gaia API calls.
   virtual gaia::GaiaSource GetGaiaApiSource() const;
 
@@ -120,8 +113,7 @@ class AccountReconcilorDelegate {
   // |OnReconcileFinished| is always called at the end of reconciliation,
   // even when there is an error (except in cases where reconciliation times
   // out before finishing, see |GetReconcileTimeout|).
-  virtual void OnReconcileFinished(const CoreAccountId& first_account,
-                                   bool reconcile_is_noop) {}
+  virtual void OnReconcileFinished(const CoreAccountId& first_account) {}
 
   // Returns the desired timeout for account reconciliation. If reconciliation
   // does not happen within this time, it is aborted and |this| delegate is

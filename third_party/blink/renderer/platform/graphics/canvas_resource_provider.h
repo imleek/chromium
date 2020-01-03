@@ -63,7 +63,7 @@ class PLATFORM_EXPORT CanvasResourceProvider
     kAcceleratedCompositedResourceUsage = 3,
     kAcceleratedDirect2DResourceUsage = 4,
     kAcceleratedDirect3DResourceUsage = 5,
-    kSoftwareCompositedDirect2DResourceUsage = 6,
+    kSoftwareCompositedDirect2DResourceUsage = 6,  // deprecated
     kMaxValue = kSoftwareCompositedDirect2DResourceUsage,
   };
 
@@ -150,7 +150,7 @@ class PLATFORM_EXPORT CanvasResourceProvider
   // queue, thus reducing latency, but with the possible side effects of tearing
   // (in cases where the resource is scanned out directly) and irregular frame
   // rate.
-  bool IsSingleBuffered() { return is_single_buffered_; }
+  bool IsSingleBuffered() const { return is_single_buffered_; }
 
   // Attempt to enable single buffering mode on this resource provider.  May
   // fail if the CanvasResourcePRovider subclass does not support this mode of
@@ -172,9 +172,11 @@ class PLATFORM_EXPORT CanvasResourceProvider
                    size_t row_bytes,
                    int x,
                    int y);
-  virtual GLuint GetBackingTextureHandleForOverwrite() {
+
+  virtual gpu::Mailbox GetBackingMailboxForOverwrite(
+      MailboxSyncMode sync_mode) {
     NOTREACHED();
-    return 0;
+    return gpu::Mailbox();
   }
   virtual GLenum GetBackingTextureTarget() const { return GL_TEXTURE_2D; }
   virtual void* GetPixelBufferAddressForOverwrite() {
@@ -210,6 +212,7 @@ class PLATFORM_EXPORT CanvasResourceProvider
   }
   SkFilterQuality FilterQuality() const { return filter_quality_; }
   scoped_refptr<StaticBitmapImage> SnapshotInternal();
+  scoped_refptr<CanvasResource> GetImportedResource() const;
 
   CanvasResourceProvider(const ResourceProviderType&,
                          const IntSize&,
@@ -265,6 +268,12 @@ class PLATFORM_EXPORT CanvasResourceProvider
   WTF::Vector<scoped_refptr<CanvasResource>> canvas_resources_;
   bool resource_recycling_enabled_ = true;
   bool is_single_buffered_ = false;
+
+  // The maximum number of in-flight resources waiting to be used for recycling.
+  static constexpr int kMaxRecycledCanvasResources = 2;
+  // The maximum number of draw ops executed on the canvas, after which the
+  // underlying GrContext is flushed.
+  static constexpr int kMaxDrawsBeforeContextFlush = 50;
 
   base::WeakPtrFactory<CanvasResourceProvider> weak_ptr_factory_{this};
 

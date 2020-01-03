@@ -44,9 +44,6 @@
 using media_gpu_v4l2::kModuleV4l2;
 using media_gpu_v4l2::InitializeStubs;
 using media_gpu_v4l2::StubPathMap;
-
-static const base::FilePath::CharType kV4l2Lib[] =
-    FILE_PATH_LITERAL("/usr/lib/libv4l2.so");
 #endif
 
 namespace media {
@@ -228,8 +225,12 @@ EGLImageKHR GenericV4L2Device::CreateEGLImage(
     return EGL_NO_IMAGE_KHR;
   }
 
-  VideoPixelFormat vf_format =
-      Fourcc::FromV4L2PixFmt(v4l2_pixfmt).ToVideoPixelFormat();
+  const auto vf_format_fourcc = Fourcc::FromV4L2PixFmt(v4l2_pixfmt);
+  if (!vf_format_fourcc) {
+    VLOGF(1) << "Unrecognized pixel format " << FourccToString(v4l2_pixfmt);
+    return EGL_NO_IMAGE_KHR;
+  }
+  const VideoPixelFormat vf_format = vf_format_fourcc->ToVideoPixelFormat();
   // Number of components, as opposed to the number of V4L2 planes, which is
   // just a buffer count.
   size_t num_planes = VideoFrame::NumPlanes(vf_format);
@@ -293,8 +294,12 @@ scoped_refptr<gl::GLImage> GenericV4L2Device::CreateGLImage(
     const std::vector<base::ScopedFD>& dmabuf_fds) {
   DVLOGF(3);
   DCHECK(CanCreateEGLImageFrom(fourcc));
-  VideoPixelFormat vf_format =
-      Fourcc::FromV4L2PixFmt(fourcc).ToVideoPixelFormat();
+  const auto vf_format_fourcc = Fourcc::FromV4L2PixFmt(fourcc);
+  if (!vf_format_fourcc) {
+    VLOGF(1) << "Unrecognized pixel format " << FourccToString(fourcc);
+    return nullptr;
+  }
+  const VideoPixelFormat vf_format = vf_format_fourcc->ToVideoPixelFormat();
   size_t num_planes = VideoFrame::NumPlanes(vf_format);
   DCHECK_LE(num_planes, 3u);
   DCHECK_LE(dmabuf_fds.size(), num_planes);
@@ -502,6 +507,12 @@ void GenericV4L2Device::CloseDevice() {
 // static
 bool GenericV4L2Device::PostSandboxInitialization() {
 #if BUILDFLAG(USE_LIBV4L2)
+  static const base::FilePath::CharType kV4l2Lib[] =
+#if defined(ARCH_CPU_64_BITS)
+      FILE_PATH_LITERAL("/usr/lib64/libv4l2.so");
+#else
+      FILE_PATH_LITERAL("/usr/lib/libv4l2.so");
+#endif  // defined(ARCH_CPU_64_BITS)
   StubPathMap paths;
   paths[kModuleV4l2].push_back(kV4l2Lib);
 

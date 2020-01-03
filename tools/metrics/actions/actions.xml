@@ -4147,11 +4147,13 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="ChromeColors_ColorApplied">
+  <obsolete>Deprecated as of 12/2019.</obsolete>
   <owner>gayane@chromium.org</owner>
   <description>Chrome Colors was applied from Colors menu.</description>
 </action>
 
 <action name="ChromeColors_DefaultApplied">
+  <obsolete>Deprecated as of 12/2019.</obsolete>
   <owner>gayane@chromium.org</owner>
   <description>Default theme was applied from Colors menu.</description>
 </action>
@@ -4175,6 +4177,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="ChromeColors_ThemeUninstalled">
+  <obsolete>Deprecated as of 7/2019.</obsolete>
   <owner>gayane@chromium.org</owner>
   <description>Webstore theme uninstalled from Colors menu.</description>
 </action>
@@ -4927,6 +4930,14 @@ should be able to be added at any place in this file.
 <action name="CookieBlockingEnabledPerDefault">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="CookieControls.Bubble.CookiesInUse">
+  <owner>dullweber@chromium.org</owner>
+  <owner>huanzhong@chromium.org</owner>
+  <description>
+    &quot;Cookies in use&quot; dialog was opened from the cookie controls UI.
+  </description>
 </action>
 
 <action name="CookieControls.Bubble.NotWorking">
@@ -5894,6 +5905,24 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Extensions.ExtensionDisabled">
+  <owner>archanasimha@chromium.org</owner>
+  <description>
+    The user interacted with the toggle in the chrome://extensions page to
+    disable an extension from either the main page(card view) or detail page for
+    a specific extension.
+  </description>
+</action>
+
+<action name="Extensions.ExtensionEnabled">
+  <owner>archanasimha@chromium.org</owner>
+  <description>
+    The user interacted with the toggle in the chrome://extensions page to
+    enable an extension from either the main page(card view) or detail page for
+    a specific extension.
+  </description>
+</action>
+
 <action name="Extensions.ExtensionInstalled">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -5907,6 +5936,48 @@ should be able to be added at any place in this file.
 <action name="Extensions.IDChangedError">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="Extensions.RemovedDefaultInstalledExtension">
+  <owner>archanasimha@chromium.org</owner>
+  <description>
+    User clicked the &quot;Remove&quot; button in the extension uninstall dialog
+    which leads to the removal of a default installed extension.
+  </description>
+</action>
+
+<action name="Extensions.RemoveExtensionClick">
+  <owner>archanasimha@chromium.org</owner>
+  <description>
+    User clicked the &quot;Remove&quot; button in the chrome://extensions page.
+    This triggers the uninstallation flow which prompts the user to cancel or
+    confirm the uninstallation.
+  </description>
+</action>
+
+<action name="Extensions.UninstallDialogCancelClick">
+  <owner>archanasimha@chromium.org</owner>
+  <description>
+    User clicked the &quot;Cancel&quot; button in the extension uninstall
+    dialog. This cancels the uninstallation of an extension.
+  </description>
+</action>
+
+<action name="Extensions.UninstallDialogRemoveClick">
+  <owner>archanasimha@chromium.org</owner>
+  <description>
+    User clicked the &quot;Remove&quot; button in the chrome://extensions page
+    uninstall dialog which leads to the removal of an extension.
+  </description>
+</action>
+
+<action name="Extensions.UninstallDialogReportAbuseChecked">
+  <owner>archanasimha@chromium.org</owner>
+  <description>
+    Used checked the &quot;Report Abuse&quot; box and the &quot;Remove&quot;
+    button in the extension uninstall dialog which leads to the removal of an
+    extension and reports the extension for abuse.
+  </description>
 </action>
 
 <action name="Extensions.WebStoreLaunch">
@@ -12593,6 +12664,11 @@ should be able to be added at any place in this file.
   <description>User pressed the stop option in the app menu.</description>
 </action>
 
+<action name="MobileMenuTextZoom">
+  <owner>rkgibson@google.com</owner>
+  <description>User pressed 'Zoom Text' in the app menu</description>
+</action>
+
 <action name="MobileMenuTranslate">
   <owner>frechette@chromium.org</owner>
   <description>User pressed the 'Translate' in the app menu.</description>
@@ -13733,6 +13809,14 @@ should be able to be added at any place in this file.
   <obsolete>Deprecated as of 5/2015</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="MobileToolbarNewTabShortcut">
+  <owner>gambard@chromium.org</owner>
+  <owner>stkhapugin@chromium.org</owner>
+  <description>
+    User pressed the NewTab shortcut on the toolbar. iOS only.
+  </description>
 </action>
 
 <action name="MobileToolbarOmniboxAcceleratorTap">
@@ -20007,6 +20091,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountPreDice_FromAvatarBubbleSignin">
+  <obsolete>Removed M80</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -20017,6 +20102,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountPreDice_FromBookmarkBubble">
+  <obsolete>Removed M80</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -20027,6 +20113,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountPreDice_FromBookmarkManager">
+  <obsolete>Removed M80</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -20038,6 +20125,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountPreDice_FromExtensionInstallBubble">
+  <obsolete>Removed M80</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -20048,6 +20136,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountPreDice_FromManageCardsBubble">
+  <obsolete>Removed M80</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jsaul@chromium.org</owner>
   <owner>manasverma@google.com</owner>
@@ -20061,6 +20150,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountPreDice_FromNTPContentSuggestions">
+  <obsolete>Removed M80</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -20071,6 +20161,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountPreDice_FromPasswordBubble">
+  <obsolete>Removed M80</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <description>
@@ -20081,6 +20172,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountPreDice_FromRecentTabs">
+  <obsolete>Removed M80</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -20092,6 +20184,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountPreDice_FromSaveCardBubble">
+  <obsolete>Removed M80</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jsaul@chromium.org</owner>
   <owner>manasverma@google.com</owner>
@@ -20105,6 +20198,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountPreDice_FromSettings">
+  <obsolete>Removed M80</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -20116,6 +20210,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_SigninNewAccountPreDice_FromTabSwitcher">
+  <obsolete>Removed M80</obsolete>
   <owner>bsazonov@chromium.org</owner>
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -22189,6 +22284,42 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="TabsSuggestions.Close.Accepted">
+  <owner>yusufo@chromium.org</owner>
+  <owner>davidjm@chromium.org</owner>
+  <description>
+    The tab close suggestions were considered and accepted by the user (with
+    some possible editing).
+  </description>
+</action>
+
+<action name="TabsSuggestions.Close.Dismissed">
+  <owner>yusufo@chromium.org</owner>
+  <owner>davidjm@chromium.org</owner>
+  <description>
+    The tab close suggestions were considered and dismissed by the user (with
+    some possible editing).
+  </description>
+</action>
+
+<action name="TabsSuggestions.Close.SuggestionsReview.Accepted">
+  <owner>yusufo@chromium.org</owner>
+  <owner>davidjm@chromium.org</owner>
+  <description>
+    The tab close suggestions were considered by the user by following through
+    the tab suggestions offered in the snackbar.
+  </description>
+</action>
+
+<action name="TabsSuggestions.Close.SuggestionsReview.Dismissed">
+  <owner>yusufo@chromium.org</owner>
+  <owner>davidjm@chromium.org</owner>
+  <description>
+    The tab close suggestions were not considered at all by the user by
+    dismissing the snackbar indicating tab suggestions are available.
+  </description>
+</action>
+
 <action name="TabStrip.UndoCloseTab">
   <owner>yusufo@chromium.org</owner>
   <owner>wychen@chromium.org</owner>
@@ -23482,6 +23613,10 @@ should be able to be added at any place in this file.
   <suffix name="Bookmark" label="For Bookmark feature."/>
   <suffix name="BottomToolbarTip" label="For BottomToolbarTip feature."/>
   <suffix name="ChromeDuet" label="For ChromeDuet feature."/>
+  <suffix name="ChromeDuetHomeButton"
+      label="For ChromeDuetHomeButton feature."/>
+  <suffix name="ChromeDuetTabSwitcherButton"
+      label="For ChromeDuetTabSwitcherButton feature."/>
   <suffix name="ChromeHomeExpand" label="For ChromeHomeExpand feature."/>
   <suffix name="ChromeHomeMenuHeader"
       label="For ChromeHomeMenuHeader feature."/>
@@ -23538,6 +23673,7 @@ should be able to be added at any place in this file.
   <suffix name="TabGroupsYourTabsTogether"
       label="For tab switcher with tab groups."/>
   <suffix name="TranslateMenuButton" label="For translate menu button."/>
+  <suffix name="WebUITabStrip" label="For the WebUI tab strip."/>
   <affected-action name="InProductHelp.NotifyEvent.IPH"/>
   <affected-action name="InProductHelp.NotifyUsedEvent.IPH"/>
   <affected-action name="InProductHelp.ShouldTriggerHelpUI.IPH"/>

@@ -15,10 +15,10 @@
 #include "content/renderer/input/widget_input_handler_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_widget.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
-#include "third_party/blink/public/platform/web_keyboard_event.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "ui/events/base_event_utils.h"
 
@@ -300,8 +300,11 @@ void WidgetInputHandlerManager::AttachSynchronousCompositor(
         compositor_request) {
 #if defined(OS_ANDROID)
   DCHECK(synchronous_compositor_registry_);
-  synchronous_compositor_registry_->proxy()->BindChannel(
-      std::move(control_host), std::move(host), std::move(compositor_request));
+  if (synchronous_compositor_registry_->proxy()) {
+    synchronous_compositor_registry_->proxy()->BindChannel(
+        std::move(control_host), std::move(host),
+        std::move(compositor_request));
+  }
 #endif
 }
 

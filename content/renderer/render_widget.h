@@ -26,6 +26,7 @@
 #include "build/build_config.h"
 #include "cc/input/overscroll_behavior.h"
 #include "cc/input/touch_action.h"
+#include "cc/trees/browser_controls_params.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "cc/trees/managed_memory_policy.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
@@ -52,9 +53,9 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/mojom/referrer_policy.mojom.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/platform/viewport_intersection_state.h"
-#include "third_party/blink/public/platform/web_input_event.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_text_input_info.h"
 #include "third_party/blink/public/web/web_ime_text_span.h"
@@ -83,6 +84,7 @@ class SyncMessageFilter;
 namespace blink {
 namespace scheduler {
 class WebRenderWidgetSchedulingState;
+class WebWidgetScheduler;
 }
 struct WebDeviceEmulationParams;
 class WebDragData;
@@ -109,7 +111,6 @@ struct DidOverscrollParams;
 }
 
 namespace content {
-class BrowserPlugin;
 class CompositorDependencies;
 class FrameSwapMessageQueue;
 class ImeEventGuard;
@@ -332,11 +333,6 @@ class CONTENT_EXPORT RenderWidget
   void RegisterRenderFrame(RenderFrameImpl* frame);
   void UnregisterRenderFrame(RenderFrameImpl* frame);
 
-  // BrowserPlugins embedded by this RenderWidget register themselves here.
-  // These plugins need to be notified about changes to ScreenInfo.
-  void RegisterBrowserPlugin(BrowserPlugin* browser_plugin);
-  void UnregisterBrowserPlugin(BrowserPlugin* browser_plugin);
-
   // IPC::Listener
   bool OnMessageReceived(const IPC::Message& msg) override;
 
@@ -415,8 +411,8 @@ class CONTENT_EXPORT RenderWidget
       const blink::WebIntrinsicSizingInfo&) override;
   void DidMeaningfulLayout(blink::WebMeaningfulLayout layout_type) override;
   void DidChangeCursor(const blink::WebCursorInfo&) override;
-  void AutoscrollStart(const blink::WebFloatPoint& point) override;
-  void AutoscrollFling(const blink::WebFloatSize& velocity) override;
+  void AutoscrollStart(const gfx::PointF& point) override;
+  void AutoscrollFling(const gfx::Vector2dF& velocity) override;
   void AutoscrollEnd() override;
   void ClosePopupWidgetSoon() override;
   void Show(blink::WebNavigationPolicy) override;
@@ -428,13 +424,13 @@ class CONTENT_EXPORT RenderWidget
   void SetWindowRect(const blink::WebRect&) override;
   void DidHandleGestureEvent(const blink::WebGestureEvent& event,
                              bool event_cancelled) override;
-  void DidOverscroll(const blink::WebFloatSize& overscroll_delta,
-                     const blink::WebFloatSize& accumulated_overscroll,
-                     const blink::WebFloatPoint& position,
-                     const blink::WebFloatSize& velocity) override;
+  void DidOverscroll(const gfx::Vector2dF& overscroll_delta,
+                     const gfx::Vector2dF& accumulated_overscroll,
+                     const gfx::PointF& position,
+                     const gfx::Vector2dF& velocity) override;
   void InjectGestureScrollEvent(
       blink::WebGestureDevice device,
-      const blink::WebFloatSize& delta,
+      const gfx::Vector2dF& delta,
       ui::input_types::ScrollGranularity granularity,
       cc::ElementId scrollable_area_element_id,
       blink::WebInputEvent::Type injected_type) override;
@@ -494,9 +490,7 @@ class CONTENT_EXPORT RenderWidget
   int GetLayerTreeId() const override;
   void SetBrowserControlsShownRatio(float top_ratio,
                                     float bottom_ratio) override;
-  void SetBrowserControlsHeight(float top_height,
-                                float bottom_height,
-                                bool shrink_viewport) override;
+  void SetBrowserControlsParams(cc::BrowserControlsParams params) override;
   viz::FrameSinkId GetFrameSinkId() override;
 
   // Returns the scale being applied to the document in blink by the device
@@ -1091,8 +1085,6 @@ class CONTENT_EXPORT RenderWidget
   // visibility state for example.
   base::ObserverList<RenderFrameImpl>::Unchecked render_frames_;
 
-  base::ObserverList<BrowserPlugin>::Unchecked browser_plugins_;
-
   bool has_host_context_menu_location_ = false;
   gfx::Point host_context_menu_location_;
 
@@ -1147,13 +1139,9 @@ class CONTENT_EXPORT RenderWidget
   // Object to record tab switch time into this RenderWidget
   TabSwitchTimeRecorder tab_switch_time_recorder_;
 
-  // Whether or not Blink's viewport size should be shrunk by the height of the
-  // URL-bar.
-  bool browser_controls_shrink_blink_size_ = false;
-  // The height of the browser top controls.
-  float top_controls_height_ = 0.f;
-  // The height of the browser bottom controls.
-  float bottom_controls_height_ = 0.f;
+  // Browser controls params such as top and bottom controls heights, whether
+  // controls shrink blink size etc.
+  cc::BrowserControlsParams browser_controls_params_;
 
   // The last seen page scale state, which comes from the main frame and is
   // propagated through the RenderWidget tree. This state is passed to any new
@@ -1172,6 +1160,8 @@ class CONTENT_EXPORT RenderWidget
   base::Optional<bool> has_touch_handlers_;
 
   uint32_t last_capture_sequence_number_ = 0u;
+
+  std::unique_ptr<blink::scheduler::WebWidgetScheduler> widget_scheduler_;
 
   base::WeakPtrFactory<RenderWidget> weak_ptr_factory_{this};
 

@@ -6,7 +6,6 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
-#include "chrome/browser/signin/scoped_account_consistency.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "content/public/test/browser_task_environment.h"
@@ -18,25 +17,19 @@ namespace extensions {
 // Tests that all accounts in extensions is enabled when Dice is enabled.
 TEST(IdentityApiTest, DiceAllAccountsExtensions) {
   content::BrowserTaskEnvironment task_environment;
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kExtensionsAllAccountsFeature);
   TestingProfile profile;
   IdentityAPI api(&profile);
   EXPECT_FALSE(api.AreExtensionsRestrictedToPrimaryAccount());
   api.Shutdown();
 }
-#endif
-
+#else
 TEST(IdentityApiTest, AllAccountsExtensionDisabled) {
   content::BrowserTaskEnvironment task_environment;
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(kExtensionsAllAccountsFeature);
-#endif
   TestingProfile profile;
   IdentityAPI api(&profile);
   EXPECT_TRUE(api.AreExtensionsRestrictedToPrimaryAccount());
   api.Shutdown();
 }
+#endif
 
 }  // namespace extensions

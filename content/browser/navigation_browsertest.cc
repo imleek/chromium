@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
@@ -28,6 +29,7 @@
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/download_manager_delegate.h"
 #include "content/public/browser/navigation_controller.h"
@@ -96,9 +98,10 @@ class InterceptAndCancelDidCommitProvisionalLoad
     return intercepted_messages_;
   }
 
-  std::vector<::service_manager::mojom::InterfaceProviderRequest>&
-  intercepted_requests() {
-    return intercepted_requests_;
+  std::vector<
+      mojo::PendingReceiver<::service_manager::mojom::InterfaceProvider>>&
+  intercepted_receivers() {
+    return intercepted_receivers_;
   }
 
  protected:
@@ -110,10 +113,10 @@ class InterceptAndCancelDidCommitProvisionalLoad
       override {
     intercepted_navigations_.push_back(navigation_request);
     intercepted_messages_.push_back(*params);
-    intercepted_requests_.push_back(
+    intercepted_receivers_.push_back(
         *interface_params
-            ? std::move((*interface_params)->interface_provider_request)
-            : nullptr);
+            ? std::move((*interface_params)->interface_provider_receiver)
+            : mojo::NullReceiver());
     if (loop_)
       loop_->Quit();
     // Do not send the message to the RenderFrameHostImpl.
@@ -125,8 +128,9 @@ class InterceptAndCancelDidCommitProvisionalLoad
   std::vector<NavigationRequest*> intercepted_navigations_;
   std::vector<::FrameHostMsg_DidCommitProvisionalLoad_Params>
       intercepted_messages_;
-  std::vector<::service_manager::mojom::InterfaceProviderRequest>
-      intercepted_requests_;
+  std::vector<
+      mojo::PendingReceiver<::service_manager::mojom::InterfaceProvider>>
+      intercepted_receivers_;
   std::unique_ptr<base::RunLoop> loop_;
 };
 
@@ -277,7 +281,7 @@ class NetworkIsolationNavigationBrowserTest
   base::test::ScopedFeatureList feature_list_;
 };
 
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+INSTANTIATE_TEST_SUITE_P(All,
                          NetworkIsolationNavigationBrowserTest,
                          ::testing::Bool());
 
@@ -296,7 +300,7 @@ class NavigationBrowserTestReferrerPolicy
 };
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     NavigationBrowserTestReferrerPolicy,
     ::testing::Values(network::mojom::ReferrerPolicy::kAlways,
                       network::mojom::ReferrerPolicy::kDefault,
@@ -3082,17 +3086,17 @@ class NavigationUrlRewriteBrowserTest : public NavigationBaseBrowserTest {
 
 // TODO(1021779): Figure out why this fails on the kitkat-dbg builder
 // and re-enable for all platforms.
-#if defined(OS_ANDROID) && !defined(NDEBUG)
-#define DISABLE_ON_ANDROID_DEBUG(x) DISABLED_##x
+#if defined(OS_ANDROID)
+#define DISABLE_ON_ANDROID(x) DISABLED_##x
 #else
-#define DISABLE_ON_ANDROID_DEBUG(x) x
+#define DISABLE_ON_ANDROID(x) x
 #endif
 
 // Tests navigating to a URL that gets rewritten to a "no access" URL. This
 // mimics the behavior of navigating to special URLs like chrome://newtab and
 // chrome://history which get rewritten to "no access" chrome-native:// URLs.
 IN_PROC_BROWSER_TEST_F(NavigationUrlRewriteBrowserTest,
-                       DISABLE_ON_ANDROID_DEBUG(RewriteToNoAccess)) {
+                       DISABLE_ON_ANDROID(RewriteToNoAccess)) {
   // Perform an initial navigation.
   {
     TestNavigationObserver observer(shell()->web_contents());
@@ -3142,6 +3146,36 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   EXPECT_TRUE(navigation_1.has_committed());
   EXPECT_FALSE(navigation_0.was_same_document());
   EXPECT_FALSE(navigation_1.was_same_document());
+}
+
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
+                       NonDeterministicUrlRewritesUseLastUrl) {
+  // Lambda expressions cannot be assigned to function pointers if they use
+  // captures, so track how many times the handler is called using a non-const
+  // static variable.
+  static int rewrite_count;
+  rewrite_count = 0;
+
+  BrowserURLHandler::URLHandler handler_method =
+      [](GURL* url, BrowserContext* browser_context) {
+        GURL::Replacements replace_path;
+        if (rewrite_count > 0) {
+          replace_path.SetPathStr("title2.html");
+        } else {
+          replace_path.SetPathStr("title1.html");
+        }
+        *url = url->ReplaceComponents(replace_path);
+        rewrite_count++;
+        return true;
+      };
+  BrowserURLHandler::GetInstance()->AddHandlerPair(
+      handler_method, BrowserURLHandler::null_handler());
+
+  TestNavigationObserver observer(shell()->web_contents());
+  EXPECT_TRUE(NavigateToURL(
+      shell(), GURL(embedded_test_server()->GetURL("/virtual-url.html"))));
+  EXPECT_EQ("/title2.html", observer.last_navigation_url().path());
+  EXPECT_EQ(2, rewrite_count);
 }
 
 }  // namespace content

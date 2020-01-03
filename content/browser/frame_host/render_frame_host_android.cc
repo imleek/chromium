@@ -17,6 +17,8 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-shared.h"
 #include "url/origin.h"
 
 using base::android::AttachCurrentThread;
@@ -43,9 +45,10 @@ void OnGetCanonicalUrlForSharing(
 
 RenderFrameHostAndroid::RenderFrameHostAndroid(
     RenderFrameHostImpl* render_frame_host,
-    service_manager::mojom::InterfaceProviderPtr interface_provider_ptr)
+    mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
+        interface_provider_remote)
     : render_frame_host_(render_frame_host),
-      interface_provider_ptr_(std::move(interface_provider_ptr)) {}
+      interface_provider_remote_(std::move(interface_provider_remote)) {}
 
 RenderFrameHostAndroid::~RenderFrameHostAndroid() {
   ScopedJavaLocalRef<jobject> jobj = GetJavaObject();
@@ -65,8 +68,7 @@ RenderFrameHostAndroid::GetJavaObject() {
     ScopedJavaLocalRef<jobject> local_ref = Java_RenderFrameHostImpl_create(
         env, reinterpret_cast<intptr_t>(this),
         render_frame_host_->delegate()->GetJavaRenderFrameHostDelegate(),
-        is_incognito,
-        interface_provider_ptr_.PassInterface().PassHandle().release().value());
+        is_incognito, interface_provider_remote_.PassPipe().release().value());
     obj_ = JavaObjectWeakGlobalRef(env, local_ref);
     return local_ref;
   }
@@ -93,6 +95,13 @@ void RenderFrameHostAndroid::GetCanonicalUrlForSharing(
   render_frame_host_->GetCanonicalUrlForSharing(base::BindOnce(
       &OnGetCanonicalUrlForSharing,
       base::android::ScopedJavaGlobalRef<jobject>(env, jcallback)));
+}
+
+bool RenderFrameHostAndroid::IsPaymentFeaturePolicyEnabled(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>&) const {
+  return render_frame_host_->IsFeatureEnabled(
+      blink::mojom::FeaturePolicyFeature::kPayment);
 }
 
 ScopedJavaLocalRef<jobject>

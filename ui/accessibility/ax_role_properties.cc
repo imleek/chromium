@@ -29,17 +29,8 @@ bool IsAlert(const ax::mojom::Role role) {
   }
 }
 
-bool IsClickable(const AXNodeData& data) {
-  // If it has a custom default action verb except for
-  // ax::mojom::DefaultActionVerb::kClickAncestor, it's definitely clickable.
-  // ax::mojom::DefaultActionVerb::kClickAncestor is used when an element with a
-  // click listener is present in its ancestry chain.
-  if (data.HasIntAttribute(ax::mojom::IntAttribute::kDefaultActionVerb) &&
-      (data.GetDefaultActionVerb() !=
-       ax::mojom::DefaultActionVerb::kClickAncestor))
-    return true;
-
-  switch (data.role) {
+bool IsClickable(const ax::mojom::Role role) {
+  switch (role) {
     case ax::mojom::Role::kButton:
     case ax::mojom::Role::kCheckBox:
     case ax::mojom::Role::kColorWell:
@@ -136,6 +127,33 @@ bool IsControl(const ax::mojom::Role role) {
   }
 }
 
+bool IsControlOnAndroid(const ax::mojom::Role role, bool isFocusable) {
+  switch (role) {
+    case ax::mojom::Role::kSplitter:
+      return isFocusable;
+    case ax::mojom::Role::kTreeItem:
+    case ax::mojom::Role::kDate:
+    case ax::mojom::Role::kDateTime:
+    case ax::mojom::Role::kInputTime:
+    case ax::mojom::Role::kDocBackLink:
+    case ax::mojom::Role::kDocBiblioRef:
+    case ax::mojom::Role::kDocGlossRef:
+    case ax::mojom::Role::kDocNoteRef:
+    case ax::mojom::Role::kLink:
+      return true;
+    case ax::mojom::Role::kMenu:
+    case ax::mojom::Role::kMenuBar:
+    case ax::mojom::Role::kNone:
+    case ax::mojom::Role::kUnknown:
+    case ax::mojom::Role::kTree:
+    case ax::mojom::Role::kDialog:
+    case ax::mojom::Role::kAlert:
+      return false;
+    default:
+      return IsControl(role);
+  }
+}
+
 bool IsDocument(const ax::mojom::Role role) {
   switch (role) {
     case ax::mojom::Role::kDocument:
@@ -155,17 +173,6 @@ bool IsDialog(const ax::mojom::Role role) {
     default:
       return false;
   }
-}
-
-bool IsPlainTextField(const AXNodeData& data) {
-  // We need to check both the role and editable state, because some ARIA text
-  // fields may in fact not be editable, whilst some editable fields might not
-  // have the role.
-  return !data.HasState(ax::mojom::State::kRichlyEditable) &&
-         (data.role == ax::mojom::Role::kTextField ||
-          data.role == ax::mojom::Role::kTextFieldWithComboBox ||
-          data.role == ax::mojom::Role::kSearchBox ||
-          data.GetBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot));
 }
 
 bool IsHeading(const ax::mojom::Role role) {
@@ -190,13 +197,6 @@ bool IsHeadingOrTableHeader(const ax::mojom::Role role) {
   }
 }
 
-bool IsIgnored(const AXNodeData& data) {
-  if (data.HasState(ax::mojom::State::kIgnored) ||
-      data.role == ax::mojom::Role::kIgnored)
-    return true;
-  return false;
-}
-
 bool IsImage(const ax::mojom::Role role) {
   switch (role) {
     case ax::mojom::Role::kCanvas:
@@ -215,18 +215,10 @@ bool IsImageOrVideo(const ax::mojom::Role role) {
   return IsImage(role) || role == ax::mojom::Role::kVideo;
 }
 
-bool IsInvokable(const AXNodeData& data) {
-  // A control is "invokable" if it initiates an action when activated but
-  // does not maintain any state. A control that maintains state when activated
-  // would be considered a toggle or expand-collapse element - these elements
-  // are "clickable" but not "invokable".
-  return IsClickable(data) && !SupportsExpandCollapse(data) &&
-         !SupportsToggle(data.role);
-}
-
 bool IsItemLike(const ax::mojom::Role role) {
   switch (role) {
     case ax::mojom::Role::kArticle:
+    case ax::mojom::Role::kComment:
     case ax::mojom::Role::kListItem:
     case ax::mojom::Role::kMenuItem:
     case ax::mojom::Role::kMenuItemRadio:
@@ -312,22 +304,48 @@ bool IsMenuRelated(const ax::mojom::Role role) {
   }
 }
 
-bool IsRangeValueSupported(const AXNodeData& data) {
-  // https://www.w3.org/TR/wai-aria-1.1/#aria-valuenow
-  // https://www.w3.org/TR/wai-aria-1.1/#aria-valuetext
-  // Roles that support aria-valuetext / aria-valuenow
-  switch (data.role) {
-    case ax::mojom::Role::kMeter:
-    case ax::mojom::Role::kProgressIndicator:
-    case ax::mojom::Role::kScrollBar:
+bool IsReadOnlySupported(const ax::mojom::Role role) {
+  // https://www.w3.org/TR/wai-aria-1.1/#aria-readonly
+  // Roles that support aria-readonly
+  switch (role) {
+    case ax::mojom::Role::kCheckBox:
+    case ax::mojom::Role::kComboBoxGrouping:
+    case ax::mojom::Role::kComboBoxMenuButton:
+    case ax::mojom::Role::kGrid:
+    case ax::mojom::Role::kListBox:
+    case ax::mojom::Role::kMenuItemCheckBox:
+    case ax::mojom::Role::kMenuItemRadio:
+    case ax::mojom::Role::kMenuListPopup:
+    case ax::mojom::Role::kPopUpButton:
+    case ax::mojom::Role::kRadioButton:
+    case ax::mojom::Role::kRadioGroup:
+    case ax::mojom::Role::kSearchBox:
     case ax::mojom::Role::kSlider:
     case ax::mojom::Role::kSpinButton:
+    case ax::mojom::Role::kSwitch:
+    case ax::mojom::Role::kTextField:
+    case ax::mojom::Role::kTextFieldWithComboBox:
+    case ax::mojom::Role::kTreeGrid:
       return true;
-    case ax::mojom::Role::kSplitter:
-      return data.HasState(ax::mojom::State::kFocusable);
-    default:
+
+    // https://www.w3.org/TR/wai-aria-1.1/#aria-readonly
+    // ARIA-1.1+ 'gridcell', supports aria-readonly, but 'cell' does not
+    //
+    // https://www.w3.org/TR/wai-aria-1.1/#columnheader
+    // https://www.w3.org/TR/wai-aria-1.1/#rowheader
+    // While the [columnheader|rowheader] role can be used in both interactive
+    // grids and non-interactive tables, the use of aria-readonly and
+    // aria-required is only applicable to interactive elements.
+    // Therefore, [...] user agents SHOULD NOT expose either property to
+    // assistive technologies unless the columnheader descends from a grid.
+    case ax::mojom::Role::kCell:
+    case ax::mojom::Role::kRowHeader:
+    case ax::mojom::Role::kColumnHeader:
       return false;
+    default:
+      break;
   }
+  return false;
 }
 
 bool IsRowContainer(const ax::mojom::Role role) {
@@ -434,57 +452,19 @@ bool IsTextOrLineBreak(ax::mojom::Role role) {
   }
 }
 
-bool IsReadOnlySupported(const ax::mojom::Role role) {
-  // https://www.w3.org/TR/wai-aria-1.1/#aria-readonly
-  // Roles that support aria-readonly
+bool IsText(ax::mojom::Role role) {
   switch (role) {
-    case ax::mojom::Role::kCheckBox:
-    case ax::mojom::Role::kComboBoxGrouping:
-    case ax::mojom::Role::kComboBoxMenuButton:
-    case ax::mojom::Role::kGrid:
-    case ax::mojom::Role::kListBox:
-    case ax::mojom::Role::kMenuItemCheckBox:
-    case ax::mojom::Role::kMenuItemRadio:
-    case ax::mojom::Role::kMenuListPopup:
-    case ax::mojom::Role::kPopUpButton:
-    case ax::mojom::Role::kRadioButton:
-    case ax::mojom::Role::kRadioGroup:
-    case ax::mojom::Role::kSearchBox:
-    case ax::mojom::Role::kSlider:
-    case ax::mojom::Role::kSpinButton:
-    case ax::mojom::Role::kSwitch:
-    case ax::mojom::Role::kTextField:
-    case ax::mojom::Role::kTextFieldWithComboBox:
-    case ax::mojom::Role::kTreeGrid:
+    case ax::mojom::Role::kInlineTextBox:
+    case ax::mojom::Role::kLineBreak:
+    case ax::mojom::Role::kStaticText:
       return true;
-
-    // https://www.w3.org/TR/wai-aria-1.1/#aria-readonly
-    // ARIA-1.1+ 'gridcell', supports aria-readonly, but 'cell' does not
-    //
-    // https://www.w3.org/TR/wai-aria-1.1/#columnheader
-    // https://www.w3.org/TR/wai-aria-1.1/#rowheader
-    // While the [columnheader|rowheader] role can be used in both interactive
-    // grids and non-interactive tables, the use of aria-readonly and
-    // aria-required is only applicable to interactive elements.
-    // Therefore, [...] user agents SHOULD NOT expose either property to
-    // assistive technologies unless the columnheader descends from a grid.
-    case ax::mojom::Role::kCell:
-    case ax::mojom::Role::kRowHeader:
-    case ax::mojom::Role::kColumnHeader:
-      return false;
     default:
-      break;
+      return false;
   }
-  return false;
 }
 
-bool SupportsExpandCollapse(const AXNodeData& data) {
-  if (data.GetHasPopup() != ax::mojom::HasPopup::kFalse ||
-      data.HasState(ax::mojom::State::kExpanded) ||
-      data.HasState(ax::mojom::State::kCollapsed))
-    return true;
-
-  switch (data.role) {
+bool SupportsExpandCollapse(const ax::mojom::Role role) {
+  switch (role) {
     case ax::mojom::Role::kComboBoxGrouping:
     case ax::mojom::Role::kComboBoxMenuButton:
     case ax::mojom::Role::kDisclosureTriangle:

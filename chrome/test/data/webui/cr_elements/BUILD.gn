@@ -34,7 +34,7 @@ js_modulizer("modulize") {
   namespace_rewrites = [
     "cr.isMac|isMac",
     "cr.isWindows|isWindows",
-    "cr.toastManager.getInstance|getInstance",
+    "cr.toastManager.getToastManager|getToastManager",
     "MockInteractions.blur|blur",
     "MockInteractions.downAndUp|downAndUp",
     "MockInteractions.keyDownOn|keyDownOn",
@@ -48,4 +48,8 @@ js_modulizer("modulize") {
     "test_util.isVisible|isVisible",
     "test_util.whenAttributeIs|whenAttributeIs",
   ]
+
+  if (is_chromeos) {
+    input_files += [ "cr_searchable_drop_down_tests.js" ]
+  }
 }

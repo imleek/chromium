@@ -1017,7 +1017,7 @@ TEST_F(RenderWidgetHostTest, ResizeThenCrash) {
 TEST_F(RenderWidgetHostTest, Background) {
   std::unique_ptr<RenderWidgetHostViewBase> view;
 #if defined(USE_AURA)
-  view.reset(new RenderWidgetHostViewAura(host_.get(), false));
+  view.reset(new RenderWidgetHostViewAura(host_.get()));
   // TODO(derat): Call this on all platforms: http://crbug.com/102450.
   view->InitAsChild(nullptr);
 #elif defined(OS_ANDROID)
@@ -1438,9 +1438,8 @@ TEST_F(RenderWidgetHostTest, IgnoreInputEvent) {
 
 TEST_F(RenderWidgetHostTest, KeyboardListenerIgnoresEvent) {
   host_->SetupForInputRouterTest();
-  host_->AddKeyPressEventCallback(
-      base::Bind(&RenderWidgetHostTest::KeyPressEventCallback,
-                 base::Unretained(this)));
+  host_->AddKeyPressEventCallback(base::BindRepeating(
+      &RenderWidgetHostTest::KeyPressEventCallback, base::Unretained(this)));
   handle_key_press_event_ = false;
   SimulateKeyboardEvent(WebInputEvent::kRawKeyDown);
 
@@ -1450,9 +1449,8 @@ TEST_F(RenderWidgetHostTest, KeyboardListenerIgnoresEvent) {
 TEST_F(RenderWidgetHostTest, KeyboardListenerSuppressFollowingEvents) {
   host_->SetupForInputRouterTest();
 
-  host_->AddKeyPressEventCallback(
-      base::Bind(&RenderWidgetHostTest::KeyPressEventCallback,
-                 base::Unretained(this)));
+  host_->AddKeyPressEventCallback(base::BindRepeating(
+      &RenderWidgetHostTest::KeyPressEventCallback, base::Unretained(this)));
 
   // The callback handles the first event
   handle_key_press_event_ = true;
@@ -1479,9 +1477,8 @@ TEST_F(RenderWidgetHostTest, KeyboardListenerSuppressFollowingEvents) {
 TEST_F(RenderWidgetHostTest, MouseEventCallbackCanHandleEvent) {
   host_->SetupForInputRouterTest();
 
-  host_->AddMouseEventCallback(
-      base::Bind(&RenderWidgetHostTest::MouseEventCallback,
-                 base::Unretained(this)));
+  host_->AddMouseEventCallback(base::BindRepeating(
+      &RenderWidgetHostTest::MouseEventCallback, base::Unretained(this)));
 
   handle_mouse_event_ = true;
   SimulateMouseEvent(WebInputEvent::kMouseDown);
@@ -1573,7 +1570,7 @@ TEST_F(RenderWidgetHostTest, InputEventRWHLatencyComponent) {
   // Tests RWHI::ForwardGestureEvent().
   PressTouchPoint(0, 1);
   SendTouchEvent();
-  host_->input_router()->OnSetTouchAction(cc::kTouchActionAuto);
+  host_->input_router()->OnSetTouchAction(cc::TouchAction::kAuto);
   dispatched_events =
       host_->mock_widget_input_handler_.GetAndResetDispatchedMessages();
   CheckLatencyInfoComponentInMessage(dispatched_events,
@@ -2012,26 +2009,6 @@ TEST_F(RenderWidgetHostTest, ForceEnableZoomShouldUpdateAfterRebind) {
   host_->ExpectForceEnableZoom(true);
 }
 
-TEST_F(RenderWidgetHostTest, RenderWidgetSurfaceProperties) {
-  RenderWidgetSurfaceProperties prop1;
-  prop1.size = gfx::Size(200, 200);
-  prop1.device_scale_factor = 1.f;
-  RenderWidgetSurfaceProperties prop2;
-  prop2.size = gfx::Size(300, 300);
-  prop2.device_scale_factor = 2.f;
-
-  EXPECT_EQ(
-      "RenderWidgetSurfaceProperties(size(this: 200x200, other: 300x300), "
-      "device_scale_factor(this: 1, other: 2))",
-      prop1.ToDiffString(prop2));
-  EXPECT_EQ(
-      "RenderWidgetSurfaceProperties(size(this: 300x300, other: 200x200), "
-      "device_scale_factor(this: 2, other: 1))",
-      prop2.ToDiffString(prop1));
-  EXPECT_EQ("", prop1.ToDiffString(prop1));
-  EXPECT_EQ("", prop2.ToDiffString(prop2));
-}
-
 // If a navigation happens while the widget is hidden, we shouldn't show
 // contents of the previous page when we become visible.
 TEST_F(RenderWidgetHostTest, NavigateInBackgroundShowsBlank) {
@@ -2081,8 +2058,10 @@ TEST_F(RenderWidgetHostTest, RendererHangRecordsMetrics) {
 
 TEST_F(RenderWidgetHostTest, PendingUserActivationTimeout) {
   base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kBrowserVerifiedUserActivation);
+  scoped_feature_list_.InitWithFeatures(
+      {features::kBrowserVerifiedUserActivationMouse,
+       features::kBrowserVerifiedUserActivationKeyboard},
+      {});
 
   // One event allows one activation notification.
   SimulateMouseEvent(WebInputEvent::kMouseDown);

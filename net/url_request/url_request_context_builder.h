@@ -280,6 +280,7 @@ class NET_EXPORT URLRequestContextBuilder {
   void set_ct_verifier(std::unique_ptr<CTVerifier> ct_verifier);
   void set_ct_policy_enforcer(
       std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer);
+  void set_quic_context(std::unique_ptr<QuicContext> quic_context);
 
   void SetCertVerifier(std::unique_ptr<CertVerifier> cert_verifier);
   // Same as above, but does not take ownership. The CertVerifier must outlive
@@ -325,8 +326,6 @@ class NET_EXPORT URLRequestContextBuilder {
   void SetCreateHttpTransactionFactoryCallback(
       CreateHttpTransactionFactoryCallback
           create_http_network_transaction_factory);
-
-  void set_allow_copy() { allow_copy_ = true; }
 
   // Creates a mostly self-contained URLRequestContext. May only be called once
   // per URLRequestContextBuilder. After this is called, the Builder can be
@@ -384,6 +383,7 @@ class NET_EXPORT URLRequestContextBuilder {
   CertVerifier* shared_cert_verifier_ = nullptr;
   std::unique_ptr<CTVerifier> ct_verifier_;
   std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer_;
+  std::unique_ptr<QuicContext> quic_context_;
 #if BUILDFLAG(ENABLE_REPORTING)
   std::unique_ptr<ReportingPolicy> reporting_policy_;
   bool network_error_logging_enabled_ = false;
@@ -395,7 +395,6 @@ class NET_EXPORT URLRequestContextBuilder {
   std::unique_ptr<HttpServerProperties> http_server_properties_;
   std::map<std::string, std::unique_ptr<URLRequestJobFactory::ProtocolHandler>>
       protocol_handlers_;
-  bool allow_copy_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(URLRequestContextBuilder);
 };

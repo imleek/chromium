@@ -274,11 +274,6 @@ source_set("lib") {
     sources += [ "keycode_text_conversion_x.cc" ]
   }
 
-  # The X11 implementation uses part of Ozone implementation.
-  if (use_ozone || use_x11) {
-    sources += [ "keycode_text_conversion_ozone.cc" ]
-  }
-
   deps = [
     ":automation_client_lib",
     "//base",
@@ -288,6 +283,7 @@ source_set("lib") {
     "//chrome/common:version_header",
     "//chrome/test/chromedriver/constants:version_header",
     "//components/crx_file",
+    "//components/embedder_support:switches",
     "//components/version_info:generate_version_info",
     "//crypto",
     "//net",
@@ -299,10 +295,15 @@ source_set("lib") {
     "//ui/base",
     "//ui/events:dom_keycode_converter",
     "//ui/events:events_base",
-    "//ui/events/ozone:events_ozone_layout",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
+
+  # The X11 implementation uses part of Ozone implementation.
+  if (use_ozone || use_x11) {
+    sources += [ "keycode_text_conversion_ozone.cc" ]
+    deps += [ "//ui/events/ozone/layout" ]
+  }
 
   if (use_x11) {
     configs += [ "//build/config/linux:x11" ]
@@ -343,6 +344,7 @@ python_library("chromedriver_py_tests") {
   pydeps_file = "test/run_py_tests.pydeps"
   data = [
     "//chrome/test/data/chromedriver/",
+    "//chrome/test/chromedriver/js/",
     "//testing/scripts/run_chromedriver_tests.py",
     "//testing/scripts/common.py",
     "//testing/xvfb.py",

@@ -33,6 +33,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "cc/trees/browser_controls_params.h"
 #include "cc/trees/render_frame_metadata.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/quads/compositor_frame.h"
@@ -78,6 +79,7 @@
 #include "content/common/widget_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/device_service.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/notification_service.h"
@@ -126,10 +128,7 @@
 
 #if defined(OS_MACOSX)
 #include "content/browser/renderer_host/input/fling_scheduler_mac.h"
-#include "content/public/browser/system_connector.h"
-#include "services/device/public/mojom/constants.mojom.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #endif
 
@@ -191,38 +190,6 @@ class RenderWidgetHostIteratorImpl : public RenderWidgetHostIterator {
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostIteratorImpl);
 };
-
-inline blink::WebGestureEvent CreateScrollBeginForWrapping(
-    const blink::WebGestureEvent& gesture_event) {
-  DCHECK(gesture_event.GetType() == blink::WebInputEvent::kGestureScrollUpdate);
-
-  blink::WebGestureEvent wrap_gesture_scroll_begin(
-      blink::WebInputEvent::kGestureScrollBegin, gesture_event.GetModifiers(),
-      gesture_event.TimeStamp(), gesture_event.SourceDevice());
-  wrap_gesture_scroll_begin.data.scroll_begin.delta_x_hint = 0;
-  wrap_gesture_scroll_begin.data.scroll_begin.delta_y_hint = 0;
-  wrap_gesture_scroll_begin.resending_plugin_id =
-      gesture_event.resending_plugin_id;
-  wrap_gesture_scroll_begin.data.scroll_begin.delta_hint_units =
-      gesture_event.data.scroll_update.delta_units;
-
-  return wrap_gesture_scroll_begin;
-}
-
-inline blink::WebGestureEvent CreateScrollEndForWrapping(
-    const blink::WebGestureEvent& gesture_event) {
-  DCHECK(gesture_event.GetType() == blink::WebInputEvent::kGestureScrollUpdate);
-
-  blink::WebGestureEvent wrap_gesture_scroll_end(
-      blink::WebInputEvent::kGestureScrollEnd, gesture_event.GetModifiers(),
-      gesture_event.TimeStamp(), gesture_event.SourceDevice());
-  wrap_gesture_scroll_end.resending_plugin_id =
-      gesture_event.resending_plugin_id;
-  wrap_gesture_scroll_end.data.scroll_end.delta_units =
-      gesture_event.data.scroll_update.delta_units;
-
-  return wrap_gesture_scroll_end;
-}
 
 std::vector<DropData::Metadata> DropDataToMetaData(const DropData& drop_data) {
   std::vector<DropData::Metadata> metadata;
@@ -412,17 +379,6 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(
   }
 
   enable_viz_ = features::IsVizDisplayCompositorEnabled();
-
-  if (!enable_viz_) {
-#if !defined(OS_ANDROID)
-    // Software compositing is not supported or used on Android.
-    //
-    // The BrowserMainLoop is null in unit tests, but they do not use
-    // compositing and report SharedBitmapIds.
-    if (BrowserMainLoop* main_loop = BrowserMainLoop::GetInstance())
-      shared_bitmap_manager_ = main_loop->GetServerSharedBitmapManager();
-#endif
-  }
 
   delegate_->RenderWidgetCreated(this);
   render_frame_metadata_provider_.AddObserver(this);
@@ -799,11 +755,17 @@ VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   RenderViewHostDelegateView* rvh_delegate_view = delegate_->GetDelegateView();
   DCHECK(rvh_delegate_view);
 
-  visual_properties.browser_controls_shrink_blink_size =
+  visual_properties.browser_controls_params.browser_controls_shrink_blink_size =
       rvh_delegate_view->DoBrowserControlsShrinkRendererSize();
+  visual_properties.browser_controls_params
+      .animate_browser_controls_height_changes =
+      rvh_delegate_view->ShouldAnimateBrowserControlsHeightChanges();
 
   float top_controls_height = rvh_delegate_view->GetTopControlsHeight();
+  float top_controls_min_height = rvh_delegate_view->GetTopControlsMinHeight();
   float bottom_controls_height = rvh_delegate_view->GetBottomControlsHeight();
+  float bottom_controls_min_height =
+      rvh_delegate_view->GetBottomControlsMinHeight();
   float browser_controls_dsf_multiplier = 1.f;
   // The top and bottom control sizes are physical pixels but the IPC wants
   // DIPs *when not using page zoom for DSF* because blink layout is working
@@ -812,10 +774,14 @@ VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
     browser_controls_dsf_multiplier =
         visual_properties.screen_info.device_scale_factor;
   }
-  visual_properties.top_controls_height =
+  visual_properties.browser_controls_params.top_controls_height =
       top_controls_height / browser_controls_dsf_multiplier;
-  visual_properties.bottom_controls_height =
+  visual_properties.browser_controls_params.top_controls_min_height =
+      top_controls_min_height / browser_controls_dsf_multiplier;
+  visual_properties.browser_controls_params.bottom_controls_height =
       bottom_controls_height / browser_controls_dsf_multiplier;
+  visual_properties.browser_controls_params.bottom_controls_min_height =
+      bottom_controls_min_height / browser_controls_dsf_multiplier;
 
   visual_properties.auto_resize_enabled = auto_resize_enabled_;
   visual_properties.min_size_for_auto_resize = min_size_for_auto_resize_;
@@ -826,8 +792,7 @@ VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   visual_properties.compositor_viewport_pixel_rect =
       gfx::Rect(view_->GetCompositorViewportPixelSize());
 
-  const bool is_child_frame = view_->IsRenderWidgetHostViewChildFrame() &&
-                              !view_->IsRenderWidgetHostViewGuest();
+  const bool is_child_frame = view_->IsRenderWidgetHostViewChildFrame();
   // These properties come from the main frame RenderWidget and flow down the
   // tree of RenderWidgets. Each child frame RenderWidgetHost gets its values
   // from their parent RenderWidget in the renderer process. It gives them to
@@ -1158,8 +1123,8 @@ void RenderWidgetHostImpl::ForwardMouseEventWithLatencyInfo(
     const blink::WebMouseEvent& mouse_event,
     const ui::LatencyInfo& latency) {
   TRACE_EVENT2("input", "RenderWidgetHostImpl::ForwardMouseEvent", "x",
-               mouse_event.PositionInWidget().x, "y",
-               mouse_event.PositionInWidget().y);
+               mouse_event.PositionInWidget().x(), "y",
+               mouse_event.PositionInWidget().y());
 
   DCHECK_GE(mouse_event.GetType(), blink::WebInputEvent::kMouseTypeFirst);
   DCHECK_LE(mouse_event.GetType(), blink::WebInputEvent::kMouseTypeLast);
@@ -1258,7 +1223,6 @@ void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
   DCHECK_NE(gesture_event.SourceDevice(),
             blink::WebGestureDevice::kUninitialized);
 
-  bool scroll_update_needs_wrapping = false;
   if (gesture_event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
     DCHECK(
         !is_in_gesture_scroll_[static_cast<int>(gesture_event.SourceDevice())]);
@@ -1332,23 +1296,6 @@ void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
     }
   }
 
-  // TODO(wjmaclean) Remove the code for supporting resending gesture events
-  // when WebView transitions to OOPIF and BrowserPlugin is removed.
-  // http://crbug.com/533069
-  scroll_update_needs_wrapping =
-      gesture_event.GetType() == blink::WebInputEvent::kGestureScrollUpdate &&
-      gesture_event.resending_plugin_id != -1 &&
-      !is_in_gesture_scroll_[static_cast<int>(gesture_event.SourceDevice())];
-
-  // TODO(crbug.com/544782): Fix WebViewGuestScrollTest.TestGuestWheelScrolls-
-  // Bubble to test the resending logic of gesture events.
-  if (scroll_update_needs_wrapping) {
-    ForwardGestureEventWithLatencyInfo(
-        CreateScrollBeginForWrapping(gesture_event),
-        ui::WebInputEventTraits::CreateLatencyInfoForWebGestureEvent(
-            gesture_event));
-  }
-
   // Delegate must be non-null, due to |IsIgnoringInputEvents()| test.
   if (delegate_->PreHandleGestureEvent(gesture_event))
     return;
@@ -1357,13 +1304,6 @@ void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
   DispatchInputEventWithLatencyInfo(gesture_event,
                                     &gesture_with_latency.latency);
   input_router_->SendGestureEvent(gesture_with_latency);
-
-  if (scroll_update_needs_wrapping) {
-    ForwardGestureEventWithLatencyInfo(
-        CreateScrollEndForWrapping(gesture_event),
-        ui::WebInputEventTraits::CreateLatencyInfoForWebGestureEvent(
-            gesture_event));
-  }
 }
 
 void RenderWidgetHostImpl::ForwardTouchEventWithLatencyInfo(
@@ -2394,12 +2334,8 @@ bool RenderWidgetHostImpl::StoredVisualPropertiesNeedsUpdate(
              new_visual_properties.is_fullscreen_granted ||
          old_visual_properties->display_mode !=
              new_visual_properties.display_mode ||
-         old_visual_properties->top_controls_height !=
-             new_visual_properties.top_controls_height ||
-         old_visual_properties->browser_controls_shrink_blink_size !=
-             new_visual_properties.browser_controls_shrink_blink_size ||
-         old_visual_properties->bottom_controls_height !=
-             new_visual_properties.bottom_controls_height ||
+         old_visual_properties->browser_controls_params !=
+             new_visual_properties.browser_controls_params ||
          old_visual_properties->visible_viewport_size !=
              new_visual_properties.visible_viewport_size ||
          old_visual_properties->capture_sequence_number !=
@@ -2492,11 +2428,6 @@ TouchEmulator* RenderWidgetHostImpl::GetExistingTouchEmulator() {
 
 void RenderWidgetHostImpl::OnTextInputStateChanged(
     const TextInputState& params) {
-  if (delegate_ && delegate_->GetInputEventShim()) {
-    delegate_->GetInputEventShim()->DidTextInputStateChange(params);
-    return;
-  }
-
   if (view_)
     view_->TextInputStateChanged(params);
 }
@@ -2554,11 +2485,6 @@ void RenderWidgetHostImpl::OnProcessSwapMessage(const IPC::Message& message) {
 void RenderWidgetHostImpl::OnLockMouse(bool user_gesture,
                                        bool privileged,
                                        bool request_unadjusted_movement) {
-  if (delegate_ && delegate_->GetInputEventShim()) {
-    delegate_->GetInputEventShim()->DidLockMouse(user_gesture, privileged);
-    return;
-  }
-
   if (pending_mouse_lock_request_) {
     Send(new WidgetMsg_LockMouse_ACK(routing_id_, false));
     return;
@@ -2586,11 +2512,6 @@ void RenderWidgetHostImpl::OnLockMouse(bool user_gesture,
 }
 
 void RenderWidgetHostImpl::OnUnlockMouse() {
-  if (delegate_ && delegate_->GetInputEventShim()) {
-    delegate_->GetInputEventShim()->DidUnlockMouse();
-    return;
-  }
-
   // Got unlock request from renderer. Will update |is_last_unlocked_by_target_|
   // for silent re-lock.
   const bool was_mouse_locked = !pending_mouse_lock_request_ && IsMouseLocked();
@@ -2707,11 +2628,6 @@ void RenderWidgetHostImpl::DecrementInFlightEventCount(
 }
 
 void RenderWidgetHostImpl::OnHasTouchEventHandlers(bool has_handlers) {
-  if (delegate_ && delegate_->GetInputEventShim()) {
-    delegate_->GetInputEventShim()->DidSetHasTouchEventHandlers(has_handlers);
-    return;
-  }
-
   input_router_->OnHasTouchEventHandlers(has_handlers);
   has_touch_handler_ = has_handlers;
 }
@@ -2745,10 +2661,13 @@ void RenderWidgetHostImpl::SetNeedsBeginFrameForFlingProgress() {
 
 void RenderWidgetHostImpl::AddPendingUserActivation(
     const WebInputEvent& event) {
-  if (base::FeatureList::IsEnabled(features::kBrowserVerifiedUserActivation) &&
-      (event.GetType() == WebInputEvent::kMouseDown ||
-       event.GetType() == WebInputEvent::kKeyDown ||
-       event.GetType() == WebInputEvent::kRawKeyDown)) {
+  if ((base::FeatureList::IsEnabled(
+           features::kBrowserVerifiedUserActivationMouse) &&
+       event.GetType() == WebInputEvent::kMouseDown) ||
+      (base::FeatureList::IsEnabled(
+           features::kBrowserVerifiedUserActivationKeyboard) &&
+       (event.GetType() == WebInputEvent::kKeyDown ||
+        event.GetType() == WebInputEvent::kRawKeyDown))) {
     pending_user_activation_timer_.Start(
         FROM_HERE, kActivationNotificationExpireTime,
         base::BindOnce(&RenderWidgetHostImpl::ClearPendingUserActivation,
@@ -3122,19 +3041,13 @@ void RenderWidgetHostImpl::DidProcessFrame(uint32_t frame_token) {
 device::mojom::WakeLock* RenderWidgetHostImpl::GetWakeLock() {
   // Here is a lazy binding, and will not reconnect after connection error.
   if (!wake_lock_) {
-    mojo::PendingReceiver<device::mojom::WakeLock> receiver =
-        wake_lock_.BindNewPipeAndPassReceiver();
-    // In some testing contexts, the system Connector isn't3 initialized.
-    if (GetSystemConnector()) {
-      mojo::Remote<device::mojom::WakeLockProvider> wake_lock_provider;
-      GetSystemConnector()->Connect(
-          device::mojom::kServiceName,
-          wake_lock_provider.BindNewPipeAndPassReceiver());
-      wake_lock_provider->GetWakeLockWithoutContext(
-          device::mojom::WakeLockType::kPreventDisplaySleep,
-          device::mojom::WakeLockReason::kOther, "GetSnapshot",
-          std::move(receiver));
-    }
+    mojo::Remote<device::mojom::WakeLockProvider> wake_lock_provider;
+    GetDeviceService().BindWakeLockProvider(
+        wake_lock_provider.BindNewPipeAndPassReceiver());
+    wake_lock_provider->GetWakeLockWithoutContext(
+        device::mojom::WakeLockType::kPreventDisplaySleep,
+        device::mojom::WakeLockReason::kOther, "GetSnapshot",
+        wake_lock_.BindNewPipeAndPassReceiver());
   }
   return wake_lock_.get();
 }

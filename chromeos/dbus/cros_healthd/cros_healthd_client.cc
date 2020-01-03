@@ -42,8 +42,8 @@ class CrosHealthdClientImpl : public CrosHealthdClient {
                                    base::kNullProcessHandle,
                                    platform_channel.TakeLocalEndpoint());
 
-    // Bind our end of |pipe| to our CrosHealthdServicePtr. The daemon should
-    // bind its end to a CrosHealthdService implementation.
+    // Bind our end of |pipe| to our CrosHealthdService remote. The daemon
+    // should bind its end to a CrosHealthdService implementation.
     mojo::Remote<cros_healthd::mojom::CrosHealthdService> cros_healthd_service;
     cros_healthd_service.Bind(
         mojo::PendingRemote<cros_healthd::mojom::CrosHealthdService>(
@@ -109,7 +109,7 @@ void CrosHealthdClient::Initialize(dbus::Bus* bus) {
 
 // static
 void CrosHealthdClient::InitializeFake() {
-  new FakeCrosHealthdClient();
+  new cros_healthd::FakeCrosHealthdClient();
 }
 
 // static

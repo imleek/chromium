@@ -41,6 +41,7 @@
 #include "third_party/blink/public/platform/web_scroll_into_view_params.h"
 #include "third_party/blink/public/web/web_autofill_client.h"
 #include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/public/web/web_range.h"
 #include "third_party/blink/public/web/web_widget_client.h"
@@ -82,6 +83,7 @@
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
 
 namespace blink {
@@ -120,8 +122,8 @@ WebFrameWidget* WebFrameWidget::CreateForMainFrame(WebWidgetClient* client,
   // Note: this isn't a leak, as the object has a self-reference that the
   // caller needs to release by calling Close().
   // TODO(dcheng): Remove the special bridge class for main frame widgets.
-  WebFrameWidgetBase* widget =
-      MakeGarbageCollected<WebViewFrameWidget>(*client, web_view_impl);
+  auto* widget = MakeGarbageCollected<WebViewFrameWidget>(
+      util::PassKey<WebFrameWidget>(), *client, web_view_impl);
   widget->BindLocalRoot(*main_frame);
   return widget;
 }
@@ -138,12 +140,14 @@ WebFrameWidget* WebFrameWidget::CreateForChildLocalRoot(
 
   // Note: this isn't a leak, as the object has a self-reference that the
   // caller needs to release by calling Close().
-  auto* widget = MakeGarbageCollected<WebFrameWidgetImpl>(*client);
+  auto* widget = MakeGarbageCollected<WebFrameWidgetImpl>(
+      util::PassKey<WebFrameWidget>(), *client);
   widget->BindLocalRoot(*local_root);
   return widget;
 }
 
-WebFrameWidgetImpl::WebFrameWidgetImpl(WebWidgetClient& client)
+WebFrameWidgetImpl::WebFrameWidgetImpl(util::PassKey<WebFrameWidget>,
+                                       WebWidgetClient& client)
     : WebFrameWidgetBase(client),
       self_keep_alive_(PERSISTENT_FROM_HERE, this) {}
 
@@ -677,8 +681,8 @@ void WebFrameWidgetImpl::HandleMouseDown(LocalFrame& main_frame,
   // Take capture on a mouse down on a plugin so we can send it mouse events.
   // If the hit node is a plugin but a scrollbar is over it don't start mouse
   // capture because it will interfere with the scrollbar receiving events.
-  PhysicalOffset point(LayoutUnit(event.PositionInWidget().x),
-                       LayoutUnit(event.PositionInWidget().y));
+  PhysicalOffset point(LayoutUnit(event.PositionInWidget().x()),
+                       LayoutUnit(event.PositionInWidget().y()));
   if (event.button == WebMouseEvent::Button::kLeft) {
     HitTestLocation location(
         LocalRootImpl()->GetFrameView()->ConvertFromRootFrame(point));
@@ -691,7 +695,7 @@ void WebFrameWidgetImpl::HandleMouseDown(LocalFrame& main_frame,
     if (!result.GetScrollbar() && hit_node && hit_node->GetLayoutObject() &&
         hit_node->GetLayoutObject()->IsEmbeddedObject() && html_element &&
         html_element->IsPluginElement()) {
-      mouse_capture_element_ = ToHTMLPlugInElement(hit_node);
+      mouse_capture_element_ = To<HTMLPlugInElement>(hit_node);
       TRACE_EVENT_ASYNC_BEGIN0("input", "capturing mouse", this);
     }
   }
@@ -860,6 +864,17 @@ WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
   // event and a keyUp event. We reset this flag here as this is a new keyDown
   // event.
   suppress_next_keypress_event_ = false;
+
+  // If there is a popup open, it should be the one processing the event,
+  // not the page.
+  scoped_refptr<WebPagePopupImpl> page_popup = View()->GetPagePopup();
+  if (page_popup) {
+    page_popup->HandleKeyEvent(event);
+    if (event.GetType() == WebInputEvent::kRawKeyDown) {
+      suppress_next_keypress_event_ = true;
+    }
+    return WebInputEventResult::kHandledSystem;
+  }
 
   auto* frame = DynamicTo<LocalFrame>(FocusedCoreFrame());
   if (!frame)

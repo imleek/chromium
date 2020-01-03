@@ -6,6 +6,7 @@
 #define CONTENT_BROWSER_SMS_SMS_SERVICE_H_
 
 #include <memory>
+#include <string>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
@@ -22,6 +23,7 @@ namespace content {
 
 class RenderFrameHost;
 class SmsFetcher;
+struct LoadCommittedDetails;
 
 // SmsService handles mojo connections from the renderer, observing the incoming
 // SMS messages from an SmsFetcher.
@@ -49,10 +51,16 @@ class CONTENT_EXPORT SmsService
 
   // blink::mojom::SmsReceiver:
   void Receive(ReceiveCallback) override;
+  void Abort() override;
 
   // content::SmsQueue::Subscriber
   void OnReceive(const std::string& one_time_code,
                  const std::string& sms) override;
+
+ protected:
+  // content::WebContentsObserver:
+  void NavigationEntryCommitted(
+      const content::LoadCommittedDetails& load_details) override;
 
  private:
   void OpenInfoBar(const std::string& one_time_code);
@@ -70,6 +78,8 @@ class CONTENT_EXPORT SmsService
   SmsFetcher* fetcher_;
 
   const url::Origin origin_;
+
+  bool prompt_open_ = false;
 
   ReceiveCallback callback_;
   base::Optional<std::string> sms_;

@@ -181,10 +181,11 @@ class FrameFetchContextSubresourceFilterTest : public FrameFetchContextTest {
 
   void SetFilterPolicy(WebDocumentSubresourceFilter::LoadPolicy policy,
                        bool is_associated_with_ad_subframe = false) {
-    document->Loader()->SetSubresourceFilter(SubresourceFilter::Create(
-        *document, std::make_unique<FixedPolicySubresourceFilter>(
-                       policy, &filtered_load_callback_counter_,
-                       is_associated_with_ad_subframe)));
+    document->Loader()->SetSubresourceFilter(
+        MakeGarbageCollected<SubresourceFilter>(
+            document, std::make_unique<FixedPolicySubresourceFilter>(
+                          policy, &filtered_load_callback_counter_,
+                          is_associated_with_ad_subframe)));
   }
 
   base::Optional<ResourceRequestBlockedReason> CanRequest() {
@@ -341,10 +342,10 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
     const KURL input_url(input);
     const KURL main_frame_url(main_frame);
     ResourceRequest resource_request(input_url);
-    resource_request.SetRequestContext(mojom::RequestContextType::SCRIPT);
+    resource_request.SetRequestContext(mojom::RequestContextType::IMAGE);
 
     RecreateFetchContext(main_frame_url);
-    document->SetInsecureRequestPolicy(policy);
+    document->GetSecurityContext().SetInsecureRequestPolicy(policy);
 
     ModifyRequestForCSP(resource_request,
                         network::mojom::RequestContextFrameType::kNone);
@@ -405,10 +406,11 @@ TEST_F(FrameFetchContextModifyRequestTest, UpgradeInsecureResourceRequests) {
        "ftp://example.test:1212/image.png"},
   };
 
-  document->SetInsecureRequestPolicy(kUpgradeInsecureRequests);
+  document->GetSecurityContext().SetInsecureRequestPolicy(
+      kUpgradeInsecureRequests);
 
   for (const auto& test : tests) {
-    document->ClearInsecureNavigationsToUpgradeForTest();
+    document->GetSecurityContext().ClearInsecureNavigationsToUpgradeForTest();
 
     // We always upgrade for FrameTypeNone.
     ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
@@ -439,7 +441,7 @@ TEST_F(FrameFetchContextModifyRequestTest, UpgradeInsecureResourceRequests) {
 
     // Or unless the host of the resource is in the document's
     // InsecureNavigationsSet:
-    document->AddInsecureNavigationUpgrade(
+    document->GetSecurityContext().AddInsecureNavigationUpgrade(
         example_origin->Host().Impl()->GetHash());
     ExpectUpgrade(test.original, mojom::RequestContextType::SCRIPT,
                   network::mojom::RequestContextFrameType::kTopLevel,
@@ -456,7 +458,8 @@ TEST_F(FrameFetchContextModifyRequestTest,
   feature_list.InitAndDisableFeature(blink::features::kMixedContentAutoupgrade);
 
   RecreateFetchContext(KURL("https://secureorigin.test/image.png"));
-  document->SetInsecureRequestPolicy(kLeaveInsecureRequestsAlone);
+  document->GetSecurityContext().SetInsecureRequestPolicy(
+      kLeaveInsecureRequestsAlone);
 
   ExpectUpgrade("http://example.test/image.png",
                 "http://example.test/image.png");
@@ -531,21 +534,25 @@ TEST_F(FrameFetchContextModifyRequestTest, SendUpgradeInsecureRequestHeader) {
   // and when it doesn't (e.g. during main frame navigations), so run through
   // the tests both before and after providing a document to the context.
   for (const auto& test : tests) {
-    document->SetInsecureRequestPolicy(kLeaveInsecureRequestsAlone);
+    document->GetSecurityContext().SetInsecureRequestPolicy(
+        kLeaveInsecureRequestsAlone);
     ExpectUpgradeInsecureRequestHeader(test.to_request, test.frame_type,
                                        test.should_prefer);
 
-    document->SetInsecureRequestPolicy(kUpgradeInsecureRequests);
+    document->GetSecurityContext().SetInsecureRequestPolicy(
+        kUpgradeInsecureRequests);
     ExpectUpgradeInsecureRequestHeader(test.to_request, test.frame_type,
                                        test.should_prefer);
   }
 
   for (const auto& test : tests) {
-    document->SetInsecureRequestPolicy(kLeaveInsecureRequestsAlone);
+    document->GetSecurityContext().SetInsecureRequestPolicy(
+        kLeaveInsecureRequestsAlone);
     ExpectUpgradeInsecureRequestHeader(test.to_request, test.frame_type,
                                        test.should_prefer);
 
-    document->SetInsecureRequestPolicy(kUpgradeInsecureRequests);
+    document->GetSecurityContext().SetInsecureRequestPolicy(
+        kUpgradeInsecureRequests);
     ExpectUpgradeInsecureRequestHeader(test.to_request, test.frame_type,
                                        test.should_prefer);
   }
@@ -1218,7 +1225,8 @@ TEST_F(FrameFetchContextMockedLocalFrameClientTest,
 
 TEST_F(FrameFetchContextTest, AddResourceTimingWhenDetached) {
   scoped_refptr<ResourceTimingInfo> info = ResourceTimingInfo::Create(
-      "type", base::TimeTicks() + base::TimeDelta::FromSecondsD(0.3));
+      "type", base::TimeTicks() + base::TimeDelta::FromSecondsD(0.3),
+      mojom::RequestContextType::UNSPECIFIED);
 
   dummy_page_holder = nullptr;
 
@@ -1279,8 +1287,8 @@ TEST_F(FrameFetchContextTest, SetFirstPartyCookieWhenDetached) {
 
   SetFirstPartyCookie(request);
 
-  EXPECT_TRUE(SecurityOrigin::AreSameSchemeHostPort(document_url,
-                                                    request.SiteForCookies()));
+  EXPECT_TRUE(
+      SecurityOrigin::AreSameOrigin(document_url, request.SiteForCookies()));
 }
 
 TEST_F(FrameFetchContextTest, TopFrameOrigin) {

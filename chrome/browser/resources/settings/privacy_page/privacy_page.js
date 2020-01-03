@@ -30,33 +30,11 @@ const NetworkPredictionOptions = {
   DEFAULT: 1,
 };
 
-/**
- * These values are persisted to logs. Entries should not be renumbered and
- * numeric values should never be reused.
- *
- * Must be kept in sync with enum of the same name in
- * histograms/enums.xml
- *
- * Interactions across all settings pages should be added here.
- */
-settings.SettingsPageInteractions = {
-  PRIVACY_SYNC_AND_GOOGLE_SERVICES: 0,
-  PRIVACY_CHROME_SIGN_IN: 1,
-  PRIVACY_DO_NOT_TRACK: 2,
-  PRIVACY_PAYMENT_METHOD: 3,
-  PRIVACY_NETWORK_PREDICTION: 4,
-  PRIVACY_MANAGE_CERTIFICATES: 5,
-  PRIVACY_SECURITY_KEYS: 6,
-  PRIVACY_SITE_SETTINGS: 7,
-  PRIVACY_CLEAR_BROWSING_DATA: 8,
-  // Leave this at the end.
-  SETTINGS_MAX_VALUE: 8,
-};
-
 Polymer({
   is: 'settings-privacy-page',
 
   behaviors: [
+    PrefsBehavior,
     settings.RouteObserverBehavior,
     I18nBehavior,
     WebUIListenerBehavior,
@@ -82,6 +60,26 @@ Polymer({
      * @type {!PrivacyPageVisibility}
      */
     pageVisibility: Object,
+
+    /** @private */
+    passwordsLeakDetectionEnabled_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('passwordsLeakDetectionEnabled');
+      },
+    },
+
+    /** @private {chrome.settingsPrivate.PrefObject} */
+    safeBrowsingReportingPref_: {
+      type: Object,
+      value: function() {
+        return /** @type {chrome.settingsPrivate.PrefObject} */ ({
+          key: '',
+          type: chrome.settingsPrivate.PrefType.BOOLEAN,
+          value: false,
+        });
+      },
+    },
 
     /** @private */
     isGuest_: {
@@ -117,6 +115,23 @@ Polymer({
       value: function() {
         return loadTimeData.getBoolean('enableSafeBrowsingSubresourceFilter');
       }
+    },
+
+    /** @private */
+    privacySettingsRedesignEnabled_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('privacySettingsRedesignEnabled');
+      },
+    },
+
+    /**
+     * Whether the more settings list is opened.
+     * @private
+     */
+    moreOpened_: {
+      type: Boolean,
+      value: false,
     },
 
     /** @private */
@@ -177,6 +192,13 @@ Polymer({
       }
     },
 
+    /** @private */
+    enableQuietNotificationPromptsSetting_: {
+      type: Boolean,
+      value: () =>
+          loadTimeData.getBoolean('enableQuietNotificationPromptsSetting'),
+    },
+
     /** @private {!Map<string, string>} */
     focusConfig_: {
       type: Object,
@@ -208,17 +230,13 @@ Polymer({
       },
     },
 
-    // <if expr="not chromeos">
-    /** @private */
-    showRestart_: Boolean,
-    // </if>
-
-    /** @private */
-    showSignoutDialog_: Boolean,
-
     /** @private */
     searchFilter_: String,
   },
+
+  observers: [
+    'onSafeBrowsingReportingPrefChange_(prefs.safebrowsing.*)',
+  ],
 
   /** @override */
   ready: function() {
@@ -240,6 +258,39 @@ Polymer({
         this.handleSyncStatus_.bind(this));
     this.addWebUIListener(
         'sync-status-changed', this.handleSyncStatus_.bind(this));
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  getDisabledExtendedSafeBrowsing_: function() {
+    return !this.getPref('safebrowsing.enabled').value;
+  },
+
+  /** @private */
+  onSafeBrowsingReportingToggleChange_: function() {
+    this.setPrefValue(
+        'safebrowsing.scout_reporting_enabled',
+        this.$$('#safeBrowsingReportingToggle').checked);
+  },
+
+  /** @private */
+  onSafeBrowsingReportingPrefChange_: function() {
+    if (this.prefs == undefined) {
+      return;
+    }
+    const safeBrowsingScoutPref =
+        this.getPref('safebrowsing.scout_reporting_enabled');
+    const prefValue = !!this.getPref('safebrowsing.enabled').value &&
+        !!safeBrowsingScoutPref.value;
+    this.safeBrowsingReportingPref_ = {
+      key: '',
+      type: chrome.settingsPrivate.PrefType.BOOLEAN,
+      value: prefValue,
+      enforcement: safeBrowsingScoutPref.enforcement,
+      controlledBy: safeBrowsingScoutPref.controlledBy,
+    };
   },
 
   /**
@@ -380,15 +431,6 @@ Polymer({
         settings.SettingsPageInteractions.PRIVACY_NETWORK_PREDICTION);
   },
 
-  /** @private */
-  onSyncAndGoogleServicesClick_: function() {
-    // Navigate to sync page, and remove (privacy related) search text to
-    // avoid the sync page from being hidden.
-    settings.navigateTo(settings.routes.SYNC, null, true);
-    this.browserProxy_.recordSettingsPageHistogram(
-        settings.SettingsPageInteractions.PRIVACY_SYNC_AND_GOOGLE_SERVICES);
-  },
-
   /**
    * This is a workaround to connect the remove all button to the subpage.
    * @private
@@ -443,43 +485,6 @@ Polymer({
   getProtectedContentIdentifiersLabel_: function(value) {
     return value ? this.i18n('siteSettingsProtectedContentEnableIdentifiers') :
                    this.i18n('siteSettingsBlocked');
-  },
-
-  /** @private */
-  onSigninAllowedChange_: function() {
-    if (this.syncStatus.signedIn && !this.$.signinAllowedToggle.checked) {
-      // Switch the toggle back on and show the signout dialog.
-      this.$.signinAllowedToggle.checked = true;
-      this.showSignoutDialog_ = true;
-    } else {
-      /** @type {!SettingsToggleButtonElement} */ (this.$.signinAllowedToggle)
-          .sendPrefChange();
-      this.showRestart_ = true;
-    }
-    this.browserProxy_.recordSettingsPageHistogram(
-        settings.SettingsPageInteractions.PRIVACY_CHROME_SIGN_IN);
-  },
-
-  /** @private */
-  onSignoutDialogClosed_: function() {
-    if (/** @type {!SettingsSignoutDialogElement} */ (
-            this.$$('settings-signout-dialog'))
-            .wasConfirmed()) {
-      this.$.signinAllowedToggle.checked = false;
-      /** @type {!SettingsToggleButtonElement} */ (this.$.signinAllowedToggle)
-          .sendPrefChange();
-      this.showRestart_ = true;
-    }
-    this.showSignoutDialog_ = false;
-  },
-
-  /**
-   * @param {!Event} e
-   * @private
-   */
-  onRestartTap_: function(e) {
-    e.stopPropagation();
-    settings.LifetimeBrowserProxyImpl.getInstance().restart();
   },
 });
 })();

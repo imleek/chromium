@@ -62,8 +62,8 @@ class ProcessPriorityPolicyTest : public PerformanceManagerTestHarness {
     // It's safe to pass unretained as we clear the callback before being
     // torn down.
     ProcessPriorityPolicy::SetCallbackForTesting(
-        base::Bind(&ProcessPriorityPolicyTest::OnSetPriorityWrapper,
-                   base::Unretained(this)));
+        base::BindRepeating(&ProcessPriorityPolicyTest::OnSetPriorityWrapper,
+                            base::Unretained(this)));
   }
 
   void TearDown() override {
@@ -72,11 +72,6 @@ class ProcessPriorityPolicyTest : public PerformanceManagerTestHarness {
     // Clean up the web contents, which should dispose of the page and frame
     // nodes involved.
     DeleteContents();
-
-    // The RenderProcessHosts seem to get leaked, or at least be still alive
-    // here, so explicitly detach from them in order to clean up the graph
-    // nodes.
-    RenderProcessUserData::DetachAndDestroyAll();
 
     PerformanceManagerTestHarness::TearDown();
   }
@@ -106,7 +101,7 @@ class ProcessPriorityPolicyTest : public PerformanceManagerTestHarness {
 TEST_F(ProcessPriorityPolicyTest, GraphReflectedToRenderProcessHost) {
   // Create an instance of the process priority policy.
   PerformanceManager::CallOnGraph(
-      FROM_HERE, base::Bind([](Graph* graph) {
+      FROM_HERE, base::BindOnce([](Graph* graph) {
         std::unique_ptr<ProcessPriorityPolicy> policy(
             new ProcessPriorityPolicy());
         graph->PassToGraph(std::move(policy));

@@ -16,7 +16,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/android/vr/gvr_gamepad_data.h"
 #include "chrome/browser/ui/page_info/page_info_ui.h"
 #include "chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.h"
 #include "chrome/browser/vr/assets_load_status.h"
@@ -29,7 +28,6 @@
 #include "chrome/browser/vr/ui_initial_state.h"
 #include "chrome/browser/vr/ui_unsupported_mode.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "device/vr/public/cpp/session_mode.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/vr_device.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -146,7 +144,6 @@ class VrShell : VoiceResultDelegate,
   void OpenFeedback();
   void CloseHostedDialog();
   void ToggleCardboardGamepad(bool enabled);
-  void ToggleGvrGamepad(bool enabled);
   void SetHistoryButtonsEnabled(JNIEnv* env,
                                 const base::android::JavaParamRef<jobject>& obj,
                                 jboolean can_go_back,
@@ -253,8 +250,6 @@ class VrShell : VoiceResultDelegate,
   void ConnectPresentingService(
       device::mojom::VRDisplayInfoPtr display_info,
       device::mojom::XRRuntimeSessionOptionsPtr options);
-
-  void UpdateGamepadData(GvrGamepadData);
 
   // ChromeLocationBarModelDelegate implementation.
   content::WebContents* GetActiveWebContents() const override;
@@ -368,7 +363,6 @@ class VrShell : VoiceResultDelegate,
   CapturingStateModel potential_capturing_;
 
   // Are we currently providing a gamepad factory to the gamepad manager?
-  bool gvr_gamepad_source_active_ = false;
   bool cardboard_gamepad_source_active_ = false;
   bool pending_cardboard_trigger_ = false;
 

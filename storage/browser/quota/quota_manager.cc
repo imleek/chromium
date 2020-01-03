@@ -50,6 +50,13 @@ const int64_t kMBytes = 1024 * 1024;
 const int kMinutesInMilliSeconds = 60 * 1000;
 const int64_t kReportHistogramInterval = 60 * 60 * 1000;  // 1 hour
 
+// Start warning about disk pressure when device has <= 15% disk space
+// available.
+const double kDiskPressureThresholdRatio = 15;
+// Limit notifications to one a day.
+const base::TimeDelta kDiskPressureNotificationInterval =
+    base::TimeDelta::FromDays(1);
+
 }  // namespace
 
 const int64_t QuotaManager::kNoLimit = INT64_MAX;
@@ -186,7 +193,7 @@ bool UpdateModifiedTimeOnDBThread(const url::Origin& origin,
   return database->SetOriginLastModifiedTime(origin, type, modified_time);
 }
 
-void DidGetUsageAndQuotaForWebApps(
+void DidGetUsageAndQuotaStripBreakdown(
     QuotaManager::UsageAndQuotaCallback callback,
     blink::mojom::QuotaStatusCode status,
     int64_t usage,
@@ -205,6 +212,7 @@ class QuotaManager::UsageAndQuotaInfoGatherer : public QuotaTask {
                             bool is_unlimited,
                             bool is_session_only,
                             bool is_incognito,
+                            bool should_send_notification,
                             UsageAndQuotaWithBreakdownCallback callback)
       : QuotaTask(manager),
         origin_(origin),
@@ -212,7 +220,8 @@ class QuotaManager::UsageAndQuotaInfoGatherer : public QuotaTask {
         type_(type),
         is_unlimited_(is_unlimited),
         is_session_only_(is_session_only),
-        is_incognito_(is_incognito) {}
+        is_incognito_(is_incognito),
+        should_send_notification_(should_send_notification) {}
 
  protected:
   void Run() override {
@@ -220,7 +229,7 @@ class QuotaManager::UsageAndQuotaInfoGatherer : public QuotaTask {
     // Start the async process of gathering the info we need.
     // Gather 4 pieces of info before computing an answer:
     // settings, device_storage_capacity, host_usage, and host_quota.
-    base::Closure barrier = base::BarrierClosure(
+    base::RepeatingClosure barrier = base::BarrierClosure(
         4, base::BindOnce(&UsageAndQuotaInfoGatherer::OnBarrierComplete,
                           weak_factory_.GetWeakPtr()));
 
@@ -283,6 +292,14 @@ class QuotaManager::UsageAndQuotaInfoGatherer : public QuotaTask {
       }
     }
 
+    if (should_send_notification_) {
+      const double percent_disk_available =
+          ((total_space_ - available_space_) * 100 / total_space_);
+      if (percent_disk_available < kDiskPressureThresholdRatio) {
+        manager()->SendStoragePressureNotification(std::move(origin_));
+      }
+    }
+
     std::move(callback_).Run(blink::mojom::QuotaStatusCode::kOk, host_usage_,
                              host_quota, std::move(host_usage_breakdown_));
     if (type_ == StorageType::kTemporary && !is_incognito_ &&
@@ -303,7 +320,7 @@ class QuotaManager::UsageAndQuotaInfoGatherer : public QuotaTask {
     return static_cast<QuotaManager*>(observer());
   }
 
-  void OnGotSettings(const base::Closure& barrier_closure,
+  void OnGotSettings(base::RepeatingClosure barrier_closure,
                      const QuotaSettings& settings) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     settings_ = settings;
@@ -317,30 +334,30 @@ class QuotaManager::UsageAndQuotaInfoGatherer : public QuotaTask {
     }
   }
 
-  void OnGotCapacity(const base::Closure& barrier_closure,
+  void OnGotCapacity(base::OnceClosure barrier_closure,
                      int64_t total_space,
                      int64_t available_space) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     total_space_ = total_space;
     available_space_ = available_space;
-    barrier_closure.Run();
+    std::move(barrier_closure).Run();
   }
 
-  void OnGotHostUsage(const base::Closure& barrier_closure,
+  void OnGotHostUsage(base::OnceClosure barrier_closure,
                       int64_t usage,
                       blink::mojom::UsageBreakdownPtr usage_breakdown) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     host_usage_ = usage;
     host_usage_breakdown_ = std::move(usage_breakdown);
-    barrier_closure.Run();
+    std::move(barrier_closure).Run();
   }
 
-  void SetDesiredHostQuota(const base::Closure& barrier_closure,
+  void SetDesiredHostQuota(base::OnceClosure barrier_closure,
                            blink::mojom::QuotaStatusCode status,
                            int64_t quota) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     desired_host_quota_ = quota;
-    barrier_closure.Run();
+    std::move(barrier_closure).Run();
   }
 
   void OnBarrierComplete() { CallCompleted(); }
@@ -351,6 +368,7 @@ class QuotaManager::UsageAndQuotaInfoGatherer : public QuotaTask {
   bool is_unlimited_;
   bool is_session_only_;
   bool is_incognito_;
+  bool should_send_notification_;
   int64_t available_space_ = 0;
   int64_t total_space_ = 0;
   int64_t desired_host_quota_ = 0;
@@ -406,18 +424,18 @@ class QuotaManager::EvictionRoundInfoHelper : public QuotaTask {
     return static_cast<QuotaManager*>(observer());
   }
 
-  void OnGotSettings(const base::Closure& barrier_closure,
+  void OnGotSettings(base::OnceClosure barrier_closure,
                      const QuotaSettings& settings) {
     settings_ = settings;
-    barrier_closure.Run();
+    std::move(barrier_closure).Run();
   }
 
-  void OnGotCapacity(const base::Closure& barrier_closure,
+  void OnGotCapacity(base::OnceClosure barrier_closure,
                      int64_t total_space,
                      int64_t available_space) {
     total_space_ = total_space;
     available_space_ = available_space;
-    barrier_closure.Run();
+    std::move(barrier_closure).Run();
   }
 
   void OnBarrierComplete() {
@@ -545,7 +563,7 @@ class QuotaManager::OriginDataDeleter : public QuotaTask {
   void Run() override {
     error_count_ = 0;
     remaining_clients_ = manager()->clients_.size();
-    for (auto* client : manager()->clients_) {
+    for (const auto& client : manager()->clients_) {
       if (quota_client_mask_ & client->id()) {
         static int tracing_id = 0;
         TRACE_EVENT_ASYNC_BEGIN2(
@@ -632,7 +650,7 @@ class QuotaManager::HostDataDeleter : public QuotaTask {
   void Run() override {
     error_count_ = 0;
     remaining_clients_ = manager()->clients_.size();
-    for (auto* client : manager()->clients_) {
+    for (const auto& client : manager()->clients_) {
       client->GetOriginsForHost(
           type_, host_,
           base::BindOnce(&HostDataDeleter::DidGetOriginsForHost,
@@ -728,7 +746,7 @@ class QuotaManager::StorageCleanupHelper : public QuotaTask {
 
     // This may synchronously trigger |callback_| at the end of the for loop,
     // make sure we do nothing after this block.
-    for (auto* client : manager()->clients_) {
+    for (const auto& client : manager()->clients_) {
       if (quota_client_mask_ & client->id()) {
         client->PerformStorageCleanup(type_, barrier);
       } else {
@@ -921,7 +939,7 @@ void QuotaManager::GetUsageAndQuotaForWebApps(const url::Origin& origin,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   GetUsageAndQuotaWithBreakdown(
       origin, type,
-      base::BindOnce(&DidGetUsageAndQuotaForWebApps, std::move(callback)));
+      base::BindOnce(&DidGetUsageAndQuotaStripBreakdown, std::move(callback)));
 }
 
 void QuotaManager::GetUsageAndQuotaWithBreakdown(
@@ -945,7 +963,7 @@ void QuotaManager::GetUsageAndQuotaWithBreakdown(
       special_storage_policy_->IsStorageSessionOnly(origin.GetURL());
   UsageAndQuotaInfoGatherer* helper = new UsageAndQuotaInfoGatherer(
       this, origin, type, IsStorageUnlimited(origin, type), is_session_only,
-      is_incognito_, std::move(callback));
+      is_incognito_, false, std::move(callback));
   helper->Start();
 }
 
@@ -960,14 +978,30 @@ void QuotaManager::GetUsageAndQuota(const url::Origin& origin,
     return;
   }
 
-  GetUsageAndQuotaForWebApps(origin, type, std::move(callback));
+  if (!IsSupportedType(type) ||
+      (is_incognito_ && !IsSupportedIncognitoType(type))) {
+    std::move(callback).Run(
+        /*status*/ blink::mojom::QuotaStatusCode::kErrorNotSupported,
+        /*usage*/ 0,
+        /*quota*/ 0);
+    return;
+  }
+  LazyInitialize();
+
+  bool is_session_only =
+      type == StorageType::kTemporary && special_storage_policy_ &&
+      special_storage_policy_->IsStorageSessionOnly(origin.GetURL());
+  UsageAndQuotaInfoGatherer* helper = new UsageAndQuotaInfoGatherer(
+      this, origin, type, IsStorageUnlimited(origin, type), is_session_only,
+      is_incognito_, true,
+      base::BindOnce(&DidGetUsageAndQuotaStripBreakdown, std::move(callback)));
+  helper->Start();
 }
 
-void QuotaManager::NotifyStorageAccessed(QuotaClient::ID client_id,
-                                         const url::Origin& origin,
+void QuotaManager::NotifyStorageAccessed(const url::Origin& origin,
                                          StorageType type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  NotifyStorageAccessedInternal(client_id, origin, type, base::Time::Now());
+  NotifyStorageAccessedInternal(origin, type, base::Time::Now());
 }
 
 void QuotaManager::NotifyStorageModified(QuotaClient::ID client_id,
@@ -1217,7 +1251,7 @@ bool QuotaManager::ResetUsageTracker(StorageType type) {
 
 QuotaManager::~QuotaManager() {
   proxy_->manager_ = nullptr;
-  for (auto* client : clients_)
+  for (const auto& client : clients_)
     client->OnQuotaManagerDestroyed();
   if (database_)
     db_runner_->DeleteSoon(FROM_HERE, database_.release());
@@ -1293,10 +1327,10 @@ void QuotaManager::DidBootstrapDatabase(
   GetLRUOrigin(StorageType::kTemporary, std::move(did_get_origin_callback));
 }
 
-void QuotaManager::RegisterClient(QuotaClient* client) {
+void QuotaManager::RegisterClient(scoped_refptr<QuotaClient> client) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!database_.get());
-  clients_.push_back(client);
+  clients_.push_back(std::move(client));
 }
 
 UsageTracker* QuotaManager::GetUsageTracker(StorageType type) const {
@@ -1325,8 +1359,7 @@ void QuotaManager::GetCachedOrigins(StorageType type,
   GetUsageTracker(type)->GetCachedOrigins(origins);
 }
 
-void QuotaManager::NotifyStorageAccessedInternal(QuotaClient::ID client_id,
-                                                 const url::Origin& origin,
+void QuotaManager::NotifyStorageAccessedInternal(const url::Origin& origin,
                                                  StorageType type,
                                                  base::Time accessed_time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1443,6 +1476,33 @@ void QuotaManager::DeleteOriginDataInternal(const url::Origin& origin,
   OriginDataDeleter* deleter = new OriginDataDeleter(
       this, origin, type, quota_client_mask, is_eviction, std::move(callback));
   deleter->Start();
+}
+
+void QuotaManager::SendStoragePressureNotification(const url::Origin origin) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!send_notification_function_) {
+    // Quota will hold onto a storage pressure notification if no storage
+    // pressure callback is set.
+    origin_with_pending_notification_ = std::move(origin);
+    return;
+  }
+  if (base::TimeTicks::Now() - disk_pressure_notification_timestamp_ <
+      kDiskPressureNotificationInterval) {
+    return;
+  }
+
+  send_notification_function_.Run(std::move(origin));
+  disk_pressure_notification_timestamp_ = base::TimeTicks::Now();
+}
+
+void QuotaManager::SetStoragePressureCallback(
+    base::RepeatingCallback<void(url::Origin)> send_notification_function) {
+  send_notification_function_ = send_notification_function;
+  if (origin_with_pending_notification_.has_value()) {
+    QuotaManager::SendStoragePressureNotification(
+        std::move(origin_with_pending_notification_.value()));
+    origin_with_pending_notification_ = base::nullopt;
+  }
 }
 
 void QuotaManager::ReportHistogram() {

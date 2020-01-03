@@ -51,17 +51,13 @@ chrome/browser/ui/ash/ash_util.h
 chrome/browser/ui/ash/multi_user/multi_user_util.h
 chrome/browser/ui/network_profile_bubble.h
 chrome/browser/ui/views/frame/browser_frame_header_ash.h
-chrome/common/mac/app_shim_launch.h
-chrome/common/mac/app_shim_param_traits.h
 chrome/install_static/chromium_install_modes.h
 chrome/install_static/install_constants.h
 chrome/install_static/install_details.h
 chrome/install_static/install_modes.h
 chrome/install_static/install_util.h
 chrome/install_static/test/scoped_install_details.h
-chrome/installer/util/google_update_constants.h
 chrome/installer/util/google_update_settings.h
-chrome/installer/util/util_constants.h
 components/browser_watcher/features.h
 components/browser_watcher/stability_paths.h
 components/cast_certificate/cast_crl_root_ca_cert_der-inc.h

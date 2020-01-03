@@ -131,7 +131,8 @@ PermissionDescriptorPtr ParsePermission(ScriptState* script_state,
             script_state->GetIsolate(), raw_permission.V8Value(),
             exception_state);
     return CreateClipboardPermissionDescriptor(
-        permission_name, clipboard_permission->allowWithoutGesture());
+        permission_name, clipboard_permission->allowWithoutGesture(),
+        clipboard_permission->allowWithoutSanitization());
   }
   if (name == "payment-handler")
     return CreatePermissionDescriptor(PermissionName::PAYMENT_HANDLER);
@@ -139,15 +140,8 @@ PermissionDescriptorPtr ParsePermission(ScriptState* script_state,
     return CreatePermissionDescriptor(PermissionName::BACKGROUND_FETCH);
   if (name == "idle-detection")
     return CreatePermissionDescriptor(PermissionName::IDLE_DETECTION);
-  if (name == "periodic-background-sync") {
-    if (!RuntimeEnabledFeatures::PeriodicBackgroundSyncEnabled(
-            ExecutionContext::From(script_state))) {
-      exception_state.ThrowTypeError(
-          "Periodic Background Sync is not enabled.");
-      return nullptr;
-    }
+  if (name == "periodic-background-sync")
     return CreatePermissionDescriptor(PermissionName::PERIODIC_BACKGROUND_SYNC);
-  }
   if (name == "wake-lock") {
     if (!RuntimeEnabledFeatures::WakeLockEnabled(
             ExecutionContext::From(script_state))) {

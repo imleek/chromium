@@ -246,10 +246,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   // FIXME: We should pass in the LayoutBox but this opens a window
   // for crashers during PaintLayer setup (see crbug.com/368062).
-  static PaintLayerScrollableArea* Create(PaintLayer& layer) {
-    return MakeGarbageCollected<PaintLayerScrollableArea>(layer);
-  }
-
   explicit PaintLayerScrollableArea(PaintLayer&);
   ~PaintLayerScrollableArea() override;
 
@@ -318,6 +314,9 @@ class CORE_EXPORT PaintLayerScrollableArea final
   }
   IntSize ScrollOffsetInt() const override;
   ScrollOffset GetScrollOffset() const override;
+  // Commits a final scroll offset for the frame, if it might have changed.
+  // If it did change, enqueues a scroll event.
+  void EnqueueScrollEventIfNeeded();
   IntSize MinimumScrollOffsetInt() const override;
   IntSize MaximumScrollOffsetInt() const override;
   IntRect VisibleContentRect(
@@ -552,7 +551,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   void DidScrollWithScrollbar(ScrollbarPart,
                               ScrollbarOrientation,
                               WebInputEvent::Type) override;
-  CompositorElementId GetCompositorElementId() const override;
+  CompositorElementId GetScrollElementId() const override;
 
   bool VisualViewportSuppliesScrollbars() const override;
 
@@ -564,14 +563,28 @@ class CORE_EXPORT PaintLayerScrollableArea final
   const DisplayItemClient& GetScrollingBackgroundDisplayItemClient() const {
     return scrolling_background_display_item_client_;
   }
+  const DisplayItemClient& GetScrollCornerDisplayItemClient() const {
+    return scroll_corner_display_item_client_;
+  }
 
   const cc::SnapContainerData* GetSnapContainerData() const override;
   void SetSnapContainerData(base::Optional<cc::SnapContainerData>) override;
+  bool SetTargetSnapAreaElementIds(cc::TargetSnapAreaElementIds) override;
 
   base::Optional<FloatPoint> GetSnapPositionAndSetTarget(
       const cc::SnapSelectionStrategy& strategy) override;
 
   void DisposeImpl() override;
+
+  void SetPendingHistoryRestoreScrollOffset(
+      const HistoryItem::ViewState& view_state,
+      bool should_restore_scroll) override {
+    if (!should_restore_scroll)
+      return;
+    pending_view_state_ = view_state;
+  }
+
+  void ApplyPendingHistoryRestoreScrollOffset() override;
 
  private:
   bool NeedsScrollbarReconstruction() const;
@@ -697,6 +710,11 @@ class CORE_EXPORT PaintLayerScrollableArea final
   // This is the offset from the beginning of content flow.
   ScrollOffset scroll_offset_;
 
+  // The last scroll offset that was committed during the main document
+  // lifecycle.
+  bool has_last_committed_scroll_offset_;
+  ScrollOffset last_committed_scroll_offset_;
+
   // LayoutObject to hold our custom scroll corner.
   LayoutCustomScrollbarPart* scroll_corner_;
 
@@ -735,8 +753,28 @@ class CORE_EXPORT PaintLayerScrollableArea final
     Member<const PaintLayerScrollableArea> scrollable_area_;
   };
 
+  class ScrollCornerDisplayItemClient final : public DisplayItemClient {
+    DISALLOW_NEW();
+
+   public:
+    ScrollCornerDisplayItemClient(
+        const PaintLayerScrollableArea& scrollable_area)
+        : scrollable_area_(&scrollable_area) {}
+
+    void Trace(Visitor* visitor) { visitor->Trace(scrollable_area_); }
+
+   private:
+    IntRect VisualRect() const final;
+    String DebugName() const final;
+    DOMNodeId OwnerNodeId() const final;
+
+    Member<const PaintLayerScrollableArea> scrollable_area_;
+  };
+
   ScrollingBackgroundDisplayItemClient
-      scrolling_background_display_item_client_;
+      scrolling_background_display_item_client_{*this};
+  ScrollCornerDisplayItemClient scroll_corner_display_item_client_{*this};
+  base::Optional<HistoryItem::ViewState> pending_view_state_;
 };
 
 DEFINE_TYPE_CASTS(PaintLayerScrollableArea,

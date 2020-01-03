@@ -23,6 +23,21 @@
         }
       ],
       "transform": 1
+    },
+    {
+      "name": "HorizontalScrollbar",
+      "position": [0, 585],
+      "bounds": [785, 15]
+    },
+    {
+      "name": "VerticalScrollbar",
+      "position": [785, 0],
+      "bounds": [15, 585]
+    },
+    {
+      "name": "Scroll corner of LayoutView #document",
+      "position": [785, 585],
+      "bounds": [15, 15]
     }
   ],
   "transforms": [
@@ -32,7 +47,7 @@
         [1, 0, 0, 0],
         [0, 1, 0, 0],
         [0, 0, 1, 0],
-        [-766, -1181, 0, 1]
+        [-781, -1196, 0, 1]
       ]
     }
   ]

@@ -19,6 +19,7 @@
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
 #include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/loader/navigation_url_loader_impl.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
@@ -62,13 +63,13 @@ void NotifyNavigationPreloadRequestSentOnUI(
 
 void NotifyNavigationPreloadResponseReceivedOnUI(
     const GURL& url,
-    scoped_refptr<network::ResourceResponse> response,
+    network::mojom::URLResponseHeadPtr response,
     const std::pair<int, int>& worker_id,
     const std::string& request_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   ServiceWorkerDevToolsManager::GetInstance()
       ->NavigationPreloadResponseReceived(worker_id.first, worker_id.second,
-                                          request_id, url, response->head);
+                                          request_id, url, *response);
 }
 
 void NotifyNavigationPreloadCompletedOnUI(
@@ -131,28 +132,32 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
   }
   void OnReceiveResponse(network::mojom::URLResponseHeadPtr head) override {
     if (devtools_enabled_) {
-      // Make a deep copy of ResourceResponseHead before passing it
-      // cross-thread.
-      auto resource_response =
-          base::MakeRefCounted<network::ResourceResponse>();
-      resource_response->head = head.Clone();
+      // Make a deep copy of URLResponseHead before passing it cross-thread.
+      auto deep_copied_response = head.Clone();
+      if (head->headers) {
+        deep_copied_response->headers =
+            base::MakeRefCounted<net::HttpResponseHeaders>(
+                head->headers->raw_headers());
+      }
       AddDevToolsCallback(
           base::BindOnce(&NotifyNavigationPreloadResponseReceivedOnUI, url_,
-                         resource_response->DeepCopy()));
+                         std::move(deep_copied_response)));
     }
     client_->OnReceiveResponse(std::move(head));
   }
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          network::mojom::URLResponseHeadPtr head) override {
     if (devtools_enabled_) {
-      // Make a deep copy of ResourceResponseHead before passing it
-      // cross-thread.
-      auto resource_response =
-          base::MakeRefCounted<network::ResourceResponse>();
-      resource_response->head = head.Clone();
+      // Make a deep copy of URLResponseHead before passing it cross-thread.
+      auto deep_copied_response = head.Clone();
+      if (head->headers) {
+        deep_copied_response->headers =
+            base::MakeRefCounted<net::HttpResponseHeaders>(
+                head->headers->raw_headers());
+      }
       AddDevToolsCallback(
           base::BindOnce(&NotifyNavigationPreloadResponseReceivedOnUI, url_,
-                         resource_response->DeepCopy()));
+                         std::move(deep_copied_response)));
       network::URLLoaderCompletionStatus status;
       AddDevToolsCallback(
           base::BindOnce(&NotifyNavigationPreloadCompletedOnUI, status));
@@ -299,7 +304,8 @@ void CreateNetworkFactoryForNavigationPreloadOnUI(
   FrameTreeNode* frame_tree_node =
       FrameTreeNode::GloballyFindByID(frame_tree_node_id);
   StoragePartitionImpl* partition = context_wrapper->storage_partition();
-  if (!frame_tree_node || !partition) {
+  if (!frame_tree_node || !partition ||
+      !frame_tree_node->navigation_request()) {
     // The navigation was cancelled or we are in shutdown. Just drop the
     // request. Otherwise, we might go to network without consulting the
     // embedder first, which would break guarantees.
@@ -314,11 +320,15 @@ void CreateNetworkFactoryForNavigationPreloadOnUI(
   // Consult the embedder.
   mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
       header_client;
+  // Here we give nullptr for |factory_override|, because CORS is no-op
+  // for navigations.
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       partition->browser_context(), frame_tree_node->current_frame_host(),
       frame_tree_node->current_frame_host()->GetProcess()->GetID(),
       ContentBrowserClient::URLLoaderFactoryType::kNavigation, url::Origin(),
-      &receiver, &header_client, &bypass_redirect_checks_unused);
+      frame_tree_node->navigation_request()->GetNavigationId(), &receiver,
+      &header_client, &bypass_redirect_checks_unused,
+      /*factory_override=*/nullptr);
 
   // Make the network factory.
   NavigationURLLoaderImpl::CreateURLLoaderFactoryWithHeaderClient(
@@ -587,6 +597,9 @@ void ServiceWorkerFetchDispatcher::DispatchFetchEvent() {
   params->request = std::move(request_);
   params->client_id = client_id_;
   params->preload_handle = std::move(preload_handle_);
+  // TODO(https://crbug.com/900700): Make the remote connected to a receiver
+  // which is passed to blink::PerformanceResourceTiming.
+  params->worker_timing_remote = mojo::NullRemote();
   // |endpoint()| is owned by |version_|. So it is safe to pass the
   // unretained raw pointer of |version_| to OnFetchEventFinished callback.
   // Pass |url_loader_assets_| to the callback to keep the URL loader related
@@ -701,25 +714,25 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
   auto url_loader_client = std::make_unique<DelegatingURLLoaderClient>(
       std::move(inner_url_loader_client), resource_request);
 
-  // Use NavigationURLLoaderImpl to get a unique request id across
-  // browser-initiated navigations and navigation preloads.
-  int request_id = NavigationURLLoaderImpl::MakeGlobalRequestID().request_id;
+  // Get a unique request id across browser-initiated navigations and navigation
+  // preloads.
+  int request_id = GlobalRequestID::MakeBrowserInitiated().request_id;
 
   // Start the network request for the URL using the network factory.
   // TODO(falken): What to do about routing_id.
   mojo::PendingRemote<network::mojom::URLLoaderClient>
       url_loader_client_to_pass;
   url_loader_client->Bind(&url_loader_client_to_pass);
-  network::mojom::URLLoaderPtr url_loader;
+  mojo::PendingRemote<network::mojom::URLLoader> url_loader;
 
   factory->CreateLoaderAndStart(
-      mojo::MakeRequest(&url_loader), -1 /* routing_id? */, request_id,
-      network::mojom::kURLLoadOptionNone, resource_request,
+      url_loader.InitWithNewPipeAndPassReceiver(), -1 /* routing_id? */,
+      request_id, network::mojom::kURLLoadOptionNone, resource_request,
       std::move(url_loader_client_to_pass),
       net::MutableNetworkTrafficAnnotationTag(
           kNavigationPreloadTrafficAnnotation));
 
-  preload_handle_->url_loader = url_loader.PassInterface();
+  preload_handle_->url_loader = std::move(url_loader);
 
   DCHECK(!url_loader_assets_);
   url_loader_assets_ = base::MakeRefCounted<URLLoaderAssets>(

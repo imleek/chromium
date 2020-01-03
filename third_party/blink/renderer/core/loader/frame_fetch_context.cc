@@ -518,8 +518,11 @@ void FrameFetchContext::AddClientHintsIfNecessary(
   // policy is used to enable hints for all subresources, based on the policy of
   // the requesting document, and the origin of the resource.
   const FeaturePolicy* policy = nullptr;
-  if (frame_or_imported_document_)
-    policy = frame_or_imported_document_->GetDocument().GetFeaturePolicy();
+  if (frame_or_imported_document_) {
+    policy = frame_or_imported_document_->GetDocument()
+                 .GetSecurityContext()
+                 .GetFeaturePolicy();
+  }
   url::Origin resource_origin =
       SecurityOrigin::Create(request.Url())->ToUrlOrigin();
 
@@ -750,6 +753,19 @@ void FrameFetchContext::AddClientHintsIfNecessary(
             mojom::WebClientHintsType::kUAModel)],
         AddQuotes(ua.model));
   }
+
+  if ((can_always_send_hints ||
+       (RuntimeEnabledFeatures::FeaturePolicyForClientHintsEnabled() &&
+        policy->IsFeatureEnabledForOrigin(
+            mojom::FeaturePolicyFeature::kClientHintUAMobile,
+            resource_origin))) &&
+      ShouldSendClientHint(mojom::WebClientHintsType::kUAMobile,
+                           hints_preferences, enabled_hints)) {
+    request.SetHttpHeaderField(
+        blink::kClientHintsHeaderMapping[static_cast<size_t>(
+            mojom::WebClientHintsType::kUAMobile)],
+        ua.mobile ? "?1" : "?0");
+  }
 }
 
 void FrameFetchContext::PopulateResourceRequest(
@@ -803,7 +819,7 @@ bool FrameFetchContext::IsFirstPartyOrigin(const KURL& url) const {
       .Top()
       .GetSecurityContext()
       ->GetSecurityOrigin()
-      ->IsSameSchemeHostPort(SecurityOrigin::Create(url).get());
+      ->IsSameOriginWith(SecurityOrigin::Create(url).get());
 }
 
 bool FrameFetchContext::ShouldBlockRequestByInspector(const KURL& url) const {
@@ -908,7 +924,7 @@ bool FrameFetchContext::ShouldBlockFetchAsCredentialedSubresource(
   // TODO(mkwst): This doesn't work when the subresource is an iframe.
   // See https://crbug.com/756846.
   if (Url().User() == url.User() && Url().Pass() == url.Pass() &&
-      SecurityOrigin::Create(url)->IsSameSchemeHostPort(
+      SecurityOrigin::Create(url)->IsSameOriginWith(
           GetResourceFetcherProperties()
               .GetFetchClientSettingsObject()
               .GetSecurityOrigin())) {
@@ -1039,6 +1055,11 @@ bool FrameFetchContext::CalculateIfAdSubresource(
   return GetFrame()->GetAdTracker()->CalculateIfAdSubresource(
       &frame_or_imported_document_->GetDocument(), resource_request, type,
       known_ad);
+}
+
+mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
+FrameFetchContext::TakePendingWorkerTimingReceiver(int request_id) {
+  return MasterDocumentLoader()->TakePendingWorkerTimingReceiver(request_id);
 }
 
 base::Optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(

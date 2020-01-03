@@ -3,14 +3,12 @@
 <translationbundle lang="sr">
 <translation id="1001534784610492198">Архива програма за инсталацију је оштећена или неважећа. Преузмите Google Chrome поново.</translation>
 <translation id="102763973188675173">Прилагодите и контролишите Google Chrome. Доступно је ажурирање.</translation>
-<translation id="1035334672863811645">пријавите се у Chrome</translation>
 <translation id="1051826050538111504">На рачунару постоји штетан софтвер. Chrome може да га уклони, врати подешавања и онемогући додатке да би прегледач могао поново да ради уобичајено.</translation>
 <translation id="1065672644894730302">Подешавања не могу да се прочитају.
 
 Неке функције су можда недоступне и промене подешавања неће бити сачуване.</translation>
 <translation id="1088300314857992706">Корисник <ph name="USER_EMAIL_ADDRESS" /> је претходно користио Chrome</translation>
 <translation id="1097330777386562916">Обриши колачиће и податке о сајтовима кад изађем из Chrome-а</translation>
-<translation id="1104959162601287462">О &amp;Chrome ОС-у</translation>
 <translation id="110877069173485804">Ово је ваш Chrome</translation>
 <translation id="1142745911746664600">Не можете да ажурирате Chrome</translation>
 <translation id="1154147086299354128">&amp;Отвори у Chrome-у</translation>
@@ -54,6 +52,7 @@
 <translation id="2290014774651636340">Недостају шифре за Google API. Неке функције Google Chrome-а ће бити онемогућене.</translation>
 <translation id="2290095356545025170">Да ли стварно желите да деинсталирате Google Chrome?</translation>
 <translation id="2309047409763057870">Ово је секундарна инсталација Google Chrome-а па не можете да га подесите као подразумевани прегледач.</translation>
+<translation id="2341767445688917208">Chrome ОС није успео да синхронизује лозинке. Решите проблем.</translation>
 <translation id="2348335408836342058">Chrome тражи дозволу да приступи камери и микрофону за овај сајт</translation>
 <translation id="2429317896000329049">Google Chrome не може да синхронизује податке јер Синхронизација није доступна за домен.</translation>
 <translation id="2467438592969358367">Google Chrome жели да извезе лозинке. Унесите лозинку за Windows да бисте то омогућили.</translation>
@@ -132,7 +131,6 @@
 <translation id="4953650215774548573">Подеси Google Chrome као подразумевани прегледач</translation>
 <translation id="495931528404527476">У Chrome-у</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
-<translation id="5028489144783860647">Google Chrome не може да синхронизује податке. Ажурирајте приступну фразу за Синхронизацију.</translation>
 <translation id="5062123544085870375">Рестартујте Chrome ОС</translation>
 <translation id="5132929315877954718">Откријте одличне апликације, игре, додатке и теме за Google Chrome.</translation>
 <translation id="5170938038195470297">Профил не може да се користи јер је из новије верзије Google Chrome-а.
@@ -216,6 +214,7 @@ Google Chrome не може да врати подешавања.</translation>
 <translation id="7855730255114109580">Google Chrome је актуелан</translation>
 <translation id="7890208801193284374">Ако делите рачунар, пријатељи и породица могу засебно да прегледају и да подесе Chrome баш онако како желе.</translation>
 <translation id="7896673875602241923">Неко се претходно пријавио на Chrome на овом рачунару као <ph name="ACCOUNT_EMAIL_LAST" />. Направите новог корисника Chrome-а да би информације биле раздвојене.</translation>
+<translation id="7916016681687251387">Chrome ОС није успео да синхронизује податке. Решите проблем.</translation>
 <translation id="7962410387636238736">Овај рачунар више неће добијати ажурирања за Google Chrome јер Windows XP и Windows Vista више нису подржани</translation>
 <translation id="8008534537613507642">Поново инсталирај Chrome</translation>
 <translation id="8013993649590906847">Ако слика нема користан опис, Chrome ће пробати да вам га пружи. Слике се шаљу Google-у ради прављења описа.</translation>

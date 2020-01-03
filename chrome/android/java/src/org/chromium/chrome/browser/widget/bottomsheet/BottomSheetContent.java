@@ -95,6 +95,13 @@ public interface BottomSheetContent {
     boolean swipeToDismissEnabled();
 
     /**
+     * @return Whether the sheet will always skip the half state once it was fully extended.
+     */
+    default boolean skipHalfStateOnScrollingDown() {
+        return true;
+    };
+
+    /**
      * @return Whether this content owns its lifecycle. If false, the content will be hidden
      *         when the user navigates away from the page or switches tab.
      */
@@ -161,7 +168,7 @@ public interface BottomSheetContent {
      *         scrolls down the page.
      */
     default boolean hideOnScroll() {
-        return true;
+        return false;
     }
 
     /**

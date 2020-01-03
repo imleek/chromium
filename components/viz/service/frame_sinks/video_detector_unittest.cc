@@ -144,8 +144,7 @@ class VideoDetectorTest : public testing::Test {
       quad->SetNew(
           shared_quad_state, gfx::Rect(0, 0, 10, 10), gfx::Rect(0, 0, 5, 5),
           SurfaceRange(base::nullopt, frame_sink->last_activated_surface_id()),
-          SK_ColorMAGENTA, /*stretch_content_to_fill_bounds=*/false,
-          /*ignores_input_event=*/false);
+          SK_ColorMAGENTA, /*stretch_content_to_fill_bounds=*/false);
     }
     root_frame_sink_->SubmitCompositorFrame(
         root_frame_sink_->last_activated_local_surface_id(), std::move(frame));
@@ -184,14 +183,12 @@ class VideoDetectorTest : public testing::Test {
 
   std::unique_ptr<CompositorFrameSinkSupport> CreateFrameSink() {
     constexpr bool is_root = false;
-    constexpr bool needs_sync_points = true;
     static uint32_t client_id = 1;
     FrameSinkId frame_sink_id(client_id++, 0);
     frame_sink_manager_.RegisterFrameSinkId(frame_sink_id,
                                             true /* report_activation */);
     auto frame_sink = std::make_unique<CompositorFrameSinkSupport>(
-        &frame_sink_client_, &frame_sink_manager_, frame_sink_id, is_root,
-        needs_sync_points);
+        &frame_sink_client_, &frame_sink_manager_, frame_sink_id, is_root);
     SendUpdate(frame_sink.get(), gfx::Rect());
     return frame_sink;
   }

@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/page_scale_constraints_set.h"
+#include "third_party/blink/renderer/core/frame/screen.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen_options.h"
@@ -157,8 +158,16 @@ void FullscreenController::EnterFullscreen(LocalFrame& frame,
     return;
 
   DCHECK(state_ == State::kInitial);
+  auto fullscreen_options = mojom::blink::FullscreenOptions::New();
+  fullscreen_options->prefers_navigation_bar =
+      options->navigationUI() != "hide";
+  if (options->hasScreen()) {
+    DCHECK(RuntimeEnabledFeatures::WindowPlacementEnabled());
+    if (options->screen()->DisplayId() != Screen::kInvalidDisplayId)
+      fullscreen_options->display_id = options->screen()->DisplayId();
+  }
   frame.GetLocalFrameHostRemote().EnterFullscreen(
-      mojom::blink::FullscreenOptions::New(options->navigationUI() != "hide"));
+      std::move(fullscreen_options));
 
   state_ = State::kEnteringFullscreen;
 }
@@ -182,13 +191,14 @@ void FullscreenController::FullscreenElementChanged(Element* old_element,
 
   // We only override the WebView's background color for overlay fullscreen
   // video elements, so have to restore the override when the element changes.
-  if (IsHTMLVideoElement(old_element))
+  auto* old_video_element = DynamicTo<HTMLVideoElement>(old_element);
+  if (old_video_element)
     RestoreBackgroundColorOverride();
 
   if (new_element) {
     DCHECK(Fullscreen::IsFullscreenElement(*new_element));
 
-    if (auto* video_element = ToHTMLVideoElementOrNull(*new_element)) {
+    if (auto* video_element = DynamicTo<HTMLVideoElement>(*new_element)) {
       video_element->DidEnterFullscreen();
 
       // If the video uses overlay fullscreen mode, make the background
@@ -201,8 +211,8 @@ void FullscreenController::FullscreenElementChanged(Element* old_element,
   if (old_element) {
     DCHECK(!Fullscreen::IsFullscreenElement(*old_element));
 
-    if (auto* video_element = ToHTMLVideoElementOrNull(*old_element))
-      video_element->DidExitFullscreen();
+    if (old_video_element)
+      old_video_element->DidExitFullscreen();
   }
 
   // Tell the browser the fullscreen state has changed.

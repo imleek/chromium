@@ -27,7 +27,6 @@ static_library("vr_android") {
     "gl_browser_interface.h",
     "gvr_consent_helper_impl.cc",
     "gvr_consent_helper_impl.h",
-    "gvr_gamepad_data.h",
     "gvr_graphics_delegate.cc",
     "gvr_graphics_delegate.h",
     "gvr_input_delegate.cc",
@@ -206,7 +205,9 @@ android_library("ar_java") {
     "//third_party/arcore-android-sdk-client:com_google_ar_core_java",
   ]
 
-  java_files = [ "//chrome/android/java/src/org/chromium/chrome/browser/vr/ArCoreShimImpl.java" ]
+  sources = [
+    "//chrome/android/java/src/org/chromium/chrome/browser/vr/ArCoreShimImpl.java",
+  ]
 }
 
 if (enable_arcore) {
@@ -220,7 +221,8 @@ if (enable_arcore) {
 
 if (current_toolchain == default_toolchain) {
   generate_jni_registration("jni_registration") {
-    target = "//chrome/android:chrome_modern_public_bundle__vr_bundle_module"
+    targets =
+        [ "//chrome/android:chrome_modern_public_bundle__vr_bundle_module" ]
     header_output = "$target_gen_dir/${target_name}.h"
     namespace = "vr"
   }

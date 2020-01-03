@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -45,8 +46,13 @@ struct DeviceScaleFactorDPIThreshold {
 // Update the list of zoom levels whenever a new device scale factor is added
 // here. See zoom level list in /ui/display/manager/display_util.cc
 const DeviceScaleFactorDPIThreshold kThresholdTableForInternal[] = {
-    {300.f, 2.66666f}, {270.0f, 2.25f}, {230.0f, 2.0f}, {220.0f, 1.77777f},
-    {180.0f, 1.6f},    {150.0f, 1.25f}, {0.0f, 1.0f},
+    {300.f, 2.6666667461395263671875f},
+    {270.0f, 2.25f},
+    {230.0f, 2.0f},
+    {220.0f, 1.77777779102325439453125f},
+    {180.0f, 1.6f},
+    {150.0f, 1.25f},
+    {0.0f, 1.0f},
 };
 
 // Returns a list of display modes for the given |output| that doesn't exclude
@@ -334,6 +340,16 @@ ManagedDisplayInfo DisplayChangeObserver::CreateManagedDisplayInfo(
     new_info.set_device_dpi(dpi);
   new_info.set_color_space(snapshot->color_space());
   new_info.set_bits_per_channel(snapshot->bits_per_channel());
+  // TODO(crbug.com/1012846): Remove this flag and provision when HDR is fully
+  // supported on ChromeOS.
+#if defined(OS_CHROMEOS)
+  constexpr int32_t kNormalBitDepth = 8;
+  if (new_info.bits_per_channel() > kNormalBitDepth &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableUseHDRTransferFunction)) {
+    new_info.set_bits_per_channel(kNormalBitDepth);
+  }
+#endif
 
   new_info.set_refresh_rate(mode_info->refresh_rate());
   new_info.set_is_interlaced(mode_info->is_interlaced());

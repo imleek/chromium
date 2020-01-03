@@ -215,6 +215,8 @@ class NavigationControllerTest : public RenderViewHostImplTestHarness,
                                            : contents()->GetMainFrame();
   }
 
+  FrameTreeNode* root_ftn() { return contents()->GetFrameTree()->root(); }
+
  protected:
   GURL navigated_url_;
   size_t navigation_entry_committed_counter_ = 0;
@@ -429,7 +431,9 @@ TEST_F(NavigationControllerTest, LoadURL) {
   ASSERT_TRUE(controller.GetVisibleEntry());
   EXPECT_FALSE(controller.CanGoBack());
   EXPECT_FALSE(controller.CanGoForward());
-  EXPECT_EQ(0, controller.GetLastCommittedEntry()->bindings());
+  EXPECT_EQ(0, controller.GetLastCommittedEntry()
+                   ->GetFrameEntry(root_ftn())
+                   ->bindings());
 
   // The timestamp should have been set.
   EXPECT_FALSE(controller.GetVisibleEntry()->GetTimestamp().is_null());
@@ -915,8 +919,9 @@ TEST_F(NavigationControllerTest, LoadURL_PrivilegedPending) {
   navigation->Commit();
   EXPECT_EQ(1U, navigation_entry_committed_counter_);
   navigation_entry_committed_counter_ = 0;
-  EXPECT_EQ(BINDINGS_POLICY_MOJO_WEB_UI,
-            controller.GetLastCommittedEntry()->bindings());
+  EXPECT_EQ(BINDINGS_POLICY_MOJO_WEB_UI, controller.GetLastCommittedEntry()
+                                             ->GetFrameEntry(root_ftn())
+                                             ->bindings());
   // Simulate a user gesture so that the above entry is not marked to be skipped
   // on back.
   main_test_rfh()->frame_tree_node()->UpdateUserActivationState(
@@ -927,7 +932,9 @@ TEST_F(NavigationControllerTest, LoadURL_PrivilegedPending) {
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), kExistingURL2);
   EXPECT_EQ(1U, navigation_entry_committed_counter_);
   navigation_entry_committed_counter_ = 0;
-  EXPECT_EQ(0, controller.GetLastCommittedEntry()->bindings());
+  EXPECT_EQ(0, controller.GetLastCommittedEntry()
+                   ->GetFrameEntry(root_ftn())
+                   ->bindings());
 
   // Now make a pending back/forward navigation to a privileged entry.
   // The zeroth entry should be pending.
@@ -938,8 +945,9 @@ TEST_F(NavigationControllerTest, LoadURL_PrivilegedPending) {
   EXPECT_EQ(0U, navigation_list_pruned_counter_);
   EXPECT_EQ(0, controller.GetPendingEntryIndex());
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
-  EXPECT_EQ(BINDINGS_POLICY_MOJO_WEB_UI,
-            controller.GetPendingEntry()->bindings());
+  EXPECT_EQ(
+      BINDINGS_POLICY_MOJO_WEB_UI,
+      controller.GetPendingEntry()->GetFrameEntry(root_ftn())->bindings());
 
   // Before that commits, do a new navigation.
   const GURL kNewURL("http://foo/bee");
@@ -952,7 +960,9 @@ TEST_F(NavigationControllerTest, LoadURL_PrivilegedPending) {
   EXPECT_EQ(-1, controller.GetPendingEntryIndex());
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(kNewURL, controller.GetVisibleEntry()->GetURL());
-  EXPECT_EQ(0, controller.GetLastCommittedEntry()->bindings());
+  EXPECT_EQ(0, controller.GetLastCommittedEntry()
+                   ->GetFrameEntry(root_ftn())
+                   ->bindings());
 }
 
 // Tests navigating to an existing URL when there is a pending new navigation.
@@ -1166,7 +1176,9 @@ TEST_F(NavigationControllerTest, LoadURL_WithBindings) {
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), url1);
   EXPECT_EQ(controller.GetEntryCount(), 1);
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
-  EXPECT_EQ(0, controller.GetLastCommittedEntry()->bindings());
+  EXPECT_EQ(0, controller.GetLastCommittedEntry()
+                   ->GetFrameEntry(root_ftn())
+                   ->bindings());
 
   // Manually increase the number of active frames in the SiteInstance
   // that orig_rfh belongs to, to prevent it from being destroyed when
@@ -1188,12 +1200,16 @@ TEST_F(NavigationControllerTest, LoadURL_WithBindings) {
   EXPECT_EQ(controller.GetEntryCount(), 2);
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_TRUE(controller.CanGoBack());
-  EXPECT_EQ(1, controller.GetLastCommittedEntry()->bindings());
+  EXPECT_EQ(1, controller.GetLastCommittedEntry()
+                   ->GetFrameEntry(root_ftn())
+                   ->bindings());
 
   // Going back, the first entry should still appear unprivileged.
   NavigationSimulator::GoBack(contents());
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
-  EXPECT_EQ(0, controller.GetLastCommittedEntry()->bindings());
+  EXPECT_EQ(0, controller.GetLastCommittedEntry()
+                   ->GetFrameEntry(root_ftn())
+                   ->bindings());
 }
 
 TEST_F(NavigationControllerTest, Reload) {
@@ -1970,7 +1986,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   std::string unique_name0("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(),
-      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      TestRenderFrameHost::CreateStubInterfaceProviderReceiver(),
       TestRenderFrameHost::CreateStubBrowserInterfaceBrokerReceiver(),
       blink::WebTreeScopeType::kDocument, std::string(), unique_name0, false,
       base::UnguessableToken::Create(), blink::FramePolicy(),
@@ -2008,7 +2024,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   std::string unique_name1("uniqueName1");
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(),
-      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      TestRenderFrameHost::CreateStubInterfaceProviderReceiver(),
       TestRenderFrameHost::CreateStubBrowserInterfaceBrokerReceiver(),
       blink::WebTreeScopeType::kDocument, std::string(), unique_name1, false,
       base::UnguessableToken::Create(), blink::FramePolicy(),
@@ -2046,7 +2062,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   std::string unique_name2("uniqueName2");
   subframe->OnCreateChildFrame(
       process()->GetNextRoutingID(),
-      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      TestRenderFrameHost::CreateStubInterfaceProviderReceiver(),
       TestRenderFrameHost::CreateStubBrowserInterfaceBrokerReceiver(),
       blink::WebTreeScopeType::kDocument, std::string(), unique_name2, false,
       base::UnguessableToken::Create(), blink::FramePolicy(),
@@ -2102,7 +2118,7 @@ TEST_F(NavigationControllerTest, BackSubframe) {
   std::string unique_name("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(),
-      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      TestRenderFrameHost::CreateStubInterfaceProviderReceiver(),
       TestRenderFrameHost::CreateStubBrowserInterfaceBrokerReceiver(),
       blink::WebTreeScopeType::kDocument, std::string(), unique_name, false,
       base::UnguessableToken::Create(), blink::FramePolicy(),
@@ -3336,7 +3352,7 @@ TEST_F(NavigationControllerTest, SameSubframe) {
   std::string unique_name("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(),
-      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      TestRenderFrameHost::CreateStubInterfaceProviderReceiver(),
       TestRenderFrameHost::CreateStubBrowserInterfaceBrokerReceiver(),
       blink::WebTreeScopeType::kDocument, std::string(), unique_name, false,
       base::UnguessableToken::Create(), blink::FramePolicy(),
@@ -3503,7 +3519,7 @@ TEST_F(NavigationControllerTest, SubframeWhilePending) {
   std::string unique_name("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(),
-      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      TestRenderFrameHost::CreateStubInterfaceProviderReceiver(),
       TestRenderFrameHost::CreateStubBrowserInterfaceBrokerReceiver(),
       blink::WebTreeScopeType::kDocument, std::string(), unique_name, false,
       base::UnguessableToken::Create(), blink::FramePolicy(),
@@ -4763,7 +4779,7 @@ TEST_F(NavigationControllerTest, SubFrameNavigationUIData) {
   std::string unique_name("uniqueName0");
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(),
-      TestRenderFrameHost::CreateStubInterfaceProviderRequest(),
+      TestRenderFrameHost::CreateStubInterfaceProviderReceiver(),
       TestRenderFrameHost::CreateStubBrowserInterfaceBrokerReceiver(),
       blink::WebTreeScopeType::kDocument, std::string(), unique_name, false,
       base::UnguessableToken::Create(), blink::FramePolicy(),
@@ -4825,6 +4841,44 @@ TEST_F(NavigationControllerTest, NoURLRewriteForSubframes) {
 
   // Clean up the handler.
   BrowserURLHandlerImpl::GetInstance()->SetFixupHandlerForTesting(nullptr);
+}
+
+// Test that if an empty WebContents is navigated via frame proxy with
+// replacement, the NavigationRequest does not specify replacement, since there
+// is no entry to replace.
+TEST_F(NavigationControllerTest,
+       NavigateFromFrameProxyWithReplacementWithoutEntries) {
+  const GURL main_url("http://foo1");
+  const GURL other_contents_url("http://foo2");
+  NavigationSimulator::NavigateAndCommitFromBrowser(contents(), main_url);
+
+  // Suppose the main WebContents creates another WebContents which it can
+  // navigate via frame proxy.
+  std::unique_ptr<WebContents> other_contents = CreateTestWebContents();
+  TestWebContents* other_contents_impl =
+      static_cast<TestWebContents*>(other_contents.get());
+  NavigationControllerImpl& other_controller =
+      other_contents_impl->GetController();
+  FrameTreeNode* node = other_contents_impl->GetFrameTree()->root();
+  RenderFrameHostImpl* frame = node->current_frame_host();
+
+  // The newly created contents has no entries.
+  EXPECT_EQ(0, other_controller.GetEntryCount());
+
+  // Simulate the main WebContents navigating the new WebContents with
+  // replacement.
+  const bool should_replace_current_entry = true;
+  other_controller.NavigateFromFrameProxy(
+      frame, other_contents_url, url::Origin::Create(main_url),
+      true /* is_renderer_initiated */, main_test_rfh()->GetSiteInstance(),
+      Referrer(), ui::PAGE_TRANSITION_LINK, should_replace_current_entry,
+      NavigationDownloadPolicy(), "GET", nullptr, "", nullptr);
+  NavigationRequest* request = node->navigation_request();
+  ASSERT_TRUE(request);
+
+  // Since the new WebContents had no entries, the request is not done with
+  // replacement.
+  EXPECT_FALSE(request->common_params().should_replace_current_entry);
 }
 
 // Tests that calling RemoveForwareEntries() clears all forward entries

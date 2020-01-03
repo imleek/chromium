@@ -118,8 +118,7 @@ class ProxyServiceMojoTest : public testing::Test {
 
     fetcher_ = new net::MockPacFileFetcher;
     proxy_resolution_service_ = CreateProxyResolutionServiceUsingMojoFactory(
-        proxy_resolver::mojom::ProxyResolverFactoryPtr(
-            test_mojo_proxy_resolver_factory_.CreateFactoryRemote()),
+        test_mojo_proxy_resolver_factory_.CreateFactoryRemote(),
         std::make_unique<net::ProxyConfigServiceFixed>(
             net::ProxyConfigWithAnnotation(
                 net::ProxyConfig::CreateFromCustomPacURL(GURL(kPacUrl)),
@@ -135,7 +134,7 @@ class ProxyServiceMojoTest : public testing::Test {
   net::MockHostResolver mock_host_resolver_;
   // Owned by |proxy_resolution_service_|.
   net::MockPacFileFetcher* fetcher_;
-  net::TestNetLog net_log_;
+  net::RecordingTestNetLog net_log_;
   std::unique_ptr<net::ProxyResolutionService> proxy_resolution_service_;
 };
 
@@ -185,7 +184,7 @@ TEST_F(ProxyServiceMojoTest, DnsResolution) {
 TEST_F(ProxyServiceMojoTest, Error) {
   net::ProxyInfo info;
   net::TestCompletionCallback callback;
-  net::BoundTestNetLog test_net_log;
+  net::RecordingBoundTestNetLog test_net_log;
   std::unique_ptr<net::ProxyResolutionService::Request> request;
   EXPECT_EQ(net::ERR_IO_PENDING,
             proxy_resolution_service_->ResolveProxy(

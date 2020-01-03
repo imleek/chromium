@@ -51,6 +51,7 @@ GetComponentInstallationErrorForCrOSComponentManagerError(
       return api::media_perception_private::
           COMPONENT_INSTALLATION_ERROR_UNKNOWN_COMPONENT;
     case component_updater::CrOSComponentManager::Error::INSTALL_FAILURE:
+    case component_updater::CrOSComponentManager::Error::UPDATE_IN_PROGRESS:
       return api::media_perception_private::
           COMPONENT_INSTALLATION_ERROR_INSTALL_FAILURE;
     case component_updater::CrOSComponentManager::Error::MOUNT_FAILURE:
@@ -115,9 +116,9 @@ void MediaPerceptionAPIDelegateChromeOS::SetMediaPerceptionRequestHandler(
 }
 
 void MediaPerceptionAPIDelegateChromeOS::ForwardMediaPerceptionReceiver(
+    content::RenderFrameHost* render_frame_host,
     mojo::PendingReceiver<chromeos::media_perception::mojom::MediaPerception>
-        receiver,
-    content::RenderFrameHost* render_frame_host) {
+        receiver) {
   if (!handler_) {
     DLOG(ERROR) << "Got receiver but the handler is not set.";
     return;

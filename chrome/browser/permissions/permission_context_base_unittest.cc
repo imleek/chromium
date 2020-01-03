@@ -36,7 +36,6 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "components/user_manager/scoped_user_manager.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_entry.h"
@@ -44,11 +43,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/app_mode/web_app/web_kiosk_app_manager.h"
-#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
-#endif
 
 const char* const kPermissionsKillSwitchFieldStudy =
     PermissionContextBase::kPermissionsKillSwitchFieldStudy;
@@ -252,6 +246,15 @@ class PermissionContextBaseTests : public ChromeRenderViewHostTestHarness {
           "Permissions.Prompt." + decision_string + ".PriorIgnoreCount." +
               PermissionUtil::GetPermissionString(content_settings_type),
           0, 1);
+#if defined(OS_ANDROID)
+      histograms.ExpectUniqueSample(
+          "Permissions.Action.WithDisposition.ModalDialog",
+          static_cast<int>(action.value()), 1);
+#else
+      histograms.ExpectUniqueSample(
+          "Permissions.Action.WithDisposition.AnchoredBubble",
+          static_cast<int>(action.value()), 1);
+#endif
     }
 
     EXPECT_EQ(decision, permission_context.GetContentSettingFromMap(url, url));
@@ -275,6 +278,16 @@ class PermissionContextBaseTests : public ChromeRenderViewHostTestHarness {
                 static_cast<int64_t>(content_settings_type));
       EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "Action"),
                 static_cast<int64_t>(action.value()));
+
+#if defined(OS_ANDROID)
+      EXPECT_EQ(
+          *ukm_recorder.GetEntryMetric(entry, "PromptDisposition"),
+          static_cast<int64_t>(PermissionPromptDisposition::MODAL_DIALOG));
+#else
+      EXPECT_EQ(
+          *ukm_recorder.GetEntryMetric(entry, "PromptDisposition"),
+          static_cast<int64_t>(PermissionPromptDisposition::ANCHORED_BUBBLE));
+#endif
     }
   }
 
@@ -672,35 +685,6 @@ class PermissionContextBaseTests : public ChromeRenderViewHostTestHarness {
     prompt_factory_->DocumentOnLoadCompletedInMainFrame();
   }
 
-#if defined(OS_CHROMEOS)
-  void TestWebKioskMode(const GURL& app_url,
-                        const GURL& request_url,
-                        ContentSetting response) {
-    const AccountId account_id = AccountId::FromUserEmail("lala@example.com");
-
-    auto fake_user_manager =
-        std::make_unique<chromeos::FakeChromeUserManager>();
-    // Stealing the pointer from unique ptr before it goes to the scoped user
-    // manager.
-    chromeos::FakeChromeUserManager* user_manager = fake_user_manager.get();
-    auto scoped_user_manager =
-        std::make_unique<user_manager::ScopedUserManager>(
-            std::move(fake_user_manager));
-    user_manager->AddWebKioskAppUser(account_id);
-    user_manager->LoginUser(account_id);
-
-    auto kiosk_app_manager = std::make_unique<chromeos::WebKioskAppManager>();
-    kiosk_app_manager->AddAppForTesting(account_id, app_url);
-
-    TestPermissionContext permission_context(profile(),
-                                             ContentSettingsType::GEOLOCATION);
-    PermissionResult result = permission_context.GetPermissionStatus(
-        nullptr, request_url, request_url);
-
-    EXPECT_EQ(result.content_setting, response);
-  }
-#endif  // defined(OS_CHROMEOS)
-
  private:
   // ChromeRenderViewHostTestHarness:
   void SetUp() override {
@@ -885,15 +869,3 @@ TEST_F(PermissionContextBaseTests, TestVirtualURLSameOrigin) {
                  GURL("http://www.google.com/foo"), CONTENT_SETTING_ASK,
                  PermissionStatusSource::UNSPECIFIED);
 }
-
-#if defined(OS_CHROMEOS)
-TEST_F(PermissionContextBaseTests, TestWebKioskModeSameOrigin) {
-  TestWebKioskMode(GURL("https://google.com/launch"),
-                   GURL("https://google.com/page"), CONTENT_SETTING_ALLOW);
-}
-
-TEST_F(PermissionContextBaseTests, TestWebKioskModeDifferentOrigin) {
-  TestWebKioskMode(GURL("https://google.com/launch"),
-                   GURL("https://notgoogle.com/page"), CONTENT_SETTING_ASK);
-}
-#endif  // defined(OS_CHROMEOS)

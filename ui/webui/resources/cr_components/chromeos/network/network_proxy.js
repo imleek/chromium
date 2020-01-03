@@ -115,8 +115,19 @@ Polymer({
     this.updateProxy_();
   },
 
-  /** @private */
-  managedPropertiesChanged_: function() {
+  /**
+   * @param {!chromeos.networkConfig.mojom.ManagedProperties|undefined} newValue
+   * @param {!chromeos.networkConfig.mojom.ManagedProperties|undefined} oldValue
+   * @private
+   */
+  managedPropertiesChanged_: function(newValue, oldValue) {
+    if ((newValue && newValue.guid) != (oldValue && oldValue.guid)) {
+      // Clear saved manual properties and exclude domains if we're updating
+      // to show a different network.
+      this.savedManual_ = undefined;
+      this.savedExcludeDomains_ = undefined;
+    }
+
     if (this.proxyIsUserModified_) {
       return;  // Ignore update
     }
@@ -168,9 +179,6 @@ Polymer({
       }
       if (!proxy.manual.secureHttpProxy) {
         proxy.manual.secureHttpProxy = this.createDefaultProxyLocation_(80);
-      }
-      if (!proxy.manual.ftpProxy) {
-        proxy.manual.ftpProxy = this.createDefaultProxyLocation_(80);
       }
       if (!proxy.manual.socks) {
         proxy.manual.socks = this.createDefaultProxyLocation_(1080);
@@ -225,13 +233,12 @@ Polymer({
       const manual = proxy.manual;
       const httpProxy = manual.httpProxy;
       if (this.proxyMatches_(httpProxy, manual.secureHttpProxy) &&
-          this.proxyMatches_(httpProxy, manual.ftpProxy) &&
           this.proxyMatches_(httpProxy, manual.socks)) {
         // If all four proxies match, enable the 'use same proxy' toggle.
         this.useSameProxy_ = true;
       } else if (
           !manual.secureHttpProxy.host.activeValue &&
-          !manual.ftpProxy.host.activeValue && !manual.socks.host.activeValue) {
+          !manual.socks.host.activeValue) {
         // Otherwise if no proxies other than http have a host value, also
         // enable the 'use same proxy' toggle.
         this.useSameProxy_ = true;
@@ -297,7 +304,6 @@ Polymer({
           httpProxy: this.getProxyLocation_(this.proxy_.manual.httpProxy),
           secureHttpProxy:
               this.getProxyLocation_(this.proxy_.manual.secureHttpProxy),
-          ftpProxy: this.getProxyLocation_(this.proxy_.manual.ftpProxy),
           socks: this.getProxyLocation_(this.proxy_.manual.socks),
         };
       }
@@ -310,8 +316,6 @@ Polymer({
       if (this.useSameProxy_) {
         manual.secureHttpProxy = /** @type {!mojom.ProxyLocation} */ (
             Object.assign({}, defaultProxy));
-        manual.ftpProxy = /** @type {!mojom.ProxyLocation} */ (
-            Object.assign({}, defaultProxy));
         manual.socks = /** @type {!mojom.ProxyLocation} */ (
             Object.assign({}, defaultProxy));
       } else {
@@ -321,9 +325,6 @@ Polymer({
         }
         if (manual.secureHttpProxy && !manual.secureHttpProxy.host) {
           delete manual.secureHttpProxy;
-        }
-        if (manual.ftpProxy && !manual.ftpProxy.host) {
-          delete manual.ftpProxy;
         }
         if (manual.socks && !manual.socks.host) {
           delete manual.socks;
@@ -360,9 +361,9 @@ Polymer({
         break;
       case 'PAC':
         elementToFocus = this.$$('#pacInput');
-        // If a PAC is already defined, send the type change now, otherwise wait
+        // If a PAC is already set, send the type change now, otherwise wait
         // until the user provides a PAC value.
-        proxyTypeChangeIsReady = !!this.proxy_.pac;
+        proxyTypeChangeIsReady = !!OncMojo.getActiveString(this.proxy_.pac);
         break;
       case 'Manual':
         // Manual proxy configuration includes multiple input fields, so wait
@@ -490,7 +491,8 @@ Polymer({
       return false;
     }
     const source = this.managedProperties.source;
-    return source == 'Device' || source == 'DevicePolicy';
+    return source == chromeos.networkConfig.mojom.OncSource.kDevice ||
+        source == chromeos.networkConfig.mojom.OncSource.kDevicePolicy;
   },
 
   /**
@@ -508,7 +510,6 @@ Polymer({
     }
     return !!httpHost ||
         !!this.get('secureHttpProxy.host.activeValue', manual) ||
-        !!this.get('ftpProxy.host.activeValue', manual) ||
         !!this.get('socks.host.activeValue', manual);
   },
 

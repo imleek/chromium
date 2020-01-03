@@ -19,7 +19,6 @@
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "chrome/common/media/webrtc_logging.mojom.h"
-#include "chrome/common/plugin.mojom.h"
 #include "chrome/renderer/media/chrome_key_systems_provider.h"
 #include "components/nacl/common/buildflags.h"
 #include "components/rappor/public/mojom/rappor_recorder.mojom.h"
@@ -40,6 +39,10 @@
 
 #if defined(OS_WIN)
 #include "chrome/common/conflicts/remote_module_watcher_win.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+#include "chrome/common/plugin.mojom.h"
 #endif
 
 class ChromeRenderThreadObserver;
@@ -63,10 +66,6 @@ namespace content {
 class BrowserPluginDelegate;
 struct WebPluginInfo;
 }  // namespace content
-
-namespace network_hints {
-class WebPrescientNetworkingImpl;
-}
 
 namespace extensions {
 class Extension;
@@ -137,9 +136,15 @@ class ChromeContentRendererClient
       base::SingleThreadTaskRunner* compositor_thread_task_runner) override;
   bool RunIdleHandlerWhenWidgetsHidden() override;
   bool AllowPopup() override;
+  bool ShouldFork(blink::WebLocalFrame* frame,
+                  const GURL& url,
+                  const std::string& http_method,
+                  bool is_initial_navigation,
+                  bool is_server_redirect) override;
   void WillSendRequest(blink::WebLocalFrame* frame,
                        ui::PageTransition transition_type,
                        const blink::WebURL& url,
+                       const blink::WebURL& site_for_cookies,
                        const url::Origin* initiator_origin,
                        GURL* new_url,
                        bool* attach_same_site_cookies) override;
@@ -147,7 +152,8 @@ class ChromeContentRendererClient
                       const blink::WebURLRequest& request) override;
   uint64_t VisitedLinkHash(const char* canonical_url, size_t length) override;
   bool IsLinkVisited(uint64_t link_hash) override;
-  blink::WebPrescientNetworking* GetPrescientNetworking() override;
+  std::unique_ptr<blink::WebPrescientNetworking> CreatePrescientNetworking(
+      content::RenderFrame* render_frame) override;
   bool IsExternalPepperPlugin(const std::string& module_name) override;
   bool IsOriginIsolatedPepperPlugin(const base::FilePath& plugin_path) override;
   std::unique_ptr<content::WebSocketHandshakeThrottleProvider>
@@ -265,6 +271,9 @@ class ChromeContentRendererClient
   static bool IsNativeNaClAllowed(const GURL& app_url,
                                   bool is_nacl_unrestricted,
                                   const extensions::Extension* extension);
+  static void ReportNaClAppType(bool is_pnacl,
+                                bool is_extension_or_app,
+                                bool is_hosted_app);
 #endif
 
 #if defined(OS_WIN)
@@ -282,9 +291,6 @@ class ChromeContentRendererClient
   std::unique_ptr<ChromeRenderThreadObserver> chrome_observer_;
   std::unique_ptr<web_cache::WebCacheImpl> web_cache_impl_;
   std::unique_ptr<chrome::WebRtcLoggingAgentImpl> webrtc_logging_agent_impl_;
-
-  std::unique_ptr<network_hints::WebPrescientNetworkingImpl>
-      web_prescient_networking_impl_;
 
   ChromeKeySystemsProvider key_systems_provider_;
 

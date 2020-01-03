@@ -128,6 +128,23 @@ class OptimizationGuideNavigationData {
     was_host_covered_by_fetch_at_commit_ = was_host_covered_by_fetch_at_commit;
   }
 
+  // Whether a hint was attempted to be fetched from the remote Optimization
+  // Guide Service at some point during the navigation.
+  base::Optional<bool> was_hint_for_host_attempted_to_be_fetched() const {
+    return was_hint_for_host_attempted_to_be_fetched_;
+  }
+  void set_was_hint_for_host_attempted_to_be_fetched(
+      bool was_hint_for_host_attempted_to_be_fetched) {
+    was_hint_for_host_attempted_to_be_fetched_ =
+        was_hint_for_host_attempted_to_be_fetched;
+  }
+
+  // Whether the initiation of the navigation was from a same origin URL or not.
+  bool is_same_origin_navigation() const { return is_same_origin_navigation_; }
+  void set_is_same_origin_navigation(bool is_same_origin_navigation) {
+    is_same_origin_navigation_ = is_same_origin_navigation;
+  }
+
  private:
   // Records the hint cache and fetch coverage based on data currently held in
   // |this|.
@@ -141,6 +158,14 @@ class OptimizationGuideNavigationData {
   // Records the OptimizationGuide UKM event based on data currently held in
   // |this|.
   void RecordOptimizationGuideUKM() const;
+
+  // Returns whether the host was covered by a hint or a fetch based on data
+  // currently held in |this| at navigation start.
+  bool WasHostCoveredByHintOrFetchAtNavigationStart() const;
+
+  // Returns whether the host was covered by a hint or a fetch based on data
+  // currently held in |this| at commit.
+  bool WasHostCoveredByHintOrFetchAtCommit() const;
 
   // The navigation ID of the navigation handle that this data is associated
   // with.
@@ -186,6 +211,13 @@ class OptimizationGuideNavigationData {
 
   // Whether the host was covered by a hints fetch at commit.
   base::Optional<bool> was_host_covered_by_fetch_at_commit_;
+
+  // Whether a hint for the host was attempted to be fetched at some point
+  // during the navigation.
+  base::Optional<bool> was_hint_for_host_attempted_to_be_fetched_;
+
+  // Whether the initiation of the navigation was from a same origin URL or not.
+  bool is_same_origin_navigation_ = false;
 
   DISALLOW_ASSIGN(OptimizationGuideNavigationData);
 };

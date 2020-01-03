@@ -494,6 +494,9 @@ class IdentityManager : public KeyedService,
                                            const CoreAccountId& account_id);
   friend void UpdateAccountInfoForAccount(IdentityManager* identity_manager,
                                           AccountInfo account_info);
+  friend void SimulateAccountImageFetch(IdentityManager* identity_manager,
+                                        const CoreAccountId& account_id,
+                                        const gfx::Image& image);
   friend void SetFreshnessOfAccountsInGaiaCookie(
       IdentityManager* identity_manager,
       bool accounts_are_fresh);
@@ -670,6 +673,8 @@ class IdentityManager : public KeyedService,
   base::ObserverList<Observer, true>::Unchecked observer_list_;
   base::ObserverList<DiagnosticsObserver, true>::Unchecked
       diagnostics_observer_list_;
+
+  bool unconsented_primary_account_revoked_during_load_ = false;
 
 #if defined(OS_ANDROID)
   // Java-side IdentityManager object.

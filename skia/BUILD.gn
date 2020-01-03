@@ -10,6 +10,7 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//gpu/vulkan/features.gni")
 import("//printing/buildflags/buildflags.gni")
 import("//testing/test.gni")
+import("//third_party/libgifcodec/libgifcodec.gni")
 import("//third_party/skia/gn/shared_sources.gni")
 import("//third_party/skia/third_party/skcms/skcms.gni")
 import("features.gni")
@@ -26,7 +27,11 @@ skia_support_pdf = !is_ios && enable_basic_printing
 skia_support_skottie = true
 
 declare_args() {
+  # If, in the future, this configuration option is deleted entirely, we can
+  # also probably delete any mention of the "libgifcodec" third party library
+  # from the top level DEPS and the third_party/.gitignore files.
   enable_skia_wuffs_gif = true
+
   skia_whitelist_serialized_typefaces = false
 }
 
@@ -43,6 +48,8 @@ config("skia_config") {
   if (!is_ios) {
     if (enable_skia_wuffs_gif) {
       include_dirs += [ "//third_party/wuffs/src/release/c" ]
+    } else {
+      include_dirs += [ "//third_party/libgifcodec" ]
     }
   }
   if (enable_vulkan) {
@@ -67,6 +74,8 @@ config("skia_config") {
     defines += [ "SK_HAS_JPEG_LIBRARY" ]
     if (enable_skia_wuffs_gif) {
       defines += [ "SK_HAS_WUFFS_LIBRARY" ]
+    } else {
+      defines += [ "SK_USE_LIBGIFCODEC" ]
     }
   }
   if (enable_vulkan) {
@@ -198,6 +207,7 @@ config("skia_library_config") {
     cflags_cc = [ "/std:c++17" ]
   } else {
     cflags_cc = [ "-std=c++17" ]
+    cflags_objcc = [ "-std=c++17" ]
   }
 }
 
@@ -357,10 +367,9 @@ component("skia") {
       deps += [ "//third_party/wuffs" ]
       sources += [ "//third_party/skia/src/codec/SkWuffsCodec.cpp" ]
     } else {
-      sources += [
-        "//third_party/skia/src/codec/SkGifCodec.cpp",
-        "//third_party/skia/third_party/gif/SkGifImageReader.cpp",
-      ]
+      sources += rebase_path(libgifcodec_sources + libgifcodec_public,
+                             ".",
+                             "//third_party/libgifcodec")
     }
   }
 
@@ -469,10 +478,9 @@ component("skia") {
       "ext/fontmgr_default_fuchsia.cc",
     ]
     deps += [
-      "//third_party/fuchsia-sdk/sdk:fonts",
-      "//third_party/fuchsia-sdk/sdk:fonts",
-      "//third_party/fuchsia-sdk/sdk:io",
-      "//third_party/fuchsia-sdk/sdk:sys",
+      "//third_party/fuchsia-sdk/sdk:fuchsia-fonts",
+      "//third_party/fuchsia-sdk/sdk:fuchsia-io",
+      "//third_party/fuchsia-sdk/sdk:fuchsia-sys",
       "//third_party/fuchsia-sdk/sdk:sys_cpp",
       "//third_party/fuchsia-sdk/sdk:zx",
       "//third_party/icu:icuuc",
@@ -599,9 +607,11 @@ component("skia") {
 
   if (skia_support_skottie) {
     import("//third_party/skia/modules/skottie/skottie.gni")
+    import("//third_party/skia/modules/skresources/skresources.gni")
     import("//third_party/skia/modules/sksg/sksg.gni")
     import("//third_party/skia/modules/skshaper/skshaper.gni")
     sources += skia_skottie_sources + skia_skottie_public
+    sources += skia_skresources_sources
     sources += skia_sksg_sources
     sources += skia_shaper_primitive_sources
   }
@@ -637,6 +647,14 @@ template("skia_source_set") {
     # cost.
     if (using_mismatched_sample_profile) {
       configs -= [ "//build/config/compiler:afdo_optimize_size" ]
+    }
+    if (is_win) {
+      cflags_cc = [
+        "/std:c++17",
+        "/wd5041",  # out-of-line definition for constexpr static data member is not needed and is deprecated in C++17
+      ]
+    } else {
+      cflags_cc = [ "-std=c++17" ]
     }
   }
 }
@@ -890,9 +908,9 @@ source_set("test_fonts") {
       "ext/test_fonts_fuchsia.h",
     ]
     deps += [
-      "//third_party/fuchsia-sdk/sdk:fonts",
-      "//third_party/fuchsia-sdk/sdk:io",
-      "//third_party/fuchsia-sdk/sdk:sys",
+      "//third_party/fuchsia-sdk/sdk:fuchsia-fonts",
+      "//third_party/fuchsia-sdk/sdk:fuchsia-io",
+      "//third_party/fuchsia-sdk/sdk:fuchsia-sys",
       "//third_party/fuchsia-sdk/sdk:sys_cpp",
     ]
   }
@@ -943,7 +961,7 @@ test("skia_unittests") {
   if (is_fuchsia) {
     sources += [ "ext/fontmgr_fuchsia_unittest.cc" ]
     deps += [
-      "//third_party/fuchsia-sdk/sdk:fonts",
+      "//third_party/fuchsia-sdk/sdk:fuchsia-fonts",
       "//third_party/test_fonts",
     ]
     data_deps = [

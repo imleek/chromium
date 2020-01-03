@@ -111,6 +111,10 @@ class CONTENT_EXPORT BackgroundSyncManager
   void GetPeriodicSyncRegistrations(int64_t sw_registration_id,
                                     StatusAndRegistrationsCallback callback);
 
+  // Goes through the list of active Periodic Background Sync registrations and
+  // unregisters any origins that no longer have the required permission.
+  void UnregisterPeriodicSyncForOrigin(const url::Origin& origin);
+
   // ServiceWorkerContextCoreObserver overrides.
   void OnRegistrationDeleted(int64_t sw_registration_id,
                              const GURL& pattern) override;
@@ -213,7 +217,7 @@ class CONTENT_EXPORT BackgroundSyncManager
       const std::string& tag,
       scoped_refptr<ServiceWorkerVersion> active_version,
       ServiceWorkerVersion::StatusCallback callback);
-  virtual void HasMainFrameProviderHost(const url::Origin& origin,
+  virtual void HasMainFrameWindowClient(const url::Origin& origin,
                                         BoolCallback callback);
 
  private:
@@ -424,6 +428,14 @@ class CONTENT_EXPORT BackgroundSyncManager
                                   base::OnceClosure done_closure,
                                   blink::ServiceWorkerStatusCode status);
   void DidReceiveDelaysForSuspendedRegistrations(base::OnceClosure callback);
+
+  // Helper methods to unregister Periodic Background Sync registrations
+  // associated with |origin|.
+  void UnregisterForOriginImpl(const url::Origin& origin,
+                               base::OnceClosure callback);
+  void UnregisterForOriginDidStore(base::OnceClosure done_closure,
+                                   blink::ServiceWorkerStatusCode status);
+  void UnregisterForOriginScheduleDelayedProcessing(base::OnceClosure callback);
 
   base::OnceClosure MakeEmptyCompletion(CacheStorageSchedulerId id);
 

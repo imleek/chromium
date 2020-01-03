@@ -73,20 +73,9 @@ test("chrome_cleaner_unittests") {
     ":engine_definitions",
     ":engine_target_factory",
     ":other_executable_definitions",
-    "//base",
-    "//base/test:test_support",
-    "//chrome/chrome_cleaner:buildflags",
-    "//chrome/chrome_cleaner/crash:crashpad_lib",
-    "//chrome/chrome_cleaner/ipc:sandbox",
-    "//chrome/chrome_cleaner/logging:common",
-    "//chrome/chrome_cleaner/os:cleaner_os",
     "//chrome/chrome_cleaner/os:common_os",
-    "//chrome/chrome_cleaner/pup_data:pup_data_base",
-    "//chrome/chrome_cleaner/settings:settings_types",
-    "//chrome/chrome_cleaner/test:test_pup_data",
     "//chrome/chrome_cleaner/test:test_util",
-    "//sandbox/win:sandbox",
-    "//testing/gtest",
+    "//chrome/chrome_cleaner/test:test_uws_catalog",
 
     # Tests from sub-directories.
     "//chrome/chrome_cleaner/chrome_utils:unittest_sources",
@@ -124,6 +113,16 @@ test("chrome_cleaner_unittests") {
   }
 }
 
+group("shipped_binaries") {
+  # This group is used for network annotation check test.
+  visibility += [ "//.:shipped_binaries" ]
+
+  deps = [
+    "//chrome/chrome_cleaner/executables:chrome_cleanup_tool",
+    "//chrome/chrome_cleaner/executables:software_reporter_tool",
+  ]
+}
+
 group("chrome_cleaner") {
   testonly = true
 
@@ -132,8 +131,8 @@ group("chrome_cleaner") {
 
   deps = [
     ":chrome_cleaner_unittests",
-    "//chrome/chrome_cleaner/executables:chrome_cleanup_tool",
-    "//chrome/chrome_cleaner/executables:software_reporter_tool",
+    ":shipped_binaries",
+    "//chrome/chrome_cleaner/tools:generate_test_uws",
   ]
 
   if (is_internal_chrome_cleaner_build) {

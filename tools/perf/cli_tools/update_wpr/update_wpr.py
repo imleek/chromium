@@ -36,7 +36,7 @@ HISTOGRAM2CSV = os.path.join(
 RUN_BENCHMARK = os.path.join(SRC_ROOT, 'tools', 'perf', 'run_benchmark')
 DATA_DIR = os.path.join(SRC_ROOT, 'tools', 'perf', 'page_sets', 'data')
 RECORD_WPR = os.path.join(SRC_ROOT, 'tools', 'perf', 'record_wpr')
-DEFAULT_REVIEWERS = ['perezju@chromium.org']
+DEFAULT_REVIEWERS = ['crouleau@chromium.org']
 MISSING_RESOURCE_RE = re.compile(
     r'\[network\]: Failed to load resource: the server responded with a status '
     r'of 404 \(\) ([^\s]+)')
@@ -347,8 +347,7 @@ class WprUpdater(object):
     """Creates, starts a Pinpoint job and returns its URL."""
     try:
       resp = pinpoint_service.NewJob(
-          start_git_hash='HEAD',
-          end_git_hash='HEAD',
+          base_git_hash='HEAD',
           target='performance_test_suite',
           patch=self._GetBranchIssueUrl(),
           bug_id=self.bug_id or '',
@@ -453,7 +452,7 @@ class WprUpdater(object):
       if self._IsDesktop():
         configs = ['linux-perf', 'win-10-perf', 'mac-10_12_laptop_low_end-perf']
       else:
-        configs = ['android-nexus5x-perf']
+        configs = ['android-pixel2-perf']
     for config in configs:
       job_url = self._StartPinpointJob(config)
       if not job_url:

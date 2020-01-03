@@ -4699,7 +4699,7 @@ TEST_F(SpdyNetworkTransactionTest, NetLog) {
       MockRead(ASYNC, 0, 3)  // EOF
   };
 
-  BoundTestNetLog log;
+  RecordingBoundTestNetLog log;
 
   SequencedSocketData data(reads, writes);
   request_.extra_headers.SetHeader("User-Agent", "Chrome");
@@ -6327,7 +6327,7 @@ class SpdyNetworkTransactionPushHeaderTest
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          SpdyNetworkTransactionPushHeaderTest,
                          ::testing::ValuesIn(push_header_test_cases));
 
@@ -6534,7 +6534,7 @@ class SpdyNetworkTransactionPushUrlTest
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          SpdyNetworkTransactionPushUrlTest,
                          ::testing::ValuesIn(push_url_test_cases));
 
@@ -10288,6 +10288,87 @@ TEST_F(SpdyNetworkTransactionTest, GreaseFrameTypeWithPostRequest) {
   base::RunLoop().RunUntilIdle();
 
   helper.VerifyDataConsumed();
+}
+
+// According to https://httpwg.org/specs/rfc7540.html#CONNECT, "frame types
+// other than DATA or stream management frames (RST_STREAM, WINDOW_UPDATE, and
+// PRIORITY) MUST NOT be sent on a connected stream".
+TEST_F(SpdyNetworkTransactionTest, DoNotGreaseFrameTypeWithConnect) {
+  auto session_deps = std::make_unique<SpdySessionDependencies>(
+      ProxyResolutionService::CreateFixedFromPacResult(
+          "HTTPS myproxy:70", TRAFFIC_ANNOTATION_FOR_TESTS));
+
+  const uint8_t type = 0x0b;
+  const uint8_t flags = 0xcc;
+  const std::string payload("foo");
+  session_deps->greased_http2_frame =
+      base::Optional<net::SpdySessionPool::GreasedHttp2Frame>(
+          {type, flags, payload});
+
+  NormalSpdyTransactionHelper helper(request_, DEFAULT_PRIORITY, log_,
+                                     std::move(session_deps));
+
+  // CONNECT to proxy.
+  spdy::SpdySerializedFrame connect_req(spdy_util_.ConstructSpdyConnect(
+      nullptr, 0, 1, HttpProxyConnectJob::kH2QuicTunnelPriority,
+      HostPortPair("www.example.org", 443)));
+  spdy::SpdySerializedFrame connect_response(
+      spdy_util_.ConstructSpdyGetReply(nullptr, 0, 1));
+
+  // Tunneled transaction wrapped in DATA frames.
+  const char req[] =
+      "GET / HTTP/1.1\r\n"
+      "Host: www.example.org\r\n"
+      "Connection: keep-alive\r\n\r\n";
+  spdy::SpdySerializedFrame tunneled_req(
+      spdy_util_.ConstructSpdyDataFrame(1, req, false));
+
+  const char resp[] =
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Length: 5\r\n\r\n"
+      "hello";
+  spdy::SpdySerializedFrame tunneled_response(
+      spdy_util_.ConstructSpdyDataFrame(1, resp, false));
+
+  MockWrite writes[] = {CreateMockWrite(connect_req, 0),
+                        CreateMockWrite(tunneled_req, 2)};
+
+  MockRead reads[] = {CreateMockRead(connect_response, 1),
+                      CreateMockRead(tunneled_response, 3),
+                      MockRead(ASYNC, 0, 4)};
+
+  SequencedSocketData data0(reads, writes);
+
+  // HTTP/2 connection to proxy.
+  auto ssl_provider0 = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
+  ssl_provider0->next_proto = kProtoHTTP2;
+  helper.AddDataWithSSLSocketDataProvider(&data0, std::move(ssl_provider0));
+
+  // HTTP/1.1 to destination.
+  SSLSocketDataProvider ssl_provider1(ASYNC, OK);
+  ssl_provider1.next_proto = kProtoHTTP11;
+  helper.session_deps()->socket_factory->AddSSLSocketDataProvider(
+      &ssl_provider1);
+
+  helper.RunPreTestSetup();
+  helper.StartDefaultTest();
+  helper.FinishDefaultTestWithoutVerification();
+  helper.VerifyDataConsumed();
+
+  const HttpResponseInfo* response = helper.trans()->GetResponseInfo();
+  ASSERT_TRUE(response);
+  ASSERT_TRUE(response->headers);
+  EXPECT_EQ("HTTP/1.1 200 OK", response->headers->GetStatusLine());
+  EXPECT_FALSE(response->was_fetched_via_spdy);
+  EXPECT_EQ(HttpResponseInfo::CONNECTION_INFO_HTTP1_1,
+            response->connection_info);
+  EXPECT_TRUE(response->was_alpn_negotiated);
+  EXPECT_TRUE(request_.url.SchemeIs("https"));
+  EXPECT_EQ("127.0.0.1", response->remote_endpoint.ToStringWithoutPort());
+  EXPECT_EQ(70, response->remote_endpoint.port());
+  std::string response_data;
+  ASSERT_THAT(ReadTransaction(helper.trans(), &response_data), IsOk());
+  EXPECT_EQ("hello", response_data);
 }
 
 }  // namespace net

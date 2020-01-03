@@ -63,7 +63,6 @@ class VizMainImpl : public mojom::VizMain {
 
     ExternalDependencies& operator=(ExternalDependencies&& other);
 
-    bool create_display_compositor = false;
     gpu::SyncPointManager* sync_point_manager = nullptr;
     gpu::SharedImageManager* shared_image_manager = nullptr;
     base::WaitableEvent* shutdown_event = nullptr;
@@ -109,7 +108,7 @@ class VizMainImpl : public mojom::VizMain {
   }
 
   // Cleanly exits the process.
-  void ExitProcess();
+  void ExitProcess(bool immediately);
 
  private:
   void CreateFrameSinkManagerInternal(mojom::FrameSinkManagerParamsPtr params);

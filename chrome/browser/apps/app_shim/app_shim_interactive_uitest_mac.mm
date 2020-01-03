@@ -119,9 +119,9 @@ class WindowedAppShimLaunchObserver : public apps::ExtensionAppShimHandler {
     if (run_loop_.get())
       run_loop_->Quit();
   }
-  void OnShimFocus(AppShimHost* host,
-                   apps::AppShimFocusType focus_type,
-                   const std::vector<base::FilePath>& files) override {}
+  void OnShimFocus(AppShimHost* host) override {}
+  void OnShimOpenedFiles(AppShimHost* host,
+                         const std::vector<base::FilePath>& files) override {}
   void OnShimSelectedProfile(AppShimHost* host,
                              const base::FilePath& profile_path) override {}
 
@@ -606,7 +606,7 @@ IN_PROC_BROWSER_TEST_F(AppShimInteractiveTest, MAYBE_RebuildShim) {
 
   // Copy 32 bit shim to where it's expected to be.
   // CopyDirectory doesn't seem to work when copying and renaming in one go.
-  ASSERT_TRUE(base::DeleteFile(shim_path, true));
+  ASSERT_TRUE(base::DeleteFileRecursively(shim_path));
   ASSERT_TRUE(base::PathExists(shim_path.DirName()));
   ASSERT_TRUE(base::CopyDirectory(shim_path_32, shim_path.DirName(), true));
   ASSERT_TRUE(base::Move(shim_path.DirName().Append(shim_path_32.BaseName()),

@@ -16,21 +16,19 @@
 #include "chrome/browser/ui/ash/assistant/assistant_image_downloader.h"
 #include "chrome/browser/ui/ash/assistant/assistant_service_connection.h"
 #include "chrome/browser/ui/ash/assistant/assistant_setup.h"
+#include "chrome/browser/ui/ash/assistant/assistant_web_view_factory_impl.h"
 #include "chrome/browser/ui/ash/assistant/proactive_suggestions_client_impl.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/services/assistant/public/features.h"
 #include "components/session_manager/core/session_manager.h"
+#include "content/public/browser/audio_service.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/device_service.h"
+#include "content/public/browser/media_session_service.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/service_process_host.h"
-#include "content/public/browser/system_connector.h"
-#include "content/public/common/content_switches.h"
-#include "services/audio/public/mojom/constants.mojom.h"
-#include "services/device/public/mojom/constants.mojom.h"
 #include "services/identity/public/mojom/identity_service.mojom.h"
-#include "services/media_session/public/mojom/constants.mojom.h"
-#include "services/preferences/public/mojom/preferences.mojom.h"
 
 namespace {
 
@@ -84,14 +82,15 @@ void AssistantClient::MaybeInit(Profile* profile) {
 
   initialized_ = true;
 
-  bool is_test = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      ::switches::kBrowserTest);
   auto* service =
       AssistantServiceConnection::GetForProfile(profile_)->service();
   service->Init(client_receiver_.BindNewPipeAndPassRemote(),
-                device_actions_.AddReceiver(), is_test);
+                device_actions_.AddReceiver());
+
   assistant_image_downloader_ = std::make_unique<AssistantImageDownloader>();
   assistant_setup_ = std::make_unique<AssistantSetup>(service);
+  assistant_web_view_factory_ =
+      std::make_unique<AssistantWebViewFactoryImpl>(profile_);
 
   if (chromeos::assistant::features::IsProactiveSuggestionsEnabled()) {
     proactive_suggestions_client_ =
@@ -170,28 +169,19 @@ void AssistantClient::RequestAssistantStateController(
       std::move(receiver));
 }
 
-void AssistantClient::RequestPrefStoreConnector(
-    mojo::PendingReceiver<prefs::mojom::PrefStoreConnector> receiver) {
-  content::BrowserContext::GetConnectorFor(profile_)->Connect(
-      prefs::mojom::kServiceName, std::move(receiver));
-}
-
 void AssistantClient::RequestBatteryMonitor(
     mojo::PendingReceiver<device::mojom::BatteryMonitor> receiver) {
-  content::GetSystemConnector()->Connect(device::mojom::kServiceName,
-                                         std::move(receiver));
+  content::GetDeviceService().BindBatteryMonitor(std::move(receiver));
 }
 
 void AssistantClient::RequestWakeLockProvider(
     mojo::PendingReceiver<device::mojom::WakeLockProvider> receiver) {
-  content::GetSystemConnector()->Connect(device::mojom::kServiceName,
-                                         std::move(receiver));
+  content::GetDeviceService().BindWakeLockProvider(std::move(receiver));
 }
 
 void AssistantClient::RequestAudioStreamFactory(
     mojo::PendingReceiver<audio::mojom::StreamFactory> receiver) {
-  content::GetSystemConnector()->Connect(audio::mojom::kServiceName,
-                                         std::move(receiver));
+  content::GetAudioService().BindStreamFactory(std::move(receiver));
 }
 
 void AssistantClient::RequestAudioDecoderFactory(
@@ -200,7 +190,7 @@ void AssistantClient::RequestAudioDecoderFactory(
   content::ServiceProcessHost::Launch(
       std::move(receiver),
       content::ServiceProcessHost::Options()
-          .WithSandboxType(service_manager::SANDBOX_TYPE_UTILITY)
+          .WithSandboxType(service_manager::SandboxType::kUtility)
           .WithDisplayName("Assistant Audio Decoder Service")
           .Pass());
 }
@@ -214,15 +204,14 @@ void AssistantClient::RequestIdentityAccessor(
 
 void AssistantClient::RequestAudioFocusManager(
     mojo::PendingReceiver<media_session::mojom::AudioFocusManager> receiver) {
-  content::GetSystemConnector()->Connect(media_session::mojom::kServiceName,
-                                         std::move(receiver));
+  content::GetMediaSessionService().BindAudioFocusManager(std::move(receiver));
 }
 
 void AssistantClient::RequestMediaControllerManager(
     mojo::PendingReceiver<media_session::mojom::MediaControllerManager>
         receiver) {
-  content::GetSystemConnector()->Connect(media_session::mojom::kServiceName,
-                                         std::move(receiver));
+  content::GetMediaSessionService().BindMediaControllerManager(
+      std::move(receiver));
 }
 
 void AssistantClient::RequestNetworkConfig(

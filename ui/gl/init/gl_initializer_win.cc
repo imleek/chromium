@@ -236,12 +236,6 @@ bool InitializeStaticGLBindings(GLImplementation implementation) {
   return false;
 }
 
-void InitializeDebugGLBindings() {
-  InitializeDebugGLBindingsEGL();
-  InitializeDebugGLBindingsGL();
-  InitializeDebugGLBindingsWGL();
-}
-
 void ShutdownGLPlatform() {
   GLSurfaceEGL::ShutdownOneOff();
   ClearBindingsEGL();

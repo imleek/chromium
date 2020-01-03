@@ -26,6 +26,7 @@
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/combobox/combobox_listener.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link_listener.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -162,17 +163,19 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
                            AlwaysTranslateCheckboxAndCancelButton);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
                            AlwaysTranslateCheckboxAndDoneButton);
+  FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
+                           TabUIAlwaysTranslateCheckboxShortcut);
+  FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
+                           TabUIAlwaysTranslateCheckboxAndCloseButton);
+  FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
+                           TabUIAlwaysTranslateCheckboxAndDoneButton);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest, DoneButton);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest, TabUiSourceDoneButton);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest, TabUiTargetDoneButton);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
                            DoneButtonWithoutTranslating);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
-                           TabUiSourceDoneButtonWithoutTranslating);
-  FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
-                           TabUiTargetDoneButtonWithoutTranslating);
-  FRIEND_TEST_ALL_PREFIXES(TabUiSourceTranslateBubbleViewTest,
-                           DoneButtonWithoutTranslating);
+                           TabUiDoneButtonWithoutTranslating);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
                            CancelButtonReturningBeforeTranslate);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
@@ -254,46 +257,38 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   std::unique_ptr<views::View> CreateViewErrorNoTitle(
       std::unique_ptr<views::Button> advanced_button);
 
-  // Creates the 'error' view for Tab and Button_GM2 UI.
+  // Creates the 'error' view for Tab UI.
   std::unique_ptr<views::View> CreateViewErrorTab();
-  std::unique_ptr<views::View> CreateViewErrorGM2();
 
   // Creates the 'advanced' view. Caller takes ownership of the returned view.
   // Three options depending on UI selection in kUseButtonTranslateBubbleUI.
   std::unique_ptr<views::View> CreateViewAdvanced();
 
   // Creates source language label and combobox for Tab UI advanced view
-  std::unique_ptr<views::View> TabUiCreateViewAdvanedSource();
+  std::unique_ptr<views::View> TabUiCreateViewAdvancedSource();
 
   // Creates source language label and combobox for Tab UI advanced view
-  std::unique_ptr<views::View> TabUiCreateViewAdvanedTarget();
+  std::unique_ptr<views::View> TabUiCreateViewAdvancedTarget();
 
   // Tab UI present the same view for before/during/after translate state.
   bool TabUiIsEquivalentState(TranslateBubbleModel::ViewState view_state);
-
-  // Creates the skeleton view for GM2 UI.
-  std::unique_ptr<views::View> GM2CreateView(
-      std::unique_ptr<views::Button> action_button,
-      std::unique_ptr<views::View> status_indicator,
-      bool active_option_button,
-      std::unique_ptr<views::Label> source_language_label,
-      std::unique_ptr<views::Label> target_language_label);
-
-  // Creates the 'before translate' view for Button_GM2 UI.
-  std::unique_ptr<views::View> GM2CreateViewBeforeTranslate();
-
-  // Creates the 'translating' view for Button_GM2 UI.
-  std::unique_ptr<views::View> GM2CreateViewTranslating();
-
-  // Creates the 'after translate' view for Button_GM2 UI.
-  std::unique_ptr<views::View> GM2CreateViewAfterTranslate();
 
   // Creates the 'advanced' view to show source/target language combobox under
   // TAB UI. Caller takes ownership of the returned view.
   std::unique_ptr<views::View> CreateViewAdvancedTabUi(
       std::unique_ptr<views::Combobox> combobox,
-      std::unique_ptr<views::Label> language_title_label);
+      std::unique_ptr<views::Label> language_title_label,
+      std::unique_ptr<views::Button> advance_done_button,
+      std::unique_ptr<views::Checkbox> advanced_always_translate_checkbox);
 
+  // Creates a translate icon for when the bottom branding isn't showing. This
+  // should only be used on non-Chrome-branded builds.
+  std::unique_ptr<views::ImageView> CreateTranslateIcon();
+
+  // Creates a three dot options menu button.
+  std::unique_ptr<views::Button> CreateOptionsMenuButton();
+
+  // Creates a close button.
   std::unique_ptr<views::Button> CreateCloseButton();
 
   // Get the current always translate checkbox
@@ -347,13 +342,9 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   views::Checkbox* advanced_always_translate_checkbox_ = nullptr;
   views::TabbedPane* tabbed_pane_ = nullptr;
 
-  // Button_GM2 UI source/target language label class variable to be updated
-  // based on user selction in
-  views::Label* gm2_source_language_label_ = nullptr;
-  views::Label* gm2_target_language_label_ = nullptr;
-
-  views::LabelButton* advanced_cancel_button_ = nullptr;
   views::LabelButton* advanced_done_button_ = nullptr;
+  views::LabelButton* advanced_done_button_source_ = nullptr;
+  views::LabelButton* advanced_done_button_target_ = nullptr;
 
   // Default source/target language without user interaction.
   int previous_source_language_index_;

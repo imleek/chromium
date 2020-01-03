@@ -14,12 +14,17 @@
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/time/time.h"
+#include "chrome/browser/chromeos/crostini/ansible/ansible_management_service_factory.h"
+#include "chrome/browser/chromeos/crostini/crostini_features.h"
+#include "chrome/browser/chromeos/crostini/crostini_installer_types.mojom.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/crostini/crostini_terminal.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/webui/chromeos/crostini_installer/crostini_installer_dialog.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -36,6 +41,7 @@ namespace crostini {
 
 namespace {
 using SetupResult = CrostiniInstaller::SetupResult;
+constexpr char kCrostiniSetupSourceHistogram[] = "Crostini.SetupSource";
 
 class CrostiniInstallerFactory : public BrowserContextKeyedServiceFactory {
  public:
@@ -57,6 +63,7 @@ class CrostiniInstallerFactory : public BrowserContextKeyedServiceFactory {
             "CrostiniInstallerService",
             BrowserContextDependencyManager::GetInstance()) {
     DependsOn(crostini::CrostiniManagerFactory::GetInstance());
+    DependsOn(crostini::AnsibleManagementServiceFactory::GetInstance());
   }
 
   // BrowserContextKeyedServiceFactory:
@@ -112,6 +119,8 @@ SetupResult ErrorToSetupResult(InstallerError error) {
       return SetupResult::kErrorStartingTermina;
     case InstallerError::kErrorStartingContainer:
       return SetupResult::kErrorStartingContainer;
+    case InstallerError::kErrorConfiguringContainer:
+      return SetupResult::kErrorConfiguringContainer;
     case InstallerError::kErrorOffline:
       return SetupResult::kErrorOffline;
     case InstallerError::kErrorFetchingSshKeys:
@@ -122,6 +131,10 @@ SetupResult ErrorToSetupResult(InstallerError error) {
       return SetupResult::kErrorSettingUpContainer;
     case InstallerError::kErrorInsufficientDiskSpace:
       return SetupResult::kErrorInsufficientDiskSpace;
+    case InstallerError::kErrorCreateContainer:
+      return SetupResult::kErrorCreateContainer;
+    case InstallerError::kErrorUnknown:
+      return SetupResult::kErrorUnknown;
   }
 
   NOTREACHED();
@@ -146,6 +159,8 @@ SetupResult InstallStateToCancelledSetupResult(
       return SetupResult::kUserCancelledSetupContainer;
     case InstallerState::kStartContainer:
       return SetupResult::kUserCancelledStartContainer;
+    case InstallerState::kConfigureContainer:
+      return SetupResult::kUserCancelledConfiguringContainer;
     case InstallerState::kFetchSshKeys:
       return SetupResult::kUserCancelledFetchSshKeys;
     case InstallerState::kMountContainer:
@@ -174,6 +189,20 @@ void CrostiniInstaller::Shutdown() {
         restart_id_, base::DoNothing());
     restart_id_ = CrostiniManager::kUninitializedRestartId;
   }
+}
+
+void CrostiniInstaller::ShowDialog(CrostiniUISurface ui_surface) {
+  // Defensive check to prevent showing the installer when crostini is not
+  // allowed.
+  if (!CrostiniFeatures::Get()->IsUIAllowed(profile_)) {
+    return;
+  }
+  base::UmaHistogramEnumeration(kCrostiniSetupSourceHistogram, ui_surface,
+                                crostini::CrostiniUISurface::kCount);
+
+  // TODO(lxj): We should pass the dialog |this| here instead of letting the
+  // webui to call |GetForProfile()| later.
+  chromeos::CrostiniInstallerDialog::Show(profile_);
 }
 
 void CrostiniInstaller::Install(CrostiniManager::RestartOptions options,
@@ -339,6 +368,15 @@ void CrostiniInstaller::OnContainerDownloading(int32_t download_percent) {
 
 void CrostiniInstaller::OnContainerCreated(CrostiniResult result) {
   DCHECK_EQ(installing_state_, InstallerState::kCreateContainer);
+  if (result != CrostiniResult::SUCCESS) {
+    if (content::GetNetworkConnectionTracker()->IsOffline()) {
+      LOG(ERROR) << "Network connection dropped while creating container";
+      HandleError(InstallerError::kErrorOffline);
+    } else {
+      HandleError(InstallerError::kErrorCreateContainer);
+    }
+    return;
+  }
   UpdateInstallingState(InstallerState::kSetupContainer);
 }
 
@@ -355,10 +393,54 @@ void CrostiniInstaller::OnContainerSetup(bool success) {
     return;
   }
   UpdateInstallingState(InstallerState::kStartContainer);
+  ansible_management_service_observer_.Add(
+      AnsibleManagementService::GetForProfile(profile_));
+}
+
+void CrostiniInstaller::OnAnsibleSoftwareConfigurationStarted() {
+  DCHECK_EQ(installing_state_, InstallerState::kStartContainer);
+  UpdateInstallingState(InstallerState::kConfigureContainer);
+}
+
+void CrostiniInstaller::OnAnsibleSoftwareConfigurationFinished(bool success) {
+  DCHECK_EQ(installing_state_, InstallerState::kConfigureContainer);
+  ansible_management_service_observer_.Remove(
+      AnsibleManagementService::GetForProfile(profile_));
+
+  if (!success) {
+    LOG(ERROR) << "Failed to configure container";
+    CrostiniManager::GetForProfile(profile_)->RemoveCrostini(
+        kCrostiniDefaultVmName,
+        base::BindOnce(
+            &CrostiniInstaller::OnCrostiniRemovedAfterConfigurationFailed,
+            weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+}
+
+void CrostiniInstaller::OnCrostiniRemovedAfterConfigurationFailed(
+    CrostiniResult result) {
+  if (result != CrostiniResult::SUCCESS) {
+    LOG(ERROR) << "Failed to remove Crostini after failed configuration";
+  }
+
+  if (content::GetNetworkConnectionTracker()->IsOffline()) {
+    LOG(ERROR) << "Network connection dropped while configuring container";
+    HandleError(InstallerError::kErrorOffline);
+  } else {
+    HandleError(InstallerError::kErrorConfiguringContainer);
+  }
 }
 
 void CrostiniInstaller::OnContainerStarted(CrostiniResult result) {
-  DCHECK_EQ(installing_state_, InstallerState::kStartContainer);
+  if (result == CrostiniResult::CONTAINER_CONFIGURATION_FAILED) {
+    LOG(ERROR) << "Container start failed due to failed configuration";
+    NOTREACHED();
+    return;
+  }
+
+  DCHECK(installing_state_ == InstallerState::kStartContainer ||
+         installing_state_ == InstallerState::kConfigureContainer);
 
   if (result != CrostiniResult::SUCCESS) {
     LOG(ERROR) << "Failed to start container with error code: "
@@ -410,36 +492,42 @@ void CrostiniInstaller::RunProgressCallback() {
       break;
     case InstallerState::kInstallImageLoader:
       state_start_mark = 0.0;
-      state_end_mark = 0.25;
+      state_end_mark = 0.20;
       state_max_seconds = 30;
       break;
     case InstallerState::kStartConcierge:
-      state_start_mark = 0.25;
-      state_end_mark = 0.26;
+      state_start_mark = 0.20;
+      state_end_mark = 0.21;
       break;
     case InstallerState::kCreateDiskImage:
-      state_start_mark = 0.26;
-      state_end_mark = 0.27;
+      state_start_mark = 0.21;
+      state_end_mark = 0.22;
       break;
     case InstallerState::kStartTerminaVm:
-      state_start_mark = 0.27;
-      state_end_mark = 0.35;
+      state_start_mark = 0.22;
+      state_end_mark = 0.28;
       state_max_seconds = 8;
       break;
     case InstallerState::kCreateContainer:
-      state_start_mark = 0.35;
-      state_end_mark = 0.90;
+      state_start_mark = 0.28;
+      state_end_mark = 0.72;
       state_max_seconds = 180;
       break;
     case InstallerState::kSetupContainer:
-      state_start_mark = 0.90;
-      state_end_mark = 0.95;
+      state_start_mark = 0.72;
+      state_end_mark = 0.76;
       state_max_seconds = 8;
       break;
     case InstallerState::kStartContainer:
-      state_start_mark = 0.95;
-      state_end_mark = 0.99;
+      state_start_mark = 0.76;
+      state_end_mark = 0.79;
       state_max_seconds = 8;
+      break;
+    case InstallerState::kConfigureContainer:
+      state_start_mark = 0.79;
+      state_end_mark = 0.99;
+      // Ansible installation and playbook application.
+      state_max_seconds = 140 + 300;
       break;
     case InstallerState::kFetchSshKeys:
       state_start_mark = 0.99;
@@ -461,6 +549,8 @@ void CrostiniInstaller::RunProgressCallback() {
     state_fraction =
         0.5 * (state_fraction + 0.01 * container_download_percent_);
   }
+  // TODO(https://crbug.com/1000173): Calculate configure container step
+  // progress based on real progress.
 
   double progress =
       state_start_mark + base::ClampToRange(state_fraction, 0.0, 1.0) *
@@ -542,13 +632,7 @@ void CrostiniInstaller::OnCrostiniRestartFinished(CrostiniResult result) {
       DCHECK_EQ(state_, State::INSTALLING);
       LOG(ERROR) << "Failed to restart Crostini with error code: "
                  << static_cast<int>(result);
-      // TODO(lxj): The error code here is probably incorrect. If
-      // |CrostiniManager::CrostiniRestarter| failed to mount the container, it
-      // still calls this function with |SUCCESS| (see
-      // |CrostiniRestarter::OnMountEvent()|), so if we reach here (i.e.
-      // |state_| has not been set to |ERROR| but this function receives a
-      // failure result), something else is probably wrong.
-      HandleError(InstallerError::kErrorMountingContainer);
+      HandleError(InstallerError::kErrorUnknown);
     }
     return;
   }

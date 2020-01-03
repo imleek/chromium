@@ -173,8 +173,8 @@ void PromoService::Refresh() {
 
 void PromoService::ServeExtensionCheckupPromo() {
   const int checkup_message = base::GetFieldTrialParamByFeatureAsInt(
-      extensions_features::kExtensionsCheckupTool,
-      extensions_features::kExtensionsCheckupToolBannerMessageParameter, 2);
+      extensions_features::kExtensionsCheckup,
+      extensions_features::kExtensionsCheckupBannerMessageParameter, 2);
   PromoData checkup_promo;
   int promo_idr = -1;
   switch (static_cast<extensions::CheckupMessage>(checkup_message)) {
@@ -191,7 +191,7 @@ void PromoService::ServeExtensionCheckupPromo() {
   std::string promo_message = l10n_util::GetStringUTF8(promo_idr);
   std::string promo_html = base::StrCat({"<div>", promo_message, "</div>"});
   checkup_promo.promo_html = promo_html;
-  checkup_promo.can_open_privileged_links = true;
+  checkup_promo.can_open_extensions_page = true;
   PromoDataLoaded(Status::OK_WITH_PROMO, checkup_promo);
 }
 

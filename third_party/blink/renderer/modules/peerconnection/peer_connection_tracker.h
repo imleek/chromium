@@ -13,10 +13,10 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/mojom/peerconnection/peer_connection_tracker.mojom-blink.h"
-#include "third_party/blink/public/platform/web_rtc_peer_connection_handler_client.h"
-#include "third_party/blink/public/platform/web_rtc_rtp_transceiver.h"
-#include "third_party/blink/public/platform/web_rtc_session_description.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_peer_connection_handler_client.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_rtp_transceiver_platform.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_session_description_platform.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/webrtc/api/peer_connection_interface.h"
 
@@ -25,12 +25,12 @@ class DataChannelInterface;
 }  // namespace webrtc
 
 namespace blink {
-class RTCPeerConnectionHandler;
+class MediaConstraints;
 class RTCAnswerOptionsPlatform;
+class RTCIceCandidatePlatform;
 class RTCOfferOptionsPlatform;
+class RTCPeerConnectionHandler;
 class WebLocalFrame;
-class WebMediaConstraints;
-class WebRTCICECandidate;
 class WebUserMediaRequest;
 
 // This class collects data about each peer connection,
@@ -89,7 +89,7 @@ class MODULES_EXPORT PeerConnectionTracker
   void RegisterPeerConnection(
       RTCPeerConnectionHandler* pc_handler,
       const webrtc::PeerConnectionInterface::RTCConfiguration& config,
-      const blink::WebMediaConstraints& constraints,
+      const MediaConstraints& constraints,
       const blink::WebLocalFrame* frame);
 
   // Sends an update when a PeerConnection has been destroyed.
@@ -102,11 +102,11 @@ class MODULES_EXPORT PeerConnectionTracker
                                 RTCOfferOptionsPlatform* options);
   // TODO(hta): Get rid of the version below.
   virtual void TrackCreateOffer(RTCPeerConnectionHandler* pc_handler,
-                                const blink::WebMediaConstraints& options);
+                                const MediaConstraints& options);
   virtual void TrackCreateAnswer(RTCPeerConnectionHandler* pc_handler,
                                  blink::RTCAnswerOptionsPlatform* options);
   virtual void TrackCreateAnswer(RTCPeerConnectionHandler* pc_handler,
-                                 const blink::WebMediaConstraints& constraints);
+                                 const MediaConstraints& constraints);
 
   // Sends an update when setLocalDescription or setRemoteDescription is called.
   virtual void TrackSetSessionDescription(RTCPeerConnectionHandler* pc_handler,
@@ -122,11 +122,16 @@ class MODULES_EXPORT PeerConnectionTracker
       const webrtc::PeerConnectionInterface::RTCConfiguration& config);
 
   // Sends an update when an Ice candidate is added.
-  virtual void TrackAddIceCandidate(
-      RTCPeerConnectionHandler* pc_handler,
-      scoped_refptr<blink::WebRTCICECandidate> candidate,
-      Source source,
-      bool succeeded);
+  virtual void TrackAddIceCandidate(RTCPeerConnectionHandler* pc_handler,
+                                    RTCIceCandidatePlatform* candidate,
+                                    Source source,
+                                    bool succeeded);
+  // Sends an update when an Ice candidate error is receiver.
+  virtual void TrackIceCandidateError(RTCPeerConnectionHandler* pc_handler,
+                                      const String& host_candidate,
+                                      const String& url,
+                                      int error_code,
+                                      const String& error_text);
 
   // Sends an update when a transceiver is added, modified or removed. This can
   // happen as a result of any of the methods indicated by |reason|.
@@ -136,22 +141,21 @@ class MODULES_EXPORT PeerConnectionTracker
   // Example events: "transceiverAdded", "transceiverModified".
   // See peer_connection_tracker_unittest.cc for expected resulting event
   // strings.
-  virtual void TrackAddTransceiver(
-      RTCPeerConnectionHandler* pc_handler,
-      TransceiverUpdatedReason reason,
-      const blink::WebRTCRtpTransceiver& transceiver,
-      size_t transceiver_index);
+  virtual void TrackAddTransceiver(RTCPeerConnectionHandler* pc_handler,
+                                   TransceiverUpdatedReason reason,
+                                   const RTCRtpTransceiverPlatform& transceiver,
+                                   size_t transceiver_index);
   virtual void TrackModifyTransceiver(
       RTCPeerConnectionHandler* pc_handler,
       TransceiverUpdatedReason reason,
-      const blink::WebRTCRtpTransceiver& transceiver,
+      const RTCRtpTransceiverPlatform& transceiver,
       size_t transceiver_index);
   // TODO(hbos): When Plan B is removed this is no longer applicable.
   // https://crbug.com/857004
   virtual void TrackRemoveTransceiver(
       RTCPeerConnectionHandler* pc_handler,
       TransceiverUpdatedReason reason,
-      const blink::WebRTCRtpTransceiver& transceiver,
+      const RTCRtpTransceiverPlatform& transceiver,
       size_t transceiver_index);
 
   // Sends an update when a DataChannel is created.
@@ -219,7 +223,7 @@ class MODULES_EXPORT PeerConnectionTracker
 
   // Sends a new fragment on an RtcEventLog.
   virtual void TrackRtcEventLogWrite(RTCPeerConnectionHandler* pc_handler,
-                                     const String& output);
+                                     const std::string& output);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(PeerConnectionTrackerTest, OnSuspend);
@@ -236,7 +240,7 @@ class MODULES_EXPORT PeerConnectionTracker
   void TrackTransceiver(const char* callback_type_ending,
                         RTCPeerConnectionHandler* pc_handler,
                         PeerConnectionTracker::TransceiverUpdatedReason reason,
-                        const blink::WebRTCRtpTransceiver& transceiver,
+                        const RTCRtpTransceiverPlatform& transceiver,
                         size_t transceiver_index);
 
   // PeerConnectionTracker implementation.

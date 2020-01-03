@@ -24,15 +24,16 @@ DiceBubbleSyncPromoView::DiceBubbleSyncPromoView(
     Profile* profile,
     BubbleSyncPromoDelegate* delegate,
     signin_metrics::AccessPoint access_point,
-    int no_accounts_promo_message_resource_id,
     int accounts_promo_message_resource_id,
     bool signin_button_prominent,
     int text_style)
     : views::View(), delegate_(delegate) {
-  DCHECK(AccountConsistencyModeManager::IsDiceEnabledForProfile(profile));
+  DCHECK(!profile->IsGuestSession());
+  std::vector<AccountInfo> accounts;
+  // Signin promos can be shown in incognito, they use an empty account list.
+  if (profile->IsRegularProfile())
+    accounts = signin_ui_util::GetAccountsForDicePromos(profile);
 
-  std::vector<AccountInfo> accounts =
-      signin_ui_util::GetAccountsForDicePromos(profile);
   // Always show the accounts promo message for now.
   const int title_resource_id = accounts_promo_message_resource_id;
 

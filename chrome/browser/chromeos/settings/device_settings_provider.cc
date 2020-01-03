@@ -112,6 +112,7 @@ const char* const kKnownSettings[] = {
     kReportDeviceActivityTimes,
     kReportDeviceBoardStatus,
     kReportDeviceBootMode,
+    kReportDeviceCpuInfo,
     kReportDeviceHardwareStatus,
     kReportDeviceLocation,
     kReportDevicePowerStatus,
@@ -550,6 +551,10 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
       new_values_cache->SetInteger(kReportUploadFrequency,
                                    reporting_policy.device_status_frequency());
     }
+    if (reporting_policy.has_report_cpu_info()) {
+      new_values_cache->SetBoolean(kReportDeviceCpuInfo,
+                                   reporting_policy.report_cpu_info());
+    }
   }
 }
 
@@ -846,14 +851,16 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
         policy.device_second_factor_authentication().mode());
   }
 
+  // Default value of the policy in case it's missing.
+  bool is_powerwash_allowed = true;
   if (policy.has_device_powerwash_allowed()) {
     const em::DevicePowerwashAllowedProto& container(
         policy.device_powerwash_allowed());
     if (container.has_device_powerwash_allowed()) {
-      new_values_cache->SetBoolean(kDevicePowerwashAllowed,
-                                   container.device_powerwash_allowed());
+      is_powerwash_allowed = container.device_powerwash_allowed();
     }
   }
+  new_values_cache->SetBoolean(kDevicePowerwashAllowed, is_powerwash_allowed);
 }
 
 void DecodeLogUploadPolicies(const em::ChromeDeviceSettingsProto& policy,
@@ -1145,10 +1152,10 @@ const base::Value* DeviceSettingsProvider::Get(const std::string& path) const {
 }
 
 DeviceSettingsProvider::TrustedStatus
-DeviceSettingsProvider::PrepareTrustedValues(const base::Closure& cb) {
+DeviceSettingsProvider::PrepareTrustedValues(base::OnceClosure callback) {
   TrustedStatus status = RequestTrustedEntity();
-  if (status == TEMPORARILY_UNTRUSTED && !cb.is_null())
-    callbacks_.push_back(cb);
+  if (status == TEMPORARILY_UNTRUSTED && !callback.is_null())
+    callbacks_.push_back(std::move(callback));
   return status;
 }
 
@@ -1211,10 +1218,10 @@ bool DeviceSettingsProvider::UpdateFromService() {
   }
 
   // Notify the observers we are done.
-  std::vector<base::Closure> callbacks;
+  std::vector<base::OnceClosure> callbacks;
   callbacks.swap(callbacks_);
-  for (size_t i = 0; i < callbacks.size(); ++i)
-    callbacks[i].Run();
+  for (auto& callback : callbacks)
+    std::move(callback).Run();
 
   return settings_loaded;
 }

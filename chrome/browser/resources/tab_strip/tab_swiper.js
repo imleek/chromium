@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 
 /**
- * The minimum amount of pixels needed for the user to swipe for the opacity
- * to start animating to 0.
+ * The minimum amount of pixels needed for the user to swipe for the position
+ * (controlled by transform property) to start animating to 0.
  * @const {number}
  */
-export const OPACITY_ANIMATION_THRESHOLD_PX = 30;
+export const TRANSLATE_ANIMATION_THRESHOLD_PX = 30;
 
 /**
  * The minimum amount of pixels needed for the user to swipe to actually close
@@ -21,24 +21,11 @@ export const SWIPE_START_THRESHOLD_PX = 100;
  * The maximum amount of pixels needed to swipe a tab away. This is how many
  * pixels across the screen the user needs to swipe for the swipe away
  * animation to complete such that the tab is gone from the screen.
+ * TODO(johntlee): Make this relative to the height of the tab, not a
+ * hard-coded value.
  * @const {number}
  */
 export const SWIPE_FINISH_THRESHOLD_PX = 200;
-
-/**
- * The pixel that maps to the time of the swipe away animation at which the tab
- * is in its original stable position.
- * @const {number}
- */
-const SWIPE_ANIMATION_BASELINE_PX = SWIPE_FINISH_THRESHOLD_PX;
-
-/**
- * The swipe away animation is bidirectional to allow the user to swipe in
- * either direction, so the total span of pixels is SWIPE_FINISH_THRESHOLD_PX in
- * both directions.
- * @const {number}
- */
-const SWIPE_ANIMATION_TOTAL_PX = SWIPE_FINISH_THRESHOLD_PX * 2;
 
 /**
  * The minimum velocity of pixels per milliseconds required for the tab to
@@ -98,59 +85,35 @@ export class TabSwiper {
         this.element_,
         [
           {
-            // Fully swiped up.
-            maxWidth: '0px',
-            opacity: 0,
-            transform: `translateY(-${SWIPE_FINISH_THRESHOLD_PX}px)`
-          },
-          {
-            // Start of max-width animation swiping up.
-            maxWidth: 'var(--tabstrip-tab-width)',
-            offset: (SWIPE_ANIMATION_BASELINE_PX - SWIPE_START_THRESHOLD_PX) /
-                SWIPE_ANIMATION_TOTAL_PX,
-          },
-          {
-            // Start of opacity animation swiping up.
-            maxWidth: 'var(--tabstrip-tab-width)',
-            offset:
-                (SWIPE_ANIMATION_BASELINE_PX - OPACITY_ANIMATION_THRESHOLD_PX) /
-                SWIPE_ANIMATION_TOTAL_PX,
-            opacity: 1,
-            transform: `translateY(0)`
-          },
-          {
             // Base.
             opacity: 1,
             maxWidth: 'var(--tabstrip-tab-width)',
             transform: `translateY(0)`
           },
           {
-            // Start of opacity animation swiping down.
-            maxWidth: 'var(--tabstrip-tab-width)',
+            // Start of transform animation swiping up.
             offset:
-                (SWIPE_ANIMATION_BASELINE_PX + OPACITY_ANIMATION_THRESHOLD_PX) /
-                SWIPE_ANIMATION_TOTAL_PX,
-            opacity: 1,
+                TRANSLATE_ANIMATION_THRESHOLD_PX / SWIPE_FINISH_THRESHOLD_PX,
             transform: `translateY(0)`
           },
           {
-            // Start of opacity animation swiping down.
+            // Start of max-width and opacity animation swiping up.
             maxWidth: 'var(--tabstrip-tab-width)',
-            offset: (SWIPE_ANIMATION_BASELINE_PX + SWIPE_START_THRESHOLD_PX) /
-                SWIPE_ANIMATION_TOTAL_PX,
+            offset: SWIPE_START_THRESHOLD_PX / SWIPE_FINISH_THRESHOLD_PX,
+            opacity: 1,
           },
           {
-            // Fully swiped down.
+            // Fully swiped up.
             maxWidth: '0px',
             opacity: 0,
-            transform: `translateY(${SWIPE_FINISH_THRESHOLD_PX}px)`
+            transform: `translateY(-${SWIPE_FINISH_THRESHOLD_PX}px)`
           },
         ],
         {
-          duration: SWIPE_ANIMATION_TOTAL_PX,
+          duration: SWIPE_FINISH_THRESHOLD_PX,
           fill: 'both',
         }));
-    animation.currentTime = SWIPE_FINISH_THRESHOLD_PX;
+    animation.currentTime = 0;
     animation.onfinish = () => {
       this.element_.dispatchEvent(new CustomEvent('swipe'));
     };
@@ -166,7 +129,7 @@ export class TabSwiper {
       return;
     }
 
-    this.animation_.currentTime = SWIPE_ANIMATION_BASELINE_PX;
+    this.animation_.currentTime = 0;
     this.animationInitiated_ = false;
     this.currentPointerDownEvent_ = event;
 
@@ -197,13 +160,13 @@ export class TabSwiper {
       return;
     }
 
-    const yDiff = event.clientY - this.currentPointerDownEvent_.clientY;
-    const animationTime = SWIPE_ANIMATION_BASELINE_PX + yDiff;
+    const yDiff = this.currentPointerDownEvent_.clientY - event.clientY;
+    const animationTime = yDiff;
     this.animation_.currentTime =
-        Math.max(0, Math.min(SWIPE_ANIMATION_TOTAL_PX, animationTime));
+        Math.max(0, Math.min(SWIPE_FINISH_THRESHOLD_PX, animationTime));
 
     if (!this.animationInitiated_ &&
-        Math.abs(yDiff) > OPACITY_ANIMATION_THRESHOLD_PX) {
+        Math.abs(yDiff) > TRANSLATE_ANIMATION_THRESHOLD_PX) {
       this.animationInitiated_ = true;
       this.element_.setPointerCapture(event.pointerId);
     }
@@ -218,27 +181,22 @@ export class TabSwiper {
       return;
     }
 
-    const pixelsSwiped =
-        this.animation_.currentTime - SWIPE_ANIMATION_BASELINE_PX;
-    const swipedEnoughToClose =
-        Math.abs(pixelsSwiped) > SWIPE_START_THRESHOLD_PX;
-    const wasHighVelocity =
-        Math.abs(
-            pixelsSwiped /
-            (event.timeStamp - this.currentPointerDownEvent_.timeStamp)) >
+    const pixelsSwiped = this.animation_.currentTime;
+    const swipedEnoughToClose = pixelsSwiped > SWIPE_START_THRESHOLD_PX;
+    const wasHighVelocity = pixelsSwiped /
+            (event.timeStamp - this.currentPointerDownEvent_.timeStamp) >
         SWIPE_VELOCITY_THRESHOLD;
 
-    if (Math.abs(pixelsSwiped) === SWIPE_FINISH_THRESHOLD_PX) {
+    if (pixelsSwiped === SWIPE_FINISH_THRESHOLD_PX) {
       // The user has swiped the max amount of pixels to swipe and the animation
       // has already completed all its keyframes, so just fire the onfinish
       // events on the animation.
       this.animation_.finish();
     } else if (swipedEnoughToClose || wasHighVelocity) {
-      this.animation_.playbackRate = Math.sign(pixelsSwiped);
       this.animation_.play();
     } else {
       this.animation_.cancel();
-      this.animation_.currentTime = SWIPE_FINISH_THRESHOLD_PX;
+      this.animation_.currentTime = 0;
     }
 
     this.clearPointerEvents_();

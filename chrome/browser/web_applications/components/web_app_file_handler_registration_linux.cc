@@ -14,11 +14,7 @@ namespace web_app {
 
 namespace {
 
-void OnShortcutInfoReceived(const std::set<std::string> mime_types,
-                            std::unique_ptr<ShortcutInfo> info) {
-  for (const auto& mime_type : mime_types)
-    info->mime_types.push_back(mime_type);
-
+void OnShortcutInfoReceived(std::unique_ptr<ShortcutInfo> info) {
   base::FilePath shortcut_data_dir = internals::GetShortcutDataDir(*info);
 
   ShortcutLocations locations;
@@ -32,22 +28,22 @@ void OnShortcutInfoReceived(const std::set<std::string> mime_types,
 
 }  // namespace
 
-bool OsSupportsWebAppFileHandling() {
+bool ShouldRegisterFileHandlersWithOs() {
   return true;
 }
 
-void RegisterFileHandlersForWebApp(const AppId& app_id,
-                                   const std::string& app_name,
-                                   Profile* profile,
-                                   const std::set<std::string>& file_extensions,
-                                   const std::set<std::string>& mime_types) {
+void RegisterFileHandlersWithOs(const AppId& app_id,
+                                const std::string& app_name,
+                                Profile* profile,
+                                const std::set<std::string>& file_extensions,
+                                const std::set<std::string>& mime_types) {
   AppShortcutManager& shortcut_manager =
       WebAppProviderBase::GetProviderBase(profile)->shortcut_manager();
   shortcut_manager.GetShortcutInfoForApp(
-      app_id, base::BindOnce(OnShortcutInfoReceived, mime_types));
+      app_id, base::BindOnce(OnShortcutInfoReceived));
 }
 
-void UnregisterFileHandlersForWebApp(const AppId& app_id, Profile* profile) {
+void UnregisterFileHandlersWithOs(const AppId& app_id, Profile* profile) {
   // TODO(harrisjay): Add support for unregistering file handlers.
 }
 

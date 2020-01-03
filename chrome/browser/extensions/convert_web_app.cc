@@ -56,10 +56,10 @@ const char kIconsDirName[] = "icons";
 const char kScopeUrlHandlerId[] = "scope";
 
 std::unique_ptr<base::DictionaryValue> CreateFileHandlersForBookmarkApp(
-    const blink::Manifest::FileHandler& manifest_file_handler) {
+    const std::vector<blink::Manifest::FileHandler>& manifest_file_handlers) {
   base::Value file_handlers(base::Value::Type::DICTIONARY);
 
-  for (const auto& handler : manifest_file_handler.files) {
+  for (const auto& entry : manifest_file_handlers) {
     base::Value file_handler(base::Value::Type::DICTIONARY);
     file_handler.SetKey(keys::kFileHandlerIncludeDirectories,
                         base::Value(false));
@@ -69,15 +69,22 @@ std::unique_ptr<base::DictionaryValue> CreateFileHandlersForBookmarkApp(
     base::Value mime_types(base::Value::Type::LIST);
     base::Value file_extensions(base::Value::Type::LIST);
 
-    for (const auto& acceptsUTF16 : handler.accept) {
-      std::string acceptsUTF8 = base::UTF16ToUTF8(acceptsUTF16);
-      if (acceptsUTF8.size() == 0)
+    for (const auto& it : entry.accept) {
+      std::string type = base::UTF16ToUTF8(it.first);
+      if (type.empty())
         continue;
 
-      if (acceptsUTF8[0] == '.') {
-        file_extensions.Append(base::Value(acceptsUTF8.substr(1)));
-      } else {
-        mime_types.Append(base::Value(acceptsUTF8));
+      mime_types.Append(base::Value(type));
+      for (const auto& extensionUTF16 : it.second) {
+        std::string extension = base::UTF16ToUTF8(extensionUTF16);
+        if (extension.empty())
+          continue;
+
+        if (extension[0] != '.')
+          continue;
+
+        // Remove the '.' before appending.
+        file_extensions.Append(base::Value(extension.substr(1)));
       }
     }
 
@@ -85,13 +92,7 @@ std::unique_ptr<base::DictionaryValue> CreateFileHandlersForBookmarkApp(
     file_handler.SetKey(keys::kFileHandlerExtensions,
                         std::move(file_extensions));
 
-    // Use '{action}/?name={name}' as the id for the file handler, so we don't
-    // have to introduce a new field to the extension manifest.
-    file_handlers.SetKey(
-        net::AppendQueryParameter(manifest_file_handler.action, "name",
-                                  base::UTF16ToUTF8(handler.name))
-            .spec(),
-        std::move(file_handler));
+    file_handlers.SetKey(entry.action.spec(), std::move(file_handler));
   }
 
   return base::DictionaryValue::From(
@@ -215,27 +216,27 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
   root->SetString(keys::kAppDisplayMode,
                   blink::DisplayModeToString(web_app.display_mode));
 
-  if (web_app.file_handler) {
+  if (web_app.file_handlers.size() != 0) {
     root->SetDictionary(keys::kFileHandlers, CreateFileHandlersForBookmarkApp(
-                                                 web_app.file_handler.value()));
+                                                 web_app.file_handlers));
   }
 
   // Add the icons and linked icon information.
-  auto icons = std::make_unique<base::DictionaryValue>();
   auto linked_icons = std::make_unique<base::ListValue>();
-  for (const auto& icon : web_app.icons) {
-    std::string size = base::StringPrintf("%i", icon.width);
+  for (const WebApplicationIconInfo& icon_info : web_app.icon_infos) {
+    DCHECK(icon_info.url.is_valid());
+    std::unique_ptr<base::DictionaryValue> linked_icon(
+        new base::DictionaryValue());
+    linked_icon->SetString(keys::kLinkedAppIconURL, icon_info.url.spec());
+    linked_icon->SetInteger(keys::kLinkedAppIconSize, icon_info.square_size_px);
+    linked_icons->Append(std::move(linked_icon));
+  }
+  auto icons = std::make_unique<base::DictionaryValue>();
+  for (const std::pair<SquareSizePx, SkBitmap>& icon : web_app.icon_bitmaps) {
+    std::string size = base::StringPrintf("%i", icon.first);
     std::string icon_path = base::StringPrintf("%s/%s.png", kIconsDirName,
                                                size.c_str());
     icons->SetString(size, icon_path);
-
-    if (icon.url.is_valid()) {
-      std::unique_ptr<base::DictionaryValue> linked_icon(
-          new base::DictionaryValue());
-      linked_icon->SetString(keys::kLinkedAppIconURL, icon.url.spec());
-      linked_icon->SetInteger(keys::kLinkedAppIconSize, icon.width);
-      linked_icons->Append(std::move(linked_icon));
-    }
   }
   root->Set(keys::kIcons, std::move(icons));
   root->Set(keys::kLinkedAppIcons, std::move(linked_icons));
@@ -254,17 +255,13 @@ scoped_refptr<Extension> ConvertWebAppToExtension(
     LOG(ERROR) << "Could not create icons directory.";
     return nullptr;
   }
-  for (size_t i = 0; i < web_app.icons.size(); ++i) {
-    // Skip unfetched bitmaps.
-    if (web_app.icons[i].data.colorType() == kUnknown_SkColorType)
-      continue;
+  for (const std::pair<SquareSizePx, SkBitmap>& icon : web_app.icon_bitmaps) {
+    DCHECK_NE(icon.second.colorType(), kUnknown_SkColorType);
 
-    base::FilePath icon_file = icons_dir.AppendASCII(
-        base::StringPrintf("%i.png", web_app.icons[i].width));
+    base::FilePath icon_file =
+        icons_dir.AppendASCII(base::StringPrintf("%i.png", icon.first));
     std::vector<unsigned char> image_data;
-    if (!gfx::PNGCodec::EncodeBGRASkBitmap(web_app.icons[i].data,
-                                           false,
-                                           &image_data)) {
+    if (!gfx::PNGCodec::EncodeBGRASkBitmap(icon.second, false, &image_data)) {
       LOG(ERROR) << "Could not create icon file.";
       return nullptr;
     }

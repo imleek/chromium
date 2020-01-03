@@ -133,10 +133,10 @@ void HTMLIFrameElement::ParseAttribute(
   const QualifiedName& name = params.name;
   const AtomicString& value = params.new_value;
   if (name == html_names::kNameAttr) {
-    if (IsInDocumentTree() && GetDocument().IsHTMLDocument()) {
-      HTMLDocument& document = ToHTMLDocument(GetDocument());
-      document.RemoveNamedItem(name_);
-      document.AddNamedItem(value);
+    auto* document = DynamicTo<HTMLDocument>(GetDocument());
+    if (document && IsInDocumentTree()) {
+      document->RemoveNamedItem(name_);
+      document->AddNamedItem(value);
     }
     AtomicString old_name = name_;
     name_ = value;
@@ -151,9 +151,8 @@ void HTMLIFrameElement::ParseAttribute(
         value.IsNull()
             ? WebSandboxFlags::kNone
             : ParseSandboxPolicy(sandbox_->TokenSet(), invalid_tokens);
-    SetAllowedToDownloadWithoutUserActivation(
-        (current_flags & WebSandboxFlags::kDownloads) ==
-        WebSandboxFlags::kNone);
+    SetAllowedToDownload((current_flags & WebSandboxFlags::kDownloads) ==
+                         WebSandboxFlags::kNone);
     // With FeaturePolicyForSandbox, sandbox flags are represented as part of
     // the container policies. However, not all sandbox flags are yet converted
     // and for now the residue will stay around in the stored flags.
@@ -248,6 +247,15 @@ void HTMLIFrameElement::ParseAttribute(
                           WebFeature::kFeaturePolicyAllowAttribute);
       }
     }
+  } else if (name == html_names::kDisallowdocumentaccessAttr) {
+    disallow_document_access_ = !value.IsNull();
+    // We don't need to call tell the client frame properties
+    // changed since this attribute only stays inside the renderer.
+  } else if (name == html_names::kPolicyAttr) {
+    if (required_policy_ != value) {
+      required_policy_ = value;
+      UpdateRequiredPolicy();
+    }
   } else {
     // Websites picked up a Chromium article that used this non-specified
     // attribute which ended up changing shape after the specification process.
@@ -272,6 +280,12 @@ void HTMLIFrameElement::ParseAttribute(
       LogUpdateAttributeIfIsolatedWorldAndInDocument("iframe", params);
     HTMLFrameElementBase::ParseAttribute(params);
   }
+}
+
+DocumentPolicy::FeatureState HTMLIFrameElement::ConstructRequiredPolicy()
+    const {
+  return DocumentPolicy::Parse(required_policy_.Ascii())
+      .value_or(DocumentPolicy::FeatureState{});
 }
 
 ParsedFeaturePolicy HTMLIFrameElement::ConstructContainerPolicy(
@@ -354,9 +368,9 @@ Node::InsertionNotificationRequest HTMLIFrameElement::InsertedInto(
   InsertionNotificationRequest result =
       HTMLFrameElementBase::InsertedInto(insertion_point);
 
-  if (insertion_point.IsInDocumentTree() && GetDocument().IsHTMLDocument()) {
-    ToHTMLDocument(GetDocument()).AddNamedItem(name_);
-
+  auto* html_doc = DynamicTo<HTMLDocument>(GetDocument());
+  if (html_doc && insertion_point.IsInDocumentTree()) {
+    html_doc->AddNamedItem(name_);
     if (!ContentSecurityPolicy::IsValidCSPAttr(
             required_csp_, GetDocument().RequiredCSP().GetString())) {
       if (!required_csp_.IsEmpty()) {
@@ -377,8 +391,9 @@ Node::InsertionNotificationRequest HTMLIFrameElement::InsertedInto(
 
 void HTMLIFrameElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLFrameElementBase::RemovedFrom(insertion_point);
-  if (insertion_point.IsInDocumentTree() && GetDocument().IsHTMLDocument())
-    ToHTMLDocument(GetDocument()).RemoveNamedItem(name_);
+  auto* html_doc = DynamicTo<HTMLDocument>(GetDocument());
+  if (html_doc && insertion_point.IsInDocumentTree())
+    html_doc->RemoveNamedItem(name_);
 }
 
 bool HTMLIFrameElement::IsInteractiveContent() const {

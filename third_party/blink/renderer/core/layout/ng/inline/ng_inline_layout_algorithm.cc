@@ -311,7 +311,8 @@ void NGInlineLayoutAlgorithm::CreateLine(
   }
 
   // Truncate the line if 'text-overflow: ellipsis' is set.
-  if (UNLIKELY(inline_size > line_info->AvailableWidth() &&
+  if (UNLIKELY(inline_size >
+                   line_info->AvailableWidth() - line_info->TextIndent() &&
                node_.GetLayoutBlockFlow()->ShouldTruncateOverflowingText())) {
     inline_size = NGLineTruncator(*line_info)
                       .TruncateLine(inline_size, &line_box_, box_states_);
@@ -1039,16 +1040,17 @@ NGPositionedFloat NGInlineLayoutAlgorithm::PositionFloat(
     LayoutUnit origin_bfc_block_offset,
     LayoutObject* floating_object,
     NGExclusionSpace* exclusion_space) const {
-  NGUnpositionedFloat unpositioned_float(
-      NGBlockNode(ToLayoutBox(floating_object)), /* break_token */ nullptr);
-
   NGBfcOffset origin_bfc_offset = {ConstraintSpace().BfcOffset().line_offset,
                                    origin_bfc_block_offset};
-  return ::blink::PositionFloat(
-      ConstraintSpace().AvailableSize(),
+
+  NGUnpositionedFloat unpositioned_float(
+      NGBlockNode(ToLayoutBox(floating_object)),
+      /* break_token */ nullptr, ConstraintSpace().AvailableSize(),
       ConstraintSpace().PercentageResolutionSize(),
       ConstraintSpace().ReplacedPercentageResolutionSize(), origin_bfc_offset,
-      &unpositioned_float, ConstraintSpace(), Style(), exclusion_space);
+      ConstraintSpace(), Style());
+
+  return ::blink::PositionFloat(&unpositioned_float, exclusion_space);
 }
 
 void NGInlineLayoutAlgorithm::BidiReorder(TextDirection base_direction) {

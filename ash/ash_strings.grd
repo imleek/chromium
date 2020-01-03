@@ -68,10 +68,15 @@ This file contains the strings for ash.
     <output filename="ash_strings_zh-TW.pak" type="data_package" lang="zh-TW" />
   </outputs>
   <translations>
+    <file path="strings/ash_strings_af.xtb" lang="af" />
     <file path="strings/ash_strings_am.xtb" lang="am" />
     <file path="strings/ash_strings_ar.xtb" lang="ar" />
+    <file path="strings/ash_strings_as.xtb" lang="as" />
+    <file path="strings/ash_strings_az.xtb" lang="az" />
+    <file path="strings/ash_strings_be.xtb" lang="be" />
     <file path="strings/ash_strings_bg.xtb" lang="bg" />
     <file path="strings/ash_strings_bn.xtb" lang="bn" />
+    <file path="strings/ash_strings_bs.xtb" lang="bs" />
     <file path="strings/ash_strings_ca.xtb" lang="ca" />
     <file path="strings/ash_strings_cs.xtb" lang="cs" />
     <file path="strings/ash_strings_da.xtb" lang="da" />
@@ -81,35 +86,53 @@ This file contains the strings for ash.
     <file path="strings/ash_strings_es.xtb" lang="es" />
     <file path="strings/ash_strings_es-419.xtb" lang="es-419" />
     <file path="strings/ash_strings_et.xtb" lang="et" />
+    <file path="strings/ash_strings_eu.xtb" lang="eu" />
     <file path="strings/ash_strings_fa.xtb" lang="fa" />
     <file path="strings/ash_strings_fi.xtb" lang="fi" />
     <file path="strings/ash_strings_fil.xtb" lang="fil" />
     <file path="strings/ash_strings_fr.xtb" lang="fr" />
+    <file path="strings/ash_strings_fr-CA.xtb" lang="fr-CA" />
+    <file path="strings/ash_strings_gl.xtb" lang="gl" />
     <file path="strings/ash_strings_gu.xtb" lang="gu" />
     <file path="strings/ash_strings_hi.xtb" lang="hi" />
     <file path="strings/ash_strings_hr.xtb" lang="hr" />
     <file path="strings/ash_strings_hu.xtb" lang="hu" />
+    <file path="strings/ash_strings_hy.xtb" lang="hy" />
     <file path="strings/ash_strings_id.xtb" lang="id" />
+    <file path="strings/ash_strings_is.xtb" lang="is" />
     <file path="strings/ash_strings_it.xtb" lang="it" />
     <!-- The translation console uses 'iw' for Hebrew, but we use 'he'. -->
     <file path="strings/ash_strings_iw.xtb" lang="he" />
     <file path="strings/ash_strings_ja.xtb" lang="ja" />
+    <file path="strings/ash_strings_ka.xtb" lang="ka" />
+    <file path="strings/ash_strings_kk.xtb" lang="kk" />
+    <file path="strings/ash_strings_km.xtb" lang="km" />
     <file path="strings/ash_strings_kn.xtb" lang="kn" />
     <file path="strings/ash_strings_ko.xtb" lang="ko" />
+    <file path="strings/ash_strings_ky.xtb" lang="ky" />
+    <file path="strings/ash_strings_lo.xtb" lang="lo" />
     <file path="strings/ash_strings_lt.xtb" lang="lt" />
     <file path="strings/ash_strings_lv.xtb" lang="lv" />
+    <file path="strings/ash_strings_mk.xtb" lang="mk" />
     <file path="strings/ash_strings_ml.xtb" lang="ml" />
+    <file path="strings/ash_strings_mn.xtb" lang="mn" />
     <file path="strings/ash_strings_mr.xtb" lang="mr" />
     <file path="strings/ash_strings_ms.xtb" lang="ms" />
+    <file path="strings/ash_strings_my.xtb" lang="my" />
+    <file path="strings/ash_strings_ne.xtb" lang="ne" />
     <file path="strings/ash_strings_nl.xtb" lang="nl" />
     <file path="strings/ash_strings_no.xtb" lang="no" />
+    <file path="strings/ash_strings_or.xtb" lang="or" />
+    <file path="strings/ash_strings_pa.xtb" lang="pa" />
     <file path="strings/ash_strings_pl.xtb" lang="pl" />
     <file path="strings/ash_strings_pt-BR.xtb" lang="pt-BR" />
     <file path="strings/ash_strings_pt-PT.xtb" lang="pt-PT" />
     <file path="strings/ash_strings_ro.xtb" lang="ro" />
     <file path="strings/ash_strings_ru.xtb" lang="ru" />
+    <file path="strings/ash_strings_si.xtb" lang="si" />
     <file path="strings/ash_strings_sk.xtb" lang="sk" />
     <file path="strings/ash_strings_sl.xtb" lang="sl" />
+    <file path="strings/ash_strings_sq.xtb" lang="sq" />
     <file path="strings/ash_strings_sr.xtb" lang="sr" />
     <file path="strings/ash_strings_sv.xtb" lang="sv" />
     <file path="strings/ash_strings_sw.xtb" lang="sw" />
@@ -118,9 +141,13 @@ This file contains the strings for ash.
     <file path="strings/ash_strings_th.xtb" lang="th" />
     <file path="strings/ash_strings_tr.xtb" lang="tr" />
     <file path="strings/ash_strings_uk.xtb" lang="uk" />
+    <file path="strings/ash_strings_ur.xtb" lang="ur" />
+    <file path="strings/ash_strings_uz.xtb" lang="uz" />
     <file path="strings/ash_strings_vi.xtb" lang="vi" />
     <file path="strings/ash_strings_zh-CN.xtb" lang="zh-CN" />
+    <file path="strings/ash_strings_zh-HK.xtb" lang="zh-HK" />
     <file path="strings/ash_strings_zh-TW.xtb" lang="zh-TW" />
+    <file path="strings/ash_strings_zu.xtb" lang="zu" />
   </translations>
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">
@@ -401,7 +428,7 @@ This file contains the strings for ash.
         Toggle Volume. <ph name="STATE_TEXT">$1<ex>Volume is muted</ex></ph>
       </message>
       <message name="IDS_ASH_STATUS_TRAY_VOLUME_STATE_ON" desc="The accessible text used when the volume button is in the on state.">
-        Volume is on.
+        Volume is on, toggling will mute audio.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_VOLUME_STATE_MUTED" desc="The accessible text used when the volume button is in the muted state.">
         Volume is muted.
@@ -743,6 +770,9 @@ This file contains the strings for ash.
       <message name="IDS_ASH_ASSISTANT_DISABLED_BY_ACCOUNT_MESSAGE" desc="Message content on the toast that appears when the voice interaction shortcut is pressed but current logged in user account does not support voice interaction.">
         The Google Assistant is not available for current user account.
       </message>
+      <message name="IDS_ASH_ASSISTANT_QUERY_ACCESSIBILITY_ANNOUNCEMENT" desc="The accessibility announcement that notifies users that the UI is focusing on an assistant query">
+        <ph name="QUERY_NAME">$1<ex>Harry Potter</ex></ph>, Google Assistant
+      </message>
 
       <message name="IDS_ASH_TOAST_DISMISS_BUTTON" desc="The text button shown in toasts to close the toast immediately without waiting timeout.">
         DISMISS
@@ -877,44 +907,53 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_NETWORK" desc="The label used in the network dialog header.">
         Network
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_ETHERNET_A11Y_LABEL_WITH_CONNECTION_STATUS" desc="Accessibility label for an ethernet network in the quick settings network list.">
-        <ph name="NETWORK_NAME">$1<ex>Ethernet</ex></ph>, <ph name="CONNECTION_STATUS">$2<ex>Connected</ex></ph>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_A11Y_LABEL_OPEN" desc="Accessibility label used for a network in quick settings network list that opens network settings page.">
+        Open settings for <ph name="NETWORK_NAME">$1<ex>Ethernet</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_ETHERNET_A11Y_LABEL_MANAGED" desc="Accessibility label for an enterprise managed ethernet network in the quick settings network list.">
-        <ph name="NETWORK_NAME">$1<ex>Ethernet</ex></ph>, Managed by your Administrator
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_A11Y_LABEL_OPEN_WITH_CONNECTION_STATUS" desc="Accessibility label used for a network in quick settings network list that opens network settings page.">
+        Open settings for <ph name="NETWORK_NAME">$1<ex>Ethernet</ex></ph>, <ph name="CONNECTION_STATUS">$2<ex>Connecting</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_ETHERNET_A11Y_LABEL_MANAGED_WITH_CONNECTION_STATUS" desc="Accessibility label for an enterprise managed ethernet network in the quick settings network list.  Includes connection status.">
-        <ph name="NETWORK_NAME">$1<ex>Ethernet</ex></ph>, <ph name="CONNECTION_STATUS">$2<ex>Connected</ex></ph>, Managed by your Administrator
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_A11Y_LABEL_CONNECT" desc="Accessibility label used for a network in quick settings network list that connects to the network.">
+        Connect to <ph name="NETWORK_NAME">$1<ex>Ethernet</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_LABEL" desc="Accessibility label for a cellular network in the quick settings network list.">
-        <ph name="NETWORK_NAME">$1<ex>Verizon Wireless</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$2<ex>80%</ex></ph>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_DISCONNECT_BUTTON_A11Y_LABEL" desc="Accessibility label used for a button to disconnect from a network in quick settings network list.">
+        Disconnect from <ph name="NETWORK_NAME">$1<ex>Ethernet</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_LABEL_WITH_CONNECTION_STATUS" desc="Accessibility label for a cellular network in the quick settings network list .  Includes connection status.">
-        <ph name="NETWORK_NAME">$1<ex>Verizon Wireless</ex></ph>, <ph name="CONNECTION_STATUS">$2<ex>Connecting...</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$3<ex>80%</ex></ph>
+      <message name="IDS_ASH_STATUS_TRAY_ETHERNET_A11Y_DESC_MANAGED" desc="Accessibility description for an enterprise managed ethernet network in the quick settings network list.">
+        Managed by your Administrator
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_LABEL_MANAGED" desc="Accessibility label for an enterprise managed cellular network in the quick settings network list.">
-        <ph name="NETWORK_NAME">$1<ex>Verizon Wireless</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$2<ex>80%</ex></ph>, Managed by your Administrator
+      <message name="IDS_ASH_STATUS_TRAY_ETHERNET_A11Y_DESC_MANAGED_WITH_CONNECTION_STATUS" desc="Accessibility description for an enterprise managed ethernet network in the quick settings network list. Includes connection status.">
+        <ph name="CONNECTION_STATUS">$1<ex>Connected</ex></ph>, Managed by your Administrator
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_LABEL_MANAGED_WITH_CONNECTION_STATUS" desc="Accessibility label for an enterprise managed cellular network in the quick settings network list.  Includes connection status.">
-        <ph name="NETWORK_NAME">$1<ex>Verizon Wireless</ex></ph>, <ph name="CONNECTION_STATUS">$2<ex>Connecting...</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$3<ex>80%</ex></ph>, Managed by your Administrator
+      <message name="IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_DESC" desc="Accessibility description for a cellular network in the quick settings network list.">
+        Signal Strength <ph name="SIGNAL_STRENGTH">$1<ex>80%</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_LABEL" desc="Accessibility label for a Wi-Fi network in the quick settings network list.">
-        <ph name="NETWORK_NAME">$1<ex>GuestNetwork</ex></ph>, <ph name="SECURITY_STATUS">$2<ex>Unsecured</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$3<ex>80%</ex></ph>
+      <message name="IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_DESC_WITH_CONNECTION_STATUS" desc="Accessibility description for a cellular network in the quick settings network list. Includes connection status.">
+        <ph name="CONNECTION_STATUS">$1<ex>Connecting...</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$2<ex>80%</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_LABEL_WITH_CONNECTION_STATUS" desc="Accessibility label for a Wi-Fi network in the quick settings network list.  Includes connection status.">
-        <ph name="NETWORK_NAME">$1<ex>GuestNetwork</ex></ph>, <ph name="SECURITY_STATUS">$2<ex>Unsecured</ex></ph>, <ph name="CONNECTION_STATUS">$3<ex>Connecting</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$4<ex>80%</ex></ph>
+      <message name="IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_DESC_MANAGED" desc="Accessibility description for an enterprise managed cellular network in the quick settings network list.">
+        Signal Strength <ph name="SIGNAL_STRENGTH">$1<ex>80%</ex></ph>, Managed by your Administrator
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_LABEL_MANAGED" desc="Accessibility label for an enterprise managed Wi-Fi network in the quick settings network list.">
-        <ph name="NETWORK_NAME">$1<ex>GuestNetwork</ex></ph>, <ph name="SECURITY_STATUS">$2<ex>Unsecured</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$3<ex>80%</ex></ph>, Managed by your Administrator
+      <message name="IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_DESC_MANAGED_WITH_CONNECTION_STATUS" desc="Accessibility description for an enterprise managed cellular network in the quick settings network list. Includes connection status.">
+        <ph name="CONNECTION_STATUS">$1<ex>Connecting...</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$2<ex>80%</ex></ph>, Managed by your Administrator
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_LABEL_MANAGED_WITH_CONNECTION_STATUS" desc="Accessibility label for an enterprise managed Wi-Fi network in the quick settings network list.  Incldues connection status.">
-        <ph name="NETWORK_NAME">$1<ex>GuestNetwork</ex></ph>, <ph name="SECURITY_STATUS">$2<ex>Unsecured</ex></ph>, <ph name="CONNECTION_STATUS">$3<ex>Connecting</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$4<ex>80%</ex></ph>, Managed by your Administrator
+      <message name="IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_DESC" desc="Accessibility description for a Wi-Fi network in the quick settings network list.">
+        <ph name="SECURITY_STATUS">$1<ex>Unsecured</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$2<ex>80%</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_TETHER_NETWORK_A11Y_LABEL" desc="Accessibility label for a phone tether network in the quick settings network list.">
-        <ph name="PHONE_NAME">$1<ex>Pixel 4</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$2<ex>80%</ex></ph>, Phone Battery <ph name="BATTERY_STATUS">$3<ex>80%</ex></ph>
+      <message name="IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_DESC_WITH_CONNECTION_STATUS" desc="Accessibility description for a Wi-Fi network in the quick settings network list. Includes connection status.">
+        <ph name="SECURITY_STATUS">$1<ex>Unsecured</ex></ph>, <ph name="CONNECTION_STATUS">$2<ex>Connecting</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$3<ex>80%</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_TETHER_NETWORK_A11Y_LABEL_WITH_CONNECTION_STATUS" desc="Accessibility label for a phone tether network in the quick settings network list.  Includes connection status.">
-        <ph name="PHONE_NAME">$1<ex>Pixel 4</ex></ph>, <ph name="CONNECTION_STATUS">$2<ex>Connecting...</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$3<ex>80%</ex></ph>, Phone Battery <ph name="BATTERY_STATUS">$4<ex>80%</ex></ph>
+      <message name="IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_DESC_MANAGED" desc="Accessibility description for an enterprise managed Wi-Fi network in the quick settings network list.">
+        <ph name="SECURITY_STATUS">$1<ex>Unsecured</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$2<ex>80%</ex></ph>, Managed by your Administrator
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_DESC_MANAGED_WITH_CONNECTION_STATUS" desc="Accessibility description for an enterprise managed Wi-Fi network in the quick settings network list. Incldues connection status.">
+        <ph name="SECURITY_STATUS">$1<ex>Unsecured</ex></ph>, <ph name="CONNECTION_STATUS">$2<ex>Connecting</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$3<ex>80%</ex></ph>, Managed by your Administrator
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_TETHER_NETWORK_A11Y_DESC" desc="Accessibility description for a phone tether network in the quick settings network list.">
+        Signal Strength <ph name="SIGNAL_STRENGTH">$1<ex>80%</ex></ph>, Phone Battery <ph name="BATTERY_STATUS">$2<ex>80%</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_TETHER_NETWORK_A11Y_DESC_WITH_CONNECTION_STATUS" desc="Accessibility description for a phone tether network in the quick settings network list. Includes connection status.">
+        <ph name="CONNECTION_STATUS">$1<ex>Connecting...</ex></ph>, Signal Strength <ph name="SIGNAL_STRENGTH">$2<ex>80%</ex></ph>, Phone Battery <ph name="BATTERY_STATUS">$3<ex>80%</ex></ph>
       </message>
       <message name="IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTED" desc="The label used when a network connection is connected.">
         Connected
@@ -953,7 +992,7 @@ This file contains the strings for ash.
         Network settings
       </message>
       <message name="IDS_ASH_STATUS_TRAY_OTHER_WIFI" desc="The label used for the item to display other Wi-Fi networks.">
-        Join other...
+        Join other Wi-Fi networks
       </message>
       <message name="IDS_ASH_STATUS_TRAY_EXTENSION_CONTROLLED_WIFI" desc="The accessible text for the badge in the detailed network list indicating that the respective network's configuration may be controlled by an extension.">
         The extension "<ph name="EXTENSION_NAME">$1<ex>Nexus S</ex></ph>" can help connect to this network.
@@ -1040,6 +1079,9 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_NETWORK_SETTINGS_TOOLTIP" desc="The tooltip text for the button that shows network list.">
         Show network list. <ph name="STATE_TEXT">$1<ex>Connected to public wifi</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NETWORK_PROGRESS_ACCESSIBLE_NAME" desc="The accessible name for the progress bar shown in the network settings.">
+        Scanning
       </message>
 
       <!-- Status Tray Bluetooth strings -->
@@ -1448,6 +1490,9 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_NETWORK_MONITORED_WARNING" desc="The label used in the tray popup to warn users their network may be monitored." >
         Network may be monitored
       </message>
+      <message name="IDS_ASH_A11Y_ROLE_BUTTON" desc="The label used to identify a button. For accessibility only." >
+        Button
+      </message>
 
       <message name="IDS_ASH_VIRTUAL_KEYBOARD_TRAY_ACCESSIBLE_NAME" desc="The accessible text for virtual keyboard icon in status tray.">
         Show on-screen keyboard
@@ -1528,6 +1573,15 @@ This file contains the strings for ash.
         Yes
       </message>
 
+      <message name="IDS_ASH_AUTO_NIGHT_LIGHT_NOTIFY_TITLE" desc="The title of the notification shown when Night Light turns on automatically when the auto-night-light feature is enabled.">
+        Night Light turns on automatically at sunset
+      </message>
+      <message name="IDS_ASH_AUTO_NIGHT_LIGHT_NOTIFY_BODY" desc="The body of the notification shown when Night Light turns on automatically when the auto-night-light feature is enabled.">
+        Night Light makes it easier to look at your screen or read in dim light. Tap to change this.
+      </message>
+      <message name="IDS_ASH_AUTO_NIGHT_LIGHT_NOTIFY_BUTTON_TEXT" desc="The text of the button on the notification shown when Night Light turns on automatically when the auto-night-light feature is enabled.">
+        Turn off for tonight
+      </message>
 
       <message name="IDS_ASH_IME_MENU_ACCESSIBLE_NAME" desc="The accessible text for opt-in IME menu icon in status tray.">
         IME menu button
@@ -1685,6 +1739,9 @@ This file contains the strings for ash.
       <message name="IDS_ASH_PIN_KEYBOARD_DELETE_ACCESSIBLE_NAME" desc="Text to be spoken when the focus is set to the delete button of the PIN keyboard.">
         Delete
       </message>
+      <message name="IDS_ASH_LOGIN_MANAGED_DEVICE_INDICATOR" desc="Template for text shown as a bottom status on the login screen, informing the user that this device is managed.">
+        Device managed by <ph name="DOMAIN">$1<ex>yourdomain.com</ex></ph>
+      </message>
       <message name="IDS_ASH_LOGIN_POD_OWNER_USER" desc="Login/lock screen user pod menu title for a user who owns the device.">
         <ph name="USER_NAME">$1<ex>Ivan Arbuzov</ex></ph> (owner)
       </message>
@@ -1705,9 +1762,6 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_LOGIN_POD_NON_OWNER_USER_REMOVE_WARNING_PART_2" desc="Text shown as a warning when attempting to remove non-owner user. Also see IDS_ASH_LOGIN_POD_NON_OWNER_USER_REMOVE_WARNING_PART_1.">
         <ph name="USER_EMAIL_ADDRESS">$1<ex>john.doe@example.com</ex></ph> can still sign in later.
-      </message>
-      <message name="IDS_ASH_LOGIN_PUBLIC_ACCOUNT_INFO_FORMAT" desc="Template for text shown in the public account user pod, informing the user that this is a public, managed account.">
-        Managed by <ph name="DOMAIN">$1<ex>yourdomain.com</ex></ph>
       </message>
       <message name="IDS_ASH_LOGIN_PUBLIC_ACCOUNT_MONITORING_WARNING" desc="Template for text shown in the public account user pod, informing the user that this is a public, managed account.">
         The device admin may monitor your browsing activity.
@@ -1829,7 +1883,7 @@ This file contains the strings for ash.
       <message name="IDS_ASH_LOGIN_SMART_CARD_SIGN_IN_FAILURE_MESSAGE" desc="Message shown in the user pod when the sign in attempt via a smart card fails.">
         Couldn’t recognize your smart card. Try again.
       </message>
-      <message name="IDS_ASH_LOGIN_SCREEN_UNVERIFIED_CODE_WARNING" desc="Message shown in the user pod when the device has ran or is capable to run unverified code.">
+      <message name="IDS_ASH_LOGIN_SCREEN_UNVERIFIED_CODE_WARNING" desc="Message shown at the bottom of the login screen when the device has ran or is capable to run unverified code.">
         This device may contain apps that haven't been verified by Google.
       </message>
 
@@ -1883,6 +1937,9 @@ This file contains the strings for ash.
       </message>
 
       <!-- Message center -->
+      <message name="IDS_ASH_MESSAGE_CENTER_ACCESSIBLE_NAME" desc="The spoken feedback name for when accessible focus moves to the message center">
+        Notification Center
+      </message>
       <message name="IDS_ASH_MESSAGE_CENTER_QUIET_MODE_BUTTON_TOOLTIP" desc="The tooltip text for the do not disturb button.">
         Do not disturb
       </message>

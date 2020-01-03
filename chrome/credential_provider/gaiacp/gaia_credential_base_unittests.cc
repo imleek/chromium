@@ -8,6 +8,7 @@
 #include <wrl/client.h>
 
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time_override.h"
@@ -369,7 +370,7 @@ TEST_P(GcpGaiaCredentialBaseForceResetRegistryTest,
   ASSERT_EQ(S_OK, FinishLogonProcess(true, false, 0));
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          GcpGaiaCredentialBaseForceResetRegistryTest,
                          ::testing::Values(0, 1, 2));
 
@@ -604,6 +605,33 @@ TEST_F(GcpGaiaCredentialBaseTest, FailedUserCreation) {
   ASSERT_EQ(S_OK, FinishLogonProcess(false, false, IDS_INTERNAL_ERROR_BASE));
 }
 
+TEST_F(GcpGaiaCredentialBaseTest, FailOnInvalidDomain) {
+  const base::string16 allowed_email_domains =
+      L"acme.com,acme2.com,acme3.com";
+  ASSERT_EQ(S_OK, SetGlobalFlagForTesting(L"ed", allowed_email_domains));
+
+  // Create provider and start logon.
+  Microsoft::WRL::ComPtr<ICredentialProviderCredential> cred;
+
+  ASSERT_EQ(S_OK, InitializeProviderAndGetCredential(0, &cred));
+  Microsoft::WRL::ComPtr<ITestCredential> test;
+  ASSERT_EQ(S_OK, cred.As(&test));
+
+  // Fail due to invalid domain.
+  ASSERT_EQ(S_OK, test->SetDefaultExitCode(kUiecInvalidEmailDomain));
+
+  ASSERT_EQ(S_OK, StartLogonProcessAndWait());
+
+  const base::string16 formatted_domains_str =
+      L"acme.com, acme2.com, acme3.com";
+  base::string16 expected_error_msg = base::ReplaceStringPlaceholders(
+      GetStringResource(IDS_INVALID_EMAIL_DOMAIN_BASE), {formatted_domains_str},
+      nullptr);
+
+  // Logon process should fail with the specified error message.
+  ASSERT_EQ(S_OK, FinishLogonProcess(false, false, expected_error_msg));
+}
+
 TEST_F(GcpGaiaCredentialBaseTest, StripEmailTLD) {
   USES_CONVERSION;
   // Create provider and start logon.
@@ -728,6 +756,53 @@ TEST_F(GcpGaiaCredentialBaseTest, InvalidUserUnlockedAfterSignin) {
 
   // No new user should be created.
   EXPECT_EQ(2ul, fake_os_user_manager()->GetUserCount());
+}
+
+TEST_F(GcpGaiaCredentialBaseTest, SigninNotBlockedWhenValidChromeNotFound) {
+  // Enforce token handle verification with user locking when the token handle
+  // is not valid.
+  ASSERT_EQ(S_OK, SetGlobalFlagForTesting(kRegMdmUrl, L"https://mdm.com"));
+  ASSERT_EQ(S_OK, SetGlobalFlagForTesting(kRegMdmAllowConsumerAccounts, 1));
+  GoogleMdmEnrollmentStatusForTesting force_success(true);
+
+  // Simulate a valid Chrome installation not being found.
+  fake_chrome_checker()->SetHasSupportedChrome(
+      FakeChromeAvailabilityChecker::kChromeForceNo);
+
+  USES_CONVERSION;
+  // Create a fake user that has the same gaia id as the test gaia id.
+  CComBSTR sid;
+  base::string16 username(L"foo");
+  ASSERT_EQ(S_OK,
+            fake_os_user_manager()->CreateTestOSUser(
+                username, L"password", L"name", L"comment",
+                base::UTF8ToUTF16(kDefaultGaiaId), base::string16(), &sid));
+  ASSERT_EQ(2ul, fake_os_user_manager()->GetUserCount());
+
+  // Create provider and start logon.
+  Microsoft::WRL::ComPtr<ICredentialProviderCredential> cred;
+
+  // Create with invalid token handle response.
+  SetDefaultTokenHandleResponse(kDefaultInvalidTokenHandleResponse);
+  ASSERT_EQ(S_OK, InitializeProviderAndGetCredential(0, &cred));
+
+  Microsoft::WRL::ComPtr<ITestCredential> test;
+  ASSERT_EQ(S_OK, cred.As(&test));
+
+  // User should have invalid token handle but sign-in should not be blocked
+  // just because Chrome was not found and GCPW cannot load.
+  EXPECT_FALSE(
+      fake_associated_user_validator()->IsTokenHandleValidForUser(OLE2W(sid)));
+  EXPECT_FALSE(fake_associated_user_validator()->IsUserAccessBlockedForTesting(
+      OLE2W(sid)));
+
+  ASSERT_EQ(S_OK, StartLogonProcessAndWait());
+
+  // Logon process should not raise an error message.
+  ASSERT_EQ(S_OK, FinishLogonProcess(true, true, 0));
+
+  EXPECT_FALSE(fake_associated_user_validator()->IsUserAccessBlockedForTesting(
+      OLE2W(sid)));
 }
 
 TEST_F(GcpGaiaCredentialBaseTest, DenySigninBlockedDuringSignin) {
@@ -1444,7 +1519,7 @@ TEST_P(GcpGaiaCredentialBaseConsumerEmailTest, ConsumerEmailSignin) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          GcpGaiaCredentialBaseConsumerEmailTest,
                          ::testing::Combine(::testing::Bool(),
                                             ::testing::Values(0, 1, 2),
@@ -1686,7 +1761,7 @@ TEST_P(GcpGaiaCredentialBasePasswordRecoveryTest, PasswordRecovery) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          GcpGaiaCredentialBasePasswordRecoveryTest,
                          ::testing::Combine(::testing::Values(0, 1, 2),
                                             ::testing::Values(0, 1, 2),
@@ -1824,11 +1899,82 @@ TEST_P(GcpGaiaCredentialBasePasswordRecoveryDisablingTest,
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          GcpGaiaCredentialBasePasswordRecoveryDisablingTest,
                          ::testing::Values(nullptr,
                                            L"",
                                            L"https://escrowservice.com"));
+
+// Test Upload device details to GEM service with different failure scenarios.
+// Parameters are:
+// 0. Successfully uploaded device details.
+// 1. Fails the upload device details call due to network timeout.
+// 2. Fails the upload device details call due to invalid response
+//    from the GEM http server.
+class GcpGaiaCredentialBaseUploadDeviceDetailsTest
+    : public GcpGaiaCredentialBaseTest,
+      public ::testing::WithParamInterface<int> {};
+
+TEST_P(GcpGaiaCredentialBaseUploadDeviceDetailsTest, UploadDeviceDetails) {
+  bool fail_upload_device_details_timeout = (GetParam() == 1);
+  bool fail_upload_device_details_invalid_response = (GetParam() == 2);
+
+  GoogleMdmEnrolledStatusForTesting force_success(true);
+
+  // Create a fake user associated to a gaia id.
+  CComBSTR sid;
+  ASSERT_EQ(S_OK,
+            fake_os_user_manager()->CreateTestOSUser(
+                kDefaultUsername, L"password", L"Full Name", L"comment",
+                base::UTF8ToUTF16(kDefaultGaiaId), base::string16(), &sid));
+
+  // Change token response to an invalid one.
+  SetDefaultTokenHandleResponse(kDefaultValidTokenHandleResponse);
+
+  // Make timeout events for the upload device details request if needed.
+  std::unique_ptr<base::WaitableEvent> upload_device_details_key_event;
+
+  if (fail_upload_device_details_timeout) {
+    upload_device_details_key_event.reset(new base::WaitableEvent());
+
+    fake_gem_device_details_manager()->SetRequestTimeoutForTesting(
+        base::TimeDelta::FromMilliseconds(50));
+  }
+
+  fake_http_url_fetcher_factory()->SetFakeResponse(
+      fake_gem_device_details_manager()->GetGemServiceUploadDeviceDetailsUrl(),
+      FakeWinHttpUrlFetcher::Headers(),
+      fail_upload_device_details_invalid_response ? "Invalid json response"
+                                                  : "{}",
+      upload_device_details_key_event
+          ? upload_device_details_key_event->handle()
+          : INVALID_HANDLE_VALUE);
+
+  // Create provider and start logon.
+  Microsoft::WRL::ComPtr<ICredentialProviderCredential> cred;
+
+  ASSERT_EQ(S_OK, InitializeProviderAndGetCredential(0, &cred));
+
+  ASSERT_EQ(S_OK, StartLogonProcessAndWait());
+
+  // Finish logon successfully.
+  ASSERT_EQ(S_OK, FinishLogonProcess(true, true, 0));
+
+  // Verify that upload device details http call returned back with appropriate
+  // status code. Since the login process doesn't get affected by the status of
+  // the upload device details process, the login attempt would always succeed
+  // irrespective of the upload status.
+  HRESULT hr = fake_gem_device_details_manager()->GetUploadStatusForTesting();
+  bool has_upload_failed = (fail_upload_device_details_timeout ||
+                            fail_upload_device_details_invalid_response);
+  ASSERT_TRUE(has_upload_failed ? FAILED(hr) : SUCCEEDED(hr));
+
+  ASSERT_EQ(S_OK, ReleaseProvider());
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         GcpGaiaCredentialBaseUploadDeviceDetailsTest,
+                         ::testing::Values(0, 1, 2));
 
 TEST_F(GcpGaiaCredentialBaseTest, FullNameUpdated) {
   USES_CONVERSION;

@@ -275,8 +275,9 @@ TEST_F(ScrollSnapDataTest, MandatoryReturnsToCurrentIfNoValidAreaForward) {
   gfx::ScrollOffset snap_position;
 
   std::unique_ptr<SnapSelectionStrategy> direction_strategy =
-      SnapSelectionStrategy::CreateForDirection(gfx::ScrollOffset(600, 0),
-                                                gfx::ScrollOffset(5, 0));
+      SnapSelectionStrategy::CreateForDirection(
+          gfx::ScrollOffset(600, 0), gfx::ScrollOffset(5, 0),
+          false /* use_fractional_deltas */);
   EXPECT_TRUE(container.FindSnapPosition(*direction_strategy, &snap_position,
                                          &target_elements));
   // The snap direction is right. However, there is no valid snap position on
@@ -289,7 +290,8 @@ TEST_F(ScrollSnapDataTest, MandatoryReturnsToCurrentIfNoValidAreaForward) {
 
   std::unique_ptr<SnapSelectionStrategy> end_direction_strategy =
       SnapSelectionStrategy::CreateForEndAndDirection(
-          gfx::ScrollOffset(600, 0), gfx::ScrollOffset(15, 15));
+          gfx::ScrollOffset(600, 0), gfx::ScrollOffset(15, 15),
+          false /* use_fractional_deltas */);
   EXPECT_TRUE(container.FindSnapPosition(*end_direction_strategy,
                                          &snap_position, &target_elements));
   // The snap direction is down and right. However, there is no valid snap
@@ -321,8 +323,9 @@ TEST_F(ScrollSnapDataTest, MandatorySnapsBackwardIfNoValidAreaForward) {
   gfx::ScrollOffset snap_position;
 
   std::unique_ptr<SnapSelectionStrategy> direction_strategy =
-      SnapSelectionStrategy::CreateForDirection(gfx::ScrollOffset(650, 0),
-                                                gfx::ScrollOffset(5, 0));
+      SnapSelectionStrategy::CreateForDirection(
+          gfx::ScrollOffset(650, 0), gfx::ScrollOffset(5, 0),
+          false /* use_fractional_deltas */);
   EXPECT_TRUE(container.FindSnapPosition(*direction_strategy, &snap_position,
                                          &target_elements));
   // The snap direction is right. However, there is no valid snap position on
@@ -335,7 +338,8 @@ TEST_F(ScrollSnapDataTest, MandatorySnapsBackwardIfNoValidAreaForward) {
 
   std::unique_ptr<SnapSelectionStrategy> end_direction_strategy =
       SnapSelectionStrategy::CreateForEndAndDirection(
-          gfx::ScrollOffset(650, 10), gfx::ScrollOffset(15, 15));
+          gfx::ScrollOffset(650, 10), gfx::ScrollOffset(15, 15),
+          false /* use_fractional_deltas */);
   EXPECT_TRUE(container.FindSnapPosition(*end_direction_strategy,
                                          &snap_position, &target_elements));
   // The snap direction is down and right. However, there is no valid snap
@@ -375,7 +379,8 @@ TEST_F(ScrollSnapDataTest, ShouldNotPassScrollSnapStopAlwaysElement) {
 
   std::unique_ptr<SnapSelectionStrategy> end_direction_strategy =
       SnapSelectionStrategy::CreateForEndAndDirection(
-          gfx::ScrollOffset(0, 0), gfx::ScrollOffset(600, 0));
+          gfx::ScrollOffset(0, 0), gfx::ScrollOffset(600, 0),
+          false /* use_fractional_deltas */);
 
   EXPECT_TRUE(container.FindSnapPosition(*end_direction_strategy,
                                          &snap_position, &target_elements));
@@ -404,7 +409,8 @@ TEST_F(ScrollSnapDataTest, SnapStopAlwaysOverridesCoveringSnapArea) {
   gfx::ScrollOffset snap_position;
   std::unique_ptr<SnapSelectionStrategy> strategy =
       SnapSelectionStrategy::CreateForEndAndDirection(
-          gfx::ScrollOffset(0, 0), gfx::ScrollOffset(300, 0));
+          gfx::ScrollOffset(0, 0), gfx::ScrollOffset(300, 0),
+          false /* use_fractional_deltas */);
 
   // The fling is from (0, 0) to (300, 0), and the destination would make
   // the |covering_area| perfectly cover the snapport. However, another area
@@ -429,7 +435,8 @@ TEST_F(ScrollSnapDataTest, SnapStopAlwaysInReverseDirection) {
   gfx::ScrollOffset snap_position;
   std::unique_ptr<SnapSelectionStrategy> strategy =
       SnapSelectionStrategy::CreateForEndAndDirection(
-          gfx::ScrollOffset(150, 0), gfx::ScrollOffset(200, 0));
+          gfx::ScrollOffset(150, 0), gfx::ScrollOffset(200, 0),
+          false /* use_fractional_deltas */);
 
   // The fling is from (150, 0) to (350, 0), but the snap position is in the
   // reverse direction at (100, 0). Since the container has mandatory for
@@ -457,14 +464,151 @@ TEST_F(ScrollSnapDataTest, SnapStopAlwaysNotInterferingWithDirectionStrategy) {
   // regardless its scroll-snap-stop value.
   gfx::ScrollOffset snap_position;
   std::unique_ptr<SnapSelectionStrategy> direction_strategy =
-      SnapSelectionStrategy::CreateForDirection(gfx::ScrollOffset(90, 0),
-                                                gfx::ScrollOffset(50, 0));
+      SnapSelectionStrategy::CreateForDirection(
+          gfx::ScrollOffset(90, 0), gfx::ScrollOffset(50, 0),
+          false /* use_fractional_deltas */);
   snap_position = gfx::ScrollOffset();
   EXPECT_TRUE(container.FindSnapPosition(*direction_strategy, &snap_position,
                                          &target_elements));
   EXPECT_EQ(100, snap_position.x());
   EXPECT_EQ(0, snap_position.y());
   EXPECT_EQ(TargetSnapAreaElementIds(ElementId(10), ElementId()),
+            target_elements);
+}
+
+TEST_F(ScrollSnapDataTest, SnapToOneTargetElementOnX) {
+  SnapContainerData container(
+      ScrollSnapType(false, SnapAxis::kBoth, SnapStrictness::kMandatory),
+      gfx::RectF(0, 0, 200, 300), gfx::ScrollOffset(600, 800));
+
+  SnapAreaData closer_area_x(ScrollSnapAlign(SnapAlignment::kStart),
+                             gfx::RectF(100, 0, 1, 1), false, ElementId(10));
+  SnapAreaData target_area_x(ScrollSnapAlign(SnapAlignment::kStart),
+                             gfx::RectF(200, 100, 1, 1), false, ElementId(20));
+  SnapAreaData closer_area_y(ScrollSnapAlign(SnapAlignment::kStart),
+                             gfx::RectF(300, 50, 1, 1), false, ElementId(30));
+
+  container.AddSnapAreaData(closer_area_x);
+  container.AddSnapAreaData(target_area_x);
+  container.AddSnapAreaData(closer_area_y);
+  container.SetTargetSnapAreaElementIds(
+      TargetSnapAreaElementIds(ElementId(20), ElementId()));
+
+  // Even though closer_area_x is closer to the scroll offset, the container
+  // should snap to the target for the x-axis. However, since the target is not
+  // set for the y-axis, the target on the y-axis should be closer_area_y.
+  std::unique_ptr<SnapSelectionStrategy> target_element_strategy =
+      SnapSelectionStrategy::CreateForTargetElement(gfx::ScrollOffset(0, 0));
+
+  gfx::ScrollOffset snap_position = gfx::ScrollOffset();
+  EXPECT_TRUE(container.FindSnapPosition(*target_element_strategy,
+                                         &snap_position, &target_elements));
+
+  EXPECT_EQ(200, snap_position.x());
+  EXPECT_EQ(50, snap_position.y());
+  EXPECT_EQ(TargetSnapAreaElementIds(ElementId(20), ElementId(30)),
+            target_elements);
+}
+
+TEST_F(ScrollSnapDataTest, SnapToOneTargetElementOnY) {
+  SnapContainerData container(
+      ScrollSnapType(false, SnapAxis::kBoth, SnapStrictness::kMandatory),
+      gfx::RectF(0, 0, 200, 300), gfx::ScrollOffset(600, 800));
+
+  SnapAreaData closer_area_y(ScrollSnapAlign(SnapAlignment::kStart),
+                             gfx::RectF(0, 100, 1, 1), false, ElementId(10));
+  SnapAreaData target_area_y(ScrollSnapAlign(SnapAlignment::kStart),
+                             gfx::RectF(100, 200, 1, 1), false, ElementId(20));
+  SnapAreaData closer_area_x(ScrollSnapAlign(SnapAlignment::kStart),
+                             gfx::RectF(50, 300, 1, 1), false, ElementId(30));
+
+  container.AddSnapAreaData(closer_area_y);
+  container.AddSnapAreaData(target_area_y);
+  container.AddSnapAreaData(closer_area_x);
+  container.SetTargetSnapAreaElementIds(
+      TargetSnapAreaElementIds(ElementId(), ElementId(20)));
+
+  // Even though closer_area_y is closer to the scroll offset, the container
+  // should snap to the target for the y-axis. However, since the target is not
+  // set for the x-axis, the target on the x-axis should be closer_area_x.
+  std::unique_ptr<SnapSelectionStrategy> target_element_strategy =
+      SnapSelectionStrategy::CreateForTargetElement(gfx::ScrollOffset(0, 0));
+
+  gfx::ScrollOffset snap_position = gfx::ScrollOffset();
+  EXPECT_TRUE(container.FindSnapPosition(*target_element_strategy,
+                                         &snap_position, &target_elements));
+
+  EXPECT_EQ(50, snap_position.x());
+  EXPECT_EQ(200, snap_position.y());
+  EXPECT_EQ(TargetSnapAreaElementIds(ElementId(30), ElementId(20)),
+            target_elements);
+}
+
+TEST_F(ScrollSnapDataTest, SnapToTwoTargetElementsMutualVisible) {
+  SnapContainerData container(
+      ScrollSnapType(false, SnapAxis::kBoth, SnapStrictness::kMandatory),
+      gfx::RectF(0, 0, 300, 300), gfx::ScrollOffset(600, 800));
+
+  SnapAreaData target_area_x(ScrollSnapAlign(SnapAlignment::kStart),
+                             gfx::RectF(100, 200, 1, 1), false, ElementId(10));
+  SnapAreaData target_area_y(ScrollSnapAlign(SnapAlignment::kStart),
+                             gfx::RectF(200, 100, 1, 1), false, ElementId(20));
+  SnapAreaData closer_area_both(ScrollSnapAlign(SnapAlignment::kStart),
+                                gfx::RectF(0, 0, 1, 1), false, ElementId(30));
+
+  container.AddSnapAreaData(target_area_x);
+  container.AddSnapAreaData(target_area_y);
+  container.AddSnapAreaData(closer_area_both);
+  container.SetTargetSnapAreaElementIds(
+      TargetSnapAreaElementIds(ElementId(10), ElementId(20)));
+
+  // The container should snap to both target areas since they are mutually
+  // visible, while ignoring the snap area that is closest to the scroll offset.
+  std::unique_ptr<SnapSelectionStrategy> target_element_strategy =
+      SnapSelectionStrategy::CreateForTargetElement(gfx::ScrollOffset(0, 0));
+
+  gfx::ScrollOffset snap_position = gfx::ScrollOffset();
+  EXPECT_TRUE(container.FindSnapPosition(*target_element_strategy,
+                                         &snap_position, &target_elements));
+
+  EXPECT_EQ(100, snap_position.x());
+  EXPECT_EQ(100, snap_position.y());
+  EXPECT_EQ(TargetSnapAreaElementIds(ElementId(10), ElementId(20)),
+            target_elements);
+}
+
+TEST_F(ScrollSnapDataTest, SnapToTwoTargetElementsNotMutualVisible) {
+  SnapContainerData container(
+      ScrollSnapType(false, SnapAxis::kBoth, SnapStrictness::kMandatory),
+      gfx::RectF(0, 0, 300, 300), gfx::ScrollOffset(600, 800));
+
+  SnapAreaData target_area_x(ScrollSnapAlign(SnapAlignment::kStart),
+                             gfx::RectF(100, 500, 1, 1), false, ElementId(10));
+  SnapAreaData target_area_y(ScrollSnapAlign(SnapAlignment::kStart),
+                             gfx::RectF(500, 100, 1, 1), false, ElementId(20));
+  SnapAreaData area_mutually_visible_to_targets(
+      ScrollSnapAlign(SnapAlignment::kStart), gfx::RectF(350, 350, 1, 1), false,
+      ElementId(30));
+
+  container.AddSnapAreaData(target_area_x);
+  container.AddSnapAreaData(target_area_y);
+  container.AddSnapAreaData(area_mutually_visible_to_targets);
+  container.SetTargetSnapAreaElementIds(
+      TargetSnapAreaElementIds(ElementId(10), ElementId(20)));
+
+  // The container cannot snap to both targets, so it should snap to the one
+  // closer to the scroll offset, and then snap to the closest mutually visible
+  // snap area on the other axis.
+  std::unique_ptr<SnapSelectionStrategy> target_element_strategy =
+      SnapSelectionStrategy::CreateForTargetElement(gfx::ScrollOffset(10, 0));
+
+  gfx::ScrollOffset snap_position = gfx::ScrollOffset();
+  EXPECT_TRUE(container.FindSnapPosition(*target_element_strategy,
+                                         &snap_position, &target_elements));
+
+  EXPECT_EQ(100, snap_position.x());
+  EXPECT_EQ(350, snap_position.y());
+  EXPECT_EQ(TargetSnapAreaElementIds(ElementId(10), ElementId(30)),
             target_elements);
 }
 

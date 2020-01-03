@@ -17,7 +17,6 @@
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_disk_cache.h"
 #include "content/browser/service_worker/service_worker_loader_helpers.h"
-#include "content/browser/service_worker/service_worker_storage.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/common/service_worker/service_worker_utils.h"
@@ -28,7 +27,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_status_flags.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/loader/throttling_url_loader.h"
 #include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 
@@ -52,8 +51,8 @@ std::unique_ptr<
     ServiceWorkerUpdatedScriptLoader::ThrottlingURLLoaderCoreWrapper>
 ServiceWorkerUpdatedScriptLoader::ThrottlingURLLoaderCoreWrapper::
     CreateLoaderAndStart(
-        std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-            loader_factory_info,
+        std::unique_ptr<network::PendingSharedURLLoaderFactory>
+            pending_loader_factory,
         BrowserContextGetter browser_context_getter,
         int32_t routing_id,
         int32_t request_id,
@@ -67,7 +66,7 @@ ServiceWorkerUpdatedScriptLoader::ThrottlingURLLoaderCoreWrapper::
   RunOrPostTaskOnThread(
       FROM_HERE, BrowserThread::UI,
       base::BindOnce(&ThrottlingURLLoaderCoreWrapper::StartInternalOnUI,
-                     std::move(loader_factory_info),
+                     std::move(pending_loader_factory),
                      std::move(browser_context_getter), routing_id, request_id,
                      options, network::ResourceRequest(resource_request),
                      std::move(client),
@@ -79,8 +78,8 @@ ServiceWorkerUpdatedScriptLoader::ThrottlingURLLoaderCoreWrapper::
 // static
 void ServiceWorkerUpdatedScriptLoader::ThrottlingURLLoaderCoreWrapper::
     StartInternalOnUI(
-        std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-            loader_factory_info,
+        std::unique_ptr<network::PendingSharedURLLoaderFactory>
+            pending_loader_factory,
         BrowserContextGetter browser_context_getter,
         int32_t routing_id,
         int32_t request_id,
@@ -107,7 +106,8 @@ void ServiceWorkerUpdatedScriptLoader::ThrottlingURLLoaderCoreWrapper::
   mojo::Remote<network::mojom::URLLoaderClient> client(
       std::move(client_remote));
   auto loader = blink::ThrottlingURLLoader::CreateLoaderAndStart(
-      network::SharedURLLoaderFactory::Create(std::move(loader_factory_info)),
+      network::SharedURLLoaderFactory::Create(
+          std::move(pending_loader_factory)),
       std::move(throttles), routing_id, request_id, options, &resource_request,
       client.get(), traffic_annotation, base::ThreadTaskRunnerHandle::Get());
   loader_on_ui->loader = std::move(loader);
@@ -213,7 +213,6 @@ ServiceWorkerUpdatedScriptLoader::ServiceWorkerUpdatedScriptLoader(
   network_loader_ = std::move(info.paused_state->network_loader);
   pending_network_client_receiver_ =
       std::move(info.paused_state->network_client_receiver);
-  network_consumer_ = std::move(info.paused_state->network_consumer);
 
   network_loader_state_ = info.paused_state->network_loader_state;
   DCHECK(network_loader_state_ == LoaderState::kLoadingBody ||
@@ -229,12 +228,14 @@ ServiceWorkerUpdatedScriptLoader::ServiceWorkerUpdatedScriptLoader(
   // Resume the cache writer and observe its writes, so all data written
   // is sent to |client_|.
   cache_writer_->set_write_observer(this);
-  net::Error error = cache_writer_->Resume(
-      base::BindOnce(&ServiceWorkerUpdatedScriptLoader::OnCacheWriterResumed,
-                     weak_factory_.GetWeakPtr()));
+  net::Error error = cache_writer_->Resume(base::BindOnce(
+      &ServiceWorkerUpdatedScriptLoader::OnCacheWriterResumed,
+      weak_factory_.GetWeakPtr(), info.paused_state->pending_network_buffer,
+      info.paused_state->consumed_bytes));
 
   if (error != net::ERR_IO_PENDING) {
-    OnCacheWriterResumed(error);
+    OnCacheWriterResumed(info.paused_state->pending_network_buffer,
+                         info.paused_state->consumed_bytes, error);
   }
 }
 
@@ -346,9 +347,9 @@ int ServiceWorkerUpdatedScriptLoader::WillWriteInfo(
       response_info->response_data_size);
   // Don't pass SSLInfo to the client when the original request doesn't ask
   // to send it.
-  if (response.head.ssl_info.has_value() &&
+  if (response.head->ssl_info.has_value() &&
       !(options_ & network::mojom::kURLLoadOptionSendSSLInfoWithResponse)) {
-    response.head.ssl_info.reset();
+    response.head->ssl_info.reset();
   }
 
   client_->OnReceiveResponse(std::move(response.head));
@@ -425,7 +426,10 @@ int ServiceWorkerUpdatedScriptLoader::WillWriteData(
   return net::ERR_IO_PENDING;
 }
 
-void ServiceWorkerUpdatedScriptLoader::OnCacheWriterResumed(net::Error error) {
+void ServiceWorkerUpdatedScriptLoader::OnCacheWriterResumed(
+    scoped_refptr<network::MojoToNetPendingBuffer> pending_network_buffer,
+    uint32_t consumed_bytes,
+    net::Error error) {
   DCHECK_NE(error, net::ERR_IO_PENDING);
   // Stop observing write operations in cache writer as further data are
   // from network which would be processed by OnNetworkDataAvailable().
@@ -442,6 +446,13 @@ void ServiceWorkerUpdatedScriptLoader::OnCacheWriterResumed(net::Error error) {
     CommitCompleted(network::URLLoaderCompletionStatus(net::OK), std::string());
     return;
   }
+
+  // The data in the pending buffer has been processed during resuming. At this
+  // point, this completes the pending read and releases the Mojo handle to
+  // continue with reading the rest of the body.
+  DCHECK(pending_network_buffer);
+  pending_network_buffer->CompleteRead(consumed_bytes);
+  network_consumer_ = pending_network_buffer->ReleaseHandle();
 
   // Continue to load the rest of the body from the network.
   DCHECK_EQ(body_writer_state_, WriterState::kWriting);

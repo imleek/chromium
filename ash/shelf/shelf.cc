@@ -29,6 +29,27 @@
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/rect.h"
 
+namespace {
+
+bool IsAppListBackground(ash::ShelfBackgroundType background_type) {
+  switch (background_type) {
+    case ash::ShelfBackgroundType::kAppList:
+    case ash::ShelfBackgroundType::kHomeLauncher:
+    case ash::ShelfBackgroundType::kMaximizedWithAppList:
+      return true;
+    case ash::ShelfBackgroundType::kDefaultBg:
+    case ash::ShelfBackgroundType::kMaximized:
+    case ash::ShelfBackgroundType::kOobe:
+    case ash::ShelfBackgroundType::kLogin:
+    case ash::ShelfBackgroundType::kLoginNonBlurredWallpaper:
+    case ash::ShelfBackgroundType::kOverview:
+    case ash::ShelfBackgroundType::kInApp:
+      return false;
+  }
+}
+
+}  // namespace
+
 namespace ash {
 
 // Shelf::AutoHideEventHandler -----------------------------------------------
@@ -54,7 +75,7 @@ class Shelf::AutoHideEventHandler : public ui::EventHandler {
         event, static_cast<aura::Window*>(event->target()));
   }
   void OnTouchEvent(ui::TouchEvent* event) override {
-    if (shelf_->auto_hide_behavior() != SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS)
+    if (shelf_->auto_hide_behavior() != ShelfAutoHideBehavior::kAlways)
       return;
 
     // The event target should be the shelf widget or the hotseat widget.
@@ -110,7 +131,6 @@ class Shelf::AutoDimEventHandler : public ui::EventHandler {
     }
   }
 
- private:
   void DimShelf() { shelf_->shelf_layout_manager()->SetDimmed(true); }
 
   // Sets shelf as active and sets timer to mark shelf as inactive.
@@ -121,6 +141,7 @@ class Shelf::AutoDimEventHandler : public ui::EventHandler {
         base::BindOnce(&AutoDimEventHandler::DimShelf, base::Unretained(this)));
   }
 
+ private:
   // Unowned pointer to the shelf that owns this event handler.
   Shelf* shelf_;
   // OneShotTimer that dims shelf due to inactivity.
@@ -200,7 +221,7 @@ void Shelf::CreateShelfWidget(aura::Window* root) {
   // constructors call back into Shelf::shelf_widget().
   DCHECK(!shelf_widget_->status_area_widget());
   aura::Window* status_container =
-      root->GetChildById(kShellWindowId_StatusContainer);
+      root->GetChildById(kShellWindowId_ShelfControlContainer);
   shelf_widget_->CreateStatusAreaWidget(status_container);
   shelf_widget_->Initialize(shelf_container);
 
@@ -237,7 +258,7 @@ void Shelf::SetAlignment(ShelfAlignment alignment) {
     return;
 
   if (shelf_locking_manager_.is_locked() &&
-      alignment != SHELF_ALIGNMENT_BOTTOM_LOCKED) {
+      alignment != ShelfAlignment::kBottomLocked) {
     shelf_locking_manager_.set_stored_alignment(alignment);
     return;
   }
@@ -252,11 +273,11 @@ void Shelf::SetAlignment(ShelfAlignment alignment) {
 
 bool Shelf::IsHorizontalAlignment() const {
   switch (alignment_) {
-    case SHELF_ALIGNMENT_BOTTOM:
-    case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+    case ShelfAlignment::kBottom:
+    case ShelfAlignment::kBottomLocked:
       return true;
-    case SHELF_ALIGNMENT_LEFT:
-    case SHELF_ALIGNMENT_RIGHT:
+    case ShelfAlignment::kLeft:
+    case ShelfAlignment::kRight:
       return false;
   }
   NOTREACHED();
@@ -265,12 +286,12 @@ bool Shelf::IsHorizontalAlignment() const {
 
 int Shelf::SelectValueForShelfAlignment(int bottom, int left, int right) const {
   switch (alignment_) {
-    case SHELF_ALIGNMENT_BOTTOM:
-    case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+    case ShelfAlignment::kBottom:
+    case ShelfAlignment::kBottomLocked:
       return bottom;
-    case SHELF_ALIGNMENT_LEFT:
+    case ShelfAlignment::kLeft:
       return left;
-    case SHELF_ALIGNMENT_RIGHT:
+    case ShelfAlignment::kRight:
       return right;
   }
   NOTREACHED();
@@ -302,7 +323,7 @@ void Shelf::UpdateAutoHideState() {
 
 ShelfBackgroundType Shelf::GetBackgroundType() const {
   return shelf_widget_ ? shelf_widget_->GetBackgroundType()
-                       : SHELF_BACKGROUND_DEFAULT;
+                       : ShelfBackgroundType::kDefaultBg;
 }
 
 void Shelf::UpdateVisibilityState() {
@@ -387,14 +408,14 @@ TrayBackgroundView* Shelf::GetSystemTrayAnchorView() const {
 gfx::Rect Shelf::GetSystemTrayAnchorRect() const {
   gfx::Rect work_area = GetWorkAreaInsets()->user_work_area_bounds();
   switch (alignment_) {
-    case SHELF_ALIGNMENT_BOTTOM:
-    case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+    case ShelfAlignment::kBottom:
+    case ShelfAlignment::kBottomLocked:
       return gfx::Rect(
           base::i18n::IsRTL() ? work_area.x() : work_area.right() - 1,
           work_area.bottom() - 1, 0, 0);
-    case SHELF_ALIGNMENT_LEFT:
+    case ShelfAlignment::kLeft:
       return gfx::Rect(work_area.x(), work_area.bottom() - 1, 0, 0);
-    case SHELF_ALIGNMENT_RIGHT:
+    case ShelfAlignment::kRight:
       return gfx::Rect(work_area.right() - 1, work_area.bottom() - 1, 0, 0);
   }
   NOTREACHED();
@@ -451,7 +472,7 @@ void Shelf::WillChangeVisibilityState(ShelfVisibilityState new_state) {
     auto_hide_event_handler_ = std::make_unique<AutoHideEventHandler>(this);
   }
 
-  if (!auto_dim_event_handler_ && ash::switches::IsUsingShelfAutoDim()) {
+  if (!auto_dim_event_handler_ && switches::IsUsingShelfAutoDim()) {
     auto_dim_event_handler_ = std::make_unique<AutoDimEventHandler>(this);
   }
 }
@@ -465,6 +486,11 @@ void Shelf::OnBackgroundUpdated(ShelfBackgroundType background_type,
                                 AnimationChangeType change_type) {
   if (background_type == GetBackgroundType())
     return;
+
+  // Shelf should undim when transitioning to show app list.
+  if (auto_dim_event_handler_ && IsAppListBackground(background_type))
+    UndimShelf();
+
   for (auto& observer : observers_)
     observer.OnBackgroundTypeChanged(background_type, change_type);
 }
@@ -472,6 +498,14 @@ void Shelf::OnBackgroundUpdated(ShelfBackgroundType background_type,
 void Shelf::OnWorkAreaInsetsChanged() {
   for (auto& observer : observers_)
     observer.OnShelfWorkAreaInsetsChanged();
+}
+
+void Shelf::DimShelf() {
+  auto_dim_event_handler_->DimShelf();
+}
+
+void Shelf::UndimShelf() {
+  auto_dim_event_handler_->UndimShelf();
 }
 
 WorkAreaInsets* Shelf::GetWorkAreaInsets() const {

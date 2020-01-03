@@ -53,8 +53,12 @@ int GetBookmarkPromoStringSpecifier() {
 
 StarView::StarView(CommandUpdater* command_updater,
                    Browser* browser,
-                   PageActionIconView::Delegate* delegate)
-    : PageActionIconView(command_updater, IDC_BOOKMARK_THIS_TAB, delegate),
+                   IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+                   PageActionIconView::Delegate* page_action_icon_delegate)
+    : PageActionIconView(command_updater,
+                         IDC_BOOKMARK_THIS_TAB,
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate),
       browser_(browser) {
   DCHECK(browser_);
   extension_observer_.Add(
@@ -83,13 +87,10 @@ void StarView::ShowPromo() {
   }
 }
 
-bool StarView::Update() {
-  bool was_visible = GetVisible();
+void StarView::UpdateImpl() {
   SetVisible(browser_defaults::bookmarks_enabled &&
-             !delegate()->IsLocationBarUserInputInProgress() &&
              edit_bookmarks_enabled_.GetValue() &&
              !IsBookmarkStarHiddenByExtension());
-  return was_visible != GetVisible();
 }
 
 void StarView::OnExecuting(PageActionIconView::ExecuteSource execute_source) {
@@ -125,6 +126,10 @@ const gfx::VectorIcon& StarView::GetVectorIcon() const {
 base::string16 StarView::GetTextForTooltipAndAccessibleName() const {
   return l10n_util::GetStringUTF16(active() ? IDS_TOOLTIP_STARRED
                                             : IDS_TOOLTIP_STAR);
+}
+
+const char* StarView::GetClassName() const {
+  return "StarView";
 }
 
 SkColor StarView::GetInkDropBaseColor() const {

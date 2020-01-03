@@ -4,7 +4,11 @@
 
 #include "ash/wm/back_gesture_affordance.h"
 
+#include "ash/display/screen_orientation_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/window_factory.h"
+#include "ash/wm/splitview/split_view_controller.h"
+#include "ash/wm/splitview/split_view_divider.h"
 #include "ash/wm/window_util.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/aura/window.h"
@@ -74,6 +78,11 @@ constexpr SkColor kRippleColor = SkColorSetA(gfx::kGoogleBlue600, 0x4C);  // 30%
 // Y-axis drag distance to achieve full y drag progress.
 constexpr float kDistanceForFullYProgress = 80.f;
 
+// Distance of the affordance that beyond the left of display or splitview
+// divider.
+constexpr int kDistanceBeyondLeftOrSplitvieDivider =
+    kMaxBurstRippleRadius + kBackgroundRadius;
+
 // Maximium y-axis movement of the affordance. Note, the affordance can move
 // both up and down.
 constexpr float kMaxYMovement = 8.f;
@@ -112,7 +121,6 @@ class AffordanceView : public views::View {
     ripple_flags.setStyle(cc::PaintFlags::kFill_Style);
     ripple_flags.setColor(kRippleColor);
 
-    const bool is_activated = x_offset_ >= kDistanceForFullRadius;
     float ripple_radius = 0.f;
     if (state_ == BackGestureAffordance::State::COMPLETING) {
       const float burst_progress = gfx::Tween::CalculateValue(
@@ -120,7 +128,7 @@ class AffordanceView : public views::View {
       ripple_radius =
           kMaxRippleRadius +
           burst_progress * (kMaxBurstRippleRadius - kMaxRippleRadius);
-    } else if (is_activated) {
+    } else if (x_offset_ >= kDistanceForFullRadius) {
       const float factor = (kMaxRippleRadius - kFullRippleRadius) /
                            (kDistanceForMaxRadius - kDistanceForFullRadius);
       ripple_radius = (kFullRippleRadius - factor * kDistanceForFullRadius) +
@@ -132,6 +140,9 @@ class AffordanceView : public views::View {
     }
     canvas->DrawCircle(center_point, ripple_radius, ripple_flags);
 
+    const bool is_activated =
+        x_offset_ >= kDistanceForFullRadius ||
+        state_ == BackGestureAffordance::State::COMPLETING;
     // Draw the arrow background circle.
     cc::PaintFlags bg_flags;
     bg_flags.setAntiAlias(true);
@@ -167,27 +178,67 @@ class AffordanceView : public views::View {
   DISALLOW_COPY_AND_ASSIGN(AffordanceView);
 };
 
-// Get the bounds of the affordance widget, which is outside of the left edge of
-// the display.
-gfx::Rect GetWidgetBounds(const gfx::Point& location) {
-  gfx::Rect widget_bounds(
+gfx::Rect GetSplitViewDividerBoundsInScreen(const gfx::Point& location) {
+  auto* split_view_controller =
+      SplitViewController::Get(window_util::GetRootWindowAt(location));
+  if (!split_view_controller->InTabletSplitViewMode())
+    return gfx::Rect();
+
+  return split_view_controller->split_view_divider()->GetDividerBoundsInScreen(
+      /*is_dragging=*/false);
+}
+
+// Return true if |origin_y| is above the bottom of the splitview divider while
+// in portrait screen orientation.
+bool AboveBottomOfSplitViewDivider(const gfx::Point& location, int origin_y) {
+  auto* split_view_controller =
+      SplitViewController::Get(window_util::GetRootWindowAt(location));
+  if (!split_view_controller->InTabletSplitViewMode() ||
+      IsCurrentScreenOrientationLandscape()) {
+    return false;
+  }
+
+  const gfx::Rect bounds_of_bottom_snapped_window =
+      split_view_controller->GetSnappedWindowBoundsInScreen(
+          IsCurrentScreenOrientationPrimary() ? SplitViewController::RIGHT
+                                              : SplitViewController::LEFT,
+          /*window_for_minimum_size=*/nullptr);
+  return bounds_of_bottom_snapped_window.Contains(location) &&
+         origin_y < GetSplitViewDividerBoundsInScreen(location).bottom();
+}
+
+gfx::Rect GetAffordanceBounds(const gfx::Point& location,
+                              bool dragged_from_splitview_divider) {
+  gfx::Rect bounds(
       gfx::Rect(2 * kMaxBurstRippleRadius, 2 * kMaxBurstRippleRadius));
+
   gfx::Point origin;
-  origin.set_x(-kMaxBurstRippleRadius - kBackgroundRadius);
+  // X origin of the affordance is beyond the left of this location. It could be
+  // the left of the display or the splitview divider.
+  int left_location = 0;
+  if (dragged_from_splitview_divider)
+    left_location = GetSplitViewDividerBoundsInScreen(location).x();
+  origin.set_x(left_location - kDistanceBeyondLeftOrSplitvieDivider);
+
   int origin_y =
       location.y() - kDistanceFromArrowToTouchPoint - kMaxBurstRippleRadius;
-  if (origin_y < 0) {
+  // Put the affordance below the start |location| if |origin_y| exceeds the
+  // top of the display or bottom of the splitview divider.
+  if (origin_y < 0 || AboveBottomOfSplitViewDivider(location, origin_y)) {
     origin_y =
         location.y() + kDistanceFromArrowToTouchPoint - kMaxBurstRippleRadius;
   }
   origin.set_y(origin_y);
-  widget_bounds.set_origin(origin);
-  return widget_bounds;
+  bounds.set_origin(origin);
+  return bounds;
 }
 
 }  // namespace
 
-BackGestureAffordance::BackGestureAffordance(const gfx::Point& location) {
+BackGestureAffordance::BackGestureAffordance(
+    const gfx::Point& location,
+    bool dragged_from_splitview_divider)
+    : dragged_from_splitview_divider_(dragged_from_splitview_divider) {
   CreateAffordanceWidget(location);
 }
 
@@ -234,14 +285,15 @@ void BackGestureAffordance::Complete() {
 }
 
 bool BackGestureAffordance::IsActivated() const {
-  return current_offset_ >= kDistanceForFullRadius;
+  return current_offset_ >= kDistanceForFullRadius ||
+         state_ == State::COMPLETING;
 }
 
 void BackGestureAffordance::CreateAffordanceWidget(const gfx::Point& location) {
   affordance_widget_ = std::make_unique<views::Widget>();
   views::Widget::InitParams params(
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.accept_events = true;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.name = "BackGestureAffordance";
@@ -250,7 +302,19 @@ void BackGestureAffordance::CreateAffordanceWidget(const gfx::Point& location) {
       kShellWindowId_AlwaysOnTopContainer);
   affordance_widget_->Init(std::move(params));
   affordance_widget_->SetContentsView(new AffordanceView());
-  affordance_widget_->SetBounds(GetWidgetBounds(location));
+  const gfx::Rect widget_bounds =
+      GetAffordanceBounds(location, dragged_from_splitview_divider_);
+  affordance_widget_->SetBounds(widget_bounds);
+  if (dragged_from_splitview_divider_) {
+    // Clip the affordance to make sure it will only be visible inside the
+    // snapped window's bounds. Note, |clip_bounds| is the area that the
+    // affordance will be visible, and it is based on the layer's coordinate.
+    gfx::Rect clip_bounds(
+        GetSplitViewDividerBoundsInScreen(location).right() - widget_bounds.x(),
+        0, kDistanceForMaxRadius + kMaxBurstRippleRadius,
+        widget_bounds.height());
+    affordance_widget_->GetLayer()->SetClipRect(clip_bounds);
+  }
   affordance_widget_->Show();
   affordance_widget_->SetOpacity(1.f);
 }
@@ -329,7 +393,9 @@ float BackGestureAffordance::GetAffordanceProgress() const {
                                          abort_progress_));
 }
 
-void BackGestureAffordance::AnimationEnded(const gfx::Animation* animation) {}
+void BackGestureAffordance::AnimationEnded(const gfx::Animation* animation) {
+  affordance_widget_->Hide();
+}
 
 void BackGestureAffordance::AnimationProgressed(
     const gfx::Animation* animation) {

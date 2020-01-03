@@ -13,7 +13,6 @@ import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -32,7 +31,7 @@ import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.externalnav.IntentWithGesturesHandler;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.tabmodel.TabModelImpl;
-import org.chromium.chrome.browser.ui.styles.ChromeColors;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.resources.AndroidResourceType;
@@ -135,7 +134,7 @@ public class CompositorView
             return;
         }
 
-        mCompositorSurfaceManager = new CompositorSurfaceManagerImpl(this, this);
+        mCompositorSurfaceManager = new CompositorSurfaceManagerImpl(this, this, false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             mScreenStateReceiver = new ScreenStateReceiverWorkaround();
         }
@@ -323,11 +322,6 @@ public class CompositorView
         onWindowVisibilityChangedInternal(getWindowVisibility());
     }
 
-    @Override
-    public boolean onTouchEvent(MotionEvent e) {
-        return super.onTouchEvent(e);
-    }
-
     /**
      * Enables/disables overlay video mode. Affects alpha blending on this view.
      * @param enabled Whether to enter or leave overlay video mode.
@@ -493,6 +487,7 @@ public class CompositorView
     @CalledByNative
     private void notifyWillUseSurfaceControl() {
         mIsSurfaceControlEnabled = true;
+        mCompositorSurfaceManager.recreateTranslucentSurfaceForSurfaceControl();
     }
 
     /**
@@ -608,7 +603,8 @@ public class CompositorView
     }
 
     private void createCompositorSurfaceManager() {
-        mCompositorSurfaceManager = new CompositorSurfaceManagerImpl(this, this);
+        mCompositorSurfaceManager =
+                new CompositorSurfaceManagerImpl(this, this, mIsSurfaceControlEnabled);
         mCompositorSurfaceManager.requestSurface(getSurfacePixelFormat());
         CompositorViewJni.get().setNeedsComposite(mNativeCompositorView, CompositorView.this);
         mCompositorSurfaceManager.setVisibility(getVisibility());

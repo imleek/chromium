@@ -12,8 +12,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/embedder_support/switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -28,7 +28,7 @@
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 
 namespace extensions {
 namespace {
@@ -88,13 +88,16 @@ IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest,
 // Tests that an error raised during an async function still fires
 // the callback, but sets chrome.runtime.lastError.
 IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest, LastError) {
+  ExtensionTestMessageListener ready_listener("ready", /*will_reply=*/false);
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("bindings").AppendASCII("last_error")));
+  ASSERT_TRUE(ready_listener.WaitUntilSatisfied());
 
   // Get the ExtensionHost that is hosting our background page.
   extensions::ProcessManager* manager =
       extensions::ProcessManager::Get(browser()->profile());
   extensions::ExtensionHost* host = FindHostWithPath(manager, "/bg.html", 1);
+  ASSERT_TRUE(host);
 
   bool result = false;
   ASSERT_TRUE(content::ExecuteScriptAndExtractBool(host->host_contents(),
@@ -253,7 +256,7 @@ class FramesExtensionBindingsApiTest : public ExtensionBindingsApiTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionBindingsApiTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(::switches::kDisablePopupBlocking);
+    command_line->AppendSwitch(embedder_support::kDisablePopupBlocking);
   }
 };
 

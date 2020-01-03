@@ -4,7 +4,9 @@
 
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_item.h"
 
+#include "third_party/blink/renderer/core/editing/inline_box_traversal.h"
 #include "third_party/blink/renderer/core/editing/position_with_affinity.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_caret_position.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_items_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
@@ -20,7 +22,8 @@ NGFragmentItem::NGFragmentItem(const NGPhysicalTextFragment& text)
       style_variant_(static_cast<unsigned>(text.StyleVariant())),
       is_generated_text_(text.IsGeneratedText()),
       is_hidden_for_paint_(text.IsHiddenForPaint()),
-      text_direction_(static_cast<unsigned>(text.ResolvedDirection())) {
+      text_direction_(static_cast<unsigned>(text.ResolvedDirection())),
+      ink_overflow_computed_(false) {
   DCHECK_LE(text_.start_offset, text_.end_offset);
 #if DCHECK_IS_ON()
   if (text_.shape_result) {
@@ -45,7 +48,8 @@ NGFragmentItem::NGFragmentItem(const NGPhysicalLineBoxFragment& line,
       type_(kLine),
       style_variant_(static_cast<unsigned>(line.StyleVariant())),
       is_hidden_for_paint_(false),
-      text_direction_(static_cast<unsigned>(line.BaseDirection())) {}
+      text_direction_(static_cast<unsigned>(line.BaseDirection())),
+      ink_overflow_computed_(false) {}
 
 NGFragmentItem::NGFragmentItem(const NGPhysicalBoxFragment& box,
                                wtf_size_t item_count,
@@ -56,7 +60,8 @@ NGFragmentItem::NGFragmentItem(const NGPhysicalBoxFragment& box,
       type_(kBox),
       style_variant_(static_cast<unsigned>(box.StyleVariant())),
       is_hidden_for_paint_(box.IsHiddenForPaint()),
-      text_direction_(static_cast<unsigned>(resolved_direction)) {}
+      text_direction_(static_cast<unsigned>(resolved_direction)),
+      ink_overflow_computed_(false) {}
 
 NGFragmentItem::~NGFragmentItem() {
   switch (Type()) {
@@ -120,11 +125,32 @@ bool NGFragmentItem::HasSelfPaintingLayer() const {
   return false;
 }
 
+inline const LayoutBox* NGFragmentItem::InkOverflowOwnerBox() const {
+  if (Type() == kBox)
+    return ToLayoutBoxOrNull(GetLayoutObject());
+  return nullptr;
+}
+
+inline LayoutBox* NGFragmentItem::MutableInkOverflowOwnerBox() {
+  if (Type() == kBox)
+    return ToLayoutBoxOrNull(const_cast<LayoutObject*>(layout_object_));
+  return nullptr;
+}
+
 PhysicalRect NGFragmentItem::SelfInkOverflow() const {
-  return ink_overflow_ ? ink_overflow_->self_ink_overflow : LocalRect();
+  if (const LayoutBox* box = InkOverflowOwnerBox())
+    return box->PhysicalSelfVisualOverflowRect();
+
+  if (!ink_overflow_)
+    return LocalRect();
+
+  return ink_overflow_->self_ink_overflow;
 }
 
 PhysicalRect NGFragmentItem::InkOverflow() const {
+  if (const LayoutBox* box = InkOverflowOwnerBox())
+    return box->PhysicalVisualOverflowRect();
+
   if (!ink_overflow_)
     return LocalRect();
 
@@ -231,7 +257,8 @@ PhysicalRect NGFragmentItem::LocalVisualRectFor(
   return visual_rect;
 }
 
-PhysicalRect NGFragmentItem::RecalcInkOverflowAll(NGInlineCursor* cursor) {
+PhysicalRect NGFragmentItem::RecalcInkOverflowForCursor(
+    NGInlineCursor* cursor) {
   DCHECK(cursor);
   PhysicalRect contents_ink_overflow;
   while (*cursor) {
@@ -254,15 +281,16 @@ void NGFragmentItem::RecalcInkOverflow(
     PhysicalRect* self_and_contents_rect_out) {
   DCHECK_EQ(this, cursor->CurrentItem());
 
-  if (Type() == kText) {
+  if (IsText()) {
     cursor->MoveToNext();
 
     // Re-computing text item is not necessary, because all changes that needs
     // to re-compute ink overflow invalidate layout.
-    if (ink_overflow_) {
-      *self_and_contents_rect_out = ink_overflow_->self_ink_overflow;
+    if (ink_overflow_computed_) {
+      *self_and_contents_rect_out = SelfInkOverflow();
       return;
     }
+    ink_overflow_computed_ = true;
 
     NGTextFragmentPaintInfo paint_info = TextPaintInfo(cursor->Items());
     if (paint_info.shape_result) {
@@ -278,18 +306,21 @@ void NGFragmentItem::RecalcInkOverflow(
     return;
   }
 
-  if (Type() == kGeneratedText) {
-    cursor->MoveToNext();
-    // TODO(kojii): Implement.
-    ink_overflow_ = nullptr;
-    *self_and_contents_rect_out = LocalRect();
+  // If this item has an owner |LayoutBox|, let it compute. It will call back NG
+  // to compute and store the result to |LayoutBox|. Pre-paint requires ink
+  // overflow to be stored in |LayoutBox|.
+  if (LayoutBox* owner_box = MutableInkOverflowOwnerBox()) {
+    DCHECK(!HasChildren());
+    cursor->MoveToNextSibling();
+    owner_box->RecalcNormalFlowChildVisualOverflowIfNeeded();
+    *self_and_contents_rect_out = owner_box->PhysicalVisualOverflowRect();
     return;
   }
 
-  // Compute the contents ink overflow from descendants.
+  // Re-compute descendants, then compute the contents ink overflow from them.
   NGInlineCursor descendants_cursor = cursor->CursorForDescendants();
   cursor->MoveToNextSibling();
-  PhysicalRect contents_rect = RecalcInkOverflowAll(&descendants_cursor);
+  PhysicalRect contents_rect = RecalcInkOverflowForCursor(&descendants_cursor);
 
   // Compute the self ink overflow.
   PhysicalRect self_rect;
@@ -297,6 +328,7 @@ void NGFragmentItem::RecalcInkOverflow(
     // Line boxes don't have self overflow. Compute content overflow only.
     *self_and_contents_rect_out = contents_rect;
   } else if (const NGPhysicalBoxFragment* box_fragment = BoxFragment()) {
+    DCHECK(box_fragment->IsInlineBox());
     self_rect = box_fragment->ComputeSelfInkOverflow();
     *self_and_contents_rect_out = UnionRect(self_rect, contents_rect);
   } else {
@@ -317,17 +349,75 @@ void NGFragmentItem::RecalcInkOverflow(
   }
 }
 
+void NGFragmentItem::SetDeltaToNextForSameLayoutObject(wtf_size_t delta) {
+  DCHECK_NE(delta, 0u);
+  delta_to_next_for_same_layout_object_ = delta;
+}
+
+PositionWithAffinity NGFragmentItem::PositionForPointInText(
+    const PhysicalOffset& point,
+    const NGInlineCursor& cursor) const {
+  DCHECK_EQ(Type(), kText);
+  DCHECK_EQ(cursor.CurrentItem(), this);
+  const unsigned text_offset = TextOffsetForPoint(point, cursor.Items());
+  const NGCaretPosition unadjusted_position{
+      cursor, NGCaretPositionType::kAtTextOffset, text_offset};
+  if (RuntimeEnabledFeatures::BidiCaretAffinityEnabled())
+    return unadjusted_position.ToPositionInDOMTreeWithAffinity();
+  if (text_offset > StartOffset() && text_offset < EndOffset())
+    return unadjusted_position.ToPositionInDOMTreeWithAffinity();
+  return BidiAdjustment::AdjustForHitTest(unadjusted_position)
+      .ToPositionInDOMTreeWithAffinity();
+}
+
+unsigned NGFragmentItem::TextOffsetForPoint(
+    const PhysicalOffset& point,
+    const NGFragmentItems& items) const {
+  DCHECK_EQ(Type(), kText);
+  const ComputedStyle& style = Style();
+  const LayoutUnit& point_in_line_direction =
+      style.IsHorizontalWritingMode() ? point.left : point.top;
+  if (const ShapeResultView* shape_result = TextShapeResult()) {
+    // TODO(layout-dev): Move caret logic out of ShapeResult into separate
+    // support class for code health and to avoid this copy.
+    return shape_result->CreateShapeResult()->CaretOffsetForHitTest(
+               point_in_line_direction.ToFloat(), Text(items), BreakGlyphs) +
+           StartOffset();
+  }
+
+  // Flow control fragments such as forced line break, tabulation, soft-wrap
+  // opportunities, etc. do not have ShapeResult.
+  DCHECK(IsFlowControl());
+
+  // Zero-inline-size objects such as newline always return the start offset.
+  LogicalSize size = Size().ConvertToLogical(style.GetWritingMode());
+  if (!size.inline_size)
+    return StartOffset();
+
+  // Sized objects such as tabulation returns the next offset if the given point
+  // is on the right half.
+  LayoutUnit inline_offset = IsLtr(ResolvedDirection())
+                                 ? point_in_line_direction
+                                 : size.inline_size - point_in_line_direction;
+  DCHECK_EQ(1u, TextLength());
+  return inline_offset <= size.inline_size / 2 ? StartOffset() : EndOffset();
+}
+
 NGFragmentItem::ItemsForLayoutObject NGFragmentItem::ItemsFor(
     const LayoutObject& layout_object) {
   DCHECK(layout_object.IsInLayoutNGInlineFormattingContext());
   DCHECK(layout_object.IsText() || layout_object.IsLayoutInline() ||
          (layout_object.IsBox() && layout_object.IsInline()));
 
-  // TODO(kojii): This is a hot function needed by paint and several other
-  // operations. Make this fast, by not iterating.
   if (const LayoutBlockFlow* block_flow =
           layout_object.RootInlineFormattingContext()) {
     if (const NGPhysicalBoxFragment* fragment = block_flow->CurrentFragment()) {
+      if (wtf_size_t index = layout_object.FirstInlineFragmentItemIndex()) {
+        const auto& items = fragment->Items()->Items();
+        return ItemsForLayoutObject(items, index, items[index].get());
+      }
+      // TODO(yosin): Once we update all usages of |FirstInlineFragment()|,
+      // we should get rid of below code.
       if (const NGFragmentItems* items = fragment->Items()) {
         for (unsigned i = 0; i < items->Items().size(); ++i) {
           const NGFragmentItem* item = items->Items()[i].get();
@@ -347,13 +437,12 @@ NGFragmentItem::ItemsForLayoutObject::Iterator::operator++() {
   // operations. Make this fast, by not iterating.
   if (!current_)
     return *this;
-  const LayoutObject* current_layout_object = current_->GetLayoutObject();
-  while (++index_ < items_->size()) {
-    current_ = (*items_)[index_].get();
-    if (current_->GetLayoutObject() == current_layout_object)
-      return *this;
+  if (!current_->delta_to_next_for_same_layout_object_) {
+    current_ = nullptr;
+    return *this;
   }
-  current_ = nullptr;
+  index_ += current_->delta_to_next_for_same_layout_object_;
+  current_ = (*items_)[index_].get();
   return *this;
 }
 

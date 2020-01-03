@@ -10,9 +10,9 @@
 #include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/network/public/mojom/quic_transport.mojom-blink.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/webtransport/quic_transport_connector.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_gc_controller.h"
@@ -68,7 +68,8 @@ class MockQuicTransport final : public network::mojom::blink::QuicTransport {
                         pending_receiver)
       : receiver_(this, std::move(pending_receiver)) {}
 
-  // TODO(ricea): Add methods when there are some.
+  void SendDatagram(base::span<const uint8_t> data,
+                    base::OnceCallback<void(bool)> callback) override {}
 
  private:
   mojo::Receiver<network::mojom::blink::QuicTransport> receiver_;
@@ -77,11 +78,12 @@ class MockQuicTransport final : public network::mojom::blink::QuicTransport {
 class QuicTransportTest : public ::testing::Test {
  public:
   void AddBinder(const V8TestingScope& scope) {
-    service_manager::InterfaceProvider::TestApi(
-        scope.GetExecutionContext()->GetInterfaceProvider())
-        .SetBinderForName(mojom::blink::QuicTransportConnector::Name_,
-                          base::BindRepeating(&QuicTransportTest::BindConnector,
-                                              weak_ptr_factory_.GetWeakPtr()));
+    interface_broker_ =
+        &scope.GetExecutionContext()->GetBrowserInterfaceBroker();
+    interface_broker_->SetBinderForTesting(
+        mojom::blink::QuicTransportConnector::Name_,
+        base::BindRepeating(&QuicTransportTest::BindConnector,
+                            weak_ptr_factory_.GetWeakPtr()));
   }
 
   // Creates, connects and returns a QuicTransport object with the given |url|.
@@ -125,6 +127,14 @@ class QuicTransportTest : public ::testing::Test {
         std::move(handle)));
   }
 
+  void TearDown() override {
+    if (!interface_broker_)
+      return;
+    interface_broker_->SetBinderForTesting(
+        mojom::blink::QuicTransportConnector::Name_, {});
+  }
+
+  BrowserInterfaceBrokerProxy* interface_broker_ = nullptr;
   QuicTransportConnector connector_;
   std::unique_ptr<MockQuicTransport> mock_quic_transport_;
 
@@ -150,6 +160,17 @@ TEST_F(QuicTransportTest, FailWithEmptyURL) {
   EXPECT_EQ("The URL '' is invalid.", exception_state.Message());
 }
 
+TEST_F(QuicTransportTest, FailWithNoScheme) {
+  V8TestingScope scope;
+  auto& exception_state = scope.GetExceptionState();
+  QuicTransport::Create(scope.GetScriptState(), String("no-scheme"),
+                        exception_state);
+  EXPECT_TRUE(exception_state.HadException());
+  EXPECT_EQ(static_cast<int>(DOMExceptionCode::kSyntaxError),
+            exception_state.Code());
+  EXPECT_EQ("The URL 'no-scheme' is invalid.", exception_state.Message());
+}
+
 TEST_F(QuicTransportTest, FailWithHttpsURL) {
   V8TestingScope scope;
   auto& exception_state = scope.GetExceptionState();
@@ -171,7 +192,8 @@ TEST_F(QuicTransportTest, FailWithNoHost) {
   EXPECT_TRUE(exception_state.HadException());
   EXPECT_EQ(static_cast<int>(DOMExceptionCode::kSyntaxError),
             exception_state.Code());
-  EXPECT_EQ("The URL 'quic-transport:' is invalid.", exception_state.Message());
+  EXPECT_EQ("The URL 'quic-transport:///' is invalid.",
+            exception_state.Message());
 }
 
 TEST_F(QuicTransportTest, FailWithURLFragment) {
@@ -212,11 +234,10 @@ TEST_F(QuicTransportTest, PassCSP) {
   // This doesn't work without the https:// prefix, even thought it should
   // according to
   // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/connect-src.
-  // TODO(ricea): Make it work with the quic-transport: scheme.
   auto& exception_state = scope.GetExceptionState();
   scope.GetExecutionContext()
       ->GetContentSecurityPolicyForWorld()
-      ->DidReceiveHeader("connect-src https://example.com:443",
+      ->DidReceiveHeader("connect-src quic-transport://example.com",
                          kContentSecurityPolicyHeaderTypeEnforce,
                          kContentSecurityPolicyHeaderSourceHTTP);
   QuicTransport::Create(scope.GetScriptState(),

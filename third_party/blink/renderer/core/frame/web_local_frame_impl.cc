@@ -102,7 +102,6 @@
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_double_size.h"
-#include "third_party/blink/public/platform/web_float_point.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_isolated_world_info.h"
 #include "third_party/blink/public/platform/web_point.h"
@@ -153,7 +152,7 @@
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
+
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
@@ -586,6 +585,23 @@ WebLocalFrame* WebLocalFrame::FrameForCurrentContext() {
   return FrameForContext(context);
 }
 
+void WebLocalFrameImpl::NotifyUserActivation() {
+  LocalFrame::NotifyUserActivation(GetFrame());
+}
+
+bool WebLocalFrameImpl::HasStickyUserActivation() {
+  return GetFrame()->HasStickyUserActivation();
+}
+
+bool WebLocalFrameImpl::HasTransientUserActivation() {
+  return LocalFrame::HasTransientUserActivation(GetFrame());
+}
+
+bool WebLocalFrameImpl::ConsumeTransientUserActivation(
+    UserActivationUpdateSource update_source) {
+  return LocalFrame::ConsumeTransientUserActivation(GetFrame(), update_source);
+}
+
 WebLocalFrame* WebLocalFrame::FrameForContext(v8::Local<v8::Context> context) {
   return WebLocalFrameImpl::FromFrame(ToLocalFrameIfNotDetached(context));
 }
@@ -964,7 +980,7 @@ void WebLocalFrameImpl::ReloadImage(const WebNode& web_node) {
   hit_test_result.SetInnerNode(node);
   hit_test_result.SetToShadowHostIfInRestrictedShadowRoot();
   node = hit_test_result.InnerNodeOrImageMapImage();
-  if (auto* image_element = ToHTMLImageElementOrNull(*node))
+  if (auto* image_element = DynamicTo<HTMLImageElement>(*node))
     image_element->ForceReload();
 }
 
@@ -1110,8 +1126,7 @@ bool WebLocalFrameImpl::ExecuteCommand(const WebString& name) {
   if (WebPluginContainerImpl::SupportsCommand(name))
     plugin_lookup_context_node = ContextMenuNodeInner();
 
-  std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::NotifyUserActivation(GetFrame());
+  LocalFrame::NotifyUserActivation(GetFrame());
 
   WebPluginContainerImpl* plugin_container =
       GetFrame()->GetWebPluginContainer(plugin_lookup_context_node);
@@ -1125,8 +1140,7 @@ bool WebLocalFrameImpl::ExecuteCommand(const WebString& name,
                                        const WebString& value) {
   DCHECK(GetFrame());
 
-  std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::NotifyUserActivation(GetFrame());
+  LocalFrame::NotifyUserActivation(GetFrame());
 
   WebPluginContainerImpl* plugin_container =
       GetFrame()->GetWebPluginContainer();
@@ -1693,8 +1707,9 @@ WebLocalFrameImpl* WebLocalFrameImpl::CreateMainFrame(
     const WebString& name,
     WebSandboxFlags sandbox_flags,
     const FeaturePolicy::FeatureState& opener_feature_state) {
-  WebLocalFrameImpl* frame = MakeGarbageCollected<WebLocalFrameImpl>(
-      WebTreeScopeType::kDocument, client, interface_registry);
+  auto* frame = MakeGarbageCollected<WebLocalFrameImpl>(
+      util::PassKey<WebLocalFrameImpl>(), WebTreeScopeType::kDocument, client,
+      interface_registry);
   frame->SetOpener(opener);
   Page& page = *static_cast<WebViewImpl*>(web_view)->GetPage();
   DCHECK(!page.MainFrame());
@@ -1712,6 +1727,7 @@ WebLocalFrameImpl* WebLocalFrameImpl::CreateProvisional(
     const FramePolicy& frame_policy) {
   DCHECK(client);
   auto* web_frame = MakeGarbageCollected<WebLocalFrameImpl>(
+      util::PassKey<WebLocalFrameImpl>(),
       previous_web_frame->InShadowTree() ? WebTreeScopeType::kShadow
                                          : WebTreeScopeType::kDocument,
       client, interface_registry);
@@ -1760,13 +1776,14 @@ WebLocalFrameImpl* WebLocalFrameImpl::CreateLocalChild(
     WebTreeScopeType scope,
     WebLocalFrameClient* client,
     blink::InterfaceRegistry* interface_registry) {
-  WebLocalFrameImpl* frame = MakeGarbageCollected<WebLocalFrameImpl>(
-      scope, client, interface_registry);
+  auto* frame = MakeGarbageCollected<WebLocalFrameImpl>(
+      util::PassKey<WebLocalFrameImpl>(), scope, client, interface_registry);
   AppendChild(frame);
   return frame;
 }
 
 WebLocalFrameImpl::WebLocalFrameImpl(
+    util::PassKey<WebLocalFrameImpl>,
     WebTreeScopeType scope,
     WebLocalFrameClient* client,
     blink::InterfaceRegistry* interface_registry)
@@ -1784,6 +1801,16 @@ WebLocalFrameImpl::WebLocalFrameImpl(
   g_frame_count++;
   client_->BindToFrame(this);
 }
+
+WebLocalFrameImpl::WebLocalFrameImpl(
+    util::PassKey<WebRemoteFrameImpl>,
+    WebTreeScopeType scope,
+    WebLocalFrameClient* client,
+    blink::InterfaceRegistry* interface_registry)
+    : WebLocalFrameImpl(util::PassKey<WebLocalFrameImpl>(),
+                        scope,
+                        client,
+                        interface_registry) {}
 
 WebLocalFrameImpl::~WebLocalFrameImpl() {
   // The widget for the frame, if any, must have already been closed.
@@ -1867,9 +1894,11 @@ LocalFrame* WebLocalFrameImpl::CreateChildFrame(
   if (!webframe_child)
     return nullptr;
 
-  webframe_child->InitializeCoreFrame(*GetFrame()->GetPage(), owner_element,
-                                      name,
-                                      &GetFrame()->window_agent_factory());
+  webframe_child->InitializeCoreFrame(
+      *GetFrame()->GetPage(), owner_element, name,
+      owner_element->DisallowDocumentAccess()
+          ? nullptr
+          : &GetFrame()->window_agent_factory());
 
   DCHECK(webframe_child->Parent());
   return webframe_child->GetFrame();
@@ -2120,8 +2149,7 @@ void WebLocalFrameImpl::LoadJavaScriptURL(const WebURL& url) {
           GetFrame()->GetDocument()->Url().Protocol()))
     return;
 
-  std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::NotifyUserActivation(GetFrame());
+  LocalFrame::NotifyUserActivation(GetFrame());
   GetFrame()->GetScriptController().ExecuteJavaScriptURL(
       url, kDoNotCheckContentSecurityPolicy);
 }
@@ -2141,7 +2169,7 @@ void WebLocalFrameImpl::RenderFallbackContent() const {
   // TODO(ekaramad): If the owner renders its own content, then the current
   // ContentFrame() should detach (see https://crbug.com/850223).
   auto* owner = frame_->DeprecatedLocalOwner();
-  DCHECK(IsHTMLObjectElement(owner));
+  DCHECK(IsA<HTMLObjectElement>(owner));
   owner->RenderFallbackContent(frame_);
 }
 
@@ -2320,7 +2348,9 @@ void WebLocalFrameImpl::DispatchMessageEventWithOriginCheck(
 
   GetFrame()->DomWindow()->DispatchMessageEventWithOriginCheck(
       intended_target_origin.Get(), msg_event,
-      std::make_unique<SourceLocation>(String(), 0, 0, nullptr));
+      std::make_unique<SourceLocation>(String(), 0, 0, nullptr),
+      event.locked_agent_cluster_id() ? event.locked_agent_cluster_id().value()
+                                      : base::UnguessableToken());
 }
 
 WebNode WebLocalFrameImpl::ContextMenuNode() const {
@@ -2381,7 +2411,7 @@ void WebLocalFrameImpl::CopyImageAt(const WebPoint& pos_in_viewport) {
 void WebLocalFrameImpl::SaveImageAt(const WebPoint& pos_in_viewport) {
   Node* node = HitTestResultForVisualViewportPos(pos_in_viewport)
                    .InnerNodeOrImageMapImage();
-  if (!node || !(IsA<HTMLCanvasElement>(*node) || IsHTMLImageElement(*node)))
+  if (!node || !(IsA<HTMLCanvasElement>(*node) || IsA<HTMLImageElement>(*node)))
     return;
 
   String url = To<Element>(*node).ImageSourceURL();
@@ -2403,7 +2433,7 @@ WebSandboxFlags WebLocalFrameImpl::EffectiveSandboxFlagsForTesting() const {
     // part of sandbox converted to FeaturePolicies. That said, with
     // FeaturePolicyForSandbox all such flags should be part of the document's
     // FeaturePolicy. For certain flags such as "downloads", dedicated API
-    // should be used (see IsAllowedToDownloadWithoutUserActivation()).
+    // should be used (see IsAllowedToDownload()).
     auto* local_owner = GetFrame()->DeprecatedLocalOwner();
     if (local_owner &&
         local_owner->OwnerType() == FrameOwnerElementType::kIframe) {
@@ -2414,23 +2444,20 @@ WebSandboxFlags WebLocalFrameImpl::EffectiveSandboxFlagsForTesting() const {
   return static_cast<WebSandboxFlags>(flags);
 }
 
-bool WebLocalFrameImpl::IsAllowedToDownloadWithoutUserActivation() const {
+bool WebLocalFrameImpl::IsAllowedToDownload() const {
   if (!GetFrame())
     return true;
 
   if (RuntimeEnabledFeatures::FeaturePolicyForSandboxEnabled()) {
     // Downloads could be disabled if the parent frame's FeaturePolicy does not
-    // allow "downloads-without-user-activation".
+    // allow downloads.
     if (GetFrame()->Tree().Parent() &&
         !GetFrame()->Tree().Parent()->GetSecurityContext()->IsFeatureEnabled(
-            mojom::FeaturePolicyFeature::kDownloadsWithoutUserActivation)) {
+            mojom::FeaturePolicyFeature::kDownloads)) {
       return false;
     }
     return !GetFrame()->Owner() ||
-           GetFrame()
-               ->Owner()
-               ->GetFramePolicy()
-               .allowed_to_download_without_user_activation;
+           GetFrame()->Owner()->GetFramePolicy().allowed_to_download;
   } else {
     return (GetFrame()->Loader().EffectiveSandboxFlags() &
             WebSandboxFlags::kDownloads) == WebSandboxFlags::kNone;
@@ -2520,14 +2547,15 @@ static String CreateMarkupInRect(LocalFrame* frame,
   if (!start_position.GetDocument() || !end_position.GetDocument())
     return String();
 
+  const CreateMarkupOptions create_markup_options =
+      CreateMarkupOptions::Builder()
+          .SetShouldAnnotateForInterchange(true)
+          .SetShouldResolveURLs(kResolveNonLocalURLs)
+          .Build();
   if (start_position.CompareTo(end_position) <= 0) {
-    return CreateMarkup(start_position, end_position, kAnnotateForInterchange,
-                        ConvertBlocksToInlines::kNotConvert,
-                        kResolveNonLocalURLs);
+    return CreateMarkup(start_position, end_position, create_markup_options);
   }
-  return CreateMarkup(end_position, start_position, kAnnotateForInterchange,
-                      ConvertBlocksToInlines::kNotConvert,
-                      kResolveNonLocalURLs);
+  return CreateMarkup(end_position, start_position, create_markup_options);
 }
 
 void WebLocalFrameImpl::AdvanceFocusInForm(WebFocusType focus_type) {
@@ -2551,7 +2579,7 @@ bool WebLocalFrameImpl::ShouldSuppressKeyboardForFocusedElement() {
     return false;
 
   DCHECK(GetFrame()->GetDocument());
-  auto* focused_form_control_element = ToHTMLFormControlElementOrNull(
+  auto* focused_form_control_element = DynamicTo<HTMLFormControlElement>(
       GetFrame()->GetDocument()->FocusedElement());
   return focused_form_control_element &&
          autofill_client_->ShouldSuppressKeyboard(focused_form_control_element);
@@ -2562,10 +2590,10 @@ void WebLocalFrameImpl::PerformMediaPlayerAction(
     const MediaPlayerAction& action) {
   HitTestResult result = HitTestResultForVisualViewportPos(location);
   Node* node = result.InnerNode();
-  if (!IsHTMLVideoElement(*node) && !IsA<HTMLAudioElement>(*node))
+  if (!IsA<HTMLVideoElement>(*node) && !IsA<HTMLAudioElement>(*node))
     return;
 
-  HTMLMediaElement* media_element = ToHTMLMediaElement(node);
+  auto* media_element = To<HTMLMediaElement>(node);
   switch (action.type) {
     case MediaPlayerAction::Type::kPlay:
       if (action.enable)
@@ -2584,15 +2612,15 @@ void WebLocalFrameImpl::PerformMediaPlayerAction(
                                          action.enable);
       break;
     case MediaPlayerAction::Type::kPictureInPicture:
-      DCHECK(media_element->IsHTMLVideoElement());
+      DCHECK(IsA<HTMLVideoElement>(media_element));
       if (action.enable) {
         PictureInPictureController::From(node->GetDocument())
-            .EnterPictureInPicture(ToHTMLVideoElement(media_element),
+            .EnterPictureInPicture(To<HTMLVideoElement>(media_element),
                                    nullptr /* promise */,
                                    nullptr /* options */);
       } else {
         PictureInPictureController::From(node->GetDocument())
-            .ExitPictureInPicture(ToHTMLVideoElement(media_element), nullptr);
+            .ExitPictureInPicture(To<HTMLVideoElement>(media_element), nullptr);
       }
 
       break;

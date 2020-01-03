@@ -22,10 +22,10 @@ class InflateTransformer final : public TransformStreamTransformer {
   ~InflateTransformer() override;
 
   ScriptPromise Transform(v8::Local<v8::Value> chunk,
-                          TransformStreamDefaultControllerInterface*,
+                          TransformStreamDefaultController*,
                           ExceptionState&) override;
 
-  ScriptPromise Flush(TransformStreamDefaultControllerInterface*,
+  ScriptPromise Flush(TransformStreamDefaultController*,
                       ExceptionState&) override;
 
   ScriptState* GetScriptState() override { return script_state_; }
@@ -38,7 +38,7 @@ class InflateTransformer final : public TransformStreamTransformer {
   void Inflate(const uint8_t*,
                wtf_size_t,
                IsFinished,
-               TransformStreamDefaultControllerInterface*,
+               TransformStreamDefaultController*,
                ExceptionState&);
 
   Member<ScriptState> script_state_;
@@ -48,6 +48,7 @@ class InflateTransformer final : public TransformStreamTransformer {
   Vector<uint8_t> out_buffer_;
 
   bool was_flush_called_ = false;
+  bool reached_end_ = false;
 
   // This buffer size has been experimentally verified to be optimal.
   static constexpr wtf_size_t kBufferSize = 65536;

@@ -177,13 +177,13 @@ void OverviewSession::Init(const WindowList& windows,
   views::Widget::InitParams params;
   params.type = views::Widget::InitParams::TYPE_WINDOW_FRAMELESS;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.accept_events = false;
   params.bounds = gfx::Rect(0, 0, 2, 2);
   params.layer_type = ui::LAYER_NOT_DRAWN;
   params.name = "OverviewModeFocusedWidget";
   params.parent = Shell::GetPrimaryRootWindow()->GetChildById(
-      kShellWindowId_StatusContainer);
+      kShellWindowId_OverviewFocusContainer);
   overview_focus_widget_->Init(std::move(params));
 
   UMA_HISTOGRAM_COUNTS_100("Ash.WindowSelector.Items", num_items_);
@@ -319,12 +319,15 @@ void OverviewSession::SelectWindow(OverviewItem* item) {
 
   // If the selected window is a minimized window, un-minimize it first before
   // activating it so that the window can use the scale-up animation instead of
-  // un-minimizing animation.
+  // un-minimizing animation. If minimized, the activation of the window will
+  // happen in OverviewItem which listens for window state changes.
   if (WindowState::Get(window)->IsMinimized()) {
+    item->set_activate_on_unminimized(true);
     ScopedAnimationDisabler disabler(window);
     WindowState::Get(window)->Unminimize();
-    item->SetOpacity(1.f);
+    return;
   }
+
   wm::ActivateWindow(window);
 }
 
@@ -336,21 +339,25 @@ void OverviewSession::SetSplitViewDragIndicatorsDraggedWindow(
 
 void OverviewSession::UpdateSplitViewDragIndicatorsWindowDraggingStates(
     const aura::Window* root_window_being_dragged_in,
-    bool is_dragging,
-    SplitViewDragIndicators::WindowDraggingState non_snap_state,
-    SplitViewController::SnapPosition snap_position) {
-  using State = SplitViewDragIndicators::WindowDraggingState;
-  const State window_dragging_state_on_root_window_being_dragged_in =
-      SplitViewDragIndicators::ComputeWindowDraggingState(
-          is_dragging, non_snap_state, snap_position);
-  const State window_dragging_state_on_root_windows_not_being_dragged_in =
-      SplitViewDragIndicators::ComputeWindowDraggingState(
-          is_dragging, non_snap_state, SplitViewController::NONE);
+    SplitViewDragIndicators::WindowDraggingState
+        state_on_root_window_being_dragged_in) {
+  if (state_on_root_window_being_dragged_in ==
+      SplitViewDragIndicators::WindowDraggingState::kNoDrag) {
+    ResetSplitViewDragIndicatorsWindowDraggingStates();
+    return;
+  }
   for (std::unique_ptr<OverviewGrid>& grid : grid_list_) {
     grid->SetSplitViewDragIndicatorsWindowDraggingState(
         grid->root_window() == root_window_being_dragged_in
-            ? window_dragging_state_on_root_window_being_dragged_in
-            : window_dragging_state_on_root_windows_not_being_dragged_in);
+            ? state_on_root_window_being_dragged_in
+            : SplitViewDragIndicators::WindowDraggingState::kOtherDisplay);
+  }
+}
+
+void OverviewSession::ResetSplitViewDragIndicatorsWindowDraggingStates() {
+  for (std::unique_ptr<OverviewGrid>& grid : grid_list_) {
+    grid->SetSplitViewDragIndicatorsWindowDraggingState(
+        SplitViewDragIndicators::WindowDraggingState::kNoDrag);
   }
 }
 
@@ -360,6 +367,17 @@ void OverviewSession::RearrangeDuringDrag(aura::Window* dragged_window) {
     grid->RearrangeDuringDrag(
         dragged_window,
         grid->split_view_drag_indicators()->current_window_dragging_state());
+  }
+}
+
+void OverviewSession::UpdateDropTargetsBackgroundVisibilities(
+    OverviewItem* dragged_item,
+    const gfx::PointF& location_in_screen) {
+  for (std::unique_ptr<OverviewGrid>& grid : grid_list_) {
+    if (grid->GetDropTarget()) {
+      grid->UpdateDropTargetBackgroundVisibility(dragged_item,
+                                                 location_in_screen);
+    }
   }
 }
 
@@ -428,6 +446,13 @@ void OverviewSession::RemoveItem(OverviewItem* overview_item) {
   UpdateNoWindowsWidget();
 }
 
+void OverviewSession::RemoveDropTargets() {
+  for (std::unique_ptr<OverviewGrid>& grid : grid_list_) {
+    if (grid->GetDropTarget())
+      grid->RemoveDropTarget();
+  }
+}
+
 void OverviewSession::InitiateDrag(OverviewItem* item,
                                    const gfx::PointF& location_in_screen,
                                    bool is_touch_dragging) {
@@ -456,9 +481,8 @@ void OverviewSession::CompleteDrag(OverviewItem* item,
                                    const gfx::PointF& location_in_screen) {
   DCHECK(window_drag_controller_);
   DCHECK_EQ(item, window_drag_controller_->item());
-  const bool snap =
-      window_drag_controller_->CompleteDrag(location_in_screen) ==
-      OverviewWindowDragController::DragResult::kSuccessfulDragToSnap;
+  const bool snap = window_drag_controller_->CompleteDrag(location_in_screen) ==
+                    OverviewWindowDragController::DragResult::kSnap;
   for (std::unique_ptr<OverviewGrid>& grid : grid_list_)
     grid->OnSelectorItemDragEnded(snap);
 
@@ -479,10 +503,9 @@ void OverviewSession::Fling(OverviewItem* item,
   if (!window_drag_controller_ || item != window_drag_controller_->item())
     return;
 
-  const bool snap =
-      window_drag_controller_->Fling(location_in_screen, velocity_x,
-                                     velocity_y) ==
-      OverviewWindowDragController::DragResult::kSuccessfulDragToSnap;
+  const bool snap = window_drag_controller_->Fling(location_in_screen,
+                                                   velocity_x, velocity_y) ==
+                    OverviewWindowDragController::DragResult::kSnap;
   for (std::unique_ptr<OverviewGrid>& grid : grid_list_)
     grid->OnSelectorItemDragEnded(snap);
 }
@@ -575,7 +598,7 @@ void OverviewSession::SetWindowListNotAnimatedWhenExiting(
 std::unique_ptr<ui::ScopedLayerAnimationSettings>
 OverviewSession::UpdateGridAtLocationYPositionAndOpacity(
     int64_t display_id,
-    int new_y,
+    float new_y,
     float opacity,
     UpdateAnimationSettingsCallback callback) {
   OverviewGrid* grid = GetGridWithRootWindow(
@@ -788,14 +811,18 @@ void OverviewSession::OnHighlightedItemClosed(OverviewItem* item) {
   item->CloseWindow();
 }
 
-void OverviewSession::OnDisplayAdded(const display::Display& display) {
-  EndOverview();
+void OverviewSession::OnRootWindowClosing(aura::Window* root) {
+  auto iter = std::find_if(grid_list_.begin(), grid_list_.end(),
+                           [root](std::unique_ptr<OverviewGrid>& grid) {
+                             return grid->root_window() == root;
+                           });
+  DCHECK(iter != grid_list_.end());
+  (*iter)->Shutdown();
+  grid_list_.erase(iter);
 }
 
-void OverviewSession::OnDisplayRemoved(const display::Display& display) {
-  // Removing a display causes a window activation which will end overview mode
-  // so that |OnDisplayRemoved| is never called.
-  NOTREACHED();
+void OverviewSession::OnDisplayAdded(const display::Display& display) {
+  EndOverview();
 }
 
 void OverviewSession::OnDisplayMetricsChanged(const display::Display& display,
@@ -880,11 +907,15 @@ void OverviewSession::OnKeyEvent(ui::KeyEvent* event) {
     return;
   }
 
-  const bool process_released_key_event =
-      (event->key_code() == ui::VKEY_LEFT ||
-       event->key_code() == ui::VKEY_RIGHT) &&
-      ShouldUseTabletModeGridLayout();
-  if (event->type() != ui::ET_KEY_PRESSED && !process_released_key_event)
+  // Check if we can scroll with the event first as it can use release events as
+  // well.
+  if (ProcessForScrolling(*event)) {
+    event->SetHandled();
+    event->StopPropagation();
+    return;
+  }
+
+  if (event->type() != ui::ET_KEY_PRESSED)
     return;
 
   switch (event->key_code()) {
@@ -901,10 +932,8 @@ void OverviewSession::OnKeyEvent(ui::KeyEvent* event) {
       Move(/*reverse=*/false);
       break;
     case ui::VKEY_RIGHT:
-      if (!ProcessForScrolling(*event)) {
-        ++num_key_presses_;
-        Move(/*reverse=*/false);
-      }
+      ++num_key_presses_;
+      Move(/*reverse=*/false);
       break;
     case ui::VKEY_TAB: {
       const bool reverse = event->flags() & ui::EF_SHIFT_DOWN;
@@ -913,10 +942,8 @@ void OverviewSession::OnKeyEvent(ui::KeyEvent* event) {
       break;
     }
     case ui::VKEY_LEFT:
-      if (!ProcessForScrolling(*event)) {
-        ++num_key_presses_;
-        Move(/*reverse=*/true);
-      }
+      ++num_key_presses_;
+      Move(/*reverse=*/true);
       break;
     case ui::VKEY_W: {
       if (!(event->flags() & ui::EF_CONTROL_DOWN))
@@ -975,33 +1002,41 @@ void OverviewSession::Move(bool reverse) {
 }
 
 bool OverviewSession::ProcessForScrolling(const ui::KeyEvent& event) {
-  if (!ShouldUseTabletModeGridLayout() ||
-      !(event.flags() & ui::EF_CONTROL_DOWN)) {
+  if (!ShouldUseTabletModeGridLayout())
     return false;
-  }
-
-  const bool press = (event.type() == ui::ET_KEY_PRESSED);
-  const bool repeat = event.is_repeat();
-  DCHECK(event.key_code() == ui::VKEY_LEFT ||
-         event.key_code() == ui::VKEY_RIGHT);
-  const bool reverse = event.key_code() == ui::VKEY_LEFT;
 
   // TODO(sammiequon): This only works for tablet mode at the moment, so using
   // the primary display works. If this feature is adapted for multi display
   // then this needs to be revisited.
   auto* grid = GetGridWithRootWindow(Shell::GetPrimaryRootWindow());
-  if (press && !repeat) {
+  const bool press = (event.type() == ui::ET_KEY_PRESSED);
+
+  if (!press) {
+    if (is_keyboard_scrolling_grid_) {
+      is_keyboard_scrolling_grid_ = false;
+      grid->EndScroll();
+      return true;
+    }
+    return false;
+  }
+
+  // Presses only at this point.
+  if (event.key_code() != ui::VKEY_LEFT && event.key_code() != ui::VKEY_RIGHT)
+    return false;
+
+  if (!event.IsControlDown())
+    return false;
+
+  const bool repeat = event.is_repeat();
+  const bool reverse = event.key_code() == ui::VKEY_LEFT;
+  if (!repeat) {
+    is_keyboard_scrolling_grid_ = true;
     grid->StartScroll();
     grid->UpdateScrollOffset(kKeyboardPressScrollingDp * (reverse ? 1 : -1));
     return true;
   }
 
-  if (press && repeat) {
-    grid->UpdateScrollOffset(kKeyboardHoldScrollingDp * (reverse ? 1 : -1));
-    return true;
-  }
-
-  grid->EndScroll();
+  grid->UpdateScrollOffset(kKeyboardHoldScrollingDp * (reverse ? 1 : -1));
   return true;
 }
 

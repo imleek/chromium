@@ -21,6 +21,8 @@
 
 #include "third_party/blink/renderer/core/page/page.h"
 
+#include "base/feature_list.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
@@ -371,7 +373,7 @@ PluginData* Page::GetPluginData(const SecurityOrigin* main_frame_origin) {
     plugin_data_ = MakeGarbageCollected<PluginData>();
 
   if (!plugin_data_->Origin() ||
-      !main_frame_origin->IsSameSchemeHostPort(plugin_data_->Origin()))
+      !main_frame_origin->IsSameOriginWith(plugin_data_->Origin()))
     plugin_data_->UpdatePluginList(main_frame_origin);
 
   return plugin_data_.Get();
@@ -541,13 +543,17 @@ void Page::SetLifecycleState(PageLifecycleState state) {
   }
 
   if (next_state) {
+    const bool dispatch_before_unload_on_freeze =
+        base::FeatureList::IsEnabled(features::kDispatchBeforeUnloadOnFreeze);
     for (Frame* frame = main_frame_.Get(); frame;
          frame = frame->Tree().TraverseNext()) {
       if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
         // TODO(chrisha): Determine if dispatching the before unload
         // makes sense and if so put it into a specification.
-        if (next_state == mojom::FrameLifecycleState::kFrozen)
+        if (dispatch_before_unload_on_freeze &&
+            next_state == mojom::FrameLifecycleState::kFrozen) {
           local_frame->DispatchBeforeUnloadEventForFreeze();
+        }
         local_frame->SetLifecycleState(next_state.value());
       }
     }
@@ -736,9 +742,11 @@ void Page::SettingsChanged(SettingsDelegate::ChangeType change_type) {
         if (LocalFrameView* view = local_frame->View()) {
           if (const auto* scrollable_areas = view->ScrollableAreas()) {
             for (const auto& scrollable_area : *scrollable_areas) {
-              if (auto* layout_box = scrollable_area->GetLayoutBox()) {
-                layout_box->SetNeedsLayout(
-                    layout_invalidation_reason::kScrollbarChanged);
+              if (scrollable_area->ScrollsOverflow()) {
+                if (auto* layout_box = scrollable_area->GetLayoutBox()) {
+                  layout_box->SetNeedsLayout(
+                      layout_invalidation_reason::kScrollbarChanged);
+                }
               }
             }
           }
@@ -1027,8 +1035,6 @@ void Page::ClearMediaFeatureOverrides() {
 }
 
 Page::PageClients::PageClients() : chrome_client(nullptr) {}
-
-Page::PageClients::~PageClients() = default;
 
 template class CORE_TEMPLATE_EXPORT Supplement<Page>;
 

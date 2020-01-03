@@ -26,8 +26,8 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.ui.DisableAnimationsTestRule;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
+import org.chromium.ui.test.util.DisableAnimationsTestRule;
 
 import java.util.concurrent.TimeoutException;
 
@@ -89,7 +89,7 @@ public class PaymentRequestPaymentMethodIdentifierTest implements MainActivitySt
     @Test
     @MediumTest
     @Feature({"Payments"})
-    @CommandLineFlags.Add("disable-features=NoCreditCardAbort")
+    @CommandLineFlags.Add("disable-features=StrictHasEnrolledAutofillInstrument")
     public void testCannotMakeActivePaymentWithBasicMasterCard() throws TimeoutException {
         mPaymentRequestTestRule.openPageAndClickNodeAndWait(
                 "checkBasicMasterCard", mPaymentRequestTestRule.getCanMakePaymentQueryResponded());

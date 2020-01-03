@@ -74,9 +74,7 @@ class RasterContextProvider;
 namespace ui {
 
 class Compositor;
-class LatencyInfo;
 class Layer;
-class Reflector;
 class ScopedAnimationDurationScaleMode;
 class ScrollInputHandler;
 
@@ -101,15 +99,6 @@ class COMPOSITOR_EXPORT ContextFactoryObserver {
 class COMPOSITOR_EXPORT ContextFactoryPrivate {
  public:
   virtual ~ContextFactoryPrivate() {}
-
-  // Creates a reflector that copies the content of the |mirrored_compositor|
-  // onto |mirroring_layer|.
-  virtual std::unique_ptr<Reflector> CreateReflector(
-      Compositor* mirrored_compositor,
-      Layer* mirroring_layer) = 0;
-
-  // Removes the reflector, which stops the mirroring.
-  virtual void RemoveReflector(Reflector* reflector) = 0;
 
   // Allocate a new client ID for the display compositor.
   virtual viz::FrameSinkId AllocateFrameSinkId() = 0;
@@ -158,11 +147,6 @@ class COMPOSITOR_EXPORT ContextFactoryPrivate {
   virtual void AddVSyncParameterObserver(
       Compositor* compositor,
       mojo::PendingRemote<viz::mojom::VSyncParameterObserver> observer) = 0;
-
-  // Set the transform/rotation info for the display output surface that this
-  // compositor represents.
-  virtual void SetDisplayTransformHint(Compositor* compositor,
-                                       gfx::OverlayTransform transform) = 0;
 };
 
 // This class abstracts the creation of the 3D context for the compositor. It is
@@ -199,8 +183,6 @@ class COMPOSITOR_EXPORT ContextFactory {
   virtual void AddObserver(ContextFactoryObserver* observer) = 0;
 
   virtual void RemoveObserver(ContextFactoryObserver* observer) = 0;
-
-  virtual bool SyncTokensRequiredForDisplayCompositor() = 0;
 };
 
 // Compositor object to take care of GPU painting.
@@ -283,8 +265,6 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
   void DisableSwapUntilResize();
   void ReenableSwap();
 
-  void SetLatencyInfo(const LatencyInfo& latency_info);
-
   // Sets the compositor's device scale factor and size.
   void SetScaleAndSize(
       float scale,
@@ -298,8 +278,10 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
       float sdr_white_level = gfx::ColorSpace::kDefaultSDRWhiteLevel);
 
   // Set the transform/rotation info for the display output surface.
-  void SetDisplayTransformHint(gfx::OverlayTransform transform);
-  gfx::OverlayTransform display_transform() const { return display_transform_; }
+  void SetDisplayTransformHint(gfx::OverlayTransform hint);
+  gfx::OverlayTransform display_transform_hint() const {
+    return host_->display_transform_hint();
+  }
 
   // Returns the size of the widget that is being drawn to in pixel coordinates.
   const gfx::Size& size() const { return size_; }
@@ -523,8 +505,6 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
   bool disabled_swap_until_resize_ = false;
 
   const char* trace_environment_name_;
-
-  gfx::OverlayTransform display_transform_ = gfx::OVERLAY_TRANSFORM_NONE;
 
   base::WeakPtrFactory<Compositor> context_creation_weak_ptr_factory_{this};
 

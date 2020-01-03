@@ -32,6 +32,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/custom/v0_custom_element_registration_context.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/imports/html_imports_controller.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
@@ -239,7 +240,7 @@ DocumentInit& DocumentInit::WithNewRegistrationContext() {
 
 V0CustomElementRegistrationContext* DocumentInit::RegistrationContext(
     Document* document) const {
-  if (!document->IsHTMLDocument() && !document->IsXHTMLDocument())
+  if (!IsA<HTMLDocument>(document) && !document->IsXHTMLDocument())
     return nullptr;
 
   if (create_new_registration_context_)
@@ -292,6 +293,14 @@ ContentSecurityPolicy* DocumentInit::GetContentSecurityPolicy() const {
 DocumentInit& DocumentInit::WithFramePolicy(
     const base::Optional<FramePolicy>& frame_policy) {
   frame_policy_ = frame_policy;
+  if (frame_policy_.has_value()) {
+    DCHECK(document_loader_);
+    // Make the snapshot value of sandbox flags from the beginning of navigation
+    // available in frame loader, so that the value could be further used to
+    // initialize sandbox flags in security context. crbug.com/1026627
+    document_loader_->GetFrame()->Loader().SetFrameOwnerSandboxFlags(
+        frame_policy_.value().sandbox_flags);
+  }
   return *this;
 }
 

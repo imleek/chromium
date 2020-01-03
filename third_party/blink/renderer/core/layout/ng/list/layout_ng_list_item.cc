@@ -90,12 +90,6 @@ void LayoutNGListItem::SubtreeDidChange() {
   if (!marker_)
     return;
 
-  if (ordinal_.NotInListChanged()) {
-    UpdateMarker();
-    ordinal_.SetNotInListChanged(false);
-    return;
-  }
-
   // Make sure outside marker is the direct child of ListItem.
   if (!IsInside() && marker_->Parent() != this) {
     marker_->Remove();
@@ -112,8 +106,8 @@ void LayoutNGListItem::WillCollectInlines() {
 // Returns true if this is 'list-style-position: inside', or should be laid out
 // as 'inside'.
 bool LayoutNGListItem::IsInside() const {
-  return ordinal_.NotInList() ||
-         StyleRef().ListStylePosition() == EListStylePosition::kInside;
+  return StyleRef().ListStylePosition() == EListStylePosition::kInside ||
+         (IsA<HTMLLIElement>(GetNode()) && !StyleRef().IsInsideListElement());
 }
 
 // Destroy the list marker objects if exists.
@@ -147,39 +141,35 @@ void LayoutNGListItem::UpdateMarker() {
   }
 
   // Create a marker box if it does not exist yet.
-  Node* list_item = GetNode();
+  Element* list_item = To<Element>(GetNode());
   const ComputedStyle* cached_marker_style =
-      list_item->IsPseudoElement()
-          ? nullptr
-          : ToElement(list_item)->CachedStyleForPseudoElement(kPseudoIdMarker);
-  scoped_refptr<ComputedStyle> marker_style;
-  if (cached_marker_style) {
-    marker_style = ComputedStyle::Clone(*cached_marker_style);
-  } else {
-    marker_style = ComputedStyle::Create();
-    marker_style->InheritFrom(style);
+      list_item->CachedStyleForPseudoElement(kPseudoIdMarker);
+  if (cached_marker_style && cached_marker_style->GetContentData()) {
+    // Don't create an anonymous layout for the marker, it will be generated
+    // by the ::marker pseudo-element.
+    DestroyMarker();
+    marker_type_ = kStatic;
+    is_marker_text_updated_ = true;
+    return;
   }
+  scoped_refptr<ComputedStyle> marker_style =
+      cached_marker_style ? ComputedStyle::Clone(*cached_marker_style)
+                          : list_item->StyleForPseudoElement(kPseudoIdMarker);
+  DCHECK(marker_style);
   if (IsInside()) {
     if (marker_ && !marker_->IsLayoutInline())
       DestroyMarker();
     if (!marker_)
       marker_ = LayoutNGInsideListMarker::CreateAnonymous(&GetDocument());
-    marker_style->SetDisplay(EDisplay::kInline);
     auto margins =
         LayoutListMarker::InlineMarginsForInside(style, IsMarkerImage());
     marker_style->SetMarginStart(Length::Fixed(margins.first));
     marker_style->SetMarginEnd(Length::Fixed(margins.second));
-    // Markers should have unicode-bidi:isolate according to the spec
-    // (https://drafts.csswg.org/css-lists/#ua-stylesheet).
-    // Note this is only relevant for inside markers with arbitrary strings.
-    if (style.ListStyleType() == EListStyleType::kString)
-      marker_style->SetUnicodeBidi(UnicodeBidi::kIsolate);
   } else {
     if (marker_ && !marker_->IsLayoutBlockFlow())
       DestroyMarker();
     if (!marker_)
       marker_ = LayoutNGListMarker::CreateAnonymous(&GetDocument());
-    marker_style->SetDisplay(EDisplay::kInlineBlock);
     // Do not break inside the marker, and honor the trailing spaces.
     marker_style->SetWhiteSpace(EWhiteSpace::kPre);
     // Compute margins for 'outside' during layout, because it requires the
@@ -205,13 +195,38 @@ LayoutNGListItem* LayoutNGListItem::FromMarker(const LayoutObject& marker) {
   for (LayoutObject* parent = marker.Parent(); parent;
        parent = parent->Parent()) {
     if (parent->IsLayoutNGListItem()) {
-      DCHECK(ToLayoutNGListItem(parent)->Marker() == &marker);
+#if DCHECK_IS_ON()
+      LayoutObject* parent_marker = ToLayoutNGListItem(parent)->Marker();
+      if (parent_marker) {
+        DCHECK(!marker.GetNode());
+        DCHECK_EQ(ToLayoutNGListItem(parent)->Marker(), &marker);
+      } else {
+        DCHECK(marker.GetNode()->IsMarkerPseudoElement());
+        DCHECK_EQ(marker.GetNode()->parentElement()->GetLayoutBox(), parent);
+      }
+#endif
       return ToLayoutNGListItem(parent);
     }
     // These DCHECKs are not critical but to ensure we cover all cases we know.
     DCHECK(parent->IsAnonymous());
     DCHECK(parent->IsLayoutBlockFlow() || parent->IsLayoutFlowThread());
   }
+  return nullptr;
+}
+
+LayoutNGListItem* LayoutNGListItem::FromMarkerOrMarkerContent(
+    const LayoutObject& object) {
+  DCHECK(object.IsAnonymous());
+
+  if (object.IsLayoutNGListMarkerIncludingInside())
+    return FromMarker(object);
+
+  // Check if this is a marker content.
+  if (const LayoutObject* parent = object.Parent()) {
+    if (parent->IsLayoutNGListMarkerIncludingInside())
+      return FromMarker(*parent);
+  }
+
   return nullptr;
 }
 

@@ -70,8 +70,8 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/context_menu_params.h"
-#include "content/public/common/mime_handler_view_mode.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/accessibility_notification_waiter.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/dump_accessibility_test_helper.h"
 #include "content/public/test/hit_test_region_observer.h"
@@ -85,10 +85,12 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "pdf/pdf_features.h"
 #include "services/network/public/cpp/features.h"
+#include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_tree.h"
+#include "ui/accessibility/platform/ax_platform_node_delegate_base.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/test/test_clipboard.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -250,8 +252,9 @@ class PDFExtensionTest : public extensions::ExtensionApiTest {
   }
 
   // Load all the PDFs contained in chrome/test/data/<dir_name>. This only runs
-  // the test if base::Hash(filename) mod kNumberLoadTestParts == k in order
-  // to shard the files evenly across values of k in [0, kNumberLoadTestParts).
+  // the test if base::PersistentHash(filename) mod kNumberLoadTestParts == k in
+  // order to shard the files evenly across values of k in [0,
+  // kNumberLoadTestParts).
   void LoadAllPdfsTest(const std::string& dir_name, int k) {
     base::ScopedAllowBlockingForTesting allow_blocking;
     base::FilePath test_data_dir;
@@ -268,7 +271,8 @@ class PDFExtensionTest : public extensions::ExtensionApiTest {
 
       std::string pdf_file = dir_name + "/" + filename;
       SCOPED_TRACE(pdf_file);
-      if (static_cast<int>(base::Hash(filename) % kNumberLoadTestParts) == k) {
+      if (static_cast<int>(base::PersistentHash(filename) %
+                           kNumberLoadTestParts) == k) {
         LOG(INFO) << "Loading: " << pdf_file;
         bool success = LoadPdf(embedded_test_server()->GetURL("/" + pdf_file));
         if (pdf_file == "pdf_private/cfuzz5.pdf")
@@ -432,75 +436,6 @@ class PDFExtensionTestWithTestGuestViewManager : public PDFExtensionTest {
   TestGuestViewManagerFactory factory_;
 };
 
-IN_PROC_BROWSER_TEST_F(PDFExtensionTestWithTestGuestViewManager,
-                       LoadingPdfDoesNotStealFocus) {
-  // Load test HTML, and verify the text area has focus.
-  GURL main_url(embedded_test_server()->GetURL("/pdf/two_iframes.html"));
-  ui_test_utils::NavigateToURL(browser(), main_url);
-  auto* embedder_web_contents = GetActiveWebContents();
-
-  // Make sure we can see the iframe's document.
-  ASSERT_TRUE(
-      content::EvalJs(embedder_web_contents,
-                      "new Promise((resolve) => {"
-                      "  var iframe1 = document.getElementById('iframe1');"
-                      "  var iframe1doc = iframe1.contentDocument;"
-                      "  resolve(iframe1doc != null);"
-                      "});")
-          .ExtractBool());
-
-  // Make sure the text area is focused. First, we must explicitly focus the
-  // child iframe containing the text area.
-  content::RenderFrameHost* main_frame = embedder_web_contents->GetMainFrame();
-  content::RenderFrameHost* child_text_area = ChildFrameAt(main_frame, 0);
-  ASSERT_TRUE(content::ExecJs(child_text_area, "window.focus();"));
-  ASSERT_TRUE(content::EvalJs(
-                  embedder_web_contents,
-                  "new Promise((resolve) => {"
-                  "  iframe1doc = "
-                  "      document.getElementById('iframe1').contentDocument;"
-                  "  resolve(iframe1doc.hasFocus());"
-                  "});")
-                  .ExtractBool());
-
-  GURL pdf_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
-  ASSERT_TRUE(content::ExecJs(
-      embedder_web_contents,
-      content::JsReplace("document.getElementById('iframe2').src = $1;",
-                         pdf_url.spec())));
-
-  // Verify the pdf has loaded.
-  auto* guest_web_contents = GetGuestViewManager()->WaitForSingleGuestCreated();
-  ASSERT_TRUE(guest_web_contents);
-  EXPECT_NE(embedder_web_contents, guest_web_contents);
-
-  // Make sure the load has started, before waiting for it to stop.
-  // This is a little hacky, but will unjank the test for now.
-  // TODO(wjmaclean): Make this less hacky.
-  while (!guest_web_contents->IsLoading() &&
-         !guest_web_contents->GetController().GetLastCommittedEntry()) {
-    base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
-    run_loop.Run();
-  }
-
-  EXPECT_TRUE(content::WaitForLoadStop(guest_web_contents));
-
-  // Make sure the text area still has focus.
-  ASSERT_TRUE(
-      content::EvalJs(
-          embedder_web_contents,
-          "new Promise((resolve) => {"
-          "  iframe1doc = "
-          "      document.getElementById('iframe1').contentDocument;"
-          "  text_area = iframe1doc.getElementById('text_area');"
-          "  text_area_is_active = iframe1doc.activeElement == text_area;"
-          "  resolve(iframe1doc.hasFocus() && text_area_is_active);"
-          "});")
-          .ExtractBool());
-}
-
 // This test is a re-implementation of
 // WebPluginContainerTest.PluginDocumentPluginIsFocused, which was introduced
 // for https://crbug.com/536637. The original implementation checked that the
@@ -530,8 +465,9 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTestWithTestGuestViewManager,
 // has the correct URL for the PDF extension.
 // TODO(wjmaclean): Are there any attributes we can/should test with respect to
 // the extension's loaded html?
+// TODO(https://crbug.com/1034972): Re-enable. Flaky on all platforms.
 IN_PROC_BROWSER_TEST_F(PDFExtensionTestWithTestGuestViewManager,
-                       PdfExtensionLoadedInGuest) {
+                       DISABLED_PdfExtensionLoadedInGuest) {
   // Load test HTML, and verify the text area has focus.
   GURL main_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
   ui_test_utils::NavigateToURL(browser(), main_url);
@@ -1134,7 +1070,7 @@ static std::string DumpPdfAccessibilityTree(const ui::AXTreeUpdate& ax_tree) {
 
 static const char kExpectedPDFAXTreePattern[] =
     "embeddedObject\n"
-    "  document\n"
+    "  document 'PDF document containing 3 pages'\n"
     "    region 'Page 1'\n"
     "      paragraph\n"
     "        staticText '1 First Section'\n"
@@ -1164,7 +1100,9 @@ static const char kExpectedPDFAXTreePattern[] =
     "          inlineTextBox 'Second Section'\n"
     "      paragraph\n"
     "        staticText '3'\n"
-    "          inlineTextBox '3'\n";
+    "          inlineTextBox '3'\n"
+    "genericContainer\n"
+    "  genericContainer\n";
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfAccessibility) {
   content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
@@ -1423,9 +1361,7 @@ class PDFExtensionLinkClickTest : public PDFExtensionTest {
   }
 
   content::WebContents* GetWebContentsForInputRouting() {
-    return content::MimeHandlerViewMode::UsesCrossProcessFrame()
-               ? guest_contents_
-               : GetActiveWebContents();
+    return guest_contents_;
   }
 
  private:
@@ -1617,9 +1553,7 @@ class PDFExtensionInternalLinkClickTest : public PDFExtensionTest {
   }
 
   content::WebContents* GetWebContentsForInputRouting() {
-    return content::MimeHandlerViewMode::UsesCrossProcessFrame()
-               ? guest_contents_
-               : GetActiveWebContents();
+    return guest_contents_;
   }
 
  private:
@@ -1808,9 +1742,7 @@ class PDFExtensionClipboardTest : public PDFExtensionTest {
   }
 
   content::WebContents* GetWebContentsForInputRouting() {
-    return content::MimeHandlerViewMode::UsesCrossProcessFrame()
-               ? guest_contents_
-               : GetActiveWebContents();
+    return guest_contents_;
   }
 
  private:
@@ -2216,13 +2148,11 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionHitTestTest, ContextMenuCoordinates) {
 // The plugin document and the mime handler should both use the same background
 // color.
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, BackgroundColor) {
-  if (content::MimeHandlerViewMode::UsesCrossProcessFrame()) {
-    // The background color for plugins is injected when the first response
-    // is intercepted, at which point not all the plugins have loaded. This line
-    // ensures that the PDF plugin has loaded and the right background color is
-    // beign used.
-    WaitForPluginServiceToLoad();
-  }
+  // The background color for plugins is injected when the first response
+  // is intercepted, at which point not all the plugins have loaded. This line
+  // ensures that the PDF plugin has loaded and the right background color is
+  // beign used.
+  WaitForPluginServiceToLoad();
   WebContents* guest_contents =
       LoadPdfGetGuestContents(embedded_test_server()->GetURL("/pdf/test.pdf"));
   ASSERT_TRUE(guest_contents);
@@ -2258,65 +2188,6 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, ServiceWorkerNetworkFallback) {
 // provides a response.
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, ServiceWorkerInterception) {
   RunServiceWorkerTest("respond_with_fetch_worker.js");
-}
-
-// Flaky on Windows. https://crbug.com/952066
-#if defined(OS_WIN)
-#define MAYBE_EmbeddedPdfGetsFocus DISABLED_EmbeddedPdfGetsFocus
-#else
-#define MAYBE_EmbeddedPdfGetsFocus EmbeddedPdfGetsFocus
-#endif
-
-IN_PROC_BROWSER_TEST_F(PDFExtensionTest, MAYBE_EmbeddedPdfGetsFocus) {
-  if (content::MimeHandlerViewMode::UsesCrossProcessFrame()) {
-    // This test verifies focus for a BrowserPlugin and is not relevant with
-    // MHVICPF since no BrowserPlugin is created with this flag.
-    return;
-  }
-  GURL test_iframe_url(embedded_test_server()->GetURL(
-      "/pdf/test-offset-cross-site-iframe.html"));
-  ui_test_utils::NavigateToURL(browser(), test_iframe_url);
-  WebContents* contents = GetActiveWebContents();
-
-  // Get BrowserPluginGuest for the PDF.
-  WebContents* guest_contents = nullptr;
-  content::BrowserPluginGuestManager* guest_manager =
-      contents->GetBrowserContext()->GetGuestManager();
-  guest_manager->ForEachGuest(
-      contents, base::BindRepeating(&RetrieveGuestContents, &guest_contents));
-  ASSERT_TRUE(guest_contents);
-  EXPECT_NE(contents, guest_contents);
-  // Wait for the guest's view to be created.
-  while (!guest_contents->GetRenderWidgetHostView()) {
-    base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
-    run_loop.Run();
-  }
-  WaitForHitTestData(guest_contents);
-
-  // Verify it's not focused.
-  EXPECT_FALSE(IsWebContentsBrowserPluginFocused(guest_contents));
-
-  // Send mouse-click.
-  gfx::Point point_in_pdf(10, 10);
-  gfx::Point point_in_root =
-      guest_contents->GetRenderWidgetHostView()->TransformPointToRootCoordSpace(
-          point_in_pdf);
-  EXPECT_NE(point_in_pdf, point_in_root);
-  content::SimulateRoutedMouseClickAt(contents, kDefaultKeyModifier,
-                                      blink::WebMouseEvent::Button::kLeft,
-                                      point_in_root);
-
-  // Wait for the BPG to get focus. This test will timeout if the focus fails
-  // to occur. Alternatively, we could add an IPC filter to the guest's
-  // RenderProcessHost.
-  while (!IsWebContentsBrowserPluginFocused(guest_contents)) {
-    base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
-    run_loop.Run();
-  }
 }
 
 // A helper for waiting for the first request for |url_to_intercept|.
@@ -2570,6 +2441,12 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTextExtractionTest, WebLinks) {
   RunTextExtractionTest(FILE_PATH_LITERAL("weblinks.pdf"));
 }
 
+// Test data of inline text boxes for PDF with highlights.
+IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTextExtractionTest,
+                       Highlights) {
+  RunTextExtractionTest(FILE_PATH_LITERAL("highlights.pdf"));
+}
+
 // Test data of inline text boxes for PDF with multi-line and various font-sized
 // text.
 IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTextExtractionTest,
@@ -2596,7 +2473,8 @@ class PDFExtensionAccessibilityTreeDumpTest
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PDFExtensionTest::SetUpCommandLine(command_line);
-
+    feature_list_.InitAndEnableFeature(
+        chrome_pdf::features::kAccessiblePDFHighlight);
     // Each test pass might require custom command-line setup
     if (test_pass_.set_up_command_line)
       test_pass_.set_up_command_line(command_line);
@@ -2615,6 +2493,8 @@ class PDFExtensionAccessibilityTreeDumpTest
 
     RunTest(pdf_path, "pdf/accessibility");
   }
+
+  base::test::ScopedFeatureList feature_list_;
 
  private:
   using PropertyFilter = content::AccessibilityTreeFormatter::PropertyFilter;
@@ -2690,12 +2570,13 @@ class PDFExtensionAccessibilityTreeDumpTest
     // Find the embedded PDF and dump the accessibility tree.
     content::FindAccessibilityNodeCriteria find_criteria;
     find_criteria.role = ax::mojom::Role::kEmbeddedObject;
-    content::BrowserAccessibility* pdf_root =
+    ui::AXPlatformNodeDelegate* pdf_root =
         content::FindAccessibilityNode(guest_contents, find_criteria);
     CHECK(pdf_root);
 
     base::string16 actual_contents_utf16;
-    formatter->FormatAccessibilityTree(pdf_root, &actual_contents_utf16);
+    formatter->FormatAccessibilityTreeForTesting(pdf_root,
+                                                 &actual_contents_utf16);
     std::string actual_contents = base::UTF16ToUTF8(actual_contents_utf16);
 
     std::vector<std::string> actual_lines =
@@ -2751,7 +2632,7 @@ struct DumpAccessibilityTreeTestPassToString {
 };
 
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     PDFExtensionAccessibilityTreeDumpTest,
     ::testing::Range(
         size_t{0},
@@ -2784,6 +2665,15 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, WebLinks) {
   RunPDFTest(FILE_PATH_LITERAL("weblinks.pdf"));
 }
 
+IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest,
+                       OverlappingLinks) {
+  RunPDFTest(FILE_PATH_LITERAL("overlapping-links.pdf"));
+}
+
+IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, Highlights) {
+  RunPDFTest(FILE_PATH_LITERAL("highlights.pdf"));
+}
+
 IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, Images) {
   RunPDFTest(FILE_PATH_LITERAL("image_alt_text.pdf"));
 }
@@ -2800,4 +2690,39 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest,
 
 IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, TextStyle) {
   RunPDFTest(FILE_PATH_LITERAL("text-style.pdf"));
+}
+
+// This test suite validates the navigation done using the accessibility client.
+using PDFExtensionAccessibilityNavigationTest = PDFExtensionTest;
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityNavigationTest,
+                       LinkNavigation) {
+  // Enable accessibility and load the test file.
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  GURL url(embedded_test_server()->GetURL("/pdf/accessibility/weblinks.pdf"));
+  WebContents* guest_contents = LoadPdfGetGuestContents(url);
+  ASSERT_TRUE(guest_contents);
+  WaitForAccessibilityTreeToContainNodeWithName(guest_contents, "Page 1");
+
+  // Find the specific link node.
+  content::FindAccessibilityNodeCriteria find_criteria;
+  find_criteria.role = ax::mojom::Role::kLink;
+  find_criteria.name = "http://bing.com";
+  ui::AXPlatformNodeDelegate* link_node =
+      content::FindAccessibilityNode(guest_contents, find_criteria);
+  ASSERT_TRUE(link_node);
+
+  // Invoke action on a link and wait for navigation to complete.
+  content::AccessibilityNotificationWaiter event_waiter(
+      GetActiveWebContents(), ui::kAXModeComplete,
+      ax::mojom::Event::kLoadComplete);
+  ui::AXActionData action_data;
+  action_data.action = ax::mojom::Action::kDoDefault;
+  action_data.target_node_id = link_node->GetData().id;
+  link_node->AccessibilityPerformAction(action_data);
+  event_waiter.WaitForNotification();
+
+  // Test that navigation occurred correctly.
+  const GURL& expected_url = GetActiveWebContents()->GetURL();
+  EXPECT_EQ("https://bing.com/", expected_url.spec());
 }

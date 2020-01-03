@@ -233,8 +233,8 @@ class ImageDecodeAcceleratorStubTest
         channel_manager()->GetSharedContextState(&context_result);
     ASSERT_EQ(ContextResult::kSuccess, context_result);
     ASSERT_TRUE(shared_context_state);
-    shared_context_state->InitializeGrContext(GpuDriverBugWorkarounds(),
-                                              nullptr);
+    shared_context_state->InitializeGrContext(
+        GpuPreferences(), GpuDriverBugWorkarounds(), nullptr);
 
     GpuChannel* channel = CreateChannel(kChannelId, false /* is_gpu_host */);
     ASSERT_TRUE(channel);
@@ -719,7 +719,7 @@ TEST_P(ImageDecodeAcceleratorStubTest, WaitForDiscardableHandleRegistration) {
 // TODO(andrescj): test the deletion of transfer cache entries.
 
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     ImageDecodeAcceleratorStubTest,
     ::testing::Values(gfx::BufferFormat::YVU_420,
                       gfx::BufferFormat::YUV_420_BIPLANAR));

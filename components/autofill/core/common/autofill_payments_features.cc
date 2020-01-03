@@ -42,10 +42,6 @@ const base::Feature kAutofillCreditCardAuthentication{
 const base::Feature kAutofillCreditCardUploadFeedback{
     "AutofillCreditCardUploadFeedback", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kAutofillDoNotMigrateUnsupportedLocalCards{
-    "AutofillDoNotMigrateUnsupportedLocalCards",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
 // When enabled, enable local card migration flow for user who has signed in but
 // has not turned on sync.
 const base::Feature kAutofillEnableLocalCardMigrationForNonSyncUser{
@@ -56,6 +52,11 @@ const base::Feature kAutofillEnableLocalCardMigrationForNonSyncUser{
 // chip in toolbar along with the avatar toolbar button.
 const base::Feature kAutofillEnableToolbarStatusChip{
     "AutofillEnableToolbarStatusChip", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, the option of using cloud token virtual card will be offered
+// when all requirements are met.
+const base::Feature kAutofillEnableVirtualCard{
+    "AutofillEnableVirtualCard", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, will remove the option to save unmasked server cards as
 // FULL_SERVER_CARDs upon successful unmask.
@@ -72,9 +73,9 @@ const base::Feature kAutofillNoLocalSaveOnUploadSuccess{
 const base::Feature kAutofillSaveCardDismissOnNavigation{
     "AutofillSaveCardDismissOnNavigation", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Controls whether to show updated UI for the card unmask prompt.
-const base::Feature kAutofillUpdatedCardUnmaskPromptUi{
-    "AutofillUpdatedCardUnmaskPromptUi", base::FEATURE_DISABLED_BY_DEFAULT};
+// When enabled, the Save Card infobar supports editing before submitting.
+const base::Feature kAutofillSaveCardInfobarEditSupport{
+    "AutofillSaveCardInfobarEditSupport", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls offering credit card upload to Google Payments. Cannot ever be
 // ENABLED_BY_DEFAULT because it's a country-specific whitelist. There are

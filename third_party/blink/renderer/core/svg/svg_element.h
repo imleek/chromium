@@ -37,6 +37,7 @@ namespace blink {
 
 class AffineTransform;
 class Document;
+class ElementSMILAnimations;
 class SVGAnimatedPropertyBase;
 class SubtreeLayoutScope;
 class SVGAnimatedString;
@@ -100,6 +101,9 @@ class CORE_EXPORT SVGElement : public Element {
   void SetWebAnimatedAttribute(const QualifiedName& attribute,
                                SVGPropertyBase*);
   void ClearWebAnimatedAttributes();
+
+  ElementSMILAnimations* GetSMILAnimations();
+  ElementSMILAnimations& EnsureSMILAnimations();
 
   void SetAnimatedAttribute(const QualifiedName&, SVGPropertyBase*);
   void ClearAnimatedAttribute(const QualifiedName&);
@@ -330,48 +334,24 @@ struct SVGAttributeHashTranslator {
   }
 };
 
-DEFINE_ELEMENT_TYPE_CASTS(SVGElement, IsSVGElement());
-
-template <>
-struct DowncastTraits<SVGElement> {
-  static bool AllowFrom(const Node& node) { return node.IsSVGElement(); }
-};
-
 template <typename T>
 bool IsElementOfType(const SVGElement&);
 template <>
 inline bool IsElementOfType<const SVGElement>(const SVGElement&) {
   return true;
 }
-
+template <>
+inline bool IsElementOfType<const SVGElement>(const Node& node) {
+  return IsA<SVGElement>(node);
+}
+template <>
+struct DowncastTraits<SVGElement> {
+  static bool AllowFrom(const Node& node) { return node.IsSVGElement(); }
+};
 inline bool Node::HasTagName(const SVGQualifiedName& name) const {
   auto* svg_element = DynamicTo<SVGElement>(this);
   return svg_element && svg_element->HasTagName(name);
 }
-
-// This requires IsSVG*Element(const SVGElement&).
-#define DEFINE_SVGELEMENT_TYPE_CASTS_WITH_FUNCTION(thisType)               \
-  inline bool Is##thisType(const thisType* element);                       \
-  inline bool Is##thisType(const thisType& element);                       \
-  inline bool Is##thisType(const SVGElement* element) {                    \
-    return element && Is##thisType(*element);                              \
-  }                                                                        \
-  inline bool Is##thisType(const Node& node) {                             \
-    auto* svg_element = DynamicTo<SVGElement>(node);                       \
-    return svg_element && Is##thisType(svg_element);                       \
-  }                                                                        \
-  inline bool Is##thisType(const Node* node) {                             \
-    return node && Is##thisType(*node);                                    \
-  }                                                                        \
-  template <typename T>                                                    \
-  inline bool Is##thisType(const Member<T>& node) {                        \
-    return Is##thisType(node.Get());                                       \
-  }                                                                        \
-  template <>                                                              \
-  inline bool IsElementOfType<const thisType>(const SVGElement& element) { \
-    return Is##thisType(element);                                          \
-  }                                                                        \
-  DEFINE_ELEMENT_TYPE_CASTS_WITH_FUNCTION(thisType)
 
 }  // namespace blink
 

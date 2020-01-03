@@ -13,11 +13,12 @@ TabStripUILayout TabStripUILayout::CalculateForWebViewportSize(
     const gfx::Size& viewport_size) {
   // The smaller of the thumbnail's height or width is fixed to this
   // value. The other dimension will be at least this long.
-  constexpr int kThumbnailMinDimensionLength = 176;
+  constexpr int kThumbnailMinDimensionLength = 120;
 
   TabStripUILayout layout;
   layout.padding_around_tab_list = 16;
   layout.tab_title_height = 40;
+  layout.viewport_width = viewport_size.width();
 
   if (viewport_size.IsEmpty()) {
     layout.tab_thumbnail_size =
@@ -33,9 +34,12 @@ TabStripUILayout TabStripUILayout::CalculateForWebViewportSize(
                                         viewport_size.height());
   } else {
     layout.tab_thumbnail_size.set_width(kThumbnailMinDimensionLength);
+    // The height of the tab title is cropped from the thumbnail height to
+    // make the tabs appear less tall.
     layout.tab_thumbnail_size.set_height(kThumbnailMinDimensionLength *
-                                         viewport_size.height() /
-                                         viewport_size.width());
+                                             viewport_size.height() /
+                                             viewport_size.width() -
+                                         layout.tab_title_height);
   }
 
   return layout;
@@ -51,6 +55,8 @@ base::Value TabStripUILayout::AsDictionary() const {
                     base::NumberToString(tab_thumbnail_size.width()) + "px");
   dict.SetStringKey("--tabstrip-tab-thumbnail-height",
                     base::NumberToString(tab_thumbnail_size.height()) + "px");
+  dict.SetStringKey("--tabstrip-viewport-width",
+                    base::NumberToString(viewport_width) + "px");
   return dict;
 }
 

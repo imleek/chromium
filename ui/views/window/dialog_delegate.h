@@ -108,12 +108,6 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   // Returns whether the specified dialog button is enabled.
   virtual bool IsDialogButtonEnabled(ui::DialogButton button) const;
 
-  // Override this function to display a footnote view below the buttons.
-  // Overrides may construct the view; this will only be called once per dialog.
-  // DEPRECATED: Prefer to use SetFootnoteView() below; this method is being
-  // removed. See https://crbug.com/1011446.
-  virtual std::unique_ptr<View> CreateFootnoteView();
-
   // For Dialog boxes, if there is a "Cancel" button or no dialog button at all,
   // this is called when the user presses the "Cancel" button.
   // It can also be called on a close action if |Close| has not been
@@ -160,24 +154,19 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
     return view;
   }
 
-  // A helper for accessing the DialogClientView object contained by this
-  // delegate's Window.
-  const DialogClientView* GetDialogClientView() const;
-  DialogClientView* GetDialogClientView();
-
   // Returns the BubbleFrameView of this dialog delegate. A bubble frame view
   // will only be created when use_custom_frame() is true.
   BubbleFrameView* GetBubbleFrameView() const;
 
   // Helpers for accessing parts of the DialogClientView without needing to know
   // about DialogClientView. Do not call these before OnDialogInitialized.
-  views::LabelButton* GetOkButton();
-  views::LabelButton* GetCancelButton();
-  views::View* GetExtraView();
+  views::LabelButton* GetOkButton() const;
+  views::LabelButton* GetCancelButton() const;
+  views::View* GetExtraView() const;
 
   // Helper for accessing the footnote view. Unlike the three methods just
   // above, this *is* safe to call before OnDialogInitialized.
-  views::View* GetFootnoteViewForTesting();
+  views::View* GetFootnoteViewForTesting() const;
 
   // Add or remove an observer notified by calls to DialogModelChanged().
   void AddObserver(DialogObserver* observer);
@@ -243,6 +232,12 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   // "unintended interaction" detection mechanism.
   void ResetViewShownTimeStampForTesting();
 
+  // Set the insets used for the dialog's button row. This should be used only
+  // rarely.
+  // TODO(ellyjones): Investigate getting rid of this entirely and having all
+  // dialogs use the same button row insets.
+  void SetButtonRowInsets(const gfx::Insets& insets);
+
  protected:
   ~DialogDelegate() override;
 
@@ -251,10 +246,19 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
 
   const Params& GetParams() const { return params_; }
 
+  // Return ownership of the footnote view for this dialog. Only use this in
+  // subclass overrides of CreateNonClientFrameView.
+  std::unique_ptr<View> DisownFootnoteView();
+
  private:
   // Overridden from WidgetDelegate. If you need to hook after widget
   // initialization, use OnDialogInitialized above.
   void OnWidgetInitialized() final;
+
+  // A helper for accessing the DialogClientView object contained by this
+  // delegate's Window.
+  const DialogClientView* GetDialogClientView() const;
+  DialogClientView* GetDialogClientView();
 
   // The margins between the content and the inside of the border.
   // TODO(crbug.com/733040): Most subclasses assume they must set their own

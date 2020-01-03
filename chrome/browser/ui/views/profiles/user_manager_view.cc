@@ -39,7 +39,6 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_client_view.h"
 
 #if defined(OS_WIN)
 #include "chrome/browser/shell_integration_win.h"
@@ -56,7 +55,7 @@ namespace {
 // An open User Manager window. There can only be one open at a time. This
 // is reset to nullptr when the window is closed.
 UserManagerView* g_user_manager_view = nullptr;
-base::Closure* g_user_manager_shown_callback_for_testing = nullptr;
+base::OnceClosure* g_user_manager_shown_callback_for_testing = nullptr;
 bool g_is_user_manager_view_under_construction = false;
 }  // namespace
 
@@ -203,7 +202,7 @@ void UserManager::OnUserManagerShown() {
     g_user_manager_view->LogTimeToOpen();
     if (g_user_manager_shown_callback_for_testing) {
       if (!g_user_manager_shown_callback_for_testing->is_null())
-        g_user_manager_shown_callback_for_testing->Run();
+        std::move(*g_user_manager_shown_callback_for_testing).Run();
 
       delete g_user_manager_shown_callback_for_testing;
       g_user_manager_shown_callback_for_testing = nullptr;
@@ -213,9 +212,10 @@ void UserManager::OnUserManagerShown() {
 
 // static
 void UserManager::AddOnUserManagerShownCallbackForTesting(
-    const base::Closure& callback) {
+    base::OnceClosure callback) {
   DCHECK(!g_user_manager_shown_callback_for_testing);
-  g_user_manager_shown_callback_for_testing = new base::Closure(callback);
+  g_user_manager_shown_callback_for_testing =
+      new base::OnceClosure(std::move(callback));
 }
 
 // static
@@ -396,12 +396,6 @@ void UserManagerView::Init(Profile* system_profile, const GURL& url) {
       GetDialogWidgetInitParams(this, nullptr, nullptr, bounds);
   (new views::Widget)->Init(std::move(params));
 
-  // Since the User Manager can be the only top level window, we don't
-  // want to accidentally quit all of Chrome if the user is just trying to
-  // unfocus the selected pod in the WebView.
-  GetDialogClientView()->RemoveAccelerator(
-      ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
-
 #if defined(OS_WIN)
   // Set the app id for the user manager to the app id of its parent.
   ui::win::SetAppIdForWindow(
@@ -432,6 +426,14 @@ void UserManagerView::LogTimeToOpen() {
 bool UserManagerView::AcceleratorPressed(const ui::Accelerator& accelerator) {
   int key = accelerator.key_code();
   int modifier = accelerator.modifiers();
+
+  // Ignore presses of the Escape key. The user manager may be Chrome's only
+  // top-level window, in which case we don't want presses of Esc to maybe quit
+  // the entire browser. This has higher priority than the default dialog Esc
+  // accelerator (which would otherwise close the window).
+  if (key == ui::VKEY_ESCAPE && modifier == ui::EF_NONE)
+    return true;
+
   DCHECK((key == ui::VKEY_W && modifier == ui::EF_CONTROL_DOWN) ||
          (key == ui::VKEY_F4 && modifier == ui::EF_ALT_DOWN));
   GetWidget()->Close();

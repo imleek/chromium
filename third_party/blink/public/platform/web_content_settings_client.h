@@ -97,9 +97,6 @@ class WebContentSettingsClient {
   // interface.
   virtual bool AllowMutationEvents(bool default_value) { return default_value; }
 
-  // Controls whether autoplay is allowed for this frame.
-  virtual bool AllowAutoplay(bool default_value) { return default_value; }
-
   virtual bool AllowPopupsAndRedirects(bool default_value) {
     return default_value;
   }
@@ -121,6 +118,10 @@ class WebContentSettingsClient {
       const WebEnabledClientHints& enabled_client_hints,
       base::TimeDelta duration,
       const blink::WebURL& url) {}
+
+  // Controls whether mixed content autoupgrades should be allowed in this
+  // frame.
+  virtual bool ShouldAutoupgradeMixedContent() { return true; }
 
   virtual ~WebContentSettingsClient() = default;
 };

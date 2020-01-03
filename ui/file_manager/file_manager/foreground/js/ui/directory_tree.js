@@ -176,13 +176,33 @@ directorytree.createRowElementContentFilesNG = (id, label) => {
 /**
  * An optional rowElement depth (indent) style handler where undefined uses the
  * default cr.ui.TreeItem indent styling.
- *
- * TODO(crbug.com/992819): add an implementation for the FILES_NG_ENABLED case,
- * where a rowElement child needs the indent, not the rowElement itself.
- *
  * @type {function(!cr.ui.TreeItem,number)|undefined}
  */
 directorytree.styleRowElementDepth = undefined;
+
+/**
+ * Custom tree row style handler: called when the item's |rowElement| should be
+ * styled to indent |depth| in the tree for FILES_NG_ENABLED case.
+ * @param {!cr.ui.TreeItem} item cr.ui.TreeItem.
+ * @param {number} depth Indent depth (>=0).
+ */
+directorytree.styleRowElementDepthFilesNG = (item, depth) => {
+  const fileRowElement = item.rowElement.firstElementChild;
+
+  const indent = depth * 22;
+  let style = 'padding-inline-start: ' + indent + 'px';
+  const width = indent + 60;
+  style += '; min-width: ' + width + 'px;';
+
+  fileRowElement.setAttribute('style', style);
+};
+
+/**
+ * The iron-icon-set prefix for tree rows that have an .align-right-icon class
+ * element added to the row (eject icon, AndroidAppItem launch icon).
+ * @type {string}
+ */
+directorytree.rightIconSetPrefix = 'files16';
 
 /**
  * A tree item has a tree row with a text label.
@@ -734,12 +754,18 @@ class DirectoryItem extends TreeItem {
 
     // Append eject iron-icon.
     const ironIcon = document.createElement('iron-icon');
-    ironIcon.setAttribute('icon', 'files16:eject');
+    const iconSet = directorytree.rightIconSetPrefix;
+    ironIcon.setAttribute('icon', `${iconSet}:eject`);
     ejectButton.appendChild(ironIcon);
 
     // Add the eject button as the last element of the tree row content.
-    const parent = rowElement.querySelector('.label').parentElement;
-    assert(parent).appendChild(ejectButton);
+    const label = rowElement.querySelector('.label');
+    label.parentElement.appendChild(ejectButton);
+
+    // Ensure the eject icon shows when the directory tree is too narrow.
+    if (directorytree.FILES_NG_ENABLED) {
+      label.setAttribute('style', 'margin-inline-end: 2px; min-width: 0;');
+    }
   }
 
   /**
@@ -1103,19 +1129,19 @@ class VolumeItem extends DirectoryItem {
    */
   setupIcon_(icon, volumeInfo) {
     icon.classList.add('item-icon');
+
     const backgroundImage =
         util.iconSetToCSSBackgroundImageValue(volumeInfo.iconSet);
     if (backgroundImage !== 'none') {
-      // The icon div is not yet added to DOM, therefore it is impossible to
-      // use style.backgroundImage.
       icon.setAttribute('style', 'background-image: ' + backgroundImage);
     }
+
     icon.setAttribute('volume-type-icon', volumeInfo.volumeType);
+
     if (volumeInfo.volumeType === VolumeManagerCommon.VolumeType.MEDIA_VIEW) {
-      icon.setAttribute(
-          'volume-subtype',
-          VolumeManagerCommon.getMediaViewRootTypeFromVolumeId(
-              volumeInfo.volumeId));
+      const subtype = VolumeManagerCommon.getMediaViewRootTypeFromVolumeId(
+          volumeInfo.volumeId);
+      icon.setAttribute('volume-subtype', subtype);
     } else {
       icon.setAttribute('volume-subtype', volumeInfo.deviceType || '');
     }
@@ -1663,19 +1689,32 @@ class AndroidAppItem extends TreeItem {
       }
     }
 
-    // Create an external link icon. TODO(crbug.com/986169) does this icon
-    // element need aria-label, role, tabindex, etc?
+    if (directorytree.FILES_NG_ENABLED && !icon.hasAttribute('style')) {
+      icon.setAttribute('use-generic-provided-icon', '');
+    }
+
+    // Use aria-describedby attribute to let ChromeVox users know that the link
+    // launches an external app window.
+    this.setAttribute('aria-describedby', 'external-link-label');
+
+    // Create an external link icon.
     const externalLinkIcon = document.createElement('span');
     externalLinkIcon.className = 'external-link-icon align-right-icon';
 
     // Append external-link iron-icon.
     const ironIcon = document.createElement('iron-icon');
-    ironIcon.setAttribute('icon', 'files16:external-link');
+    const iconSet = directorytree.rightIconSetPrefix;
+    ironIcon.setAttribute('icon', `${iconSet}:external-link`);
     externalLinkIcon.appendChild(ironIcon);
 
-    // Add the external link as the last element of the tree row content.
-    const parent = this.rowElement.querySelector('.label').parentElement;
-    assert(parent).appendChild(externalLinkIcon);
+    // Add the external-link as the last element of the tree row content.
+    const label = this.rowElement.querySelector('.label');
+    label.parentElement.appendChild(externalLinkIcon);
+
+    // Ensure the link icon shows when the directory tree is too narrow.
+    if (directorytree.FILES_NG_ENABLED) {
+      label.setAttribute('style', 'margin-inline-end: 2px; min-width: 0;');
+    }
   }
 
   /**
@@ -1726,6 +1765,12 @@ class FakeItem extends TreeItem {
     const icon = this.querySelector('.icon');
     icon.classList.add('item-icon');
     icon.setAttribute('root-type-icon', rootType);
+
+    if (rootType === VolumeManagerCommon.RootType.RECENT) {
+      this.labelElement.scrollIntoViewIfNeeded = () => {
+        this.scrollIntoView(true);
+      };
+    }
 
     if (tree.disabledContextMenu) {
       cr.ui.contextMenuHandler.setContextMenu(this, tree.disabledContextMenu);
@@ -1805,6 +1850,9 @@ class DirectoryTree extends cr.ui.Tree {
   constructor() {
     super();
 
+    /** @type {?HTMLElement} */
+    this.activeRow_ = null;
+
     /** @type {NavigationListModel} */
     this.dataModel_ = null;
 
@@ -1858,6 +1906,9 @@ class DirectoryTree extends cr.ui.Tree {
     util.addEventListenerToBackgroundComponent(
         fileOperationManager, 'entries-changed',
         this.onEntriesChanged_.bind(this));
+
+    this.addEventListener(
+        'scroll', this.onTreeScrollEvent_.bind(this), {passive: true});
 
     this.addEventListener('click', (event) => {
       // Chromevox triggers |click| without switching focus, we force the focus
@@ -2200,6 +2251,18 @@ class DirectoryTree extends cr.ui.Tree {
    */
   onCurrentDirectoryChanged_(event) {
     this.selectByEntry(event.newDirEntry);
+
+    const selectedItem = this.selectedItem;
+
+    if (this.activeRow_) {
+      this.activeRow_.removeAttribute('active');
+    }
+
+    this.activeRow_ = selectedItem ? selectedItem.rowElement : null;
+    if (this.activeRow_) {
+      this.activeRow_.setAttribute('active', '');
+    }
+
     this.updateSubDirectories(false /* recursive */, () => {});
   }
 
@@ -2221,11 +2284,48 @@ class DirectoryTree extends cr.ui.Tree {
     });
   }
 
+  /*
+   * The directory tree does not support horizontal scrolling (by design), but
+   * can gain a scrollLeft > 0, see crbug.com/1025581. Always clamp scrollLeft
+   * back to 0 if needed.
+   */
+  onTreeScrollEvent_() {
+    if (this.scrollRAFActive_ === true) {
+      return;
+    }
+
+    /**
+     * True if a scroll RAF is active: scroll events are frequent and serviced
+     * using RAF to throttle our processing of these events.
+     * @type {boolean}
+     */
+    this.scrollRAFActive_ = true;
+
+    window.requestAnimationFrame(() => {
+      this.scrollRAFActive_ = false;
+      if (this.scrollLeft) {
+        this.scrollLeft = 0;
+      }
+    });
+  }
+
   /**
-   * Updates the UI after the layout has changed.
+   * Updates the UI after the layout has changed, due to resize events from
+   * the splitter or from the DOM window.
    */
   relayout() {
+    this.setTreeClippedAttribute_();
     cr.dispatchSimpleEvent(this, 'relayout', true);
+  }
+
+  /**
+   * Sets the tree 'clipped' attribute. TODO(crbug.com/992819): the breakpoint
+   * in the design is unspecified. Punt: use 135px for now.
+   * @private
+   */
+  setTreeClippedAttribute_() {
+    const width = parseFloat(window.getComputedStyle(this).width);
+    this.toggleAttribute('clipped', width < 135);
   }
 
   // DirectoryTree is always expanded.
@@ -2297,12 +2397,25 @@ DirectoryTree.decorate =
      fakeEntriesVisible) => {
       el.__proto__ = DirectoryTree.prototype;
 
-      // TODO(crbug.com/992819): add overrides for the FILES_NG_ENABLED case.
+      if (util.isFilesNg()) {
+        directorytree.FILES_NG_ENABLED = true;
+        directorytree.rightIconSetPrefix = 'files20';
+        directorytree.createRowElementContent =
+            directorytree.createRowElementContentFilesNG;
+        directorytree.styleRowElementDepth =
+            directorytree.styleRowElementDepthFilesNG;
+        el.setAttribute('files-ng', '');
+      }
+
       Object.freeze(directorytree);
 
       /** @type {DirectoryTree} */ (el).decorateDirectoryTree(
           directoryModel, volumeManager, metadataModel, fileOperationManager,
           fakeEntriesVisible);
+
+      if (directorytree.FILES_NG_ENABLED) {
+        el.rowElementDepthStyleHandler = directorytree.styleRowElementDepth;
+      }
     };
 
 cr.defineProperty(DirectoryTree, 'contextMenuForSubitems', cr.PropertyKind.JS);

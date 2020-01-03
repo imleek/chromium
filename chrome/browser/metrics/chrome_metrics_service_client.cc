@@ -31,6 +31,7 @@
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -59,7 +60,6 @@
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/installer/util/util_constants.h"
 #include "components/browser_watcher/stability_paths.h"
 #include "components/crash/core/common/crash_keys.h"
 #include "components/history/core/browser/history_service.h"
@@ -89,6 +89,7 @@
 #include "components/omnibox/browser/omnibox_metrics_provider.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/sync/driver/passphrase_type_metrics_provider.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync_device_info/device_count_metrics_provider.h"
 #include "components/ukm/ukm_service.h"
@@ -137,7 +138,7 @@
 #include "chrome/browser/metrics/assistant_service_metrics_provider.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
 #include "chrome/browser/signin/signin_status_metrics_provider_chromeos.h"
-#include "chrome/browser/ui/app_list/search/search_result_ranker/app_list_launch_metrics_provider.h"
+#include "components/metrics/structured/structured_metrics_provider.h"
 #endif
 
 #if defined(OS_WIN)
@@ -147,6 +148,7 @@
 #include "chrome/browser/metrics/google_update_metrics_provider_win.h"
 #include "chrome/common/metrics_constants_util_win.h"
 #include "chrome/install_static/install_util.h"
+#include "chrome/installer/util/util_constants.h"
 #include "chrome/notification_helper/notification_helper_constants.h"
 #include "components/browser_watcher/watcher_metrics_provider_win.h"
 #include "content/public/browser/system_connector.h"
@@ -545,10 +547,10 @@ void ChromeMetricsServiceClient::OnLogCleanShutdown() {
 }
 
 void ChromeMetricsServiceClient::CollectFinalMetricsForLog(
-    const base::Closure& done_callback) {
+    base::OnceClosure done_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  collect_final_metrics_done_callback_ = done_callback;
+  collect_final_metrics_done_callback_ = std::move(done_callback);
   CollectFinalHistograms();
 }
 
@@ -616,6 +618,11 @@ void ChromeMetricsServiceClient::Initialize() {
         base::BindRepeating(&IsWebstoreExtension));
     RegisterUKMProviders();
   }
+
+#if defined(OS_CHROMEOS)
+  metrics::structured::Recorder::GetInstance()->SetUiTaskRunner(
+      base::SequencedTaskRunnerHandle::Get());
+#endif
 }
 
 void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
@@ -738,9 +745,8 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<chromeos::PrinterMetricsProvider>());
 
-  // Using WrapUnique to access a private constructor.
   metrics_service_->RegisterMetricsProvider(
-      base::WrapUnique(new app_list::AppListLaunchMetricsProvider()));
+      std::make_unique<metrics::structured::StructuredMetricsProvider>());
 
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<AssistantServiceMetricsProvider>());
@@ -758,6 +764,10 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<syncer::DeviceCountMetricsProvider>(base::BindRepeating(
           &DeviceInfoSyncServiceFactory::GetAllDeviceInfoTrackers)));
+
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<syncer::PassphraseTypeMetricsProvider>(
+          base::BindRepeating(&ProfileSyncServiceFactory::GetAllSyncServices)));
 
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<HttpsEngagementMetricsProvider>());
@@ -814,12 +824,12 @@ void ChromeMetricsServiceClient::CollectFinalHistograms() {
   DCHECK(!waiting_for_collect_final_metrics_step_);
   waiting_for_collect_final_metrics_step_ = true;
 
-  base::Closure callback =
-      base::Bind(&ChromeMetricsServiceClient::OnMemoryDetailCollectionDone,
-                 weak_ptr_factory_.GetWeakPtr());
+  base::OnceClosure callback =
+      base::BindOnce(&ChromeMetricsServiceClient::OnMemoryDetailCollectionDone,
+                     weak_ptr_factory_.GetWeakPtr());
 
-  scoped_refptr<MetricsMemoryDetails> details(
-      new MetricsMemoryDetails(callback));
+  auto details =
+      base::MakeRefCounted<MetricsMemoryDetails>(std::move(callback));
   details->StartFetch();
 }
 
@@ -831,7 +841,7 @@ void ChromeMetricsServiceClient::OnMemoryDetailCollectionDone() {
   DCHECK(waiting_for_collect_final_metrics_step_);
 
   // Create a callback_task for OnHistogramSynchronizationDone.
-  base::Closure callback = base::Bind(
+  base::RepeatingClosure callback = base::BindRepeating(
       &ChromeMetricsServiceClient::OnHistogramSynchronizationDone,
       weak_ptr_factory_.GetWeakPtr());
 
@@ -865,7 +875,7 @@ void ChromeMetricsServiceClient::OnMemoryDetailCollectionDone() {
   // child processes. |timeout| specifies how long to wait before absolutely
   // calling us back on the task.
   content::FetchHistogramsAsynchronously(base::ThreadTaskRunnerHandle::Get(),
-                                         callback, timeout);
+                                         std::move(callback), timeout);
 }
 
 void ChromeMetricsServiceClient::OnHistogramSynchronizationDone() {
@@ -881,7 +891,7 @@ void ChromeMetricsServiceClient::OnHistogramSynchronizationDone() {
     return;
 
   waiting_for_collect_final_metrics_step_ = false;
-  collect_final_metrics_done_callback_.Run();
+  std::move(collect_final_metrics_done_callback_).Run();
 }
 
 void ChromeMetricsServiceClient::RecordCommandLineMetrics() {
@@ -947,6 +957,22 @@ bool ChromeMetricsServiceClient::RegisterForProfileEvents(Profile* profile) {
       chromeos::ProfileHelper::IsLockScreenAppProfile(profile)) {
     // No listeners, but still a success case.
     return true;
+  }
+
+  // Begin initializing the structured metrics system, which is currently
+  // only implemented for Chrome OS. Initialization must wait until a
+  // profile is added, because it reads keys stored within the user's
+  // cryptohome. We only initialize for profiles that are valid candidates
+  // for metrics collection, ignoring the sign-in profile, lock screen app
+  // profile, and guest sessions.
+  //
+  // TODO(crbug.com/1016655): This conditional would be better placed in
+  // metrics::structured::Recorder, but can't be because it depends on Chrome
+  // code. Investigate whether there's a way of checking this from the
+  // component.
+  if (!profile->IsGuestSession()) {
+    metrics::structured::Recorder::GetInstance()->ProfileAdded(
+        profile->GetPath());
   }
 #endif
 #if defined(OS_WIN) || defined(OS_MACOSX) || \

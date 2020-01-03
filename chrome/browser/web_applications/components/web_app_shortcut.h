@@ -6,8 +6,8 @@
 #define CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_WEB_APP_SHORTCUT_H_
 
 #include <memory>
+#include <set>
 #include <string>
-#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
@@ -40,7 +40,8 @@ struct ShortcutInfo {
   base::FilePath profile_path;
   std::string profile_name;
   std::string version_for_display;
-  std::vector<std::string> mime_types;
+  std::set<std::string> file_handler_extensions;
+  std::set<std::string> file_handler_mime_types;
 
  private:
   // Since gfx::ImageFamily |favicon| has a non-thread-safe reference count in
@@ -134,6 +135,10 @@ void ScheduleCreatePlatformShortcuts(
 // is executed on the FILE thread.
 void DeletePlatformShortcuts(const base::FilePath& shortcut_data_path,
                              const ShortcutInfo& shortcut_info);
+
+// Delete the multi-profile (non-profile_scoped) shortcuts for the specified
+// app. This is the multi-profile complement of DeletePlatformShortcuts.
+void DeleteMultiProfileShortcutsForApp(const std::string& app_id);
 
 // Updates all the shortcuts we have added for this extension. This is the
 // platform specific implementation of the UpdateAllShortcuts function, and

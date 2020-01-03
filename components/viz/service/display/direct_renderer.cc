@@ -26,7 +26,6 @@
 #include "components/viz/service/display/bsp_tree.h"
 #include "components/viz/service/display/bsp_walk_action.h"
 #include "components/viz/service/display/output_surface.h"
-#include "components/viz/service/display/overlay_candidate_validator.h"
 #include "components/viz/service/display/skia_output_surface.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -108,6 +107,12 @@ namespace viz {
 DirectRenderer::DrawingFrame::DrawingFrame() = default;
 DirectRenderer::DrawingFrame::~DrawingFrame() = default;
 
+DirectRenderer::SwapFrameData::SwapFrameData() = default;
+DirectRenderer::SwapFrameData::~SwapFrameData() = default;
+DirectRenderer::SwapFrameData::SwapFrameData(SwapFrameData&&) = default;
+DirectRenderer::SwapFrameData& DirectRenderer::SwapFrameData::operator=(
+    SwapFrameData&&) = default;
+
 DirectRenderer::DirectRenderer(const RendererSettings* settings,
                                OutputSurface* output_surface,
                                DisplayResourceProvider* resource_provider)
@@ -123,7 +128,7 @@ void DirectRenderer::Initialize() {
   // Create an overlay validator based on the platform and set it on the newly
   // created processor. This would initialize the strategies on the validator as
   // well.
-  overlay_processor_ = OverlayProcessor::CreateOverlayProcessor(
+  overlay_processor_ = OverlayProcessorInterface::CreateOverlayProcessor(
       output_surface_->AsSkiaOutputSurface(),
       output_surface_->GetSurfaceHandle(), output_surface_->capabilities(),
       *settings_);
@@ -302,7 +307,7 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
     output_surface_->Reshape(
         reshape_surface_size_, reshape_device_scale_factor_,
         reshape_device_color_space_, reshape_has_alpha_, reshape_use_stencil_);
-    overlay_processor_->SetValidatorViewportSize(reshape_surface_size_);
+    overlay_processor_->SetViewportSize(reshape_surface_size_);
     did_reshape = true;
   }
 
@@ -330,14 +335,9 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
   overlay_processor_->SetDisplayTransformHint(
       output_surface_->GetDisplayTransform());
 
-  // Only used for pre-OOP-D code path.
-  // TODO(weiliangc): Remove once reflector code is removed.
-  overlay_processor_->SetSoftwareMirrorMode(
-      output_surface_->IsSoftwareMirrorMode());
-
   // Before ProcessForOverlay calls into the hardware to ask about whether the
   // overlay setup can be handled, we need to set up the primary plane.
-  OverlayProcessor::OutputSurfaceOverlayPlane* primary_plane = nullptr;
+  OverlayProcessorInterface::OutputSurfaceOverlayPlane* primary_plane = nullptr;
   if (output_surface_->IsDisplayedAsOverlayPlane()) {
     current_frame()->output_surface_plane =
         overlay_processor_->ProcessOutputSurfaceAsOverlay(

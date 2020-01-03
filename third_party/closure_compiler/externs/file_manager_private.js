@@ -34,6 +34,24 @@ chrome.fileManagerPrivate.DeviceType = {
   UNKNOWN: 'unknown',
 };
 
+/**
+ * @enum {string}
+ */
+chrome.fileManagerPrivate.DriveConnectionStateType = {
+  OFFLINE: 'OFFLINE',
+  METERED: 'METERED',
+  ONLINE: 'ONLINE',
+};
+
+/**
+ * @enum {string}
+ */
+chrome.fileManagerPrivate.DriveOfflineReason = {
+  NOT_READY: 'NOT_READY',
+  NO_NETWORK: 'NO_NETWORK',
+  NO_SERVICE: 'NO_SERVICE',
+};
+
 /** @enum {string} */
 chrome.fileManagerPrivate.MountCondition = {
   UNKNOWN: 'unknown',
@@ -221,7 +239,6 @@ chrome.fileManagerPrivate.Verb = {
 chrome.fileManagerPrivate.SourceRestriction = {
   ANY_SOURCE: 'any_source',
   NATIVE_SOURCE: 'native_source',
-  NATIVE_OR_DRIVE_SOURCE: 'native_or_drive_source',
 };
 
 /** @enum {string} */
@@ -447,8 +464,8 @@ chrome.fileManagerPrivate.DriveMetadataSearchResult;
 
 /**
  * @typedef {{
- *   type: string,
- *   reason: (string|undefined),
+ *   type: !chrome.fileManagerPrivate.DriveConnectionStateType,
+ *   reason: (!chrome.fileManagerPrivate.DriveOfflineReason|undefined),
  *   hasCellularNetworkAccess: boolean
  * }}
  */
@@ -457,7 +474,8 @@ chrome.fileManagerPrivate.DriveConnectionState;
 /**
  * @typedef {{
  *   type: !chrome.fileManagerPrivate.DeviceEventType,
- *   devicePath: string
+ *   devicePath: string,
+ *   deviceLabel: string
  * }}
  */
 chrome.fileManagerPrivate.DeviceEvent;
@@ -854,12 +872,6 @@ chrome.fileManagerPrivate.openSettingsSubpage = function(sub_page) {};
  * @param {function((string|undefined))} callback
  */
 chrome.fileManagerPrivate.computeChecksum = function(entry, callback) {};
-
-/**
- * Gets a flag indicating whether PiexLoader is enabled.
- * @param {function((boolean|undefined))} callback
- */
-chrome.fileManagerPrivate.isPiexLoaderEnabled = function(callback) {};
 
 /**
  * Returns list of available providers.

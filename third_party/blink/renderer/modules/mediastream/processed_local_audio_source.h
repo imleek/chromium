@@ -12,8 +12,8 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/synchronization/lock.h"
 #include "media/base/audio_capturer_source.h"
-#include "third_party/blink/public/platform/web_media_constraints.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
+#include "third_party/blink/renderer/platform/mediastream/media_constraints.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_level_calculator.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_processor_options.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
@@ -118,6 +118,11 @@ class MODULES_EXPORT ProcessedLocalAudioSource final
   // Helper function to get the source buffer size based on whether audio
   // processing will take place.
   int GetBufferSize(int sample_rate) const;
+
+  // Helper method which sends the log |message| to a native WebRTC log and
+  // adds the current session ID (from the associated media stream device) to
+  // make the log unique.
+  void SendLogMessageWithSessionId(const std::string& message) const;
 
   // The LocalFrame that will consume the audio data. Used when creating
   // AudioCapturerSources.

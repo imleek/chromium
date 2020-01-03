@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <set>
 #include <vector>
 
 #include "chrome/services/app_service/public/cpp/instance.h"
@@ -33,13 +34,8 @@ class InstanceRegistryTest : public testing::Test,
   }
 
   apps::InstanceState GetState(apps::InstanceRegistry& instance_registry,
-                               const aura::Window* window) {
-    apps::InstanceState state = apps::InstanceState::kUnknown;
-    instance_registry.ForOneInstance(
-        window, [&state](const apps::InstanceUpdate& update) {
-          state = update.State();
-        });
-    return state;
+                               aura::Window* window) {
+    return instance_registry.GetState(window);
   }
 
   // apps::InstanceRegistry::Observer overrides.
@@ -145,6 +141,7 @@ class InstanceRecursiveObserver : public apps::InstanceRegistry::Observer {
     EXPECT_EQ(outer.LaunchId(), inner.LaunchId());
     EXPECT_EQ(outer.State(), inner.State());
     EXPECT_EQ(outer.LastUpdatedTime(), inner.LastUpdatedTime());
+    EXPECT_EQ(outer.BrowserContext(), inner.BrowserContext());
   }
 
   apps::InstanceRegistry* instance_registry_;
@@ -184,6 +181,12 @@ TEST_F(InstanceRegistryTest, ForEachInstance) {
   deltas.push_back(MakeInstance("b", &window2));
   deltas.push_back(MakeInstance("c", &window3));
   instance_registry.OnInstances(std::move(deltas));
+  EXPECT_TRUE(instance_registry.GetWindows("a") ==
+              std::set<aura::Window*>{&window1});
+  EXPECT_TRUE(instance_registry.GetWindows("b") ==
+              std::set<aura::Window*>{&window2});
+  EXPECT_TRUE(instance_registry.GetWindows("c") ==
+              std::set<aura::Window*>{&window3});
 
   updated_windows_.clear();
   updated_ids_.clear();
@@ -204,6 +207,10 @@ TEST_F(InstanceRegistryTest, ForEachInstance) {
   deltas.push_back(MakeInstance("a", &window1, apps::InstanceState::kRunning));
   deltas.push_back(MakeInstance("c", &window4));
   instance_registry.OnInstances(std::move(deltas));
+  EXPECT_TRUE(instance_registry.GetWindows("a") ==
+              std::set<aura::Window*>{&window1});
+  EXPECT_TRUE(instance_registry.GetWindows("c") ==
+              (std::set<aura::Window*>{&window3, &window4}));
 
   updated_windows_.clear();
   updated_ids_.clear();
@@ -328,6 +335,8 @@ TEST_F(InstanceRegistryTest, WholeProcessForOneWindow) {
   deltas.push_back(MakeInstance("p", &window, instance_state));
   instance_registry.OnInstances(std::move(deltas));
   EXPECT_EQ(1, observer.NumInstancesSeenOnInstanceUpdate());
+  EXPECT_TRUE(instance_registry.GetWindows("p") ==
+              std::set<aura::Window*>{&window});
 
   apps::InstanceState state1 = static_cast<apps::InstanceState>(
       apps::InstanceState::kStarted | apps::InstanceState::kRunning);
@@ -357,6 +366,7 @@ TEST_F(InstanceRegistryTest, WholeProcessForOneWindow) {
   // state5, and state6 separately, because they are different. So
   // OnInstanceUpdate is called 4 times, for state1, state4, state5, and state6.
   EXPECT_EQ(4, observer.NumInstancesSeenOnInstanceUpdate());
+  EXPECT_TRUE(instance_registry.GetWindows("p").empty());
 
   bool found_window = false;
   EXPECT_FALSE(instance_registry.ForOneInstance(
@@ -370,6 +380,8 @@ TEST_F(InstanceRegistryTest, WholeProcessForOneWindow) {
   deltas.push_back(MakeInstance("p", &window, state5));
   instance_registry.OnInstances(std::move(deltas));
   EXPECT_EQ(1, observer.NumInstancesSeenOnInstanceUpdate());
+  EXPECT_TRUE(instance_registry.GetWindows("p") ==
+              std::set<aura::Window*>{&window});
 
   found_window = false;
   EXPECT_TRUE(instance_registry.ForOneInstance(
@@ -398,6 +410,10 @@ TEST_F(InstanceRegistryTest, Recursive) {
   deltas.push_back(MakeInstance("p", &window2, instance_state2));
   instance_registry.OnInstances(std::move(deltas));
   EXPECT_EQ(2, observer.NumInstancesSeenOnInstanceUpdate());
+  EXPECT_TRUE(instance_registry.GetWindows("o") ==
+              std::set<aura::Window*>{&window1});
+  EXPECT_TRUE(instance_registry.GetWindows("p") ==
+              std::set<aura::Window*>{&window2});
 
   apps::InstanceState instance_state3 = static_cast<apps::InstanceState>(
       apps::InstanceState::kStarted | apps::InstanceState::kRunning);
@@ -417,6 +433,10 @@ TEST_F(InstanceRegistryTest, Recursive) {
   deltas.push_back(MakeInstance("p", &window4, instance_state3));
   instance_registry.OnInstances(std::move(deltas));
   EXPECT_EQ(2, observer.NumInstancesSeenOnInstanceUpdate());
+  EXPECT_TRUE(instance_registry.GetWindows("p") ==
+              (std::set<aura::Window*>{&window2, &window4}));
+  EXPECT_TRUE(instance_registry.GetWindows("q") ==
+              std::set<aura::Window*>{&window3});
 
   apps::InstanceState instance_state5 = static_cast<apps::InstanceState>(
       apps::InstanceState::kStarted | apps::InstanceState::kRunning);
@@ -433,6 +453,8 @@ TEST_F(InstanceRegistryTest, Recursive) {
   deltas.push_back(MakeInstance("p", &window2, instance_state7));
   instance_registry.OnInstances(std::move(deltas));
   EXPECT_EQ(1, observer.NumInstancesSeenOnInstanceUpdate());
+  EXPECT_TRUE(instance_registry.GetWindows("p") ==
+              (std::set<aura::Window*>{&window2, &window4}));
 
   apps::InstanceState instance_state8 =
       static_cast<apps::InstanceState>(apps::InstanceState::kDestroyed);
@@ -444,6 +466,9 @@ TEST_F(InstanceRegistryTest, Recursive) {
   deltas.push_back(MakeInstance("o", &window1, instance_state8));
   instance_registry.OnInstances(std::move(deltas));
   EXPECT_EQ(4, observer.NumInstancesSeenOnInstanceUpdate());
+  EXPECT_TRUE(instance_registry.GetWindows("o").empty());
+  EXPECT_TRUE(instance_registry.GetWindows("p").empty());
+  EXPECT_TRUE(instance_registry.GetWindows("q").empty());
 
   bool found_window = false;
   EXPECT_FALSE(instance_registry.ForOneInstance(
@@ -478,6 +503,8 @@ TEST_F(InstanceRegistryTest, Recursive) {
   deltas.push_back(MakeInstance("p", &window2, instance_state7));
   instance_registry.OnInstances(std::move(deltas));
   EXPECT_EQ(1, observer.NumInstancesSeenOnInstanceUpdate());
+  EXPECT_TRUE(instance_registry.GetWindows("p") ==
+              std::set<aura::Window*>{&window2});
 
   found_window = false;
   EXPECT_TRUE(instance_registry.ForOneInstance(
@@ -545,6 +572,12 @@ TEST_F(InstanceRegistryTest, SuperRecursive) {
   deltas.push_back(MakeInstance("c", &window4, apps::InstanceState::kActive));
   instance_registry.OnInstances(std::move(deltas));
   EXPECT_EQ(10, observer.NumInstancesSeenOnInstanceUpdate());
+  EXPECT_TRUE(instance_registry.GetWindows("a") ==
+              (std::set<aura::Window*>{&window1, &window2}));
+  EXPECT_TRUE(instance_registry.GetWindows("b") ==
+              (std::set<aura::Window*>{&window3, &window5}));
+  EXPECT_TRUE(instance_registry.GetWindows("c") ==
+              std::set<aura::Window*>{&window4});
 
   // After all of that, check that for each window, the last delta won.
   EXPECT_EQ(apps::InstanceState::kStarted,

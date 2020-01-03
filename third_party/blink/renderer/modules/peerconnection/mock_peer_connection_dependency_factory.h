@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "third_party/blink/public/web/modules/peerconnection/peer_connection_dependency_factory.h"
+#include "third_party/blink/renderer/modules/peerconnection/peer_connection_dependency_factory.h"
 #include "third_party/webrtc/api/media_stream_interface.h"
 
 namespace base {
@@ -65,9 +65,37 @@ class MockWebRtcAudioTrack : public webrtc::AudioTrackInterface {
   ObserverSet observers_;
 };
 
+class MockWebRtcVideoTrackSource : public webrtc::VideoTrackSourceInterface {
+ public:
+  static scoped_refptr<MockWebRtcVideoTrackSource> Create(
+      bool supports_encoded_output);
+  MockWebRtcVideoTrackSource(bool supports_encoded_output);
+  void RegisterObserver(webrtc::ObserverInterface* observer) override;
+  void UnregisterObserver(webrtc::ObserverInterface* observer) override;
+  SourceState state() const override;
+  bool remote() const override;
+  void AddOrUpdateSink(rtc::VideoSinkInterface<webrtc::VideoFrame>* sink,
+                       const rtc::VideoSinkWants& wants) override;
+  void RemoveSink(rtc::VideoSinkInterface<webrtc::VideoFrame>* sink) override;
+  bool is_screencast() const override;
+  absl::optional<bool> needs_denoising() const override;
+  bool GetStats(Stats* stats) override;
+  bool SupportsEncodedOutput() const override;
+  void GenerateKeyFrame() override;
+  void AddEncodedSink(
+      rtc::VideoSinkInterface<webrtc::RecordableEncodedFrame>* sink) override;
+  void RemoveEncodedSink(
+      rtc::VideoSinkInterface<webrtc::RecordableEncodedFrame>* sink) override;
+
+ private:
+  bool supports_encoded_output_;
+};
+
 class MockWebRtcVideoTrack : public webrtc::VideoTrackInterface {
  public:
-  static scoped_refptr<MockWebRtcVideoTrack> Create(const std::string& id);
+  static scoped_refptr<MockWebRtcVideoTrack> Create(
+      const std::string& id,
+      scoped_refptr<webrtc::VideoTrackSourceInterface> source = nullptr);
   MockWebRtcVideoTrack(const std::string& id,
                        webrtc::VideoTrackSourceInterface* source);
   void AddOrUpdateSink(rtc::VideoSinkInterface<webrtc::VideoFrame>* sink,

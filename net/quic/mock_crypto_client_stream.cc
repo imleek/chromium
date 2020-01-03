@@ -44,10 +44,10 @@ using quic::QuicErrorCode;
 using quic::QuicServerId;
 using quic::QuicSession;
 using quic::QuicSpdyClientSessionBase;
-using quic::QuicStringPiece;
 using quic::QuicTagVector;
 using quic::QuicTime;
 using quic::TransportParameters;
+using quiche::QuicheStringPiece;
 using std::string;
 
 namespace net {
@@ -76,6 +76,8 @@ MockCryptoClientStream::MockCryptoClientStream(
       proof_verify_details_(proof_verify_details),
       config_(config) {
   crypto_framer_.set_visitor(this);
+  // Simulate a negotiated cipher_suite with a fake value.
+  crypto_negotiated_params_->cipher_suite = 1;
 }
 
 MockCryptoClientStream::~MockCryptoClientStream() {}
@@ -87,6 +89,11 @@ void MockCryptoClientStream::OnHandshakeMessage(
 }
 
 bool MockCryptoClientStream::CryptoConnect() {
+  if (session()->connection()->version().KnowsWhichDecrypterToUse()) {
+    session()->connection()->InstallDecrypter(
+        ENCRYPTION_FORWARD_SECURE,
+        std::make_unique<NullDecrypter>(Perspective::IS_CLIENT));
+  }
   if (proof_verify_details_) {
     if (!proof_verify_details_->cert_verify_result.verified_cert
              ->VerifyNameMatch(server_id_.host())) {
@@ -135,8 +142,12 @@ bool MockCryptoClientStream::CryptoConnect() {
             ENCRYPTION_ZERO_RTT,
             std::make_unique<NullEncrypter>(Perspective::IS_CLIENT));
       }
-      session()->connection()->SetDefaultEncryptionLevel(ENCRYPTION_ZERO_RTT);
-      session()->OnCryptoHandshakeEvent(QuicSession::ENCRYPTION_ESTABLISHED);
+      if (session()->use_handshake_delegate()) {
+        session()->SetDefaultEncryptionLevel(ENCRYPTION_ZERO_RTT);
+      } else {
+        session()->connection()->SetDefaultEncryptionLevel(ENCRYPTION_ZERO_RTT);
+        session()->OnCryptoHandshakeEvent(QuicSession::ENCRYPTION_ESTABLISHED);
+      }
       break;
     }
 
@@ -177,10 +188,16 @@ bool MockCryptoClientStream::CryptoConnect() {
             ENCRYPTION_FORWARD_SECURE,
             std::make_unique<NullEncrypter>(Perspective::IS_CLIENT));
       }
-      session()->connection()->SetDefaultEncryptionLevel(
-          ENCRYPTION_FORWARD_SECURE);
-      session()->OnCryptoHandshakeEvent(QuicSession::HANDSHAKE_CONFIRMED);
-      session()->connection()->OnHandshakeComplete();
+      if (session()->use_handshake_delegate()) {
+        session()->SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
+        session()->DiscardOldEncryptionKey(ENCRYPTION_INITIAL);
+        session()->NeuterHandshakeData();
+      } else {
+        session()->connection()->SetDefaultEncryptionLevel(
+            ENCRYPTION_FORWARD_SECURE);
+        session()->OnCryptoHandshakeEvent(QuicSession::HANDSHAKE_CONFIRMED);
+        session()->connection()->OnHandshakeComplete();
+      }
       break;
     }
 
@@ -252,10 +269,17 @@ void MockCryptoClientStream::SendOnCryptoHandshakeEvent(
           ENCRYPTION_FORWARD_SECURE,
           std::make_unique<NullEncrypter>(Perspective::IS_CLIENT));
     }
-    session()->connection()->SetDefaultEncryptionLevel(
-        ENCRYPTION_FORWARD_SECURE);
+    if (session()->use_handshake_delegate()) {
+      session()->SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
+      session()->DiscardOldEncryptionKey(ENCRYPTION_INITIAL);
+    } else {
+      session()->connection()->SetDefaultEncryptionLevel(
+          ENCRYPTION_FORWARD_SECURE);
+    }
   }
-  session()->OnCryptoHandshakeEvent(event);
+  if (!session()->use_handshake_delegate()) {
+    session()->OnCryptoHandshakeEvent(event);
+  }
 }
 
 // static

@@ -62,7 +62,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
 #include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/events/current_input_event.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
@@ -540,10 +539,8 @@ void LocalFrameClientImpl::BeginNavigation(
     navigation_info->initiator_frame_is_ad = frame->IsAdSubframe();
   }
 
-  navigation_info
-      ->blocking_downloads_in_sandbox_without_user_activation_enabled =
-      RuntimeEnabledFeatures::
-          BlockingDownloadsInSandboxWithoutUserActivationEnabled();
+  navigation_info->blocking_downloads_in_sandbox_enabled =
+      RuntimeEnabledFeatures::BlockingDownloadsInSandboxEnabled();
 
   // The frame has navigated either by itself or by the action of the
   // |origin_document| when it is defined. |source_location| represents the
@@ -743,11 +740,13 @@ void LocalFrameClientImpl::SelectorMatchChanged(
 DocumentLoader* LocalFrameClientImpl::CreateDocumentLoader(
     LocalFrame* frame,
     WebNavigationType navigation_type,
+    base::Optional<ContentSecurityPolicy*> content_security_policy,
     std::unique_ptr<WebNavigationParams> navigation_params,
     std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) {
   DCHECK(frame);
   WebDocumentLoaderImpl* document_loader =
       MakeGarbageCollected<WebDocumentLoaderImpl>(frame, navigation_type,
+                                                  content_security_policy,
                                                   std::move(navigation_params));
   document_loader->SetExtraData(std::move(extra_data));
   if (web_frame_->Client())
@@ -939,14 +938,6 @@ unsigned LocalFrameClientImpl::BackForwardLength() {
          webview->Client()->HistoryForwardListCount();
 }
 
-void LocalFrameClientImpl::SuddenTerminationDisablerChanged(
-    bool present,
-    SuddenTerminationDisablerType type) {
-  if (web_frame_->Client()) {
-    web_frame_->Client()->SuddenTerminationDisablerChanged(present, type);
-  }
-}
-
 BlameContext* LocalFrameClientImpl::GetFrameBlameContext() {
   if (WebLocalFrameClient* client = web_frame_->Client())
     return client->GetFrameBlameContext();
@@ -975,15 +966,10 @@ void LocalFrameClientImpl::NotifyUserActivation(
     autofill_client->UserGestureObserved();
 }
 
-void LocalFrameClientImpl::ConsumeUserActivation() {
+void LocalFrameClientImpl::ConsumeTransientUserActivation() {
   DCHECK(web_frame_->Client());
   web_frame_->Client()->UpdateUserActivationState(
       UserActivationUpdateType::kConsumeTransientActivation);
-}
-
-void LocalFrameClientImpl::SetHasReceivedUserGestureBeforeNavigation(
-    bool value) {
-  web_frame_->Client()->SetHasReceivedUserGestureBeforeNavigation(value);
 }
 
 void LocalFrameClientImpl::AbortClientNavigation() {
@@ -1086,9 +1072,6 @@ bool LocalFrameClientImpl::IsPluginHandledExternally(
     HTMLPlugInElement& plugin_element,
     const KURL& resource_url,
     const String& suggesed_mime_type) {
-  if (!RuntimeEnabledFeatures::MimeHandlerViewInCrossProcessFrameEnabled())
-    return false;
-
   return web_frame_->Client()->IsPluginHandledExternally(
       &plugin_element, resource_url, suggesed_mime_type);
 }
@@ -1134,9 +1117,9 @@ void LocalFrameClientImpl::TransferUserActivationFrom(
 }
 
 void LocalFrameClientImpl::UpdateSubresourceFactory(
-    std::unique_ptr<blink::URLLoaderFactoryBundleInfo> info) {
+    std::unique_ptr<blink::PendingURLLoaderFactoryBundle> pending_factory) {
   DCHECK(web_frame_->Client());
-  web_frame_->Client()->UpdateSubresourceFactory(std::move(info));
+  web_frame_->Client()->UpdateSubresourceFactory(std::move(pending_factory));
 }
 
 }  // namespace blink

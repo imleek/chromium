@@ -82,7 +82,6 @@
 <translation id="3822383571486410024">ഈ ടെക്‌സ്റ്റിന്‍റെ ദൈർഘ്യം <ph name="MIN_CHARACTERS" /> അല്ലെങ്കിൽ അതിൽക്കൂടുതൽ പ്രതീകങ്ങൾ നൽകി കൂട്ടുക. (നിങ്ങൾ നിലവിൽ <ph name="CURRENT_LENGTH" /> പ്രതീകങ്ങളാണ് ഉപയോഗിക്കുന്നത്).</translation>
 <translation id="383465348367842624">'<ph name="ATSIGN" />' എന്നതിനുശേഷം വരുന്ന ഒരു ഭാഗത്തിൽ '<ph name="INVALIDCHARACTER" />' ചിഹ്നം ഉണ്ടാകരുത്.</translation>
 <translation id="3846214748874656680">പൂർണ്ണ സ്‌ക്രീനിൽ നിന്ന് പുറത്തുകടക്കുക</translation>
-<translation id="3889183436948184105">പുനഃപരിശോധന</translation>
 <translation id="3920932319529768807">ഉപസംഹാരം</translation>
 <translation id="3924558731517983934">ആപ്പ്</translation>
 <translation id="3944740393230681990">ആമുഖം</translation>
@@ -91,7 +90,7 @@
 <translation id="4151657705144244502">ഗ്രാഫിക്</translation>
 <translation id="4160057747563657758">ടെലിഫോൺ</translation>
 <translation id="4193965531860883258">മുഖവുര</translation>
-<translation id="4201051445878709314">മുൻ മാസം കാണിക്കുക</translation>
+<translation id="4201051445878709314">മുമ്പത്തെ മാസം കാണിക്കുക</translation>
 <translation id="421884353938374759">വർണ്ണ പിക്കർ</translation>
 <translation id="4248100235867064564">മെനു ബാർ</translation>
 <translation id="4360991593054037559">സാധുവായ മൂല്യം നൽകുക. സാധുവായ ഏറ്റവുമടുത്ത രണ്ട് മൂല്യങ്ങൾ <ph name="VALID_VALUE_LOW" />, <ph name="VALID_VALUE_HIGHER" /> എന്നിവയാണ്.</translation>
@@ -111,12 +110,15 @@
 <translation id="4748357248530471599">ഡിസ്‌പ്ലേ കട്ടൗട്ട് പൂർണ്ണ സ്ക്രീൻ മാറ്റുക</translation>
 <translation id="4757246831282535685">ടാബ് പാനൽ</translation>
 <translation id="4763480195061959176">വീഡിയോ</translation>
-<translation id="479989351350248267">search</translation>
+<translation id="479989351350248267">തിരയുക</translation>
 <translation id="4812940957355064477">ഒരു നമ്പർ നൽകുക.</translation>
 <translation id="4912536737030637138">ഗ്രന്ഥസൂചി എൻട്രി</translation>
+<translation id="492244087561876220">കമന്റ്</translation>
+<translation id="4971739861736909480"><ph name="ACCNAME" /> തിരഞ്ഞെടുത്തു</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> തിരഞ്ഞെടുത്തു</translation>
 <translation id="4992066212339426712">അൺമ്യൂട്ടുചെയ്യുക</translation>
 <translation id="49969490063480558">'<ph name="ATSIGN" />' എന്നതിനുശേഷം ഒരു ഭാഗം നൽകുക.'<ph name="INVALIDADDRESS" />' അപൂർണ്ണമാണ്.</translation>
+<translation id="5022314756875057021">വരി ഗ്രൂപ്പ്</translation>
 <translation id="5034860022980953847">'പ്രോഗ്രസ്' ഇൻഡിക്കേറ്റർ</translation>
 <translation id="5090250355906949916">വീഡിയോ ടൈം സ്‌ക്രബർ</translation>
 <translation id="5093189678851173835">ശിലാലേഖ</translation>
@@ -136,7 +138,7 @@
 <translation id="5546461542133609677">ശബ്‌ദമുള്ളതാക്കുക</translation>
 <translation id="5608153257855394627">ഹൈലൈറ്റ് ചെയ്‌തത്</translation>
 <translation id="561939826962581046">സമയം</translation>
-<translation id="5630795885300617244">10 സെക്കൻഡ് ഒഴിവാക്കാൻ ഇടത്തോട്ടോ വലത്തോട്ടോ രണ്ടുതവണ ടാപ്പ് ചെയ്യുക</translation>
+<translation id="5630795885300617244">10 സെക്കൻഡ് ഒഴിവാക്കാൻ ഇടത്തോ വലത്തോ ഡബിൾ ടാപ്പ് ചെയ്യുക</translation>
 <translation id="5631759159893697722">സംക്ഷേപം</translation>
 <translation id="5643186887447432888">ബട്ടൺ</translation>
 <translation id="5677946354068040947">കൂടുതൽ ഓപ്‌ഷനുകൾ</translation>
@@ -146,7 +148,7 @@
 <translation id="588258955323874662">പൂര്‍‌ണ്ണസ്‌ക്രീന്‍</translation>
 <translation id="5888666972993069672"><ph name="DEVICE_FRIENDLY_NAME" /> എന്ന ഉപകരണത്തിലേക്ക് കാസ്‌റ്റുചെയ്യുന്നു</translation>
 <translation id="591047860372322273">സെർച്ച് ബോക്‌സ്</translation>
-<translation id="5939518447894949180">വീണ്ടും സജ്ജീകരിക്കുക</translation>
+<translation id="5939518447894949180">റീസെറ്റ് ചെയ്യുക</translation>
 <translation id="5966707198760109579">ആഴ്‌ച</translation>
 <translation id="5987525920412732405">സ്‌പിൻ ബട്ടൺ</translation>
 <translation id="6011459053400940133">വോളിയം സ്ലൈഡർ</translation>
@@ -217,6 +219,7 @@
 <translation id="7888071071722539607">ഇമെയിൽ വിലാസത്തിൽ '<ph name="ATSIGN" />' ഉൾപ്പെടുത്തുക. '<ph name="INVALIDADDRESS" />' എന്നതിൽ ഒരു '<ph name="ATSIGN" />' കാണുന്നില്ല.</translation>
 <translation id="7891486169920085145">സ്‌പ്ലിറ്റർ</translation>
 <translation id="795667975304826397">ഒരു ഫയലും തിരഞ്ഞെടുത്തിട്ടില്ല</translation>
+<translation id="7962328325860248200"><ph name="ACCNAME" /> തിരഞ്ഞെടുത്തിട്ടില്ല</translation>
 <translation id="8034303206267677282">ശക്തം</translation>
 <translation id="8053789581856978548">തിരയൽ ടെക്‌സ്റ്റ് ഫീൽഡ്</translation>
 <translation id="8057695513531652401">അറിയിപ്പ്</translation>

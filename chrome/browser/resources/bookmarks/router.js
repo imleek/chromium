@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Polymer, html} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import 'chrome://resources/polymer/v3_0/iron-location/iron-location.js';
 import 'chrome://resources/polymer/v3_0/iron-location/iron-query-params.js';
-import {BOOKMARKS_BAR_ID} from './constants.js';
+
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 import {selectFolder, setSearchTerm} from './actions.js';
+import {BOOKMARKS_BAR_ID} from './constants.js';
 import {StoreClient} from './store_client.js';
 
 Polymer({
@@ -76,12 +78,12 @@ Polymer({
       selectedId = BOOKMARKS_BAR_ID;
     }
 
-    if (searchTerm != this.searchTerm_) {
+    if (searchTerm !== this.searchTerm_) {
       this.searchTerm_ = searchTerm;
       this.dispatch(setSearchTerm(searchTerm));
     }
 
-    if (selectedId && selectedId != this.selectedId_) {
+    if (selectedId && selectedId !== this.selectedId_) {
       this.selectedId_ = selectedId;
       // Need to dispatch a deferred action so that during page load
       // `this.getState()` will only evaluate after the Store is initialized.
@@ -116,7 +118,7 @@ Polymer({
   updateQueryParams_: function() {
     if (this.searchTerm_) {
       this.queryParams_ = {q: this.searchTerm_};
-    } else if (this.selectedId_ != BOOKMARKS_BAR_ID) {
+    } else if (this.selectedId_ !== BOOKMARKS_BAR_ID) {
       this.queryParams_ = {id: this.selectedId_};
     } else {
       this.queryParams_ = {};

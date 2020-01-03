@@ -17,6 +17,7 @@
 namespace blink {
 
 class ExceptionState;
+class XRAnchorSet;
 class XRHitTestResult;
 class XRHitTestSource;
 class XRInputSource;
@@ -24,8 +25,9 @@ class XRPose;
 class XRReferenceSpace;
 class XRSession;
 class XRSpace;
+class XRTransientInputHitTestResult;
+class XRTransientInputHitTestSource;
 class XRViewerPose;
-class XRAnchorSet;
 class XRWorldInformation;
 
 class XRFrame final : public ScriptWrappable {
@@ -41,8 +43,6 @@ class XRFrame final : public ScriptWrappable {
   XRWorldInformation* worldInformation() const { return world_information_; }
   XRAnchorSet* trackedAnchors() const;
 
-  void SetMojoFromViewer(const TransformationMatrix&, bool emulated_position);
-
   void Trace(blink::Visitor*) override;
 
   void Deactivate();
@@ -52,9 +52,13 @@ class XRFrame final : public ScriptWrappable {
   }
 
   HeapVector<Member<XRHitTestResult>> getHitTestResults(
-      XRHitTestSource* hit_test_source);
+      XRHitTestSource* hit_test_source,
+      ExceptionState& exception_state);
 
-  bool EmulatedPosition() const { return emulated_position_; }
+  HeapVector<Member<XRTransientInputHitTestResult>>
+  getHitTestResultsForTransientInput(
+      XRTransientInputHitTestSource* hit_test_source,
+      ExceptionState& exception_state);
 
  private:
   std::unique_ptr<TransformationMatrix> GetAdjustedPoseMatrix(XRSpace*) const;
@@ -65,10 +69,6 @@ class XRFrame final : public ScriptWrappable {
 
   const Member<XRSession> session_;
 
-  // Viewer pose in mojo space, the matrix maps from viewer (headset) space to
-  // mojo space.
-  std::unique_ptr<TransformationMatrix> mojo_from_viewer_;
-
   // Frames are only active during callbacks. getPose and getViewerPose should
   // only be called from JS on active frames.
   bool is_active_ = true;
@@ -77,8 +77,6 @@ class XRFrame final : public ScriptWrappable {
   // animation frames. getViewerPose should only be called from JS on active
   // animation frames.
   bool is_animation_frame_ = false;
-
-  bool emulated_position_ = false;
 };
 
 }  // namespace blink

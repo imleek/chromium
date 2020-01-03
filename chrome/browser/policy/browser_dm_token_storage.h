@@ -21,6 +21,10 @@
 #include "base/system/sys_info.h"
 #include "components/policy/core/common/cloud/dm_token.h"
 
+namespace base {
+class TaskRunner;
+}
+
 namespace policy {
 
 // Manages storing and retrieving tokens and client ID used to enroll browser
@@ -32,6 +36,7 @@ namespace policy {
 // called.
 class BrowserDMTokenStorage {
  public:
+  using StoreTask = base::OnceCallback<bool()>;
   using StoreCallback = base::OnceCallback<void(bool success)>;
 
   // Returns the global singleton object. Must be called from the UI thread.
@@ -47,13 +52,17 @@ class BrowserDMTokenStorage {
   // indicate success or failure. It is an error to attempt concurrent store
   // operations.
   void StoreDMToken(const std::string& dm_token, StoreCallback callback);
+  // Asynchronously invalidates |dm_token_| and calls |callback| with a boolean
+  // to indicate success or failure. It is an error to attempt concurrent store
+  // operations.
+  void InvalidateDMToken(StoreCallback callback);
+  // Asynchronously clears |dm_token_| and calls |callback| with a boolean to
+  // indicate success or failure. It is an error to attempt concurrent store
+  // operations.
+  void ClearDMToken(StoreCallback callback);
   // Returns an already stored DM token. An empty token is returned if no DM
   // token exists on the system or an error is encountered.
-  // TODO(domfc): Remove overload after updating callers. Note that the names
-  //              are different because you cannot overload functions that only
-  //              differ in their return type.
-  std::string RetrieveDMToken();
-  DMToken RetrieveBrowserDMToken();
+  DMToken RetrieveDMToken();
   // Must be called after the DM token is saved, to ensure that the callback is
   // invoked.
   void OnDMTokenStored(bool success);
@@ -97,8 +106,15 @@ class BrowserDMTokenStorage {
   // Gets the boolean value that determines if error message will be displayed
   // when enrollment fails.
   virtual bool InitEnrollmentErrorOption() = 0;
-  // Saves the DM token. This implementation is platform dependant.
-  virtual void SaveDMToken(const std::string& token) = 0;
+  // Function called by |SaveDMToken| that returns if the operation was a
+  // success.  This implementation is platform dependent.
+  virtual StoreTask SaveDMTokenTask(const std::string& token,
+                                    const std::string& client_id) = 0;
+  // Can optionally be overridden by platform implementation if a specific task
+  // runner should be used by |SaveDMToken|.
+  virtual scoped_refptr<base::TaskRunner> SaveDMTokenTaskRunner() = 0;
+  // Saves the DM token.
+  void SaveDMToken(const std::string& token);
 
   // Will be called after the DM token is stored.
   StoreCallback store_callback_;
@@ -112,6 +128,8 @@ class BrowserDMTokenStorage {
   bool should_display_error_message_on_failure_;
 
   SEQUENCE_CHECKER(sequence_checker_);
+
+  base::WeakPtrFactory<BrowserDMTokenStorage> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(BrowserDMTokenStorage);
 };

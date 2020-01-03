@@ -67,12 +67,19 @@ uint64_t GpuChannelManager::GpuPeakMemoryMonitor::GetPeakMemoryUsage(
 
 void GpuChannelManager::GpuPeakMemoryMonitor::StartGpuMemoryTracking(
     uint32_t sequence_num) {
+  TRACE_EVENT_ASYNC_BEGIN1("gpu", "PeakMemoryTracking", sequence_num, "start",
+                           current_memory_);
   sequence_trackers_.emplace(sequence_num, current_memory_);
 }
 
 void GpuChannelManager::GpuPeakMemoryMonitor::StopGpuMemoryTracking(
     uint32_t sequence_num) {
-  sequence_trackers_.erase(sequence_num);
+  auto sequence = sequence_trackers_.find(sequence_num);
+  if (sequence != sequence_trackers_.end()) {
+    TRACE_EVENT_ASYNC_END1("gpu", "PeakMemoryTracking", sequence_num, "peak",
+                           sequence->second);
+    sequence_trackers_.erase(sequence);
+  }
 }
 
 void GpuChannelManager::GpuPeakMemoryMonitor::OnMemoryAllocatedChange(
@@ -89,8 +96,14 @@ void GpuChannelManager::GpuPeakMemoryMonitor::OnMemoryAllocatedChange(
     // |peak_since_last_sequence_update_| on the the memory changes. Then only
     // update the sequences with a new one is added, or the peak is requested.
     for (auto& sequence : sequence_trackers_) {
-      if (current_memory_ > sequence.second)
+      if (current_memory_ > sequence.second) {
         sequence.second = current_memory_;
+        for (auto& sequence : sequence_trackers_) {
+          TRACE_EVENT_ASYNC_STEP_INTO1("gpu", "PeakMemoryTracking",
+                                       sequence.first, "Peak", "peak",
+                                       current_memory_);
+        }
+      }
     }
   }
 }
@@ -128,6 +141,8 @@ GpuChannelManager::GpuChannelManager(
       default_offscreen_surface_(std::move(default_offscreen_surface)),
       gpu_memory_buffer_factory_(gpu_memory_buffer_factory),
       gpu_feature_info_(gpu_feature_info),
+      discardable_manager_(gpu_preferences_),
+      passthrough_discardable_manager_(gpu_preferences_),
       image_decode_accelerator_worker_(image_decode_accelerator_worker),
       activity_flags_(std::move(activity_flags)),
       memory_pressure_listener_(
@@ -261,6 +276,11 @@ void GpuChannelManager::LoseAllContexts() {
   task_runner_->PostTask(FROM_HERE,
                          base::BindOnce(&GpuChannelManager::DestroyAllChannels,
                                         weak_factory_.GetWeakPtr()));
+  if (shared_context_state_) {
+    gr_cache_controller_.reset();
+    shared_context_state_->MarkContextLost();
+    shared_context_state_.reset();
+  }
 }
 
 void GpuChannelManager::DestroyAllChannels() {
@@ -285,6 +305,9 @@ void GpuChannelManager::GetVideoMemoryUsageStats(
     video_memory_usage_stats->process_map[channel->GetClientPID()]
         .video_memory += size;
   }
+
+  if (shared_context_state_ && !shared_context_state_->context_lost())
+    total_size += shared_context_state_->GetMemoryUsage();
 
   // Assign the total across all processes in the GPU process
   video_memory_usage_stats->process_map[base::GetCurrentProcId()].video_memory =
@@ -440,6 +463,10 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
   scoped_refptr<gl::GLContext> context =
       use_virtualized_gl_contexts ? share_group->GetSharedContext(surface.get())
                                   : nullptr;
+  if (context && (!context->MakeCurrent(surface.get()) ||
+                  context->CheckStickyGraphicsResetStatus() != GL_NO_ERROR)) {
+    context = nullptr;
+  }
   if (!context) {
     gl::GLContextAttribs attribs = gles2::GenerateGLContextAttribs(
         ContextCreationAttribs(), use_passthrough_decoder);
@@ -484,7 +511,7 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
       base::BindOnce(&GpuChannelManager::OnContextLost, base::Unretained(this),
                      /*synthetic_loss=*/false),
       gpu_preferences_.gr_context_type, vulkan_context_provider_,
-      metal_context_provider_, dawn_context_provider_);
+      metal_context_provider_, dawn_context_provider_, peak_memory_monitor());
 
   // OOP-R needs GrContext for raster tiles.
   bool need_gr_context =
@@ -504,9 +531,9 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
         return nullptr;
       }
     }
-    shared_context_state_->InitializeGrContext(gpu_driver_bug_workarounds_,
-                                               gr_shader_cache(),
-                                               &activity_flags_, watchdog_);
+    shared_context_state_->InitializeGrContext(
+        gpu_preferences_, gpu_driver_bug_workarounds_, gr_shader_cache(),
+        &activity_flags_, watchdog_);
   }
 
   gr_cache_controller_.emplace(shared_context_state_.get(), task_runner_);

@@ -21,14 +21,10 @@
 #include "components/discardable_memory/client/client_discardable_shared_memory_manager.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/thread_safe_interface_ptr.h"
 
 namespace content {
-enum class DiscardableMemoryBacking { kSharedMemory, kMadvFree };
-
-CONTENT_EXPORT DiscardableMemoryBacking GetDiscardableMemoryBacking();
 
 CONTENT_EXPORT std::unique_ptr<base::DiscardableMemoryAllocator>
 CreateDiscardableMemoryAllocator();

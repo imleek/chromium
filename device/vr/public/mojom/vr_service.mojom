@@ -68,9 +68,19 @@ enum XRSessionFeatureRequestStatus {
   kOptionalRejected = 3,
 };
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// These enum names come from the WebXR spec:
+// https://immersive-web.github.io/webxr/#xrsessionmode-enum
+enum XRSessionMode {
+  kInline = 1,
+  kImmersiveVr = 2,
+  kImmersiveAr = 3,
+};
+
 struct XRSessionOptions {
-  bool immersive;
-  bool environment_integration;
+  // Represents the type of session that is being requested.
+  XRSessionMode mode;
 
   // Represents the set of requested features that have been marked "required",
   // if any of these features are missing, a session will not be created.
@@ -188,8 +198,9 @@ struct VRFieldOfView {
   float right_degrees;
 };
 
-// A display's position, orientation, velocity, and acceleration state at the
-// given timestamp.
+// An entity's pose. Used by entities for which either position or orientation
+// may sometimes not be known. Also supports those poses where the position may
+// be emulated and this is worth telling consumers.
 struct VRPose {
   gfx.mojom.Quaternion? orientation;
   gfx.mojom.Point3F? position;
@@ -197,15 +208,6 @@ struct VRPose {
   // True when position is estimated by something like a neck or arm model.
   // False when position is based on sensors tracking a 6DoF pose.
   bool emulated_position;
-
-  // For WebXR sessions only, reports the state of all active input devices
-  // synced with the head pose.
-  array<XRInputSourceState>? input_state;
-
-  // Indicates that a reset pose event was triggered, either by device specific
-  // UI or by some other method, and handled on the browser side, and the
-  // renderer should now bubble up an event to the WebXR Device API.
-  bool pose_reset;
 };
 
 // An entity's pose. Used by entities for which both position and orientation is
@@ -240,14 +242,12 @@ struct VREyeParameters {
 
 struct VRStageParameters {
   gfx.mojom.Transform standing_transform;
-  float size_x;
-  float size_z;
 
-  // If present, indicates that the device supports a bounded reference space.
+  // If present, indicates that the device supports a bounded reference space
+  // (https://immersive-web.github.io/webxr/#xrboundedreferencespace-interface).
   // The points are expected to be in the "standing" space (i.e. there should be
   // no need to transform them by the accompanying standing transform) and
   // in a clockwise winding order.
-  // This should supersede size_x/size_z if they are set.
   array<gfx.mojom.Point3F>? bounds;
 };
 
@@ -383,15 +383,32 @@ struct XRAnchorsData {
 };
 
 // Information about results for a single subscription for the current frame.
+// This struct is relevant for subscriptions to hit test for persistent input
+// sources.
 struct XRHitTestSubscriptionResultData {
   uint64 subscription_id;
   array<XRHitResult> hit_test_results;
 };
 
+// Information about results for a single subscription for the current frame.
+// This struct is relevant for subscriptions to hit test for transient input
+// sources.
+struct XRHitTestTransientInputSubscriptionResultData {
+  uint64 subscription_id;
+  // Map from input source id to array of hit test results obtained using that
+  // input source. Required since there might be multiple input sources that
+  // match input source profile name passed in at subscription creation (see
+  // XRFrameDataProvider::SubscribeToHitTestForTransientInput()).
+  map<uint32, array<XRHitResult>> input_source_id_to_hit_test_results;
+};
+
 // Struct containing data about results of all hit test subscriptions for the
 // current frame.
 struct XRHitTestSubscriptionResultsData {
+  // Results for non-transient input sources.
   array<XRHitTestSubscriptionResultData> results;
+  // Results for transient input sources.
+  array<XRHitTestTransientInputSubscriptionResultData> transient_input_results;
 };
 
 // The data needed for each animation frame of an XRSession.
@@ -411,6 +428,16 @@ struct XRFrameData {
   // for rendering.
   gpu.mojom.MailboxHolder? buffer_holder;
 
+  // Indicates that there has been a significant discontinuity in the mojo space
+  // coordinate system, and that poses from this point forward with the same
+  // coordinates as those received previously may not actually be in the same
+  // position. This could have been triggered either via device specific UI or
+  // due to a major change in tracking locatibility, but should not typically
+  // be used when recovering from tracking loss.
+  // This event should be bubbled up as a reference space reset event:
+  // https://immersive-web.github.io/webxr/#eventdef-xrreferencespace-reset
+  bool mojo_space_reset;
+
   // Exclusive session values
 
   // The frame_id maps frame data to a frame arriving from the compositor. IDs
@@ -429,6 +456,13 @@ struct XRFrameData {
   // rendering.
   VREyeParameters? left_eye;
   VREyeParameters? right_eye;
+
+  // For immersive sessions only, reports the state of all active input devices
+  // at the time of this frame. If a session has indicated that it
+  // |uses_input_eventing|, then these input states should not fire select,
+  // squeeze, or similar events, but all controller state, including current
+  // button states, should still be updated.
+  array<XRInputSourceState>? input_state;
 
   // Stage parameters may be provided per-frame, or only re-computed
   // periodically.  However, setting the stage parameters to null is perfectly
@@ -525,6 +559,11 @@ enum SubscribeToHitTestResult {
   FAILURE_GENERIC = 1,
 };
 
+enum EntityTypeForHitTest {
+  POINT = 1,
+  PLANE = 2,
+};
+
 // Provides functionality for integrating environment information into an
 // XRSession. For example, some AR sessions would implement hit test to allow
 // developers to get the information about the world that its sensors supply.
@@ -545,17 +584,48 @@ interface XREnvironmentIntegrationProvider {
   // identified by passed in |native_origin_information|. I.e., in each frame,
   // the ray used to subscribe to hit test will be transformed to device
   // coordinate system using the device's current knowledge of the state of the
-  // native origin. The returned |subscription_id| uniquely identifies the
-  // subscription within an immersive session. Lifetime of the subscription is
-  // tied to the lifetime of the immersive session.
+  // native origin. |entity_types| are used to filter out results based on the
+  // specific type of the entity that was used to compute the hit test result -
+  // only the results based on the entities passed in this array will be
+  // returned in XRFrameData for this particular subscription.
+  // The returned |subscription_id| uniquely identifies the subscription within
+  // an immersive session. Lifetime of the subscription is tied to the lifetime
+  // of the immersive session.
+  // Hit-test-related mojo interfaces are influenced by WebXR's Hit Test API
+  // proposal, details can be found here:
+  // https://github.com/immersive-web/hit-test
   SubscribeToHitTest(
-    XRNativeOriginInformation native_origin_information, XRRay ray) =>
-    (SubscribeToHitTestResult result, uint64 subscription_id);
+    XRNativeOriginInformation native_origin_information,
+    array<EntityTypeForHitTest> entity_types,
+    XRRay ray) => (SubscribeToHitTestResult result, uint64 subscription_id);
+
+  // Establishes a hit test subscription on the device. The subscription results
+  // will be computed taking into account latest state of the input sources that
+  // are matching profile name specified in |profile_name|. I.e., in each frame,
+  // the ray used to subscribe to hit test will be transformed to device
+  // coordinate system using the device's current knowledge of the state of the
+  // input sources. |entity_types| are used to filter out results based on the
+  // specific type of the entity that was used to compute the hit test result -
+  // only the results based on the entities passed in this array will be
+  // returned in XRFrameData for this particular subscription.
+  // The returned |subscription_id| uniquely identifies the subscription within
+  // an immersive session. Lifetime of the subscription is tied to the lifetime
+  // of the immersive session.
+  // Hit-test-related mojo interfaces are influenced by WebXR's Hit Test API
+  // proposal, details can be found here:
+  // https://github.com/immersive-web/hit-test
+  // Transient input is described here:
+  // https://immersive-web.github.io/webxr/#transient-input
+  SubscribeToHitTestForTransientInput(
+    string profile_name,
+    array<EntityTypeForHitTest> entity_types,
+    XRRay ray) => (SubscribeToHitTestResult result, uint64 subscription_id);
 
   // Notifies the device that subscription with the passed in |subscription_id|
   // is no longer needed and should be removed. The |subscription_id| must be a
-  // valid id of a subscription returned by one of the SubscribeToHitTest calls,
-  // otherwise the call will be ignored.
+  // valid id of a subscription returned by one of the SubscribeToHitTest/
+  // SubscribeToHitTestForTransientInput calls, otherwise the call will be
+  // ignored.
   UnsubscribeFromHitTest(uint64 subscription_id);
 
   // Issues a request to create an anchor attached to a session.

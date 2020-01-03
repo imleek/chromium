@@ -38,7 +38,7 @@ CONTENT_EXPORT extern const unsigned char kMinimumIndexId;
 CONTENT_EXPORT std::string MaxIDBKey();
 CONTENT_EXPORT std::string MinIDBKey();
 
-// DatabaseId, BlobKey
+// DatabaseId, BlobNumber
 typedef std::pair<int64_t, int64_t> BlobJournalEntryType;
 typedef std::vector<BlobJournalEntryType> BlobJournalType;
 
@@ -109,6 +109,9 @@ CONTENT_EXPORT int CompareKeys(const base::StringPiece& a,
 
 CONTENT_EXPORT int CompareIndexKeys(const base::StringPiece& a,
                                     const base::StringPiece& b);
+
+// Logging support.
+std::string IndexedDBKeyToDebugString(base::StringPiece key);
 
 const constexpr int kDatabaseRangeLockLevel = 0;
 const constexpr int kObjectStoreRangeLockLevel = 1;
@@ -187,6 +190,8 @@ class KeyPrefix {
            IsValidObjectStoreId(object_store_id);
   }
 
+  std::string DebugString();
+
   Type type() const;
 
   int64_t database_id_;
@@ -220,12 +225,12 @@ class DataVersionKey {
   CONTENT_EXPORT static std::string Encode();
 };
 
-class BlobJournalKey {
+class RecoveryBlobJournalKey {
  public:
   static std::string Encode();
 };
 
-class LiveBlobJournalKey {
+class ActiveBlobJournalKey {
  public:
   static std::string Encode();
 };
@@ -248,6 +253,7 @@ class DatabaseFreeListKey {
   static CONTENT_EXPORT std::string EncodeMaxKey();
   int64_t DatabaseId() const;
   int Compare(const DatabaseFreeListKey& other) const;
+  std::string DebugString() const;
 
  private:
   int64_t database_id_;
@@ -265,6 +271,7 @@ class DatabaseNameKey {
   base::string16 origin() const { return origin_; }
   base::string16 database_name() const { return database_name_; }
   int Compare(const DatabaseNameKey& other);
+  std::string DebugString() const;
 
  private:
   base::string16 origin_;  // TODO(jsbell): Store encoded strings, or just
@@ -285,11 +292,11 @@ class DatabaseMetaDataKey {
   };
 
   CONTENT_EXPORT static const int64_t kAllBlobsKey;
-  static const int64_t kBlobKeyGeneratorInitialNumber;
+  static const int64_t kBlobNumberGeneratorInitialNumber;
   // All keys <= 0 are invalid.  This one's just a convenient example.
-  static const int64_t kInvalidBlobKey;
+  static const int64_t kInvalidBlobNumber;
 
-  static bool IsValidBlobKey(int64_t blob_key);
+  static bool IsValidBlobNumber(int64_t blob_number);
   CONTENT_EXPORT static std::string Encode(int64_t database_id,
                                            MetaDataType type);
 };
@@ -321,6 +328,7 @@ class ObjectStoreMetaDataKey {
   int64_t ObjectStoreId() const;
   unsigned char MetaDataType() const;
   int Compare(const ObjectStoreMetaDataKey& other);
+  std::string DebugString() const;
 
  private:
   int64_t object_store_id_;
@@ -348,6 +356,8 @@ class IndexMetaDataKey {
                                                  int64_t object_store_id,
                                                  int64_t index_id);
   int Compare(const IndexMetaDataKey& other);
+  std::string DebugString() const;
+
   int64_t IndexId() const;
   unsigned char meta_data_type() const { return meta_data_type_; }
 
@@ -366,6 +376,7 @@ class ObjectStoreFreeListKey {
   CONTENT_EXPORT static std::string EncodeMaxKey(int64_t database_id);
   int64_t ObjectStoreId() const;
   int Compare(const ObjectStoreFreeListKey& other);
+  std::string DebugString() const;
 
  private:
   int64_t object_store_id_;
@@ -383,6 +394,7 @@ class IndexFreeListKey {
   int Compare(const IndexFreeListKey& other);
   int64_t ObjectStoreId() const;
   int64_t IndexId() const;
+  std::string DebugString() const;
 
  private:
   int64_t object_store_id_;
@@ -399,6 +411,8 @@ class ObjectStoreNamesKey {
       int64_t database_id,
       const base::string16& object_store_name);
   int Compare(const ObjectStoreNamesKey& other);
+  std::string DebugString() const;
+
   base::string16 object_store_name() const { return object_store_name_; }
 
  private:
@@ -416,6 +430,8 @@ class IndexNamesKey {
                                            int64_t object_store_id,
                                            const base::string16& index_name);
   int Compare(const IndexNamesKey& other);
+  std::string DebugString() const;
+
   base::string16 index_name() const { return index_name_; }
 
  private:
@@ -437,6 +453,8 @@ class ObjectStoreDataKey {
   static std::string Encode(int64_t database_id,
                             int64_t object_store_id,
                             const blink::IndexedDBKey& user_key);
+  std::string DebugString() const;
+
   std::unique_ptr<blink::IndexedDBKey> user_key() const;
 
  private:
@@ -455,6 +473,8 @@ class ExistsEntryKey {
   static std::string Encode(int64_t database_id,
                             int64_t object_store_id,
                             const blink::IndexedDBKey& user_key);
+  std::string DebugString() const;
+
   std::unique_ptr<blink::IndexedDBKey> user_key() const;
 
  private:
@@ -479,6 +499,8 @@ class BlobEntryKey {
                             int64_t object_store_id,
                             const blink::IndexedDBKey& user_key);
   std::string Encode() const;
+  std::string DebugString() const;
+
   int64_t database_id() const { return database_id_; }
   int64_t object_store_id() const { return object_store_id_; }
 
@@ -533,6 +555,8 @@ class IndexDataKey {
   std::unique_ptr<blink::IndexedDBKey> primary_key() const;
 
   CONTENT_EXPORT std::string Encode() const;
+
+  std::string DebugString() const;
 
  private:
   int64_t database_id_;

@@ -3,7 +3,6 @@
 <translationbundle lang="ta">
 <translation id="1065672644894730302">உங்கள் விருப்பதேர்வுகள் படிக்கும்படி இல்லை. சில அம்சங்கள் கிடைக்காமல் இருக்கலாம் மேலும் விருப்பதேர்வுகளின் மாற்றங்களைச் சேமிக்க முடியாது.</translation>
 <translation id="1104942323762546749">Chromium உங்கள் கடவுச்சொற்களை ஏற்ற விரும்புகிறது. இதை அனுமதிக்க, உங்கள் Windows கடவுச்சொல்லை உள்ளிடவும்.</translation>
-<translation id="1115445892567829615">Chromium ஆல் உங்கள் தரவை ஒத்திசைக்க முடியவில்லை. உங்கள் ஒத்திசைவு கடவுச்சொற்றொடரைப் புதுப்பிக்கவும்.</translation>
 <translation id="113122355610423240">உங்கள் இயல்புநிலை உலாவி Chromium ஆகும்</translation>
 <translation id="1185134272377778587">Chromium அறிமுகம்</translation>
 <translation id="1396446129537741364">Chromium ஆனது கடவுச்சொற்களைக் காட்ட முயற்சிக்கிறது.</translation>
@@ -20,7 +19,6 @@
 <translation id="1929939181775079593">Chromium பதிலளிக்கவில்லை. இப்போது மீண்டும் தொடங்கவா?</translation>
 <translation id="1966382378801805537">இயல்புநிலை உலாவியைக் கண்டறியவோ அமைக்கவோ Chromium ஆல் முடியவில்லை</translation>
 <translation id="2008474315282236005">வெளியேறினால், இந்தச் சாதனத்திலிருந்து ஓர் உருப்படி நீக்கப்படும். பின்னர் தரவை மீட்டமைக்க, Chromium இல் <ph name="USER_EMAIL" /> எனும் முகவரியின் மூலம் உள்நுழையவும்.</translation>
-<translation id="2119636228670142020">&amp;Chromium OS அறிமுகம்</translation>
 <translation id="2241627712206172106">நீங்கள் கம்ப்யூட்டரைப் பகிர்ந்தால், நண்பர்களும் குடும்பத்தினரும் தனிப்பட்ட முறையில் உலாவலாம், மேலும் Chromiumமை அவர்கள் விருப்பத்திற்கு ஏற்ப அமைத்துக்கொள்ளலாம்.</translation>
 <translation id="2347108572062610441">Chromiumஐத் தொடங்கும் போது காண்பிக்கப்படும் பக்கத்தை இந்த நீட்டிப்பு மாற்றியுள்ளது.</translation>
 <translation id="2396765026452590966">Chromiumஐத் தொடங்கும் போது காண்பிக்கப்படும் பக்கத்தை, "<ph name="EXTENSION_NAME" />" நீட்டிப்பு மாற்றியுள்ளது.</translation>
@@ -107,7 +105,6 @@
 <translation id="5631814766731275228">Chromium பெயர் மற்றும் படம்</translation>
 <translation id="5634636535844844681">Windows 7 அல்லது அதற்குப் பிந்தைய பதிப்புகளில் மட்டுமே Chromium இயங்கும்.</translation>
 <translation id="5653831366781983928">Chromiumமை இப்போது மீண்டும் தொடங்கவும்</translation>
-<translation id="5680901439334282664">Chromium இல் உள்நுழைக</translation>
 <translation id="5698481217667032250">Chromiumமை இந்த மொழியில் காட்டு</translation>
 <translation id="5820394555380036790">Chromium OS</translation>
 <translation id="5862307444128926510">Chromium க்கு வரவேற்கிறோம்</translation>

@@ -16,9 +16,10 @@
 #include "base/trace_event/trace_event.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
+#include "ui/gfx/linux/drm_util_linux.h"
+#include "ui/gfx/linux/gbm_defines.h"
+#include "ui/gfx/linux/gbm_device.h"
 #include "ui/gfx/presentation_feedback.h"
-#include "ui/ozone/common/linux/drm_util_linux.h"
-#include "ui/ozone/common/linux/gbm_device.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_generator.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_manager.h"
@@ -296,9 +297,7 @@ void DrmThread::MoveCursor(gfx::AcceleratedWidget widget,
 void DrmThread::CheckOverlayCapabilities(
     gfx::AcceleratedWidget widget,
     const OverlaySurfaceCandidateList& overlays,
-    base::OnceCallback<void(gfx::AcceleratedWidget,
-                            const OverlaySurfaceCandidateList&,
-                            const OverlayStatusList&)> callback) {
+    OverlayCapabilitiesCallback callback) {
   TRACE_EVENT0("drm,hwoverlays", "DrmThread::CheckOverlayCapabilities");
 
   std::move(callback).Run(

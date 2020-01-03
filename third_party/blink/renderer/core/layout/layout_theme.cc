@@ -61,6 +61,7 @@
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "third_party/blink/renderer/platform/web_test_support.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/native_theme/native_theme.h"
 
 // The methods in this file are shared by all themes on every platform.
@@ -511,13 +512,13 @@ bool LayoutTheme::IsActive(const Node* node) {
 }
 
 bool LayoutTheme::IsChecked(const Node* node) {
-  if (auto* input = ToHTMLInputElementOrNull(node))
+  if (auto* input = DynamicTo<HTMLInputElement>(node))
     return input->ShouldAppearChecked();
   return false;
 }
 
 bool LayoutTheme::IsIndeterminate(const Node* node) {
-  if (auto* input = ToHTMLInputElementOrNull(node))
+  if (auto* input = DynamicTo<HTMLInputElement>(node))
     return input->ShouldAppearIndeterminate();
   return false;
 }
@@ -634,10 +635,10 @@ void LayoutTheme::AdjustSliderContainerStyle(ComputedStyle& style,
   if (e && (e->ShadowPseudoId() == "-webkit-media-slider-container" ||
             e->ShadowPseudoId() == "-webkit-slider-container")) {
     if (style.EffectiveAppearance() == kSliderVerticalPart) {
-      style.SetTouchAction(TouchAction::kTouchActionPanX);
+      style.SetTouchAction(TouchAction::kPanX);
       style.SetEffectiveAppearance(kNoControlPart);
     } else {
-      style.SetTouchAction(TouchAction::kTouchActionPanY);
+      style.SetTouchAction(TouchAction::kPanY);
       style.SetEffectiveAppearance(kNoControlPart);
     }
   }
@@ -884,7 +885,7 @@ bool LayoutTheme::ShouldOpenPickerWithF4Key() const {
 
 bool LayoutTheme::SupportsCalendarPicker(const AtomicString& type) const {
   DCHECK(RuntimeEnabledFeatures::InputMultipleFieldsUIEnabled());
-  if (RuntimeEnabledFeatures::FormControlsRefreshEnabled() &&
+  if (features::IsFormControlsRefreshEnabled() &&
       type == input_type_names::kTime)
     return true;
 

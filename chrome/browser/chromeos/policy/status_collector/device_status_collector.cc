@@ -128,6 +128,15 @@ const char kStorageInfoPath[] = "/var/log/storage_info.txt";
 // The location where stateful partition info is read from.
 const char kStatefulPartitionPath[] = "/home/.shadow";
 
+// TODO(b/144081278): Remove when resolved.
+// Debug values for cases when firmware version is not present.
+const char kFirmwareFileEmpty[] = "FirmwareFileEmpty";
+const char kFirmwareFileNotRead[] = "FirmwareFileNotRead";
+const char kFirmwareNotInitialized[] = "FirmwareNotInitialized";
+const char kFirmwareNotParsed[] = "FirmwareNotParsed";
+// File to look for firmware number in.
+const char kPathFirmware[] = "/var/log/bios_info.txt";
+
 // Helper function (invoked via blocking pool) to fetch information about
 // mounted disks.
 std::vector<em::VolumeInfo> GetVolumeInfo(
@@ -430,9 +439,8 @@ int ConvertWifiSignalStrength(int signal_strength) {
 }
 
 bool IsKioskApp() {
-  auto user_type = chromeos::LoginState::Get()->GetLoggedInUserType();
-  return user_type == chromeos::LoginState::LOGGED_IN_USER_KIOSK_APP ||
-         user_type == chromeos::LoginState::LOGGED_IN_USER_ARC_KIOSK_APP;
+  return chromeos::LoginState::Get()->GetLoggedInUserType() ==
+         chromeos::LoginState::LOGGED_IN_USER_KIOSK_APP;
 }
 
 // Utility method to turn cpu_temp_fetcher_ to OnceCallback
@@ -495,6 +503,24 @@ void AddCrostiniAppListForProfile(Profile* const profile,
                  << registered_app_id;
     }
   }
+}
+
+// Reads content of firmware file.
+// Returns pair of the firmware version and fetch error if not fetched.
+// TODO(b/144081278): Just call chromeos::version_loader::ParseFirmware() when
+// it's resolved.
+std::pair<std::string, std::string> ReadFirmwareVersion() {
+  std::string firmware;
+  std::string contents;
+  const base::FilePath file_path(kPathFirmware);
+  if (!base::ReadFileToString(file_path, &contents))
+    return {firmware, kFirmwareFileNotRead};
+  if (contents.empty())
+    return {firmware, kFirmwareFileEmpty};
+  firmware = chromeos::version_loader::ParseFirmware(contents);
+  if (firmware.empty())
+    return {firmware, kFirmwareNotParsed};
+  return {firmware, std::string()};
 }
 
 }  // namespace
@@ -718,6 +744,17 @@ class DeviceStatusCollectorState : public StatusCollectorState {
         battery_info_out->set_manufacture_date(
             base::StringPrintf("%04d-%02d-%02d", year, month, day));
       }
+      const auto& cpu_info = probe_result->cpu_info;
+      if (cpu_info.has_value()) {
+        for (const auto& cpu : cpu_info.value()) {
+          em::CpuInfo* const cpu_info_out =
+              response_params_.device_status->add_cpu_info();
+          cpu_info_out->set_model_name(cpu->model_name);
+          cpu_info_out->set_architecture(
+              em::CpuInfo::Architecture(cpu->architecture));
+          cpu_info_out->set_max_clock_speed_khz(cpu->max_clock_speed_khz);
+        }
+      }
 
       for (const std::unique_ptr<SampledData>& sample_data : samples) {
         auto it = sample_data->battery_samples.find(battery_info->model_name);
@@ -789,6 +826,7 @@ DeviceStatusCollector::DeviceStatusCollector(
     const CrosHealthdDataFetcher& cros_healthd_data_fetcher)
     : StatusCollector(provider, chromeos::CrosSettings::Get()),
       pref_service_(pref_service),
+      firmware_fetch_error_(kFirmwareNotInitialized),
       volume_info_fetcher_(volume_info_fetcher),
       cpu_statistics_fetcher_(cpu_statistics_fetcher),
       cpu_temp_fetcher_(cpu_temp_fetcher),
@@ -869,6 +907,8 @@ DeviceStatusCollector::DeviceStatusCollector(
       chromeos::kReportDeviceStorageStatus, callback);
   board_status_subscription_ = cros_settings_->AddSettingsObserver(
       chromeos::kReportDeviceBoardStatus, callback);
+  cpu_info_subscription_ = cros_settings_->AddSettingsObserver(
+      chromeos::kReportDeviceCpuInfo, callback);
 
   power_manager_->AddObserver(this);
 
@@ -886,7 +926,7 @@ DeviceStatusCollector::DeviceStatusCollector(
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::Bind(&chromeos::version_loader::GetFirmware),
+      base::Bind(&ReadFirmwareVersion),
       base::Bind(&DeviceStatusCollector::OnOSFirmware,
                  weak_factory_.GetWeakPtr()));
   chromeos::tpm_util::GetTpmVersion(base::BindOnce(
@@ -969,6 +1009,10 @@ void DeviceStatusCollector::UpdateReportingSettings() {
   if (!cros_settings_->GetBoolean(chromeos::kReportDeviceBoardStatus,
                                   &report_board_status_)) {
     report_board_status_ = false;
+  }
+  if (!cros_settings_->GetBoolean(chromeos::kReportDeviceCpuInfo,
+                                  &report_cpu_info_)) {
+    report_cpu_info_ = false;
   }
 
   if (!report_hardware_status_) {
@@ -1242,6 +1286,8 @@ void DeviceStatusCollector::FetchCrosHealthdData(
     categories_to_probe.push_back(ProbeCategoryEnum::kNonRemovableBlockDevices);
   if (report_power_status_)
     categories_to_probe.push_back(ProbeCategoryEnum::kBattery);
+  if (report_cpu_info_)
+    categories_to_probe.push_back(ProbeCategoryEnum::kCpu);
 
   auto sample = std::make_unique<SampledData>();
   sample->timestamp = base::Time::Now();
@@ -1261,6 +1307,10 @@ void DeviceStatusCollector::OnProbeDataFetched(
     chromeos::cros_healthd::mojom::TelemetryInfoPtr reply) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   std::move(callback).Run(std::move(reply), sampled_data_);
+}
+
+bool DeviceStatusCollector::ShouldFetchCrosHealthData() const {
+  return report_power_status_ || report_storage_status_ || report_cpu_info_;
 }
 
 void DeviceStatusCollector::ReportingUsersChanged() {
@@ -1334,7 +1384,11 @@ bool DeviceStatusCollector::GetVersionInfo(
   status->set_os_version(os_version_);
   status->set_browser_version(version_info::GetVersionNumber());
   status->set_channel(ConvertToProtoChannel(chrome::GetChannel()));
-  status->set_firmware_version(firmware_version_);
+
+  // TODO(b/144081278): Remove when resolved.
+  // When firmware version is not fetched, report error instead.
+  status->set_firmware_version(
+      !firmware_version_.empty() ? firmware_version_ : firmware_fetch_error_);
 
   em::TpmVersionInfo* const tpm_version_info =
       status->mutable_tpm_version_info();
@@ -1383,10 +1437,6 @@ bool DeviceStatusCollector::GetNetworkInterfaces(
       {
           shill::kTypeWifi,
           em::NetworkInterface::TYPE_WIFI,
-      },
-      {
-          shill::kTypeBluetooth,
-          em::NetworkInterface::TYPE_BLUETOOTH,
       },
       {
           shill::kTypeCellular,
@@ -1448,9 +1498,11 @@ bool DeviceStatusCollector::GetNetworkInterfaces(
     anything_reported = true;
   }
 
-  // Don't write any network state if we aren't in a kiosk or public session.
-  if (!GetAutoLaunchedKioskSessionInfo() &&
-      !user_manager::UserManager::Get()->IsLoggedInAsPublicAccount()) {
+  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
+  const user_manager::User* const primary_user = user_manager->GetPrimaryUser();
+  // Don't write network state for unaffiliated users or when no user is signed
+  // in.
+  if (!primary_user || !primary_user->IsAffiliated()) {
     return anything_reported;
   }
 
@@ -1580,8 +1632,10 @@ bool DeviceStatusCollector::GetHardwareStatus(
   // clear
   status->clear_cpu_temp_infos();
 
-  if (report_power_status_ || report_storage_status_) {
+  if (report_storage_status_)
     state->FetchEMMCLifeTime(emmc_lifetime_fetcher_);
+
+  if (ShouldFetchCrosHealthData()) {
     state->FetchCrosHealthdData(cros_healthd_data_fetcher_);
   } else {
     // Sample CPU temperature in a background thread.
@@ -1699,6 +1753,8 @@ bool DeviceStatusCollector::GetRunningKioskApp(
   } else if (account->type == policy::DeviceLocalAccount::TYPE_ARC_KIOSK_APP) {
     // Use package name as app ID for ARC Kiosks.
     running_kiosk_app->set_app_id(account->arc_kiosk_app_info.package_name());
+  } else if (account->type == policy::DeviceLocalAccount::TYPE_WEB_KIOSK_APP) {
+    running_kiosk_app->set_app_id(account->web_kiosk_app_info.url());
   } else {
     NOTREACHED();
   }
@@ -1846,6 +1902,8 @@ bool DeviceStatusCollector::GetKioskSessionStatus(
   } else if (account->type == policy::DeviceLocalAccount::TYPE_ARC_KIOSK_APP) {
     // Use package name as app ID for ARC Kiosks.
     app_status->set_app_id(account->arc_kiosk_app_info.package_name());
+  } else if (account->type == policy::DeviceLocalAccount::TYPE_WEB_KIOSK_APP) {
+    app_status->set_app_id(account->web_kiosk_app_info.url());
   } else {
     NOTREACHED();
   }
@@ -1927,8 +1985,10 @@ void DeviceStatusCollector::OnOSVersion(const std::string& version) {
   os_version_ = version;
 }
 
-void DeviceStatusCollector::OnOSFirmware(const std::string& version) {
-  firmware_version_ = version;
+void DeviceStatusCollector::OnOSFirmware(
+    std::pair<const std::string&, const std::string&> version) {
+  firmware_version_ = version.first;
+  firmware_fetch_error_ = version.second;
 }
 
 void DeviceStatusCollector::OnTpmVersion(

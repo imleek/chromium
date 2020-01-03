@@ -90,7 +90,7 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
 
   // DecodeSurfaceHandler implementation.
   scoped_refptr<VASurface> CreateSurface() override;
-  void SurfaceReady(const scoped_refptr<VASurface>& va_surface,
+  void SurfaceReady(scoped_refptr<VASurface> va_surface,
                     int32_t bitstream_id,
                     const gfx::Rect& visible_rect,
                     const VideoColorSpace& color_space) override;
@@ -165,7 +165,7 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
   // available VaapiPicture in |available_picture_buffers_| for output. Puts
   // contents of |va_surface| into the latter, releases the surface and passes
   // the resulting picture to |client_| along with |visible_rect|.
-  void OutputPicture(const scoped_refptr<VASurface>& va_surface,
+  void OutputPicture(scoped_refptr<VASurface> va_surface,
                      int32_t input_id,
                      gfx::Rect visible_rect,
                      const VideoColorSpace& picture_color_space);
@@ -330,6 +330,7 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
   size_t requested_num_reference_frames_;
   size_t previously_requested_num_reference_frames_;
 
+  // The video stream's profile.
   VideoCodecProfile profile_;
 
   // Callback to make GL context current.

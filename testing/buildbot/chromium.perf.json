@@ -5,128 +5,11 @@
     "isolated_scripts": [
       {
         "args": [
-          "--gtest-benchmark-name",
-          "components_perftests"
-        ],
-        "isolate_name": "components_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "components_perftests",
-        "override_compile_targets": [
-          "components_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "device_os": "KOT49H",
-              "device_os_flavor": "google",
-              "device_type": "hammerhead",
-              "os": "Android",
-              "pool": "chrome.tests.perf"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "gpu_perftests"
-        ],
-        "isolate_name": "gpu_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "gpu_perftests",
-        "override_compile_targets": [
-          "gpu_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "device_os": "KOT49H",
-              "device_os_flavor": "google",
-              "device_type": "hammerhead",
-              "os": "Android",
-              "pool": "chrome.tests.perf"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "tracing_perftests"
-        ],
-        "isolate_name": "tracing_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "tracing_perftests",
-        "override_compile_targets": [
-          "tracing_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "device_os": "KOT49H",
-              "device_os_flavor": "google",
-              "device_type": "hammerhead",
-              "os": "Android",
-              "pool": "chrome.tests.perf"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
           "-v",
           "--browser=android-chromium",
           "--upload-results",
-          "--run-ref-build",
           "--test-shard-map-filename=android_nexus5_perf_map.json",
+          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -149,9 +32,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 16
         },
         "trigger_script": {
@@ -172,7 +55,6 @@
           "-v",
           "--browser=android-webview",
           "--upload-results",
-          "--webview-embedder-apk=../../out/Release/apks/SystemWebViewShell.apk",
           "--test-shard-map-filename=android_nexus5x_webview_perf_map.json",
           "--assert-gpu-compositing"
         ],
@@ -196,9 +78,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 16
         },
         "trigger_script": {
@@ -219,7 +101,6 @@
           "-v",
           "--browser=android-webview",
           "--upload-results",
-          "--webview-embedder-apk=../../out/Release/apks/SystemWebViewShell.apk",
           "--test-shard-map-filename=android_nexus6_webview_perf_map.json",
           "--assert-gpu-compositing"
         ],
@@ -243,9 +124,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 12
         },
         "trigger_script": {
@@ -263,205 +144,11 @@
     "isolated_scripts": [
       {
         "args": [
-          "--gtest-benchmark-name",
-          "angle_perftests"
-        ],
-        "isolate_name": "angle_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "angle_perftests",
-        "override_compile_targets": [
-          "angle_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "10de:1cb3-23.21.13.8792",
-              "os": "Windows-2008ServerR2-SP1",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "PowerEdge R220 [01] (Dell Inc.)"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "load_library_perf_tests"
-        ],
-        "isolate_name": "load_library_perf_tests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "load_library_perf_tests",
-        "override_compile_targets": [
-          "load_library_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "10de:1cb3-23.21.13.8792",
-              "os": "Windows-2008ServerR2-SP1",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "PowerEdge R220 [01] (Dell Inc.)"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "media_perftests"
-        ],
-        "isolate_name": "media_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "media_perftests",
-        "override_compile_targets": [
-          "media_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "10de:1cb3-23.21.13.8792",
-              "os": "Windows-2008ServerR2-SP1",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "PowerEdge R220 [01] (Dell Inc.)"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "passthrough_command_buffer_perftests",
-          "--use-cmd-decoder=passthrough",
-          "--use-angle=gl-null"
-        ],
-        "isolate_name": "command_buffer_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "passthrough_command_buffer_perftests",
-        "override_compile_targets": [
-          "command_buffer_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "10de:1cb3-23.21.13.8792",
-              "os": "Windows-2008ServerR2-SP1",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "PowerEdge R220 [01] (Dell Inc.)"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "validating_command_buffer_perftests",
-          "--use-cmd-decoder=validating",
-          "--use-stub"
-        ],
-        "isolate_name": "command_buffer_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "validating_command_buffer_perftests",
-        "override_compile_targets": [
-          "command_buffer_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "10de:1cb3-23.21.13.8792",
-              "os": "Windows-2008ServerR2-SP1",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "PowerEdge R220 [01] (Dell Inc.)"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
           "-v",
           "--browser=release_x64",
           "--upload-results",
-          "--run-ref-build",
           "--test-shard-map-filename=win_7_nvidia_gpu_perf_map.json",
+          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -483,10 +170,10 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 5
+          "io_timeout": 19800,
+          "shards": 4
         },
         "trigger_script": {
           "args": [
@@ -503,125 +190,11 @@
     "isolated_scripts": [
       {
         "args": [
-          "--gtest-benchmark-name",
-          "components_perftests"
-        ],
-        "isolate_name": "components_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "components_perftests",
-        "override_compile_targets": [
-          "components_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "102b:0532-6.1.7600.16385",
-              "os": "Windows-2008ServerR2-SP1",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "PowerEdge R210 II (Dell Inc.)"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "load_library_perf_tests"
-        ],
-        "isolate_name": "load_library_perf_tests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "load_library_perf_tests",
-        "override_compile_targets": [
-          "load_library_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "102b:0532-6.1.7600.16385",
-              "os": "Windows-2008ServerR2-SP1",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "PowerEdge R210 II (Dell Inc.)"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "media_perftests"
-        ],
-        "isolate_name": "media_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "media_perftests",
-        "override_compile_targets": [
-          "media_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "102b:0532-6.1.7600.16385",
-              "os": "Windows-2008ServerR2-SP1",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "PowerEdge R210 II (Dell Inc.)"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
           "-v",
           "--browser=release",
           "--upload-results",
-          "--run-ref-build",
-          "--test-shard-map-filename=win_7_perf_map.json"
+          "--test-shard-map-filename=win_7_perf_map.json",
+          "--run-ref-build"
         ],
         "isolate_name": "performance_test_suite",
         "merge": {
@@ -642,10 +215,10 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 5
+          "io_timeout": 19800,
+          "shards": 4
         },
         "trigger_script": {
           "args": [
@@ -684,9 +257,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -708,9 +281,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -732,9 +305,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -756,9 +329,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -780,9 +353,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -804,9 +377,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -828,9 +401,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -852,9 +425,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       }
     ]
@@ -864,10 +437,10 @@
       {
         "args": [
           "-v",
-          "--browser=android-chrome",
+          "--browser=android-chrome-bundle",
           "--upload-results",
-          "--run-ref-build",
-          "--test-shard-map-filename=android-go-perf_map.json"
+          "--test-shard-map-filename=android-go-perf_map.json",
+          "--run-ref-build"
         ],
         "isolate_name": "performance_test_suite",
         "merge": {
@@ -889,9 +462,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 19
         },
         "trigger_script": {
@@ -912,7 +485,6 @@
           "-v",
           "--browser=android-webview-google",
           "--upload-results",
-          "--webview-embedder-apk=../../out/Release/apks/SystemWebViewShell.apk",
           "--test-shard-map-filename=android-go_webview-perf_map.json"
         ],
         "isolate_name": "performance_webview_test_suite",
@@ -935,9 +507,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 13
         },
         "trigger_script": {
@@ -979,9 +551,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1018,9 +590,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1057,9 +629,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1096,9 +668,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1135,9 +707,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1174,9 +746,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1193,8 +765,8 @@
           "-v",
           "--browser=android-chromium",
           "--upload-results",
-          "--run-ref-build",
           "--test-shard-map-filename=android-nexus5x-perf_map.json",
+          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -1217,9 +789,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 10
         },
         "trigger_script": {
@@ -1238,10 +810,10 @@
       {
         "args": [
           "-v",
-          "--browser=android-chrome",
+          "--browser=android-chrome-bundle",
           "--upload-results",
-          "--run-ref-build",
-          "--test-shard-map-filename=android-pixel2-perf_map.json"
+          "--test-shard-map-filename=android-pixel2-perf_map.json",
+          "--run-ref-build"
         ],
         "isolate_name": "performance_test_suite",
         "merge": {
@@ -1263,9 +835,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 35
         },
         "trigger_script": {
@@ -1286,8 +858,6 @@
           "-v",
           "--browser=android-weblayer",
           "--upload-results",
-          "--webview-embedder-apk=../../out/Release/apks/WebLayerShell.apk",
-          "--webview-embedder-apk=../../out/Release/apks/WebLayerSupport.apk",
           "--test-shard-map-filename=android-pixel2_weblayer-perf_map.json"
         ],
         "isolate_name": "performance_weblayer_test_suite",
@@ -1310,9 +880,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 4
         },
         "trigger_script": {
@@ -1333,7 +903,6 @@
           "-v",
           "--browser=android-webview-google",
           "--upload-results",
-          "--webview-embedder-apk=../../out/Release/apks/SystemWebViewShell.apk",
           "--test-shard-map-filename=android-pixel2_webview-perf_map.json"
         ],
         "isolate_name": "performance_webview_test_suite",
@@ -1356,10 +925,10 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 28
+          "io_timeout": 19800,
+          "shards": 21
         },
         "trigger_script": {
           "args": [
@@ -1398,9 +967,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -1422,9 +991,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -1446,9 +1015,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -1470,9 +1039,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -1494,9 +1063,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -1518,9 +1087,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       },
       {
@@ -1542,9 +1111,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600
+          "io_timeout": 19800
         }
       }
     ]
@@ -1580,9 +1149,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1618,9 +1187,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1656,9 +1225,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1694,9 +1263,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1732,9 +1301,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1770,9 +1339,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1789,8 +1358,8 @@
           "-v",
           "--browser=release",
           "--upload-results",
-          "--run-ref-build",
           "--test-shard-map-filename=linux-perf_map.json",
+          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -1812,9 +1381,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 26
         },
         "trigger_script": {
@@ -1848,14 +1417,15 @@
           "dimension_sets": [
             {
               "gpu": "8086:1626",
-              "os": "Mac-10.12",
-              "pool": "chrome.tests.perf"
+              "os": "Mac-10.12.6",
+              "pool": "chrome.tests.perf",
+              "synthetic_product_name": "MacBookAir7,2_x86-64-i5-5350U_Intel Broadwell HD Graphics 6000_8192_APPLE SSD SM0128G"
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1885,14 +1455,15 @@
           "dimension_sets": [
             {
               "gpu": "8086:1626",
-              "os": "Mac-10.12",
-              "pool": "chrome.tests.perf"
+              "os": "Mac-10.12.6",
+              "pool": "chrome.tests.perf",
+              "synthetic_product_name": "MacBookAir7,2_x86-64-i5-5350U_Intel Broadwell HD Graphics 6000_8192_APPLE SSD SM0128G"
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -1909,8 +1480,8 @@
           "-v",
           "--browser=release",
           "--upload-results",
-          "--run-ref-build",
           "--test-shard-map-filename=mac-10_12_laptop_low_end-perf_map.json",
+          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -1926,14 +1497,15 @@
           "dimension_sets": [
             {
               "gpu": "8086:1626",
-              "os": "Mac-10.12",
-              "pool": "chrome.tests.perf"
+              "os": "Mac-10.12.6",
+              "pool": "chrome.tests.perf",
+              "synthetic_product_name": "MacBookAir7,2_x86-64-i5-5350U_Intel Broadwell HD Graphics 6000_8192_APPLE SSD SM0128G"
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 26
         },
         "trigger_script": {
@@ -1951,239 +1523,11 @@
     "isolated_scripts": [
       {
         "args": [
-          "--gtest-benchmark-name",
-          "base_perftests"
-        ],
-        "isolate_name": "base_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "base_perftests",
-        "override_compile_targets": [
-          "base_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:6821-4.0.20-3.2.8",
-              "os": "Mac-10.13.3",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "MacBookPro11,5_x86-64-i7-4870HQ_AMD Radeon R8 M370X 4.0.20 [3.2.8]_Intel Haswell Iris Pro Graphics 5200 4.0.20 [3.2.8]_16384_1_475936.0"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "dawn_perf_tests"
-        ],
-        "isolate_name": "dawn_perf_tests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "dawn_perf_tests",
-        "override_compile_targets": [
-          "dawn_perf_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:6821-4.0.20-3.2.8",
-              "os": "Mac-10.13.3",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "MacBookPro11,5_x86-64-i7-4870HQ_AMD Radeon R8 M370X 4.0.20 [3.2.8]_Intel Haswell Iris Pro Graphics 5200 4.0.20 [3.2.8]_16384_1_475936.0"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "media_perftests"
-        ],
-        "isolate_name": "media_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "media_perftests",
-        "override_compile_targets": [
-          "media_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:6821-4.0.20-3.2.8",
-              "os": "Mac-10.13.3",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "MacBookPro11,5_x86-64-i7-4870HQ_AMD Radeon R8 M370X 4.0.20 [3.2.8]_Intel Haswell Iris Pro Graphics 5200 4.0.20 [3.2.8]_16384_1_475936.0"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "net_perftests"
-        ],
-        "isolate_name": "net_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "net_perftests",
-        "override_compile_targets": [
-          "net_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:6821-4.0.20-3.2.8",
-              "os": "Mac-10.13.3",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "MacBookPro11,5_x86-64-i7-4870HQ_AMD Radeon R8 M370X 4.0.20 [3.2.8]_Intel Haswell Iris Pro Graphics 5200 4.0.20 [3.2.8]_16384_1_475936.0"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "performance_browser_tests"
-        ],
-        "isolate_name": "performance_browser_tests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "performance_browser_tests",
-        "override_compile_targets": [
-          "performance_browser_tests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:6821-4.0.20-3.2.8",
-              "os": "Mac-10.13.3",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "MacBookPro11,5_x86-64-i7-4870HQ_AMD Radeon R8 M370X 4.0.20 [3.2.8]_Intel Haswell Iris Pro Graphics 5200 4.0.20 [3.2.8]_16384_1_475936.0"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
-          "--gtest-benchmark-name",
-          "views_perftests"
-        ],
-        "isolate_name": "views_perftests",
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "views_perftests",
-        "override_compile_targets": [
-          "views_perftests"
-        ],
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "1002:6821-4.0.20-3.2.8",
-              "os": "Mac-10.13.3",
-              "pool": "chrome.tests.perf",
-              "synthetic_product_name": "MacBookPro11,5_x86-64-i7-4870HQ_AMD Radeon R8 M370X 4.0.20 [3.2.8]_Intel Haswell Iris Pro Graphics 5200 4.0.20 [3.2.8]_16384_1_475936.0"
-            }
-          ],
-          "expiration": 7200,
-          "hard_timeout": 43200,
-          "ignore_task_failure": false,
-          "io_timeout": 21600,
-          "shards": 1
-        },
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      },
-      {
-        "args": [
           "-v",
           "--browser=release",
           "--upload-results",
-          "--run-ref-build",
           "--test-shard-map-filename=mac-10_13_laptop_high_end-perf_map.json",
+          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -2201,13 +1545,13 @@
               "gpu": "1002:6821-4.0.20-3.2.8",
               "os": "Mac-10.13.3",
               "pool": "chrome.tests.perf",
-              "synthetic_product_name": "MacBookPro11,5_x86-64-i7-4870HQ_AMD Radeon R8 M370X 4.0.20 [3.2.8]_Intel Haswell Iris Pro Graphics 5200 4.0.20 [3.2.8]_16384_1_475936.0"
+              "synthetic_product_name": "MacBookPro11,5_x86-64-i7-4870HQ_AMD Radeon R8 M370X 4.0.20 [3.2.8]_Intel Haswell Iris Pro Graphics 5200 4.0.20 [3.2.8]_16384_APPLE SSD SM0512G"
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 26
         },
         "trigger_script": {
@@ -2253,9 +1597,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -2291,9 +1635,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -2329,9 +1673,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -2368,9 +1712,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -2406,9 +1750,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -2444,9 +1788,9 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
           "shards": 1
         },
         "trigger_script": {
@@ -2463,8 +1807,8 @@
           "-v",
           "--browser=release_x64",
           "--upload-results",
-          "--run-ref-build",
           "--test-shard-map-filename=win-10-perf_map.json",
+          "--run-ref-build",
           "--assert-gpu-compositing"
         ],
         "isolate_name": "performance_test_suite",
@@ -2486,9 +1830,54 @@
             }
           ],
           "expiration": 7200,
-          "hard_timeout": 43200,
+          "hard_timeout": 19800,
           "ignore_task_failure": false,
-          "io_timeout": 21600,
+          "io_timeout": 19800,
+          "shards": 26
+        },
+        "trigger_script": {
+          "args": [
+            "--multiple-dimension-script-verbose",
+            "True"
+          ],
+          "requires_simultaneous_shard_dispatch": true,
+          "script": "//testing/trigger_scripts/perf_device_trigger.py"
+        }
+      }
+    ]
+  },
+  "win-10_laptop_low_end-perf": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "-v",
+          "--browser=release_x64",
+          "--upload-results",
+          "--test-shard-map-filename=win-10_laptop_low_end-perf_map.json",
+          "--run-ref-build",
+          "--assert-gpu-compositing"
+        ],
+        "isolate_name": "performance_test_suite",
+        "merge": {
+          "script": "//tools/perf/process_perf_results.py"
+        },
+        "name": "performance_test_suite",
+        "override_compile_targets": [
+          "performance_test_suite"
+        ],
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "gpu": "8086:1616-20.19.15.5070",
+              "os": "Windows-10-18363.476",
+              "pool": "chrome.tests.perf"
+            }
+          ],
+          "expiration": 7200,
+          "hard_timeout": 19800,
+          "ignore_task_failure": false,
+          "io_timeout": 19800,
           "shards": 26
         },
         "trigger_script": {

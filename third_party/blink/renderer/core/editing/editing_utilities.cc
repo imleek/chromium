@@ -64,6 +64,7 @@
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_table_cell_element.h"
 #include "third_party/blink/renderer/core/html/html_ulist_element.h"
+#include "third_party/blink/renderer/core/html/image_document.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_element_factory.h"
 #include "third_party/blink/renderer/core/html_names.h"
@@ -340,7 +341,7 @@ bool IsNodeFullyContained(const EphemeralRange& range, const Node& node) {
 // TODO(editing-dev): We should make |SelectionAdjuster| to use this funciton
 // instead of |isSelectionBondary()|.
 bool IsUserSelectContain(const Node& node) {
-  return IsHTMLTextAreaElement(node) || IsHTMLInputElement(node) ||
+  return IsA<HTMLTextAreaElement>(node) || IsA<HTMLInputElement>(node) ||
          IsA<HTMLSelectElement>(node);
 }
 
@@ -1246,7 +1247,7 @@ bool IsDisplayInsideTable(const Node* node) {
 bool IsTableCell(const Node* node) {
   DCHECK(node);
   LayoutObject* r = node->GetLayoutObject();
-  return r ? r->IsTableCell() : IsHTMLTableCellElement(*node);
+  return r ? r->IsTableCell() : IsA<HTMLTableCellElement>(*node);
 }
 
 HTMLElement* CreateDefaultParagraphElement(Document& document) {
@@ -1540,9 +1541,9 @@ bool IsBlockFlowElement(const Node& node) {
 
 bool IsInPasswordField(const Position& position) {
   TextControlElement* text_control = EnclosingTextControl(position);
-  return IsHTMLInputElement(text_control) &&
-         ToHTMLInputElement(text_control)->type() ==
-             input_type_names::kPassword;
+  auto* html_input_element = DynamicTo<HTMLInputElement>(text_control);
+  return html_input_element &&
+         html_input_element->type() == input_type_names::kPassword;
 }
 
 // If current position is at grapheme boundary, return 0; otherwise, return the
@@ -1715,11 +1716,11 @@ static scoped_refptr<Image> ImageFromNode(const Node& node) {
 AtomicString GetUrlStringFromNode(const Node& node) {
   // TODO(editing-dev): This should probably be reconciled with
   // HitTestResult::absoluteImageURL.
-  if (IsHTMLImageElement(node) || IsHTMLInputElement(node))
+  if (IsA<HTMLImageElement>(node) || IsA<HTMLInputElement>(node))
     return To<HTMLElement>(node).FastGetAttribute(html_names::kSrcAttr);
-  if (IsSVGImageElement(node))
+  if (IsA<SVGImageElement>(node))
     return To<SVGElement>(node).ImageSourceURL();
-  if (IsHTMLEmbedElement(node) || IsHTMLObjectElement(node) ||
+  if (IsA<HTMLEmbedElement>(node) || IsA<HTMLObjectElement>(node) ||
       IsA<HTMLCanvasElement>(node))
     return To<HTMLElement>(node).ImageSourceURL();
   return AtomicString();
@@ -1749,14 +1750,14 @@ Element* FindEventTargetFrom(LocalFrame& frame,
 HTMLImageElement* ImageElementFromImageDocument(const Document* document) {
   if (!document)
     return nullptr;
-  if (!document->IsImageDocument())
+  if (!IsA<ImageDocument>(document))
     return nullptr;
 
   const HTMLElement* const body = document->body();
   if (!body)
     return nullptr;
 
-  return ToHTMLImageElementOrNull(body->firstChild());
+  return DynamicTo<HTMLImageElement>(body->firstChild());
 }
 
 }  // namespace blink

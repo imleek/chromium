@@ -19,13 +19,13 @@ import org.chromium.base.Callback;
 import org.chromium.base.StrictModeContext;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.omnibox.LocationBarVoiceRecognitionHandler;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteController.OnSuggestionsReceivedListener;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionListViewBinder.SuggestionListViewHolder;
 import org.chromium.chrome.browser.omnibox.suggestions.answer.AnswerSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionView;
-import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestionProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestionViewBinder;
@@ -117,8 +117,9 @@ public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
                 // clang-format off
                 adapter.registerType(
                         OmniboxSuggestionUiType.DEFAULT,
-                        () -> new SuggestionView(mListView.getContext()),
-                        SuggestionViewViewBinder::bind);
+                        () -> new BaseSuggestionView(mListView.getContext(),
+                                                     R.layout.omnibox_basic_suggestion),
+                        new SuggestionViewViewBinder());
 
                 adapter.registerType(
                         OmniboxSuggestionUiType.EDIT_URL_SUGGESTION,
@@ -170,6 +171,11 @@ public class AutocompleteCoordinatorImpl implements AutocompleteCoordinator {
     @Override
     public void setToolbarDataProvider(ToolbarDataProvider toolbarDataProvider) {
         mMediator.setToolbarDataProvider(toolbarDataProvider);
+    }
+
+    @Override
+    public void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {
+        mMediator.setOverviewModeBehavior(overviewModeBehavior);
     }
 
     @Override

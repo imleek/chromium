@@ -188,7 +188,7 @@ void UninstallExtension(const base::FilePath& extensions_dir,
   // We don't care about the return value. If this fails (and it can, due to
   // plugins that aren't unloaded yet), it will get cleaned up by
   // ExtensionGarbageCollector::GarbageCollectExtensions.
-  base::DeleteFile(extensions_dir.AppendASCII(id), true);  // recursive.
+  base::DeleteFileRecursively(extensions_dir.AppendASCII(id));
 }
 
 scoped_refptr<Extension> LoadExtension(const base::FilePath& extension_path,
@@ -529,9 +529,10 @@ MessageBundle* LoadMessageBundle(
 MessageBundle::SubstitutionMap* LoadMessageBundleSubstitutionMap(
     const base::FilePath& extension_path,
     const std::string& extension_id,
-    const std::string& default_locale) {
+    const std::string& default_locale,
+    extension_l10n_util::GzippedMessagesPermission gzip_permission) {
   return LoadMessageBundleSubstitutionMapFromPaths(
-      {extension_path}, extension_id, default_locale);
+      {extension_path}, extension_id, default_locale, gzip_permission);
 }
 
 MessageBundle::SubstitutionMap* LoadNonLocalizedMessageBundleSubstitutionMap(
@@ -549,7 +550,8 @@ MessageBundle::SubstitutionMap* LoadNonLocalizedMessageBundleSubstitutionMap(
 MessageBundle::SubstitutionMap* LoadMessageBundleSubstitutionMapFromPaths(
     const std::vector<base::FilePath>& paths,
     const std::string& extension_id,
-    const std::string& default_locale) {
+    const std::string& default_locale,
+    extension_l10n_util::GzippedMessagesPermission gzip_permission) {
   MessageBundle::SubstitutionMap* return_value =
       LoadNonLocalizedMessageBundleSubstitutionMap(extension_id);
 
@@ -559,9 +561,8 @@ MessageBundle::SubstitutionMap* LoadMessageBundleSubstitutionMapFromPaths(
 
   std::string error;
   for (const base::FilePath& path : paths) {
-    std::unique_ptr<MessageBundle> bundle(LoadMessageBundle(
-        path, default_locale,
-        extension_l10n_util::GzippedMessagesPermission::kDisallow, &error));
+    std::unique_ptr<MessageBundle> bundle(
+        LoadMessageBundle(path, default_locale, gzip_permission, &error));
     if (bundle) {
       for (const auto& iter : *bundle->dictionary()) {
         // |insert| only adds new entries, and does not replace entries in

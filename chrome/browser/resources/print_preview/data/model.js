@@ -8,10 +8,12 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {BackgroundGraphicsModeRestriction, Policies} from '../native_layer.js';
+
 import {Cdd, CddCapabilities, Destination, DestinationOrigin, DestinationType, RecentDestination} from './destination.js';
 import {getPrinterTypeForDestination} from './destination_match.js';
 // <if expr="chromeos">
-import {BackgroundGraphicsModeRestriction, ColorModeRestriction, DuplexModeRestriction, PinModeRestriction} from './destination_policies.js';
+import {ColorModeRestriction, DuplexModeRestriction, PinModeRestriction} from './destination_policies.js';
 // </if>
 import {DocumentSettings} from './document_info.js';
 import {CustomMarginsOrientation, Margins, MarginsSetting, MarginsType} from './margins.js';
@@ -66,7 +68,7 @@ export let Settings;
 
 /**
  * @typedef {{
- *    version: string,
+ *    version: number,
  *    recentDestinations: (!Array<!RecentDestination> |
  *                         undefined),
  *    dpi: ({horizontal_dpi: number,
@@ -104,7 +106,8 @@ export let PolicyEntry;
 
 /**
  * @typedef {{
- *   headerFooter: PolicyEntry
+ *   headerFooter: (PolicyEntry | undefined),
+ *   cssBackground: (PolicyEntry | undefined),
  * }}
  */
 export let PolicySettings;
@@ -620,7 +623,7 @@ Polymer({
     if (!valid) {
       assert(setting.available, 'Setting is not available: ' + settingName);
     }
-    const shouldFireEvent = valid != setting.valid;
+    const shouldFireEvent = valid !== setting.valid;
     this.set(`settings.${settingName}.valid`, valid);
     if (shouldFireEvent) {
       this.fire('setting-valid-changed', valid);
@@ -637,7 +640,7 @@ Polymer({
       return;
     }
 
-    if (this.destination.capabilities == this.lastDestinationCapabilities_) {
+    if (this.destination.capabilities === this.lastDestinationCapabilities_) {
       return;
     }
 
@@ -667,15 +670,15 @@ Polymer({
 
     const capsHasDuplex = !!caps && !!caps.duplex && !!caps.duplex.option;
     const capsHasLongEdge = capsHasDuplex &&
-        caps.duplex.option.some(o => o.type == DuplexType.LONG_EDGE);
+        caps.duplex.option.some(o => o.type === DuplexType.LONG_EDGE);
     const capsHasShortEdge = capsHasDuplex &&
-        caps.duplex.option.some(o => o.type == DuplexType.SHORT_EDGE);
+        caps.duplex.option.some(o => o.type === DuplexType.SHORT_EDGE);
     this.setSettingPath_(
         'duplexShortEdge.available', capsHasLongEdge && capsHasShortEdge);
     this.setSettingPath_(
         'duplex.available',
         (capsHasLongEdge || capsHasShortEdge) &&
-            caps.duplex.option.some(o => o.type == DuplexType.NO_DUPLEX));
+            caps.duplex.option.some(o => o.type === DuplexType.NO_DUPLEX));
 
     this.setSettingPath_(
         'vendorItems.available', !!caps && !!caps.vendor_capability);
@@ -695,7 +698,7 @@ Polymer({
   /** @private */
   updateSettingsAvailabilityFromDestinationAndDocumentSettings_: function() {
     const isSaveAsPDF =
-        this.destination.id == Destination.GooglePromotedId.SAVE_AS_PDF;
+        this.destination.id === Destination.GooglePromotedId.SAVE_AS_PDF;
     const knownSizeToSaveAsPdf = isSaveAsPDF &&
         (!this.documentSettings.isModifiable ||
          this.documentSettings.hasCssMediaStyles);
@@ -834,8 +837,8 @@ Polymer({
     let hasLandscapeOption = false;
     caps.page_orientation.option.forEach(option => {
       hasAutoOrPortraitOption = hasAutoOrPortraitOption ||
-          option.type == 'AUTO' || option.type == 'PORTRAIT';
-      hasLandscapeOption = hasLandscapeOption || option.type == 'LANDSCAPE';
+          option.type === 'AUTO' || option.type === 'PORTRAIT';
+      hasLandscapeOption = hasLandscapeOption || option.type === 'LANDSCAPE';
     });
     return hasLandscapeOption && hasAutoOrPortraitOption;
   },
@@ -909,13 +912,13 @@ Polymer({
       const defaultOption = caps.duplex.option.find(o => !!o.is_default);
       this.setSetting(
           'duplex',
-          defaultOption ? (defaultOption.type == DuplexType.LONG_EDGE ||
-                           defaultOption.type == DuplexType.SHORT_EDGE) :
+          defaultOption ? (defaultOption.type === DuplexType.LONG_EDGE ||
+                           defaultOption.type === DuplexType.SHORT_EDGE) :
                           false,
           true);
       this.setSetting(
           'duplexShortEdge',
-          defaultOption ? defaultOption.type == DuplexType.SHORT_EDGE : false,
+          defaultOption ? defaultOption.type === DuplexType.SHORT_EDGE : false,
           true);
 
       if (!this.settings.duplexShortEdge.available) {
@@ -923,16 +926,16 @@ Polymer({
         // Set duplexShortEdge's unavailable value based on the printer.
         this.setSettingPath_(
             'duplexShortEdge.unavailableValue',
-            caps.duplex.option.some(o => o.type == DuplexType.SHORT_EDGE));
+            caps.duplex.option.some(o => o.type === DuplexType.SHORT_EDGE));
       }
     } else if (
         !this.settings.duplex.available && caps && caps.duplex &&
         caps.duplex.option) {
       // In this case, there must only be one option.
       const hasLongEdge =
-          caps.duplex.option.some(o => o.type == DuplexType.LONG_EDGE);
+          caps.duplex.option.some(o => o.type === DuplexType.LONG_EDGE);
       const hasShortEdge =
-          caps.duplex.option.some(o => o.type == DuplexType.SHORT_EDGE);
+          caps.duplex.option.some(o => o.type === DuplexType.SHORT_EDGE);
       // If the only option available is long edge, the value should always be
       // true.
       this.setSettingPath_(
@@ -948,21 +951,21 @@ Polymer({
       const vendorSettings = {};
       for (const item of caps.vendor_capability) {
         let defaultValue = null;
-        if (item.type == 'SELECT' && item.select_cap &&
+        if (item.type === 'SELECT' && item.select_cap &&
             item.select_cap.option) {
           const defaultOption =
               item.select_cap.option.find(o => !!o.is_default);
           defaultValue = defaultOption ? defaultOption.value : null;
-        } else if (item.type == 'RANGE') {
+        } else if (item.type === 'RANGE') {
           if (item.range_cap) {
             defaultValue = item.range_cap.default || null;
           }
-        } else if (item.type == 'TYPED_VALUE') {
+        } else if (item.type === 'TYPED_VALUE') {
           if (item.typed_value_cap) {
             defaultValue = item.typed_value_cap.default || null;
           }
         }
-        if (defaultValue != null) {
+        if (defaultValue !== null) {
           vendorSettings[item.id] = defaultValue;
         }
       }
@@ -990,7 +993,7 @@ Polymer({
       console.error('Unable to parse state ' + e);
       return;  // use default values rather than updating.
     }
-    if (savedSettings.version != 2) {
+    if (savedSettings.version !== 2) {
       return;
     }
 
@@ -1006,20 +1009,71 @@ Polymer({
   },
 
   /**
+   * Helper function for configurePolicySetting_(). Sets value and managed flag
+   * for given setting.
+   * @param {string} settingName Name of the setting being applied.
+   * @param {*} value Value of the setting provided via policy.
+   * @param {boolean} managed Flag showing whether value of setting is managed.
+   * @private
+   */
+  setPolicySetting_: function(settingName, value, managed) {
+    if (!this.policySettings_) {
+      this.policySettings_ = {};
+    }
+    this.policySettings_[settingName] = {
+      value: value,
+      managed: managed,
+    };
+  },
+
+  /**
+   * Helper function for setPolicySettings(). Calculates value and managed flag
+   * of the setting according to allowed and default modes.
+   * @param {string} settingName Name of the setting being applied.
+   * @param {*} allowedMode Policy value of allowed mode.
+   * @param {*} defaultMode Policy value of default mode.
+   * @private
+   */
+  configurePolicySetting_: function(settingName, allowedMode, defaultMode) {
+    switch (settingName) {
+      case 'headerFooter': {
+        const value = allowedMode !== undefined ? allowedMode : defaultMode;
+        if (value !== undefined) {
+          this.setPolicySetting_(settingName, value, allowedMode !== undefined);
+        }
+        break;
+      }
+      case 'cssBackground': {
+        const value = allowedMode ? allowedMode : defaultMode;
+        if (value !== undefined) {
+          this.setPolicySetting_(
+              settingName, value === BackgroundGraphicsModeRestriction.ENABLED,
+              !!allowedMode);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  },
+
+  /**
    * Sets settings in accordance to policies from native code, and prevents
    * those settings from being changed via other means.
-   * @param {boolean|undefined} headerFooter Value of
-   *     printing.print_header_footer, if set in prefs (or undefined, if not).
-   * @param {boolean} isHeaderFooterManaged true if the header/footer UI state
-   *     is managed by a policy.
+   * @param {Policies} policies Value of policies.
    */
-  setPolicySettings: function(headerFooter, isHeaderFooterManaged) {
-    this.policySettings_ = {
-      headerFooter: {
-        value: headerFooter,
-        managed: isHeaderFooterManaged,
-      },
-    };
+  setPolicySettings: function(policies) {
+    if (policies === undefined) {
+      return;
+    }
+    ['headerFooter', 'cssBackground'].forEach(settingName => {
+      if (!policies[settingName]) {
+        return;
+      }
+      const defaultMode = policies[settingName].defaultMode;
+      const allowedMode = policies[settingName].allowedMode;
+      this.configurePolicySetting_(settingName, allowedMode, defaultMode);
+    });
   },
 
   applyStickySettings: function() {
@@ -1027,24 +1081,14 @@ Polymer({
       STICKY_SETTING_NAMES.forEach(settingName => {
         const setting = this.get(settingName, this.settings);
         const value = this.stickySettings_[setting.key];
-        if (value != undefined) {
+        if (value !== undefined) {
           this.setSetting(settingName, value);
         } else {
           this.applyScalingStickySettings_(settingName);
         }
       });
     }
-    if (this.policySettings_) {
-      for (const [settingName, policy] of Object.entries(
-               this.policySettings_)) {
-        if (policy.value !== undefined) {
-          this.setSetting(settingName, policy.value, true);
-        }
-        if (policy.managed) {
-          this.set(`settings.${settingName}.setByPolicy`, true);
-        }
-      }
-    }
+    this.applyPolicySettings_();
     this.initialized_ = true;
     this.updateManaged_();
     this.stickySettings_ = null;
@@ -1081,6 +1125,21 @@ Polymer({
     }
   },
 
+  /** @private */
+  applyPolicySettings_: function() {
+    if (this.policySettings_) {
+      for (const [settingName, policy] of Object.entries(
+               this.policySettings_)) {
+        if (policy.value !== undefined) {
+          this.setSetting(settingName, policy.value, true);
+        }
+        if (policy.managed) {
+          this.set(`settings.${settingName}.setByPolicy`, true);
+        }
+      }
+    }
+  },
+
   // <if expr="chromeos">
   /**
    * Restricts settings and applies defaults as defined by policy applicable to
@@ -1105,7 +1164,7 @@ Polymer({
     if (duplexValue) {
       this.set(
           'settings.duplex.value',
-          duplexValue != DuplexModeRestriction.SIMPLEX);
+          duplexValue !== DuplexModeRestriction.SIMPLEX);
       if (duplexValue === DuplexModeRestriction.SHORT_EDGE) {
         this.set('settings.duplexShortEdge.value', true);
         setDuplexTypeByPolicy = true;
@@ -1130,28 +1189,16 @@ Polymer({
     }
     this.set('settings.pin.setByPolicy', !!pinPolicy);
 
-    const backgroundGraphicsPolicy = this.destination.backgroundGraphicsPolicy;
-    const backgroundGraphicsValue = backgroundGraphicsPolicy ?
-        backgroundGraphicsPolicy :
-        this.destination.defaultBackgroundGraphicsPolicy;
-    if (backgroundGraphicsValue) {
-      this.set(
-          'settings.cssBackground.value',
-          backgroundGraphicsValue ===
-              BackgroundGraphicsModeRestriction.ENABLED);
-    }
-    this.set('settings.cssBackground.setByPolicy', !!backgroundGraphicsPolicy);
-
     this.updateManaged_();
   },
   // </if>
 
   /** @private */
   updateManaged_: function() {
-    let managedSettings = ['headerFooter'];
+    let managedSettings = ['cssBackground', 'headerFooter'];
     // <if expr="chromeos">
-    managedSettings = managedSettings.concat(
-        ['color', 'cssBackground', 'duplex', 'duplexShortEdge', 'pin']);
+    managedSettings =
+        managedSettings.concat(['color', 'duplex', 'duplexShortEdge', 'pin']);
     // </if>
     this.settingsManaged = managedSettings.some(settingName => {
       const setting = this.getSetting(settingName);
@@ -1243,7 +1290,7 @@ Polymer({
       shouldPrintBackgrounds: this.getSettingValue('cssBackground'),
       shouldPrintSelectionOnly: false,  // only used in print preview
       previewModifiable: this.documentSettings.isModifiable,
-      printToGoogleDrive: destination.id == Destination.GooglePromotedId.DOCS,
+      printToGoogleDrive: destination.id === Destination.GooglePromotedId.DOCS,
       printerType: getPrinterTypeForDestination(destination),
       rasterizePDF: this.getSettingValue('rasterize'),
       scaleFactor:
@@ -1266,7 +1313,7 @@ Polymer({
       ticket.cloudPrintID = destination.id;
     }
 
-    if (this.getSettingValue('margins') == MarginsType.CUSTOM) {
+    if (this.getSettingValue('margins') === MarginsType.CUSTOM) {
       ticket.marginsCustom = this.getSettingValue('customMargins');
     }
 
@@ -1285,7 +1332,7 @@ Polymer({
     if (this.getSettingValue('pin')) {
       ticket.pinValue = this.getSettingValue('pinValue');
     }
-    if (destination.origin == DestinationOrigin.CROS) {
+    if (destination.origin === DestinationOrigin.CROS) {
       ticket.advancedSettings = this.getSettingValue('vendorItems');
     }
     // </if>
@@ -1362,7 +1409,7 @@ Polymer({
           destination.capabilities.printer.page_orientation :
           null;
       if (capability && capability.option &&
-          capability.option.some(option => option.type == 'AUTO')) {
+          capability.option.some(option => option.type === 'AUTO')) {
         cjt.print.page_orientation = {type: 'AUTO'};
       }
     } else {

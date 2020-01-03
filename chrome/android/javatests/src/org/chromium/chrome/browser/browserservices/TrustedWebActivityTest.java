@@ -32,31 +32,28 @@ import org.junit.runner.RunWith;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.library_loader.LibraryLoader;
-import org.chromium.base.library_loader.LibraryProcessType;
-import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
-import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabBrowserControlsState;
+import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
-import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeTabUtils;
+import org.chromium.chrome.test.util.browser.ThemeTestUtils;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.content_public.common.BrowserControlsState;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.net.test.EmbeddedTestServerRule;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -85,7 +82,7 @@ public class TrustedWebActivityTest {
     @Before
     public void setUp() {
         // Native needs to be initialized to start the test server.
-        LibraryLoader.getInstance().ensureInitialized(LibraryProcessType.PROCESS_BROWSER);
+        LibraryLoader.getInstance().ensureInitialized();
 
         mEmbeddedTestServerRule.setServerUsesHttps(true); // TWAs only work with HTTPS.
         mTestPage = mEmbeddedTestServerRule.getServer().getURL(TEST_PAGE);
@@ -144,8 +141,8 @@ public class TrustedWebActivityTest {
         intent.putExtra(CustomTabsIntent.EXTRA_TOOLBAR_COLOR, Color.GREEN);
         launchCustomTabActivity(intent);
         CustomTabActivity activity = mCustomTabActivityTestRule.getActivity();
-        waitForThemeColor(activity, Color.RED);
-        assertStatusBarColor(activity, Color.RED);
+        ThemeTestUtils.waitForThemeColor(activity, Color.RED);
+        ThemeTestUtils.assertStatusBarColor(activity, Color.RED);
     }
 
     /**
@@ -168,12 +165,13 @@ public class TrustedWebActivityTest {
         intent.putExtra(CustomTabsIntent.EXTRA_TOOLBAR_COLOR, Color.GREEN);
         launchCustomTabActivity(intent);
         CustomTabActivity activity = mCustomTabActivityTestRule.getActivity();
-        waitForThemeColor(activity, Color.RED);
-        assertStatusBarColor(activity, Color.RED);
+        ThemeTestUtils.waitForThemeColor(activity, Color.RED);
+        ThemeTestUtils.assertStatusBarColor(activity, Color.RED);
 
         mCustomTabActivityTestRule.loadUrl(pageWithoutThemeColor);
-        waitForThemeColor(activity, Color.GREEN);
-        assertStatusBarColor(activity, Color.GREEN);
+        // Use longer-than-default timeout to give page time to finish loading.
+        ThemeTestUtils.waitForThemeColor(activity, Color.GREEN, 10000 /* timeoutMs */);
+        ThemeTestUtils.assertStatusBarColor(activity, Color.GREEN);
     }
 
     /**
@@ -198,8 +196,8 @@ public class TrustedWebActivityTest {
         addTrustedOriginToIntent(intent, pageWithThemeColorCertError);
         launchCustomTabActivity(intent);
         CustomTabActivity activity = mCustomTabActivityTestRule.getActivity();
-        waitForThemeColor(activity, Color.RED);
-        assertStatusBarColor(activity, Color.RED);
+        ThemeTestUtils.waitForThemeColor(activity, Color.RED);
+        ThemeTestUtils.assertStatusBarColor(activity, Color.RED);
 
         spoofVerification(PACKAGE_NAME, pageWithThemeColorCertError);
         ChromeTabUtils.loadUrlOnUiThread(activity.getActivityTab(), pageWithThemeColorCertError);
@@ -208,8 +206,9 @@ public class TrustedWebActivityTest {
                 () -> { return TabThemeColorHelper.getDefaultColor(activity.getActivityTab()); });
         int expectedColor =
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? defaultColor : Color.BLACK;
-        waitForThemeColor(activity, defaultColor);
-        assertStatusBarColor(activity, expectedColor);
+        // Use longer-than-default timeout to give page time to finish loading.
+        ThemeTestUtils.waitForThemeColor(activity, defaultColor, 10000 /* timeoutMs */);
+        ThemeTestUtils.assertStatusBarColor(activity, expectedColor);
     }
 
     public void launchCustomTabActivity(Intent intent) throws TimeoutException {
@@ -217,39 +216,6 @@ public class TrustedWebActivityTest {
         spoofVerification(PACKAGE_NAME, url);
         createSession(intent, PACKAGE_NAME);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
-    }
-
-    /**
-     * Waits for the Tab's theme-color to change to the passed-in color.
-     */
-    public static void waitForThemeColor(CustomTabActivity activity, int expectedColor)
-            throws ExecutionException, TimeoutException {
-        int themeColor = TestThreadUtils.runOnUiThreadBlocking(
-                () -> { return TabThemeColorHelper.getColor(activity.getActivityTab()); });
-        if (themeColor == expectedColor) {
-            return;
-        }
-        // Use longer-than-default timeout to give page time to finish loading.
-        CallbackHelper callbackHelper = new CallbackHelper();
-        activity.getActivityTab().addObserver(new EmptyTabObserver() {
-            @Override
-            public void onDidChangeThemeColor(Tab tab, int color) {
-                if (color == expectedColor) {
-                    callbackHelper.notifyCalled();
-                }
-            }
-        });
-        callbackHelper.waitForFirst(10, TimeUnit.SECONDS);
-    }
-
-    /**
-     * Asserts that the status bar color equals the passed-in color.
-     */
-    public static void assertStatusBarColor(CustomTabActivity activity, int expectedColor) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            expectedColor = ColorUtils.getDarkenedColorForStatusBar(expectedColor);
-        }
-        assertEquals(expectedColor, activity.getWindow().getStatusBarColor());
     }
 
     /**
@@ -269,17 +235,14 @@ public class TrustedWebActivityTest {
         addTrustedOriginToIntent(intent, pageWithCertError);
         launchCustomTabActivity(createTrustedWebActivityIntent(pageWithoutCertError));
         Tab tab = mCustomTabActivityTestRule.getActivity().getActivityTab();
-        assertFalse(getCanShowToolbarState(tab));
+        assertEquals(BrowserControlsState.HIDDEN, getBrowserControlConstraints(tab));
 
         spoofVerification(PACKAGE_NAME, pageWithCertError);
         ChromeTabUtils.loadUrlOnUiThread(tab, pageWithCertError);
 
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return getCanShowToolbarState(tab);
-            }
-        }, 10000, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+        CriteriaHelper.pollUiThread(Criteria.equals(BrowserControlsState.SHOWN,
+                                            () -> getBrowserControlConstraints(tab)),
+                10000, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
     }
 
     public void addTrustedOriginToIntent(Intent intent, String trustedOrigin) {
@@ -289,8 +252,9 @@ public class TrustedWebActivityTest {
                 additionalTrustedOrigins);
     }
 
-    public boolean getCanShowToolbarState(Tab tab) {
+    @BrowserControlsState
+    private int getBrowserControlConstraints(Tab tab) {
         return TestThreadUtils.runOnUiThreadBlockingNoException(
-                () -> TabBrowserControlsState.get(tab).canShow());
+                () -> TabBrowserControlsConstraintsHelper.getConstraints(tab));
     }
 }

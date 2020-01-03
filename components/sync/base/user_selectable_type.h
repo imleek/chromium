@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_SYNC_BASE_USER_SELECTABLE_TYPE_H_
 #define COMPONENTS_SYNC_BASE_USER_SELECTABLE_TYPE_H_
 
+#include <string>
+
 #include "components/sync/base/enum_set.h"
 #include "components/sync/base/model_type.h"
 
@@ -22,7 +24,6 @@ enum class UserSelectableType {
   kExtensions,
   kApps,
   kReadingList,
-  kWifiConfigurations,
   kTabs,
   kLastType = kTabs
 };
@@ -32,6 +33,8 @@ using UserSelectableTypeSet = EnumSet<UserSelectableType,
                                       UserSelectableType::kLastType>;
 
 const char* GetUserSelectableTypeName(UserSelectableType type);
+UserSelectableType GetUserSelectableTypeFromString(const std::string& type);
+std::string UserSelectableTypeSetToString(UserSelectableTypeSet types);
 ModelTypeSet UserSelectableTypeToAllModelTypes(UserSelectableType type);
 
 ModelType UserSelectableTypeToCanonicalModelType(UserSelectableType type);
@@ -42,13 +45,17 @@ constexpr int UserSelectableTypeHistogramNumEntries() {
 }
 
 #if defined(OS_CHROMEOS)
-// Chrome OS provides a separate UI with sync controls for OS data types.
+// Chrome OS provides a separate UI with sync controls for OS data types. Note
+// that wallpaper is a special case due to its reliance on apps, so while it
+// appears in the UI, it is not included in this enum.
+// TODO(https://crbug.com/967987): Break this dependency.
 enum class UserSelectableOsType {
-  kOsPreferences,
-  kFirstType = kOsPreferences,
+  kOsApps,
+  kFirstType = kOsApps,
 
-  kPrinters,
-  kLastType = kPrinters
+  kOsPreferences,
+  kWifiConfigurations,
+  kLastType = kWifiConfigurations
 };
 
 using UserSelectableOsTypeSet = EnumSet<UserSelectableOsType,

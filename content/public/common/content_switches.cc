@@ -31,11 +31,11 @@ const char kAllowLoopbackInPeerConnection[] =
     "allow-loopback-in-peer-connection";
 
 // Allow a page to show popups during its unloading.
-// TODO(https://crbug.com/937569): Remove this in Chrome 82.
+// TODO(https://crbug.com/937569): Remove this in Chrome 88.
 const char kAllowPopupsDuringPageUnload[] = "allow-popups-during-page-unload";
 
 // Allow a page to send synchronus XHR during its unloading.
-// TODO(https://crbug.com/1003101): Remove this in Chrome 82.
+// TODO(https://crbug.com/1003101): Remove this in Chrome 88.
 const char kAllowSyncXHRInPageDismissal[] = "allow-sync-xhr-in-page-dimissal";
 
 // Uses the android SkFontManager on linux. The specified directory should
@@ -495,6 +495,13 @@ const char kEnableOopRasterization[] = "enable-oop-rasterization";
 // Turns on skia deferred display list for out of process raster.
 const char kEnableOopRasterizationDDL[] = "enable-oop-rasterization-ddl";
 
+// Pins the default referrer policy to the pre-M80 value of
+// no-referrer-when-downgrade.
+// TODO(crbug.com/1016541): After M82, remove when the corresponding
+// enterprise policy has been deleted.
+const char kForceLegacyDefaultReferrerPolicy[] =
+    "force-legacy-default-referrer-policy";
+
 // The number of multisample antialiasing samples for GPU rasterization.
 // Requires MSAA support on GPU to have an effect. 0 disables MSAA.
 const char kGpuRasterizationMSAASampleCount[] =
@@ -813,10 +820,9 @@ const char kTouchEventFeatureDetectionDisabled[] = "disabled";
 // the platform default is used.
 const char kTouchTextSelectionStrategy[]    = "touch-selection-strategy";
 
-// Accepts specified file URL of a trustable BundledExchanges file. This flag
+// Accepts specified file URL of a trustable WebBundle file. This flag
 // should be used only for testing purpose.
-const char kTrustableBundledExchangesFileUrl[] =
-    "trustable-bundled-exchanges-file-url";
+const char kTrustableWebBundleFileUrl[] = "trustable-web-bundles-file-url";
 
 // Replaces the existing codecs supported in peer connection with a single fake
 // codec entry that create a fake video encoder and decoder.

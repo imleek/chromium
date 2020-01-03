@@ -83,8 +83,14 @@ class _ArticleBrowsingStory(_BrowsingStory):
   # Some devices take long to load news webpages crbug.com/713036. Set to None
   # because we cannot access DEFAULT_WEB_CONTENTS_TIMEOUT from this file.
   COMPLETE_STATE_WAIT_TIMEOUT = None
+  # On some pages (for ex: facebook) articles appear only after we start
+  # scrolling. This specifies if we need scroll main page.
+  SCROLL_BEFORE_BROWSE = False
 
   def _DidLoadDocument(self, action_runner):
+    # Scroll main page if needed before we start browsing articles.
+    if self.SCROLL_BEFORE_BROWSE:
+      self._ScrollMainPage(action_runner)
     for i in xrange(self.ITEMS_TO_VISIT):
       self._NavigateToItem(action_runner, i)
       self._ReadNextArticle(action_runner)
@@ -132,6 +138,34 @@ class FacebookMobileStory(_ArticleBrowsingStory):
   MAIN_PAGE_SCROLL_REPEAT = 1
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
   TAGS = [story_tags.EMERGING_MARKET, story_tags.YEAR_2016]
+
+
+class FacebookMobileStory2019(_ArticleBrowsingStory):
+  NAME = 'browse:social:facebook:2019'
+  URL = 'https://www.facebook.com/rihanna'
+  ITEM_SELECTOR = '._5msj'
+  MAIN_PAGE_SCROLL_REPEAT = 1
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  IS_SINGLE_PAGE_APP = True
+  SCROLL_BEFORE_BROWSE = True
+
+  TAGS = [story_tags.EMERGING_MARKET, story_tags.YEAR_2019]
+
+  def _Login(self, action_runner):
+    facebook_login.LoginWithMobileSite(action_runner, 'facebook4')
+
+  def _ScrollMainPage(self, action_runner):
+    action_runner.tab.WaitForDocumentReadyStateToBeComplete()
+    # Facebook loads content dynamically. So keep trying to scroll till we find
+    # the elements. Retry 5 times waiting a bit each time.
+    for _ in xrange(5):
+      action_runner.RepeatableBrowserDrivenScroll(
+          repeat_count=self.MAIN_PAGE_SCROLL_REPEAT)
+      result = action_runner.EvaluateJavaScript(
+          'document.querySelectorAll("._5msj").length')
+      if result:
+        break
+      action_runner.Wait(1)
 
 
 class FacebookDesktopStory(_ArticleBrowsingStory):
@@ -224,6 +258,18 @@ class QqMobileStory(_ArticleBrowsingStory):
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
   TAGS = [story_tags.INTERNATIONAL, story_tags.HEALTH_CHECK,
           story_tags.YEAR_2016]
+
+
+class QqMobileStory2019(_ArticleBrowsingStory):
+  NAME = 'browse:news:qq:2019'
+  URL = 'https://xw.qq.com/#news'
+  ITEM_SELECTOR = '.title'
+  # The page seems to get stuck after three navigations.
+  ITEMS_TO_VISIT = 2
+
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  TAGS = [story_tags.INTERNATIONAL, story_tags.HEALTH_CHECK,
+          story_tags.YEAR_2019]
 
 
 class RedditDesktopStory2018(_ArticleBrowsingStory):
@@ -587,6 +633,47 @@ class ImgurMobileStory(_MediaBrowsingStory):
   IS_SINGLE_PAGE_APP = True
   TAGS = [story_tags.EMERGING_MARKET, story_tags.YEAR_2016]
 
+class ImgurMobileStory2019(_MediaBrowsingStory):
+  NAME = 'browse:media:imgur:2019'
+  URL = 'http://imgur.com/gallery/46DfUFT'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  IS_SINGLE_PAGE_APP = True
+  TAGS = [story_tags.EMERGING_MARKET, story_tags.YEAR_2019]
+  USER_READ_TIME = 1
+
+  def _DidLoadDocument(self, action_runner):
+    # Accept the cookies
+    accept_button = ".qc-cmp-button"
+    item_selector = js_template.Render(
+       'document.querySelectorAll({{ selector }})[{{ index }}]',
+       selector=accept_button, index=1)
+    action_runner.WaitForElement(element_function=item_selector)
+    action_runner.ClickElement(element_function=item_selector)
+    # To simulate user looking at image
+    action_runner.Wait(self.USER_READ_TIME)
+
+    # Keep scrolling for the specified amount. If we see "continue browse"
+    # button click it to enable further scroll. This button would only be added
+    # after we scrolled a bit. So can't wait for this button at the start.
+    accepted_continue = False
+    for _ in xrange(25):
+      result = action_runner.EvaluateJavaScript(
+          'document.querySelectorAll(".Button-tertiary").length')
+      if result and not accepted_continue:
+        accept_button = ".Button-tertiary"
+        item_selector = js_template.Render(
+           'document.querySelectorAll({{ selector }})[{{ index }}]',
+           selector=accept_button, index=0)
+        action_runner.ScrollPageToElement(element_function=item_selector,
+                                          speed_in_pixels_per_second=400,
+                                          container_selector=None)
+        action_runner.ClickElement(element_function=item_selector)
+        accepted_continue = True
+
+      action_runner.ScrollPage(distance=800)
+      # To simulate user looking at image
+      action_runner.Wait(self.USER_READ_TIME)
+
 
 class ImgurDesktopStory(_MediaBrowsingStory):
   NAME = 'browse:media:imgur'
@@ -621,6 +708,7 @@ class YouTubeMobileStory2019(_MediaBrowsingStory):
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
   IS_SINGLE_PAGE_APP = True
   ITEM_SELECTOR_INDEX = 3
+  ITEMS_TO_VISIT = 8
   TAGS = [story_tags.JAVASCRIPT_HEAVY, story_tags.EMERGING_MARKET,
           story_tags.HEALTH_CHECK, story_tags.YEAR_2019]
 
@@ -721,6 +809,7 @@ class YouTubeTVDesktopStory2019(_MediaBrowsingStory):
         story_set, take_memory_measurement,
         extra_browser_args=['--js-flags="--jitless"'])
 
+
 class FacebookPhotosMobileStory(_MediaBrowsingStory):
   """Load a photo page from Rihanna's facebook page then navigate a few next
   photos.
@@ -733,6 +822,20 @@ class FacebookPhotosMobileStory(_MediaBrowsingStory):
   IS_SINGLE_PAGE_APP = True
   ITEM_SELECTOR_INDEX = 0
   TAGS = [story_tags.EMERGING_MARKET, story_tags.YEAR_2016]
+
+
+class FacebookPhotosMobileStory2019(_MediaBrowsingStory):
+  """Load a photo page from Rihanna's facebook page then navigate a few next
+  photos.
+  """
+  NAME = 'browse:media:facebook_photos:2019'
+  URL = (
+      'https://m.facebook.com/rihanna/photos/a.10152251658271676/10156761246686676/?type=3&source=54')
+  ITEM_SELECTOR = '._57-r.touchable'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  IS_SINGLE_PAGE_APP = True
+  ITEM_SELECTOR_INDEX = 0
+  TAGS = [story_tags.EMERGING_MARKET, story_tags.YEAR_2019]
 
 
 class FacebookPhotosDesktopStory(_MediaBrowsingStory):
@@ -926,6 +1029,16 @@ class BrowseLazadaMobileStory(_ArticleBrowsingStory):
   ITEMS_TO_VISIT = 1
 
 
+class BrowseLazadaMobileStory2019(_ArticleBrowsingStory):
+  NAME = 'browse:shopping:lazada:2019'
+  URL = 'https://www.lazada.co.id/catalog/?q=Wrist+watch'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  TAGS = [story_tags.EMERGING_MARKET, story_tags.YEAR_2019]
+
+  ITEM_SELECTOR = '.c12p0m'
+  ITEMS_TO_VISIT = 4
+
+
 class BrowseAvitoMobileStory(_ArticleBrowsingStory):
   NAME = 'browse:shopping:avito'
   URL = 'https://www.avito.ru/rossiya'
@@ -937,6 +1050,19 @@ class BrowseAvitoMobileStory(_ArticleBrowsingStory):
   ITEMS_TO_VISIT = 4
 
 
+class BrowseAvitoMobileStory2019(_ArticleBrowsingStory):
+  NAME = 'browse:shopping:avito:2019'
+  URL = 'https://www.avito.ru/rossiya'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  TAGS = [story_tags.EMERGING_MARKET, story_tags.HEALTH_CHECK,
+          story_tags.YEAR_2019]
+
+  ITEM_SELECTOR = '._3eXe2'
+  ITEMS_TO_VISIT = 4
+
+  def _WaitForNavigation(self, action_runner):
+    action_runner.WaitForElement(selector='[class="_3uGvV YVMFh"]')
+
 class BrowseTOIMobileStory(_ArticleBrowsingStory):
   NAME = 'browse:news:toi'
   URL = 'http://m.timesofindia.com'
@@ -944,6 +1070,16 @@ class BrowseTOIMobileStory(_ArticleBrowsingStory):
   TAGS = [story_tags.EMERGING_MARKET, story_tags.YEAR_2016]
 
   ITEMS_TO_VISIT = 4
+  ITEM_SELECTOR = '.dummy-img'
+
+
+class BrowseTOIMobileStory2019(_ArticleBrowsingStory):
+  NAME = 'browse:news:toi:2019'
+  URL = 'http://m.timesofindia.com'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  TAGS = [story_tags.EMERGING_MARKET, story_tags.YEAR_2019]
+
+  ITEMS_TO_VISIT = 2
   ITEM_SELECTOR = '.dummy-img'
 
 
@@ -1636,11 +1772,31 @@ class FlickrMobileStory(_InfiniteScrollStory):
   TAGS = [story_tags.INFINITE_SCROLL, story_tags.YEAR_2016]
 
 
+class FlickrMobileStory2019(_InfiniteScrollStory):
+  NAME = 'browse:media:flickr_infinite_scroll:2019'
+  URL = 'https://www.flickr.com/explore'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  SCROLL_DISTANCE = 10000
+  TAGS = [story_tags.INFINITE_SCROLL, story_tags.YEAR_2019]
+
+
 class PinterestMobileStory(_InfiniteScrollStory):
   NAME = 'browse:social:pinterest_infinite_scroll'
   URL = 'https://www.pinterest.com/all'
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
   TAGS = [story_tags.INFINITE_SCROLL, story_tags.YEAR_2016]
+
+
+class PinterestMobileStory2019(_InfiniteScrollStory):
+  NAME = 'browse:social:pinterest_infinite_scroll:2019'
+  URL = 'https://www.pinterest.co.uk'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  TAGS = [story_tags.INFINITE_SCROLL, story_tags.YEAR_2019]
+  # TODO(crbug.com/862077): Story breaks if login is skipped during replay.
+  SKIP_LOGIN = False
+
+  def _Login(self, action_runner):
+    pinterest_login.LoginMobileAccount(action_runner, 'googletest')
 
 
 class TumblrStory2018(_InfiniteScrollStory):

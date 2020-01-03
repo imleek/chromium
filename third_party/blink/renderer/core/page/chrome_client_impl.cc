@@ -102,6 +102,7 @@
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
+#include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/document_resource_coordinator.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/web_test_support.h"
@@ -159,10 +160,6 @@ ChromeClientImpl::ChromeClientImpl(WebViewImpl* web_view)
 
 ChromeClientImpl::~ChromeClientImpl() {
   DCHECK(file_chooser_queue_.IsEmpty());
-}
-
-ChromeClientImpl* ChromeClientImpl::Create(WebViewImpl* web_view) {
-  return MakeGarbageCollected<ChromeClientImpl>(web_view);
 }
 
 void ChromeClientImpl::Trace(Visitor* visitor) {
@@ -236,11 +233,6 @@ void ChromeClientImpl::FocusedElementChanged(Element* from_element,
   web_view_->Client()->SetKeyboardFocusURL(focus_url);
 }
 
-bool ChromeClientImpl::HadFormInteraction() const {
-  return web_view_->PageImportanceSignals() &&
-         web_view_->PageImportanceSignals()->HadFormInteraction();
-}
-
 void ChromeClientImpl::StartDragging(LocalFrame* frame,
                                      const WebDragData& drag_data,
                                      WebDragOperationsMask mask,
@@ -286,10 +278,11 @@ Page* ChromeClientImpl::CreateWindowDelegate(
   return new_view->GetPage();
 }
 
-void ChromeClientImpl::DidOverscroll(const FloatSize& overscroll_delta,
-                                     const FloatSize& accumulated_overscroll,
-                                     const FloatPoint& position_in_viewport,
-                                     const FloatSize& velocity_in_viewport) {
+void ChromeClientImpl::DidOverscroll(
+    const gfx::Vector2dF& overscroll_delta,
+    const gfx::Vector2dF& accumulated_overscroll,
+    const gfx::PointF& position_in_viewport,
+    const gfx::Vector2dF& velocity_in_viewport) {
   if (!web_view_->does_composite())
     return;
 
@@ -303,7 +296,7 @@ void ChromeClientImpl::DidOverscroll(const FloatSize& overscroll_delta,
 void ChromeClientImpl::InjectGestureScrollEvent(
     LocalFrame& local_frame,
     WebGestureDevice device,
-    const WebFloatSize& delta,
+    const gfx::Vector2dF& delta,
     ScrollGranularity granularity,
     CompositorElementId scrollable_area_element_id,
     WebInputEvent::Type injected_type) {
@@ -550,8 +543,8 @@ void ChromeClientImpl::ShowMouseOverURL(const HitTestResult& result) {
         !result.AbsoluteLinkURL().GetString().IsEmpty()) {
       url = result.AbsoluteLinkURL();
     } else if (result.InnerNode() &&
-               (IsHTMLObjectElement(*result.InnerNode()) ||
-                IsHTMLEmbedElement(*result.InnerNode()))) {
+               (IsA<HTMLObjectElement>(*result.InnerNode()) ||
+                IsA<HTMLEmbedElement>(*result.InnerNode()))) {
       LayoutObject* object = result.InnerNode()->GetLayoutObject();
       if (object && object->IsLayoutEmbeddedContent()) {
         WebPluginContainerImpl* plugin_view =
@@ -639,7 +632,8 @@ DateTimeChooser* ChromeClientImpl::OpenDateTimeChooser(
       external_date_time_chooser_->IsShowingDateTimeChooserUI())
     return nullptr;
 
-  external_date_time_chooser_ = ExternalDateTimeChooser::Create(picker_client);
+  external_date_time_chooser_ =
+      MakeGarbageCollected<ExternalDateTimeChooser>(picker_client);
   external_date_time_chooser_->OpenDateTimeChooser(frame, parameters);
   return external_date_time_chooser_;
 }
@@ -734,14 +728,14 @@ void ChromeClientImpl::SetCursorOverridden(bool overridden) {
   cursor_overridden_ = overridden;
 }
 
-void ChromeClientImpl::AutoscrollStart(WebFloatPoint viewport_point,
+void ChromeClientImpl::AutoscrollStart(const gfx::PointF& viewport_point,
                                        LocalFrame* local_frame) {
   if (WebFrameWidgetBase* widget =
           WebLocalFrameImpl::FromFrame(local_frame)->LocalRootFrameWidget())
     widget->Client()->AutoscrollStart(viewport_point);
 }
 
-void ChromeClientImpl::AutoscrollFling(WebFloatSize velocity,
+void ChromeClientImpl::AutoscrollFling(const gfx::Vector2dF& velocity,
                                        LocalFrame* local_frame) {
   if (WebFrameWidgetBase* widget =
           WebLocalFrameImpl::FromFrame(local_frame)->LocalRootFrameWidget())
@@ -882,7 +876,7 @@ bool ChromeClientImpl::ShouldOpenUIElementDuringPageDismissal(
     UIElementType ui_element_type,
     const String& dialog_message,
     Document::PageDismissalType dismissal_type) const {
-  // TODO(https://crbug.com/937569): Remove this in Chrome 82.
+  // TODO(https://crbug.com/937569): Remove this in Chrome 88.
   if (ui_element_type == ChromeClient::UIElementType::kPopup &&
       web_view_->Client() &&
       web_view_->Client()->AllowPopupsDuringPageUnload()) {
@@ -1187,7 +1181,9 @@ void ChromeClientImpl::DidChangeValueInTextField(
                                ? WebFeature::kFieldEditInSecureContext
                                : WebFeature::kFieldEditInNonSecureContext);
     doc.MaybeQueueSendDidEditFieldInInsecureContext();
-    web_view_->PageImportanceSignals()->SetHadFormInteraction();
+    // The resource coordinator is not available in some tests.
+    if (auto* rc = doc.GetResourceCoordinator())
+      rc->SetHadFormInteraction();
   }
 }
 

@@ -278,11 +278,13 @@ std::unique_ptr<network::ResourceRequest> NetErrorHelper::CreatePostRequest(
   resource_request->method = "POST";
   resource_request->fetch_request_context_type =
       static_cast<int>(blink::mojom::RequestContextType::INTERNAL);
+  resource_request->destination = network::mojom::RequestDestination::kEmpty;
   resource_request->resource_type =
       static_cast<int>(content::ResourceType::kSubResource);
 
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
-  resource_request->site_for_cookies = frame->GetDocument().SiteForCookies();
+  resource_request->site_for_cookies =
+      net::SiteForCookies::FromUrl(frame->GetDocument().SiteForCookies());
   // The security origin of the error page should exist and be opaque.
   DCHECK(!frame->GetDocument().GetSecurityOrigin().IsNull());
   DCHECK(frame->GetDocument().GetSecurityOrigin().IsOpaque());

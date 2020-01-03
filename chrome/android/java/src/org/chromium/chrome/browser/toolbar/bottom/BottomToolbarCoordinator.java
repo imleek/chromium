@@ -10,10 +10,13 @@ import android.view.View.OnLongClickListener;
 import android.view.ViewGroup;
 import android.view.ViewStub;
 
+import org.chromium.base.ObservableSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior.OverviewModeObserver;
+import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.chrome.browser.toolbar.IncognitoStateProvider;
 import org.chromium.chrome.browser.toolbar.MenuButton;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
@@ -36,6 +39,10 @@ class BottomToolbarCoordinator {
     /** A provider that notifies components when the theme color changes.*/
     private final ThemeColorProvider mThemeColorProvider;
 
+    /** The overview mode manager. */
+    private OverviewModeBehavior mOverviewModeBehavior;
+    private OverviewModeObserver mOverviewModeObserver;
+
     /**
      * Build the coordinator that manages the bottom toolbar.
      * @param stub The bottom toolbar {@link ViewStub} to inflate.
@@ -47,12 +54,13 @@ class BottomToolbarCoordinator {
      */
     BottomToolbarCoordinator(ViewStub stub, ActivityTabProvider tabProvider,
             OnClickListener homeButtonListener, OnClickListener searchAcceleratorListener,
-            OnClickListener shareButtonListener, OnLongClickListener tabsSwitcherLongClickListner,
+            ObservableSupplier<OnClickListener> shareButtonListenerSupplier,
+            OnLongClickListener tabsSwitcherLongClickListner,
             ThemeColorProvider themeColorProvider) {
         View root = stub.inflate();
 
         mBrowsingModeCoordinator = new BrowsingModeBottomToolbarCoordinator(root, tabProvider,
-                homeButtonListener, searchAcceleratorListener, shareButtonListener,
+                homeButtonListener, searchAcceleratorListener, shareButtonListenerSupplier,
                 tabsSwitcherLongClickListner);
 
         mTabSwitcherModeStub = root.findViewById(R.id.bottom_toolbar_tab_switcher_mode_stub);
@@ -83,11 +91,20 @@ class BottomToolbarCoordinator {
             TabCountProvider tabCountProvider, IncognitoStateProvider incognitoStateProvider,
             ViewGroup topToolbarRoot) {
         mBrowsingModeCoordinator.initializeWithNative(tabSwitcherListener, menuButtonHelper,
-                overviewModeBehavior, tabCountProvider, mThemeColorProvider,
-                incognitoStateProvider);
+                tabCountProvider, mThemeColorProvider, incognitoStateProvider);
         mTabSwitcherModeCoordinator = new TabSwitcherBottomToolbarCoordinator(mTabSwitcherModeStub,
                 topToolbarRoot, incognitoStateProvider, mThemeColorProvider, newTabClickListener,
-                closeTabsClickListener, menuButtonHelper, overviewModeBehavior, tabCountProvider);
+                closeTabsClickListener, menuButtonHelper, tabCountProvider);
+        // Do not change bottom bar if StartSurface Single Pane is enabled and HomePage is not
+        // customized.
+        if (!ReturnToChromeExperimentsUtil.shouldShowStartSurfaceAsTheHomePage()) {
+            mOverviewModeBehavior = overviewModeBehavior;
+            mOverviewModeObserver = new BottomToolbarAnimationCoordinator(
+                    mBrowsingModeCoordinator, mTabSwitcherModeCoordinator);
+            if (mOverviewModeBehavior != null) {
+                mOverviewModeBehavior.addOverviewModeObserver(mOverviewModeObserver);
+            }
+        }
     }
 
     /**
@@ -97,6 +114,7 @@ class BottomToolbarCoordinator {
         if (mTabSwitcherModeCoordinator != null) {
             mTabSwitcherModeCoordinator.showToolbarOnTop(!isVisible);
         }
+        mBrowsingModeCoordinator.onVisibilityChanged(isVisible);
     }
 
     /**
@@ -135,6 +153,11 @@ class BottomToolbarCoordinator {
         if (mTabSwitcherModeCoordinator != null) {
             mTabSwitcherModeCoordinator.destroy();
             mTabSwitcherModeCoordinator = null;
+        }
+        if (mOverviewModeBehavior != null) {
+            mOverviewModeBehavior.removeOverviewModeObserver(mOverviewModeObserver);
+            mOverviewModeBehavior = null;
+            mOverviewModeObserver = null;
         }
         mThemeColorProvider.destroy();
     }

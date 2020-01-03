@@ -11,7 +11,7 @@ import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
 import './pack_dialog.js';
 
-import {getInstance} from 'chrome://resources/cr_elements/cr_toast/cr_toast_manager.m.js';
+import {getToastManager} from 'chrome://resources/cr_elements/cr_toast/cr_toast_manager.m.js';
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {listenOnce} from 'chrome://resources/js/util.m.js';
 import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
@@ -33,9 +33,10 @@ export class ToolbarDelegate {
 
   /**
    * Updates all extensions.
+   * @param {!Array<!chrome.developerPrivate.ExtensionInfo>} extensions
    * @return {!Promise}
    */
-  updateAllExtensions() {}
+  updateAllExtensions(extensions) {}
 }
 
 Polymer({
@@ -44,6 +45,9 @@ Polymer({
   _template: html`{__html_template__}`,
 
   properties: {
+    /** @type {!Array<!chrome.developerPrivate.ExtensionInfo>} */
+    extensions: Array,
+
     /** @type {ToolbarDelegate} */
     delegate: Object,
 
@@ -134,7 +138,7 @@ Polymer({
         /** @suppress {suspiciousCode} */ drawer.offsetTop;
       }
     } else {
-      if (previous == undefined) {
+      if (previous === undefined) {
         drawer.hidden = true;
         return;
       }
@@ -184,20 +188,22 @@ Polymer({
 
     this.isUpdating_ = true;
 
-    const toastManager = getInstance();
+    const toastManager = getToastManager();
     // Keep the toast open indefinitely.
     toastManager.duration = 0;
-    toastManager.show(this.i18n('toolbarUpdatingToast'), false);
-    this.delegate.updateAllExtensions().then(
-        () => {
-          toastManager.hide();
-          toastManager.duration = 3000;
-          toastManager.show(this.i18n('toolbarUpdateDone'), false);
-          this.isUpdating_ = false;
-        },
-        () => {
-          toastManager.hide();
-          this.isUpdating_ = false;
-        });
+    toastManager.show(this.i18n('toolbarUpdatingToast'));
+    this.delegate.updateAllExtensions(this.extensions)
+        .then(
+            () => {
+              toastManager.hide();
+              toastManager.duration = 3000;
+              toastManager.show(this.i18n('toolbarUpdateDone'));
+              this.isUpdating_ = false;
+            },
+            loadError => {
+              this.fire('load-error', loadError);
+              toastManager.hide();
+              this.isUpdating_ = false;
+            });
   },
 });

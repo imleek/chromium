@@ -13,8 +13,9 @@
 #include "ash/assistant/model/assistant_interaction_model_observer.h"
 #include "ash/assistant/model/assistant_query.h"
 #include "ash/assistant/model/assistant_response.h"
-#include "ash/assistant/model/assistant_ui_element.h"
 #include "ash/assistant/model/assistant_ui_model.h"
+#include "ash/assistant/model/ui/assistant_card_element.h"
+#include "ash/assistant/model/ui/assistant_text_element.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/assistant/util/assistant_util.h"
 #include "ash/assistant/util/deep_link_util.h"
@@ -42,9 +43,9 @@ namespace ash {
 
 namespace {
 
-constexpr int kWarmerWelcomesMaxTimesTriggered = 3;
 constexpr char kAndroidIntentScheme[] = "intent://";
 constexpr char kAndroidIntentPrefix[] = "#Intent";
+using assistant::ui::kWarmerWelcomesMaxTimesTriggered;
 
 // Helpers ---------------------------------------------------------------------
 

@@ -53,14 +53,19 @@ class CONTENT_EXPORT ChromeBlobStorageContext
   static ChromeBlobStorageContext* GetFor(
       BrowserContext* browser_context);
 
+  // Must be called on the UI thread.
+  static mojo::PendingRemote<storage::mojom::BlobStorageContext> GetRemoteFor(
+      BrowserContext* browser_context);
+
   void InitializeOnIOThread(base::FilePath blob_storage_dir,
                             scoped_refptr<base::TaskRunner> file_task_runner);
 
   storage::BlobStorageContext* context() const;
 
-  // Return a BlobStorageContext mojo interface to be used by storage apis.
+  // Bind a BlobStorageContext mojo interface to be used by storage apis.
   // This interface should not be exposed to renderers.
-  mojo::PendingRemote<storage::mojom::BlobStorageContext> MojoContext() const;
+  void BindMojoContext(
+      mojo::PendingReceiver<storage::mojom::BlobStorageContext> receiver);
 
   // Returns a NULL scoped_ptr on failure.
   std::unique_ptr<BlobHandle> CreateMemoryBackedBlob(

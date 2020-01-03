@@ -16,7 +16,7 @@
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
-#include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
+#include "chrome/browser/ui/ash/launcher/shelf_context_menu.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -222,13 +222,20 @@ void BrowserShortcutLauncherItemController::ItemSelected(
 
   ash::ShelfAction action;
   if (items.size() == 1) {
+    // Single browser, activate or minimize if active.
     action =
         ChromeLauncherController::instance()->ActivateWindowOrMinimizeIfActive(
-            last_browser->window(), true);
-  } else {
-    // Multiple targets, a menu will be shown. No need to activate or minimize
-    // the recently active browser.
+            last_browser->window(), true /* minimize allowed */);
+  } else if (source == ash::LAUNCH_FROM_SHELF) {
+    // Multiple targets, activating from shelf, a menu will be shown.
+    // No need to activate or minimize the recently active browser.
     action = ash::SHELF_ACTION_NONE;
+  } else {
+    // Multiple targets, not activating from shelf, no menu will be shown.
+    // Activate the recently active browser, never minimize.
+    action =
+        ChromeLauncherController::instance()->ActivateWindowOrMinimizeIfActive(
+            last_browser->window(), false /* minimize not allowed */);
   }
   std::move(callback).Run(action, std::move(items));
 }
@@ -274,7 +281,7 @@ void BrowserShortcutLauncherItemController::GetContextMenu(
     GetContextMenuCallback callback) {
   ChromeLauncherController* controller = ChromeLauncherController::instance();
   const ash::ShelfItem* item = controller->GetItem(shelf_id());
-  context_menu_ = LauncherContextMenu::Create(controller, item, display_id);
+  context_menu_ = ShelfContextMenu::Create(controller, item, display_id);
   context_menu_->GetMenuModel(std::move(callback));
 }
 

@@ -8,6 +8,7 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build/config/win/console_app.gni")
 import("//build/config/win/manifest.gni")
+import("//components/spellcheck/spellcheck_build_features.gni")
 import("//gpu/vulkan/features.gni")
 import("//media/media_options.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
@@ -49,81 +50,46 @@ if (is_android) {
       "-w",
       whitelist,
     ]
-    outputs = [
-      "grit/components_strings.h",
-      "java/res/values-am/components_strings.xml",
-      "java/res/values-ar/components_strings.xml",
-      "java/res/values-bg/components_strings.xml",
-      "java/res/values-bn/components_strings.xml",
-      "java/res/values-ca/components_strings.xml",
-      "java/res/values-cs/components_strings.xml",
-      "java/res/values-da/components_strings.xml",
-      "java/res/values-de/components_strings.xml",
-      "java/res/values-el/components_strings.xml",
-      "java/res/values-en-rGB/components_strings.xml",
-      "java/res/values-es/components_strings.xml",
-      "java/res/values-es-rUS/components_strings.xml",
-      "java/res/values-et/components_strings.xml",
-      "java/res/values-fa/components_strings.xml",
-      "java/res/values-fi/components_strings.xml",
-      "java/res/values-fr/components_strings.xml",
-      "java/res/values-gu/components_strings.xml",
-      "java/res/values-hi/components_strings.xml",
-      "java/res/values-hr/components_strings.xml",
-      "java/res/values-hu/components_strings.xml",
-      "java/res/values-in/components_strings.xml",
-      "java/res/values-it/components_strings.xml",
-      "java/res/values-iw/components_strings.xml",
-      "java/res/values-ja/components_strings.xml",
-      "java/res/values-kn/components_strings.xml",
-      "java/res/values-ko/components_strings.xml",
-      "java/res/values-lt/components_strings.xml",
-      "java/res/values-lv/components_strings.xml",
-      "java/res/values-ml/components_strings.xml",
-      "java/res/values-mr/components_strings.xml",
-      "java/res/values-ms/components_strings.xml",
-      "java/res/values-nb/components_strings.xml",
-      "java/res/values-nl/components_strings.xml",
-      "java/res/values-pl/components_strings.xml",
-      "java/res/values-pt-rBR/components_strings.xml",
-      "java/res/values-pt-rPT/components_strings.xml",
-      "java/res/values-ro/components_strings.xml",
-      "java/res/values-ru/components_strings.xml",
-      "java/res/values-sk/components_strings.xml",
-      "java/res/values-sl/components_strings.xml",
-      "java/res/values-sr/components_strings.xml",
-      "java/res/values-sv/components_strings.xml",
-      "java/res/values-sw/components_strings.xml",
-      "java/res/values-ta/components_strings.xml",
-      "java/res/values-te/components_strings.xml",
-      "java/res/values-th/components_strings.xml",
-      "java/res/values-tl/components_strings.xml",
-      "java/res/values-tr/components_strings.xml",
-      "java/res/values-uk/components_strings.xml",
-      "java/res/values-vi/components_strings.xml",
-      "java/res/values-zh-rCN/components_strings.xml",
-      "java/res/values-zh-rTW/components_strings.xml",
-      "java/res/values/components_strings.xml",
-    ]
-    foreach(_locale, locales_with_fake_bidi) {
-      outputs += [ "components_strings_${_locale}.pak" ]
-    }
+    outputs =
+        [
+          "grit/components_strings.h",
+          "java/res/values/components_strings.xml",
+        ] +
+        process_file_template(
+            android_bundle_locales_as_resources,
+            [ "java/res/values-{{source_name_part}}/components_strings.xml" ]) +
+        process_file_template(locales_with_fake_bidi,
+                              [ "components_strings_{{source_name_part}}.pak" ])
   }
 
-  repack("weblayer_locales") {
-    sources = [
-      "${root_gen_dir}/weblayer/components_strings_en-US.pak",
-    ]
+  repack_locales("weblayer_locales") {
+    input_locales = locales
+    output_locales = locales
+    source_patterns = [ "${root_gen_dir}/weblayer/components_strings_" ]
     deps = [
       ":generate_components_strings",
     ]
-    output = "$root_out_dir/weblayer/locales/en-US.pak"
+    output_dir = "$root_out_dir/weblayer/locales"
   }
 
   android_assets("locale_pak_assets") {
     disable_compression = true
     renaming_sources = [ "$root_out_dir/weblayer/locales/en-US.pak" ]
     renaming_destinations = [ "stored-locales/weblayer/en-US.pak" ]
+    treat_as_locale_paks = true
+    deps = [
+      ":weblayer_locales",
+    ]
+  }
+
+  android_assets("bundle_locale_pak_assets") {
+    disable_compression = true
+    renaming_sources = []
+    renaming_destinations = []
+    foreach(_locale, locales) {
+      renaming_sources += [ "$root_out_dir/weblayer/locales/$_locale.pak" ]
+      renaming_destinations += [ "locales/$_locale.pak" ]
+    }
     treat_as_locale_paks = true
     deps = [
       ":weblayer_locales",
@@ -136,10 +102,16 @@ jumbo_static_library("weblayer_lib") {
     "app/content_main_delegate_impl.cc",
     "app/content_main_delegate_impl.h",
     "app/main.cc",
+    "browser/autofill_client_impl.cc",
+    "browser/autofill_client_impl.h",
+    "browser/browser_context_impl.cc",
+    "browser/browser_context_impl.h",
     "browser/browser_main_parts_impl.cc",
     "browser/browser_main_parts_impl.h",
     "browser/content_browser_client_impl.cc",
     "browser/content_browser_client_impl.h",
+    "browser/download_manager_delegate_impl.cc",
+    "browser/download_manager_delegate_impl.h",
     "browser/file_select_helper.cc",
     "browser/file_select_helper.h",
     "browser/i18n_util.cc",
@@ -151,8 +123,8 @@ jumbo_static_library("weblayer_lib") {
     "browser/navigation_impl.h",
     "browser/profile_impl.cc",
     "browser/profile_impl.h",
-    "browser/ssl_blocking_page.cc",
-    "browser/ssl_blocking_page.h",
+    "browser/ssl_error_controller_client.cc",
+    "browser/ssl_error_controller_client.h",
     "browser/ssl_error_handler.cc",
     "browser/ssl_error_handler.h",
     "browser/ssl_host_state_delegate_impl.cc",
@@ -171,6 +143,8 @@ jumbo_static_library("weblayer_lib") {
     "common/features.h",
     "common/weblayer_paths.cc",
     "common/weblayer_paths.h",
+    "public/common/switches.cc",
+    "public/common/switches.h",
     "public/download_delegate.h",
     "public/error_page_delegate.h",
     "public/fullscreen_delegate.h",
@@ -186,6 +160,8 @@ jumbo_static_library("weblayer_lib") {
     "renderer/content_renderer_client_impl.h",
     "renderer/ssl_error_helper.cc",
     "renderer/ssl_error_helper.h",
+    "renderer/weblayer_render_frame_observer.cc",
+    "renderer/weblayer_render_frame_observer.h",
     "utility/content_utility_client_impl.cc",
     "utility/content_utility_client_impl.h",
   ]
@@ -193,6 +169,8 @@ jumbo_static_library("weblayer_lib") {
   if (is_android) {
     # TODO(timvolodine): move this to safe_browsing/
     sources += [
+      "browser/android/metrics/uma_utils.cc",
+      "browser/android/metrics/uma_utils.h",
       "browser/devtools_manager_delegate_android.cc",
       "browser/devtools_manager_delegate_android.h",
       "browser/devtools_server_android.cc",
@@ -204,6 +182,8 @@ jumbo_static_library("weblayer_lib") {
       "browser/safe_browsing/url_checker_delegate_impl.cc",
       "browser/safe_browsing/url_checker_delegate_impl.h",
       "browser/weblayer_impl_android.cc",
+      "renderer/url_loader_throttle_provider.cc",
+      "renderer/url_loader_throttle_provider.h",
     ]
   }
 
@@ -222,11 +202,19 @@ jumbo_static_library("weblayer_lib") {
     "//base:base_static",
     "//base/third_party/dynamic_annotations",
     "//cc",
+    "//components/autofill/content/browser",
+    "//components/autofill/content/renderer",
+    "//components/autofill/core/browser",
     "//components/crash/content/app",
     "//components/crash/content/browser",
+    "//components/embedder_support:switches",
+    "//components/prefs",
     "//components/security_interstitials/content:security_interstitial_page",
     "//components/security_interstitials/content/renderer:security_interstitial_page_controller",
     "//components/security_interstitials/core",
+    "//components/spellcheck:buildflags",
+    "//components/startup_metric_utils/browser:lib",
+    "//components/user_prefs",
     "//components/version_info",
     "//components/web_cache/browser",
     "//content:resources",
@@ -267,6 +255,13 @@ jumbo_static_library("weblayer_lib") {
     "//weblayer/browser/webui:mojo_bindings",
   ]
 
+  if (use_browser_spellchecker) {
+    deps += [
+      "//components/spellcheck/browser",
+      "//components/spellcheck/renderer",
+    ]
+  }
+
   if (is_android) {
     sources += [
       "common/crash_reporter/crash_keys.cc",
@@ -278,12 +273,16 @@ jumbo_static_library("weblayer_lib") {
       "//android_webview:generate_aw_resources",
       "//android_webview:generate_aw_strings",
       "//components/crash/android:crashpad_main",
+      "//components/metrics",
+      "//components/minidump_uploader",
       "//components/safe_browsing",
       "//components/safe_browsing/android:remote_database_manager",
       "//components/safe_browsing/android:safe_browsing_api_handler",
       "//components/safe_browsing/browser",
       "//components/safe_browsing/browser:network_context",
+      "//components/safe_browsing/common",
       "//components/safe_browsing/db:database_manager",
+      "//components/safe_browsing/renderer:throttles",
       "//components/version_info/android:channel_getter",
     ]
   }
@@ -292,10 +291,7 @@ jumbo_static_library("weblayer_lib") {
     deps += [ "//gpu/vulkan/init" ]
   }
   if (mojo_media_host == "browser") {
-    deps += [
-      "//media/mojo/mojom:constants",
-      "//media/mojo/services",
-    ]
+    deps += [ "//media/mojo/services" ]
   }
 
   if (is_win) {

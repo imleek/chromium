@@ -82,7 +82,6 @@
 <translation id="3822383571486410024">እባክዎ ይህን ጽሑፍ ወደ <ph name="MIN_CHARACTERS" /> ቁምፊዎች ወይም ከዚያ በላይ ያራዝሙት (አሁን እየተጠቀሙ ያሉት <ph name="CURRENT_LENGTH" />ቁምፊዎችን ነው)።</translation>
 <translation id="383465348367842624">ከ«<ph name="ATSIGN" />» በፊት የሚመጣ ክፍል የ«<ph name="INVALIDCHARACTER" />» ምልክት መያዝ የለበትም።</translation>
 <translation id="3846214748874656680">ከሙሉ ማያገጽ ውጣ</translation>
-<translation id="3889183436948184105">ክለሳ</translation>
 <translation id="3920932319529768807">ድምዳሜ</translation>
 <translation id="3924558731517983934">መተግበሪያ</translation>
 <translation id="3944740393230681990">ቅድመ-ታሪክ</translation>
@@ -114,9 +113,12 @@
 <translation id="479989351350248267">ፈልግ</translation>
 <translation id="4812940957355064477">እባክዎ ቁጥር ያስገቡ።</translation>
 <translation id="4912536737030637138">የዋቢ መጽሐፍት ግቤት</translation>
+<translation id="492244087561876220">አስተያየት</translation>
+<translation id="4971739861736909480"><ph name="ACCNAME" /> ተመርጧል</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> ተመርጠዋል</translation>
 <translation id="4992066212339426712">ድምጸ-ከል አንሳ</translation>
 <translation id="49969490063480558">እባክዎ ከ«<ph name="ATSIGN" />» በኋላ አንድ ክፍል ያስገቡ። «<ph name="INVALIDADDRESS" />» ያልተሟላ ነው።</translation>
+<translation id="5022314756875057021">የረድፍ ቡድን</translation>
 <translation id="5034860022980953847">የሂደት አመልካች</translation>
 <translation id="5090250355906949916">የቪዲዮ ጊዜ አንፏቃቂ</translation>
 <translation id="5093189678851173835">የተቀረጸ ጽሑፍ</translation>
@@ -217,6 +219,7 @@
 <translation id="7888071071722539607">እባክዎ በኢሜይል አድራሻው ውስጥ «<ph name="ATSIGN" />» ያካትቱ። «<ph name="INVALIDADDRESS" />» ውስጥ «<ph name="ATSIGN" />» ይጎድላል።</translation>
 <translation id="7891486169920085145">መክፈያ</translation>
 <translation id="795667975304826397">ምንም ፋይል አልተመረጠም</translation>
+<translation id="7962328325860248200"><ph name="ACCNAME" /> አልተመረጠም</translation>
 <translation id="8034303206267677282">ጠንካራ</translation>
 <translation id="8053789581856978548">የጽሑፍ መስክ ፈልግ</translation>
 <translation id="8057695513531652401">ማስታወቂያ</translation>

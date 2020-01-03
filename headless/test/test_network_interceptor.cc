@@ -8,7 +8,7 @@
 #include "base/task/post_task.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
@@ -29,12 +29,12 @@ class RedirectLoader : public network::mojom::URLLoader {
                  TestNetworkInterceptor::Response* response,
                  const std::string& url)
       : interceptor_impl_(interceptor_impl),
-        binding_(this, std::move(request->receiver)),
+        receiver_(this, std::move(request->receiver)),
         client_(std::move(request->client)),
         url_request_(request->url_request),
         response_(response),
         url_(request->url_request.url) {
-    binding_.set_connection_error_handler(
+    receiver_.set_disconnect_handler(
         base::BindOnce([](RedirectLoader* self) { delete self; }, this));
     NotifyRedirect(std::move(url));
   }
@@ -51,8 +51,7 @@ class RedirectLoader : public network::mojom::URLLoader {
  private:
   void NotifyRedirect(const std::string& location) {
     auto redirect_info = net::RedirectInfo::ComputeRedirectInfo(
-        url_request_.method, url_request_.url, url_request_.request_initiator,
-        url_request_.site_for_cookies,
+        url_request_.method, url_request_.url, url_request_.site_for_cookies,
         net::URLRequest::FirstPartyURLPolicy::
             UPDATE_FIRST_PARTY_URL_ON_REDIRECT,
         url_request_.referrer_policy, url_request_.referrer.spec(),
@@ -72,7 +71,7 @@ class RedirectLoader : public network::mojom::URLLoader {
 
   TestNetworkInterceptor::Impl* const interceptor_impl_;
 
-  mojo::Binding<network::mojom::URLLoader> binding_;
+  mojo::Receiver<network::mojom::URLLoader> receiver_;
   mojo::Remote<network::mojom::URLLoaderClient> client_;
   network::ResourceRequest url_request_;
   TestNetworkInterceptor::Response* response_;

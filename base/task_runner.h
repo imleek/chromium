@@ -11,7 +11,6 @@
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
-#include "base/task/promise/abstract_promise.h"
 #include "base/time/time.h"
 
 namespace base {
@@ -71,24 +70,6 @@ class BASE_EXPORT TaskRunner
                                OnceClosure task,
                                base::TimeDelta delay) = 0;
 
-  // Returns true iff tasks posted to this TaskRunner are sequenced
-  // with this call.
-  //
-  // In particular:
-  // - Returns true if this is a SequencedTaskRunner to which the
-  //   current task was posted.
-  // - Returns true if this is a SequencedTaskRunner bound to the
-  //   same sequence as the SequencedTaskRunner to which the current
-  //   task was posted.
-  // - Returns true if this is a SingleThreadTaskRunner bound to
-  //   the current thread.
-  // TODO(http://crbug.com/665062):
-  //   This API doesn't make sense for parallel TaskRunners.
-  //   Introduce alternate static APIs for documentation purposes of "this runs
-  //   in pool X", have RunsTasksInCurrentSequence() return false for parallel
-  //   TaskRunners, and ultimately move this method down to SequencedTaskRunner.
-  virtual bool RunsTasksInCurrentSequence() const = 0;
-
   // Posts |task| on the current TaskRunner.  On completion, |reply|
   // is posted to the thread that called PostTaskAndReply().  Both
   // |task| and |reply| are guaranteed to be deleted on the thread
@@ -133,10 +114,6 @@ class BASE_EXPORT TaskRunner
   bool PostTaskAndReply(const Location& from_here,
                         OnceClosure task,
                         OnceClosure reply);
-
-  // TODO(alexclarke): This should become pure virtual and replace
-  // PostDelayedTask. NB passing by reference to reduce binary size.
-  bool PostPromiseInternal(WrappedPromise promise, base::TimeDelta delay);
 
  protected:
   friend struct TaskRunnerTraits;

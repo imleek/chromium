@@ -237,12 +237,8 @@ extern const char kWallpaperManagerId[];
 extern const char kZipArchiverExtensionId[];
 // Path to preinstalled zip archiver extension.
 extern const char kZipArchiverExtensionPath[];
-// The app ID of Chrome camera app.
-extern const char kChromeCameraAppId[];
-// The dev app ID of Chrome camera app.
-extern const char kChromeCameraAppDevId[];
 // Path to preinstalled Chrome camera app.
-extern const char kChromeCameraAppPath[];
+extern const char kCameraAppPath[];
 #endif
 
 // What causes an extension to be installed? Used in histograms, so don't
@@ -267,6 +263,10 @@ extern const char kAppStateReadyToRun[];
 
 // The path part of the file system url used for media file systems.
 extern const char kMediaFileSystemPathPart[];
+
+// The key name of extension request timestamp used by the
+// prefs::kCloudExtensionRequestIds preference.
+extern const char kExtensionRequestTimestamp[];
 }  // namespace extension_misc
 
 #endif  // CHROME_COMMON_EXTENSIONS_EXTENSION_CONSTANTS_H_

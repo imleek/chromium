@@ -21,7 +21,7 @@ void FetchRemoteSms(
     content::BrowserContext* context,
     const url::Origin& origin,
     base::OnceCallback<void(base::Optional<std::string>)> callback) {
-  if (!base::FeatureList::IsEnabled(kSmsFetchRequestHandler)) {
+  if (!base::FeatureList::IsEnabled(kSmsReceiverCrossDevice)) {
     std::move(callback).Run(base::nullopt);
     return;
   }
@@ -48,7 +48,7 @@ void FetchRemoteSms(
   request.mutable_sms_fetch_request()->set_origin(origin.Serialize());
 
   sharing_service->SendMessageToDevice(
-      device->guid(), base::TimeDelta::FromSeconds(kDefaultTimeoutSeconds),
+      *device.get(), base::TimeDelta::FromSeconds(kDefaultTimeoutSeconds),
       std::move(request),
       base::BindOnce(
           [](base::OnceCallback<void(base::Optional<std::string>)> callback,

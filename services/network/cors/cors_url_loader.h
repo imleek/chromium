@@ -7,7 +7,6 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -111,6 +110,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoader
 
   void SetCorsFlagIfNeeded();
 
+  // Returns true if request's origin has special access to the destination
+  // URL (via |origin_access_list_| and |factory_bound_origin_access_list_|).
+  bool HasSpecialAccessToDestination() const;
+
+  bool PassesTimingAllowOriginCheck(
+      const mojom::URLResponseHead& response) const;
+
   static base::Optional<std::string> GetHeaderString(
       const mojom::URLResponseHead& response,
       const std::string& header_name);
@@ -129,7 +135,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoader
   mojom::URLLoaderFactory* network_loader_factory_;
 
   // For the actual request.
-  mojom::URLLoaderPtr network_loader_;
+  mojo::Remote<mojom::URLLoader> network_loader_;
   mojo::Receiver<mojom::URLLoaderClient> network_client_receiver_{this};
   ResourceRequest request_;
 
@@ -160,6 +166,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoader
 
   // https://fetch.spec.whatwg.org/#concept-request-redirect-count
   int redirect_count_ = 0;
+
+  // https://fetch.spec.whatwg.org/#timing-allow-failed
+  bool timing_allow_failed_flag_ = false;
 
   // We need to save this for redirect.
   net::MutableNetworkTrafficAnnotationTag traffic_annotation_;

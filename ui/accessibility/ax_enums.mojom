@@ -67,9 +67,9 @@ enum Event {
   kMouseMoved,
   kMousePressed,
   kMouseReleased,
-  kRowCollapsed,             // Web / Mac
-  kRowCountChanged,          // Web / Mac
-  kRowExpanded,              // Web / Mac
+  kRowCollapsed,
+  kRowCountChanged,
+  kRowExpanded,
   kScrollPositionChanged,    // Web
   kScrolledToAnchor,         // Web
   kSelectedChildrenChanged,  // Web
@@ -129,7 +129,6 @@ enum Role {
   kComboBoxMenuButton,
   kComplementary,
   kComment,
-  kCommentSection,
   kContentDeletion,
   kContentInsertion,
   kContentInfo,
@@ -261,9 +260,9 @@ enum Role {
   kRadioButton,
   kRadioGroup,
   kRegion,
-  kRevision,
   kRootWebArea,
   kRow,
+  kRowGroup,
   kRowHeader,
   kRuby,
   kRubyAnnotation,
@@ -443,6 +442,15 @@ enum ScrollAlignment {
   kScrollAlignmentLeft,
   kScrollAlignmentRight,
   kScrollAlignmentClosestEdge
+};
+
+// A list of valid values for the scroll behavior argument to argument in
+// |AXActionData|. These values control whether a node is scrolled in the
+// viewport if it is already visible.
+enum ScrollBehavior {
+  kNone,
+  kDoNotScrollIfVisible,
+  kScrollIfVisible,
 };
 
 // A list of valid values for the |AXIntAttribute| |default_action_verb|.
@@ -643,6 +651,12 @@ enum IntAttribute {
   // is released on the drop target.
   // Note: aria-dropeffect is deprecated in WAI-ARIA 1.1.
   kDropeffect,
+
+  // The DOMNodeID from Blink. Currently only populated when using
+  // the accessibility tree for PDF exporting. Warning, this is totally
+  // unrelated to the accessibility node ID, or the ID attribute for an
+  // HTML element - it's an ID used to uniquely identify nodes in Blink.
+  kDOMNodeId,
 };
 
 enum FloatAttribute {
@@ -722,6 +736,9 @@ enum BoolAttribute {
 
   // Indicates whether this node causes a page break
   kIsPageBreakingObject,
+
+  // True if the node has any ARIA attributes set.
+  kHasAriaAttribute,
 };
 
 enum IntListAttribute {
@@ -779,45 +796,15 @@ enum StringListAttribute {
   kCustomActionDescriptions,
 };
 
-// TODO(dmazzoni, nektar): make this list not grow exponentially as new
-// MarkerTypes are added
 enum MarkerType {
-  kNone,
-  // Assignments are ignored by the parser, but are kept here for clarity.
+  kNone = 0,
   kSpelling = 1,
   kGrammar = 2,
-  kSpellingGrammar = 3,
   kTextMatch = 4,
-  kSpellingTextMatch = 5,
-  kGrammarTextMatch = 6,
-  kSpellingGrammarTextMatch = 7,
   // DocumentMarker::MarkerType::Composition = 8 is ignored for accessibility
   // purposes
   kActiveSuggestion = 16,
-  kSpellingActiveSuggestion = 17,
-  kGrammarActiveSuggestion = 18,
-  kSpellingGrammarActiveSuggestion = 19,
-  kTextMatchActiveSuggestion = 20,
-  kSpellingTextMatchActiveSuggestion = 21,
-  kGrammarTextMatchActiveSuggestion = 22,
-  kSpellingGrammarTextMatchActiveSuggestion = 23,
   kSuggestion = 32,
-  kSpellingSuggestion = 33,
-  kGrammarSuggestion = 34,
-  kSpellingGrammarSuggestion = 35,
-  kTextMatchSuggestion = 36,
-  kSpellingTextMatchSuggestion = 37,
-  kGrammarTextMatchSuggestion = 38,
-  kSpellingGrammarTextMatchSuggestion = 39,
-  // We again skip over DocumentMarker::MarkerType::Composition = 8 here
-  kActiveSuggestionSuggestion = 48,
-  kSpellingActiveSuggestionSuggestion = 49,
-  kGrammarActiveSuggestionSuggestion = 50,
-  kSpellingGrammarActiveSuggestionSuggestion = 51,
-  kTextMatchActiveSuggestionSuggestion = 52,
-  kSpellingTextMatchActiveSuggestionSuggestion = 53,
-  kGrammarTextMatchActiveSuggestionSuggestion = 54,
-  kSpellingGrammarTextMatchActiveSuggestionSuggestion = 55,
 };
 
 enum ListStyle {

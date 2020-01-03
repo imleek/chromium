@@ -31,7 +31,6 @@
 #include "ui/accessibility/platform/ax_fragment_root_win.h"
 #include "ui/accessibility/platform/ax_platform_node_win.h"
 #include "ui/accessibility/platform/ax_system_caret_win.h"
-#include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/ui_base_features.h"
@@ -428,9 +427,6 @@ HWNDMessageHandler::HWNDMessageHandler(HWNDMessageHandlerDelegate* delegate,
           ::features::kPrecisionTouchpadScrollPhase)) {}
 
 HWNDMessageHandler::~HWNDMessageHandler() {
-  DCHECK(delegate_->GetHWNDMessageDelegateInputMethod());
-  delegate_->GetHWNDMessageDelegateInputMethod()->RemoveObserver(this);
-  delegate_ = nullptr;
   // Prevent calls back into this class via WNDPROC now that we've been
   // destroyed.
   ClearUserData();
@@ -461,7 +457,7 @@ void HWNDMessageHandler::Init(HWND parent, const gfx::Rect& bounds) {
       hwnd(), ui::WindowEventTarget::kWin32InputEventTarget,
       static_cast<ui::WindowEventTarget*>(this));
   DCHECK(delegate_->GetHWNDMessageDelegateInputMethod());
-  delegate_->GetHWNDMessageDelegateInputMethod()->AddObserver(this);
+  observer_.Add(delegate_->GetHWNDMessageDelegateInputMethod());
 
   // The usual way for UI Automation to obtain a fragment root is through
   // WM_GETOBJECT. However, if there's a relation such as "Controller For"
@@ -1832,8 +1828,7 @@ LRESULT HWNDMessageHandler::OnGetObject(UINT message,
           IID_PPV_ARGS(&root));
       reference_result =
           UiaReturnRawElementProvider(hwnd(), w_param, l_param, root.Get());
-    } else if (is_msaa_request &&
-               !::switches::IsExperimentalAccessibilityPlatformUIAEnabled()) {
+    } else if (is_msaa_request) {
       // Retrieve MSAA dispatch object for the root view.
       Microsoft::WRL::ComPtr<IAccessible> root(
           delegate_->GetNativeViewAccessible());
@@ -2881,7 +2876,8 @@ LRESULT HWNDMessageHandler::OnWindowSizingFinished(UINT message,
   return 0;
 }
 
-void HWNDMessageHandler::OnSessionChange(WPARAM status_code) {
+void HWNDMessageHandler::OnSessionChange(WPARAM status_code,
+                                         const bool* is_current_session) {
   // Direct3D presents are ignored while the screen is locked, so force the
   // window to be redrawn on unlock.
   if (status_code == WTS_SESSION_UNLOCK)

@@ -246,12 +246,11 @@ class RendererPerfTest : public testing::Test {
  public:
   RendererPerfTest()
       : manager_(&shared_bitmap_manager_),
-        support_(std::make_unique<CompositorFrameSinkSupport>(
-            nullptr,
-            &manager_,
-            kArbitraryFrameSinkId,
-            true /* is_root */,
-            true /* needs_sync_points */)),
+        support_(
+            std::make_unique<CompositorFrameSinkSupport>(nullptr,
+                                                         &manager_,
+                                                         kArbitraryFrameSinkId,
+                                                         true /* is_root */)),
         timer_(/*warmup_laps=*/100,
                /*time_limit=*/TestTimeLimit(),
                /*check_interval=*/10) {}
@@ -282,9 +281,7 @@ class RendererPerfTest : public testing::Test {
         gpu::kNullSurfaceHandle, gpu_memory_buffer_manager_.get(),
         image_factory, gpu_channel_manager_delegate, renderer_settings_);
     child_context_provider_->BindToCurrentThread();
-    constexpr bool sync_token_verification = false;
-    child_resource_provider_ =
-        std::make_unique<ClientResourceProvider>(sync_token_verification);
+    child_resource_provider_ = std::make_unique<ClientResourceProvider>();
 
     auto output_surface = CreateOutputSurface(gpu_service);
     // WaitForSwapDisplayClient depends on this.
@@ -357,7 +354,7 @@ class RendererPerfTest : public testing::Test {
     support_->SubmitCompositorFrame(
         id_allocator_.GetCurrentLocalSurfaceIdAllocation().local_surface_id(),
         std::move(frame));
-    ASSERT_TRUE(display_->DrawAndSwap());
+    ASSERT_TRUE(display_->DrawAndSwap(base::TimeTicks::Now()));
   }
 
   void RunSingleTextureQuad() {
@@ -413,6 +410,43 @@ class RendererPerfTest : public testing::Test {
         for (int j = 0; j < 5; j++) {
           CreateTestTextureDrawQuad(
               resource_ids[i][j],
+              gfx::Rect(i * kTextureSize.width(), j * kTextureSize.height(),
+                        kTextureSize.width(), kTextureSize.height()),
+              /*background_color=*/SK_ColorTRANSPARENT,
+              /*premultiplied_alpha=*/false, shared_state, pass.get());
+        }
+      }
+
+      RenderPassList pass_list;
+      pass_list.push_back(std::move(pass));
+      DrawFrame(std::move(pass_list));
+
+      client_.WaitForSwap();
+      timer_.NextLap();
+    } while (!timer_.HasTimeLimitExpired());
+  }
+
+  void RunTextureQuads5x5SameTex() {
+    const gfx::Size kTextureSize =
+        ScaleToCeiledSize(kSurfaceSize, /*x_scale=*/0.2, /*y_scale=*/0.2);
+    ResourceId resource_id;
+    resource_list_.push_back(CreateTestTexture(
+        gfx::Rect(kTextureSize),
+        /*texel_color=*/SkColorSetARGB(128, 0, 255, 0),
+        /*premultiplied_alpha=*/false, child_resource_provider_.get(),
+        child_context_provider_));
+    resource_id = resource_list_.back().id;
+
+    timer_.Reset();
+    do {
+      std::unique_ptr<RenderPass> pass = CreateTestRootRenderPass();
+      SharedQuadState* shared_state = CreateTestSharedQuadState(
+          gfx::Transform(), kSurfaceRect, pass.get(), gfx::RRectF());
+
+      for (int i = 0; i < 5; i++) {
+        for (int j = 0; j < 5; j++) {
+          CreateTestTextureDrawQuad(
+              resource_id,
               gfx::Rect(i * kTextureSize.width(), j * kTextureSize.height(),
                         kTextureSize.width(), kTextureSize.height()),
               /*background_color=*/SK_ColorTRANSPARENT,
@@ -553,6 +587,10 @@ TYPED_TEST(RendererPerfTest, SingleTextureQuad) {
 
 TYPED_TEST(RendererPerfTest, TextureQuads5x5) {
   this->RunTextureQuads5x5();
+}
+
+TYPED_TEST(RendererPerfTest, TextureQuads5x5SameTex) {
+  this->RunTextureQuads5x5SameTex();
 }
 
 TYPED_TEST(RendererPerfTest, RotatedTileQuadsShared) {

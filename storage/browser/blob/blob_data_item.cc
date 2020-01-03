@@ -58,6 +58,8 @@ class MojoDataItem : public storage::BlobDataItem::DataHandle {
         return nullptr;
       case mojom::BlobDataItemType::kCacheStorage:
         return "DiskCache.CacheStorage";
+      case mojom::BlobDataItemType::kIndexedDB:
+        return "IndexedDB";
     }
   }
 
@@ -223,6 +225,16 @@ void BlobDataItem::GrowFile(uint64_t new_length) {
   DCHECK_EQ(type_, Type::kFile);
   DCHECK_GE(new_length, length_);
   length_ = new_length;
+}
+
+// static
+void BlobDataItem::SetFileModificationTimes(
+    std::vector<scoped_refptr<BlobDataItem>> items,
+    std::vector<base::Time> times) {
+  DCHECK_EQ(items.size(), times.size());
+  for (size_t i = 0; i < items.size(); ++i) {
+    items[i]->expected_modification_time_ = times[i];
+  }
 }
 
 void PrintTo(const BlobDataItem& x, ::std::ostream* os) {

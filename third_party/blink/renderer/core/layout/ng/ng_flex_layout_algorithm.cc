@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_block_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space_builder.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_flex_child_iterator.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_out_of_flow_layout_part.h"
@@ -27,10 +28,18 @@ NGFlexLayoutAlgorithm::NGFlexLayoutAlgorithm(
       border_scrollbar_padding_(border_padding_ +
                                 params.fragment_geometry.scrollbar),
       is_column_(Style().ResolvedIsColumnFlexDirection()),
-      is_horizontal_flow_(FlexLayoutAlgorithm::IsHorizontalFlow(Style())) {
+      is_horizontal_flow_(FlexLayoutAlgorithm::IsHorizontalFlow(Style())),
+      is_cross_size_definite_(IsContainerCrossSizeDefinite()) {
   container_builder_.SetIsNewFormattingContext(
       params.space.IsNewFormattingContext());
   container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
+
+  border_box_size_ = container_builder_.InitialBorderBoxSize();
+  content_box_size_ =
+      ShrinkAvailableSize(border_box_size_, border_scrollbar_padding_);
+  child_percentage_size_ = CalculateChildPercentageSize(
+      ConstraintSpace(), Node(), content_box_size_);
+  algorithm_.emplace(&Style(), MainAxisContentExtent(LayoutUnit::Max()));
 }
 
 bool NGFlexLayoutAlgorithm::MainAxisIsInlineAxis(
@@ -40,26 +49,101 @@ bool NGFlexLayoutAlgorithm::MainAxisIsInlineAxis(
 }
 
 LayoutUnit NGFlexLayoutAlgorithm::MainAxisContentExtent(
-    LayoutUnit sum_hypothetical_main_size) {
+    LayoutUnit sum_hypothetical_main_size) const {
   if (Style().ResolvedIsColumnFlexDirection()) {
     return ComputeBlockSizeForFragment(
                ConstraintSpace(), Style(), border_padding_,
-               sum_hypothetical_main_size + (border_padding_).BlockSum()) -
+               sum_hypothetical_main_size +
+                   border_scrollbar_padding_.BlockSum()) -
            border_scrollbar_padding_.BlockSum();
   }
   return content_box_size_.inline_size;
 }
 
+namespace {
+
+enum AxisEdge { kStart, kCenter, kEnd };
+
+// Maps the resolved justify-content value to a static-position edge.
+AxisEdge MainAxisStaticPositionEdge(const ComputedStyle& style,
+                                    bool is_column) {
+  const StyleContentAlignmentData justify =
+      FlexLayoutAlgorithm::ResolvedJustifyContent(style);
+  const ContentPosition content_position = justify.GetPosition();
+  bool is_reverse_flex = is_column
+                             ? style.ResolvedIsColumnReverseFlexDirection()
+                             : style.ResolvedIsRowReverseFlexDirection();
+
+  if (content_position == ContentPosition::kFlexEnd)
+    return is_reverse_flex ? AxisEdge::kStart : AxisEdge::kEnd;
+
+  if (content_position == ContentPosition::kCenter ||
+      justify.Distribution() == ContentDistributionType::kSpaceAround ||
+      justify.Distribution() == ContentDistributionType::kSpaceEvenly)
+    return AxisEdge::kCenter;
+
+  return is_reverse_flex ? AxisEdge::kEnd : AxisEdge::kStart;
+}
+
+// Maps the resolved alignment value to a static-position edge.
+AxisEdge CrossAxisStaticPositionEdge(const ComputedStyle& style,
+                                     const ComputedStyle& child_style) {
+  ItemPosition alignment =
+      FlexLayoutAlgorithm::AlignmentForChild(style, child_style);
+  bool is_wrap_reverse = style.FlexWrap() == EFlexWrap::kWrapReverse;
+
+  if (alignment == ItemPosition::kFlexEnd)
+    return is_wrap_reverse ? AxisEdge::kStart : AxisEdge::kEnd;
+
+  if (alignment == ItemPosition::kCenter)
+    return AxisEdge::kCenter;
+
+  return is_wrap_reverse ? AxisEdge::kEnd : AxisEdge::kStart;
+}
+
+}  // namespace
+
 void NGFlexLayoutAlgorithm::HandleOutOfFlowPositioned(NGBlockNode child) {
-  // TODO(dgrogan): There's stuff from
-  // https://www.w3.org/TR/css-flexbox-1/#abspos-items that isn't done here.
-  // Specifically, neither rtl nor alignment is handled here, at least.
-  // Look at LayoutFlexibleBox::PrepareChildForPositionedLayout and
-  // SetStaticPositionForPositionedLayout to see how to statically position
-  // this.
-  container_builder_.AddOutOfFlowChildCandidate(
-      child, {border_scrollbar_padding_.inline_start,
-              border_scrollbar_padding_.block_start});
+  AxisEdge main_axis_edge = MainAxisStaticPositionEdge(Style(), is_column_);
+  AxisEdge cross_axis_edge =
+      CrossAxisStaticPositionEdge(Style(), child.Style());
+
+  AxisEdge inline_axis_edge = is_column_ ? cross_axis_edge : main_axis_edge;
+  AxisEdge block_axis_edge = is_column_ ? main_axis_edge : cross_axis_edge;
+
+  using InlineEdge = NGLogicalStaticPosition::InlineEdge;
+  using BlockEdge = NGLogicalStaticPosition::BlockEdge;
+
+  InlineEdge inline_edge;
+  BlockEdge block_edge;
+  LogicalOffset offset(border_scrollbar_padding_.inline_start,
+                       border_scrollbar_padding_.block_start);
+
+  // Determine the static-position based off the axis-edge.
+  if (inline_axis_edge == AxisEdge::kStart) {
+    inline_edge = InlineEdge::kInlineStart;
+  } else if (inline_axis_edge == AxisEdge::kCenter) {
+    inline_edge = InlineEdge::kInlineCenter;
+    offset.inline_offset += content_box_size_.inline_size / 2;
+  } else {
+    inline_edge = InlineEdge::kInlineEnd;
+    offset.inline_offset += content_box_size_.inline_size;
+  }
+
+  // We may not know the final block-size of the fragment yet. This will be
+  // adjusted within the |NGContainerFragmentBuilder| once set.
+  if (block_axis_edge == AxisEdge::kStart) {
+    block_edge = BlockEdge::kBlockStart;
+  } else if (block_axis_edge == AxisEdge::kCenter) {
+    block_edge = BlockEdge::kBlockCenter;
+    offset.block_offset -= border_scrollbar_padding_.BlockSum() / 2;
+  } else {
+    block_edge = BlockEdge::kBlockEnd;
+    offset.block_offset -= border_scrollbar_padding_.BlockSum();
+  }
+
+  container_builder_.AddOutOfFlowChildCandidate(child, offset, inline_edge,
+                                                block_edge);
 }
 
 bool NGFlexLayoutAlgorithm::IsColumnContainerMainSizeDefinite() const {
@@ -197,7 +281,7 @@ bool NGFlexLayoutAlgorithm::ShouldItemShrinkToFit(
 
 bool NGFlexLayoutAlgorithm::WillChildCrossSizeBeContainerCrossSize(
     const NGBlockNode& child) const {
-  return !algorithm_->IsMultiline() && IsContainerCrossSizeDefinite() &&
+  return !algorithm_->IsMultiline() && is_cross_size_definite_ &&
          DoesItemStretch(child);
 }
 
@@ -209,6 +293,7 @@ NGFlexLayoutAlgorithm::BuildConstraintSpaceForDeterminingFlexBasis(
                                          child_style.GetWritingMode(),
                                          /* is_new_fc */ true);
   SetOrthogonalFallbackInlineSizeIfNeeded(Style(), flex_item, &space_builder);
+  space_builder.SetIsPaintedAtomically(true);
 
   if (ShouldItemShrinkToFit(flex_item))
     space_builder.SetIsShrinkToFit(true);
@@ -228,9 +313,9 @@ NGFlexLayoutAlgorithm::BuildConstraintSpaceForDeterminingFlexBasis(
 }
 
 void NGFlexLayoutAlgorithm::ConstructAndAppendFlexItems() {
-  for (NGLayoutInputNode generic_child = Node().FirstChild(); generic_child;
-       generic_child = generic_child.NextSibling()) {
-    auto child = To<NGBlockNode>(generic_child);
+  NGFlexChildIterator iterator(Node());
+  for (NGBlockNode child = iterator.NextChild(); child;
+       child = iterator.NextChild()) {
     if (child.IsOutOfFlowPositioned()) {
       HandleOutOfFlowPositioned(child);
       continue;
@@ -261,18 +346,22 @@ void NGFlexLayoutAlgorithm::ConstructAndAppendFlexItems() {
         is_horizontal_flow_ ? physical_border_scrollbar_padding.HorizontalSum()
                             : physical_border_scrollbar_padding.VerticalSum();
 
+    // TODO(dgrogan): Don't layout every time, just when you need to.
+    // Use ChildHasIntrinsicMainAxisSize as a guide.
+    scoped_refptr<const NGLayoutResult> layout_result =
+        child.Layout(child_space, /* break_token */ nullptr);
+    NGFragment fragment_in_child_writing_mode(
+        child_style.GetWritingMode(), layout_result->PhysicalFragment());
+
     // We want the child's min/max size in its writing mode, not ours. We'll
     // only ever use it if the child's inline axis is our main axis.
+    //
+    // Always calculate the min/max sizes after a layout in order to corrrectly
+    // account for any scrollbars.
     MinMaxSizeInput input(
         /* percentage_resolution_block_size */ content_box_size_.block_size);
     MinMaxSize intrinsic_sizes_border_box = child.ComputeMinMaxSize(
         child_style.GetWritingMode(), input, &child_space);
-    // TODO(dgrogan): Don't layout every time, just when you need to.
-    // Use ChildHasIntrinsicMainAxisSize as a guide.
-    scoped_refptr<const NGLayoutResult> layout_result =
-        child.Layout(child_space, nullptr /*break token*/);
-    NGFragment fragment_in_child_writing_mode(
-        child_style.GetWritingMode(), layout_result->PhysicalFragment());
 
     LayoutUnit flex_base_border_box;
     const Length& specified_length_in_main_axis =
@@ -500,15 +589,6 @@ NGFlexLayoutAlgorithm::AdjustChildSizeForAspectRatioCrossAxisMinAndMax(
 }
 
 scoped_refptr<const NGLayoutResult> NGFlexLayoutAlgorithm::Layout() {
-  border_box_size_ = container_builder_.InitialBorderBoxSize();
-  content_box_size_ =
-      ShrinkAvailableSize(border_box_size_, border_scrollbar_padding_);
-  child_percentage_size_ = CalculateChildPercentageSize(
-      ConstraintSpace(), Node(), content_box_size_);
-
-  const LayoutUnit line_break_length = MainAxisContentExtent(LayoutUnit::Max());
-  algorithm_.emplace(&Style(), line_break_length);
-
   ConstructAndAppendFlexItems();
 
   LayoutUnit main_axis_offset = border_scrollbar_padding_.inline_start;
@@ -542,6 +622,7 @@ scoped_refptr<const NGLayoutResult> NGFlexLayoutAlgorithm::Layout() {
                                               &space_builder);
       space_builder.SetTextDirection(
           flex_item.ng_input_node.Style().Direction());
+      space_builder.SetIsPaintedAtomically(true);
 
       LogicalSize available_size;
       if (is_column_) {
@@ -595,6 +676,10 @@ scoped_refptr<const NGLayoutResult> NGFlexLayoutAlgorithm::Layout() {
 
   LayoutUnit intrinsic_block_size = algorithm_->IntrinsicContentBlockSize() +
                                     border_scrollbar_padding_.BlockSum();
+
+  intrinsic_block_size =
+      ClampIntrinsicBlockSize(ConstraintSpace(), Node(),
+                              border_scrollbar_padding_, intrinsic_block_size);
   LayoutUnit block_size = ComputeBlockSizeForFragment(
       ConstraintSpace(), Style(), border_padding_, intrinsic_block_size);
 
@@ -619,6 +704,7 @@ void NGFlexLayoutAlgorithm::ApplyStretchAlignmentToChild(FlexItem& flex_item) {
                                          /* is_new_fc */ true);
   SetOrthogonalFallbackInlineSizeIfNeeded(Style(), flex_item.ng_input_node,
                                           &space_builder);
+  space_builder.SetIsPaintedAtomically(true);
 
   LogicalSize available_size(
       flex_item.flexed_content_size + flex_item.main_axis_border_padding,
@@ -715,9 +801,9 @@ base::Optional<MinMaxSize> NGFlexLayoutAlgorithm::ComputeMinMaxSize(
   //   - We want the child's border box MinMaxSize, which is the default.
   MinMaxSizeInput child_input(child_percentage_resolution_block_size);
 
-  for (NGLayoutInputNode generic_child = Node().FirstChild(); generic_child;
-       generic_child = generic_child.NextSibling()) {
-    auto child = To<NGBlockNode>(generic_child);
+  NGFlexChildIterator iterator(Node());
+  for (NGBlockNode child = iterator.NextChild(); child;
+       child = iterator.NextChild()) {
     if (child.IsOutOfFlowPositioned())
       continue;
 

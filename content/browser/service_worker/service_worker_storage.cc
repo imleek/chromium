@@ -182,9 +182,10 @@ void ServiceWorkerStorage::FindRegistrationForClientUrl(
     return;
   }
 
-  // To connect this TRACE_EVENT with the callback, TimeTicks is used for
+  // To connect this TRACE_EVENT with the callback, Time is used for
   // callback id.
-  int64_t callback_id = base::TimeTicks::Now().ToInternalValue();
+  int64_t callback_id =
+      base::Time::Now().ToDeltaSinceWindowsEpoch().InMicroseconds();
   TRACE_EVENT_ASYNC_BEGIN1("ServiceWorker",
                            "ServiceWorkerStorage::FindRegistrationForClientUrl",
                            callback_id, "URL", client_url.spec());
@@ -1421,6 +1422,10 @@ void ServiceWorkerStorage::DidGetAllRegistrationsInfos(
     info.registration_id = registration_data.registration_id;
     info.stored_version_size_bytes =
         registration_data.resources_total_size_bytes;
+    info.navigation_preload_enabled =
+        registration_data.navigation_preload_state.enabled;
+    info.navigation_preload_header_length =
+        registration_data.navigation_preload_state.header.size();
     if (ServiceWorkerVersion* version =
             context_->GetLiveVersion(registration_data.version_id)) {
       if (registration_data.is_active)
@@ -1442,6 +1447,8 @@ void ServiceWorkerStorage::DidGetAllRegistrationsInfos(
           registration_data.has_fetch_handler
               ? ServiceWorkerVersion::FetchHandlerExistence::EXISTS
               : ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST;
+      info.active_version.navigation_preload_state =
+          registration_data.navigation_preload_state;
     } else {
       info.waiting_version.status = ServiceWorkerVersion::INSTALLED;
       info.waiting_version.script_url = registration_data.script;
@@ -1453,6 +1460,8 @@ void ServiceWorkerStorage::DidGetAllRegistrationsInfos(
           registration_data.has_fetch_handler
               ? ServiceWorkerVersion::FetchHandlerExistence::EXISTS
               : ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST;
+      info.waiting_version.navigation_preload_state =
+          registration_data.navigation_preload_state;
     }
     infos.push_back(info);
   }
@@ -2223,7 +2232,7 @@ void ServiceWorkerStorage::DidDeleteDatabase(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(),
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
-      base::BindOnce(&base::DeleteFile, GetDiskCachePath(), true),
+      base::BindOnce(&base::DeleteFileRecursively, GetDiskCachePath()),
       base::BindOnce(&ServiceWorkerStorage::DidDeleteDiskCache,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }

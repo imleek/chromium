@@ -25,6 +25,7 @@
 #include "remoting/host/file_transfer/file_transfer_message_handler.h"
 #include "remoting/host/host_extension_session.h"
 #include "remoting/host/input_injector.h"
+#include "remoting/host/keyboard_layout_monitor.h"
 #include "remoting/host/mouse_shape_pump.h"
 #include "remoting/host/screen_controls.h"
 #include "remoting/host/screen_resolution.h"
@@ -53,8 +54,6 @@ ClientSession::ClientSession(
     scoped_refptr<protocol::PairingRegistry> pairing_registry,
     const std::vector<HostExtension*>& extensions)
     : event_handler_(event_handler),
-      connection_(std::move(connection)),
-      client_jid_(connection_->session()->jid()),
       desktop_environment_factory_(desktop_environment_factory),
       desktop_environment_options_(desktop_environment_options),
       input_tracker_(&host_input_filter_),
@@ -64,7 +63,9 @@ ClientSession::ClientSession(
       disable_clipboard_filter_(clipboard_echo_filter_.host_filter()),
       client_clipboard_factory_(clipboard_echo_filter_.client_filter()),
       max_duration_(max_duration),
-      pairing_registry_(pairing_registry) {
+      pairing_registry_(pairing_registry),
+      connection_(std::move(connection)),
+      client_jid_(connection_->session()->jid()) {
   connection_->session()->AddPlugin(&host_experiment_session_plugin_);
   connection_->SetEventHandler(this);
 
@@ -85,8 +86,6 @@ ClientSession::~ClientSession() {
   DCHECK(!input_injector_);
   DCHECK(!screen_controls_);
   DCHECK(!video_stream_);
-
-  connection_.reset();
 }
 
 void ClientSession::NotifyClientResolution(
@@ -378,6 +377,15 @@ void ClientSession::OnConnectionChannelsConnected() {
       new MouseShapePump(desktop_environment_->CreateMouseCursorMonitor(),
                          connection_->client_stub()));
 
+  // Create KeyboardLayoutMonitor to send keyboard layout.
+  // Unretained is sound because callback will never be called after
+  // |keyboard_layout_monitor_| has been destroyed, and |connection_| (which
+  // owns the client stub) is guaranteed to outlive |keyboard_layout_monitor_|.
+  keyboard_layout_monitor_ = desktop_environment_->CreateKeyboardLayoutMonitor(
+      base::BindRepeating(&protocol::KeyboardLayoutStub::SetKeyboardLayout,
+                          base::Unretained(connection_->client_stub())));
+  keyboard_layout_monitor_->Start();
+
   if (pending_video_layout_message_) {
     connection_->client_stub()->SetVideoLayout(*pending_video_layout_message_);
     pending_video_layout_message_.reset();
@@ -406,6 +414,7 @@ void ClientSession::OnConnectionClosed(protocol::ErrorCode error) {
   // longer valid once ConnectionToClient calls OnConnectionClosed().
   audio_stream_.reset();
   video_stream_.reset();
+  keyboard_layout_monitor_.reset();
   mouse_shape_pump_.reset();
   client_clipboard_factory_.InvalidateWeakPtrs();
   input_injector_.reset();

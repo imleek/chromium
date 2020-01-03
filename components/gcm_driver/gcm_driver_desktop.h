@@ -49,6 +49,9 @@ class GCMDelayedTaskController;
 class GCMDriverDesktop : public GCMDriver,
                          protected InstanceIDHandler {
  public:
+  // |remove_account_mappings_with_email_key| indicates whether account mappings
+  // having email as account key should be removed while loading. This is
+  // required during the migration of account identifier from email to Gaia ID.
   GCMDriverDesktop(
       std::unique_ptr<GCMClientFactory> gcm_client_factory,
       const GCMClient::ChromeBuildInfo& chrome_build_info,
@@ -56,6 +59,7 @@ class GCMDriverDesktop : public GCMDriver,
       const std::string& user_agent,
       PrefService* prefs,
       const base::FilePath& store_path,
+      bool remove_account_mappings_with_email_key,
       base::RepeatingCallback<void(
           mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>)>
           get_socket_factory_callback,
@@ -67,11 +71,10 @@ class GCMDriverDesktop : public GCMDriver,
   ~GCMDriverDesktop() override;
 
   // GCMDriver implementation:
-  void ValidateRegistration(
-      const std::string& app_id,
-      const std::vector<std::string>& sender_ids,
-      const std::string& registration_id,
-      const ValidateRegistrationCallback& callback) override;
+  void ValidateRegistration(const std::string& app_id,
+                            const std::vector<std::string>& sender_ids,
+                            const std::string& registration_id,
+                            ValidateRegistrationCallback callback) override;
   void Shutdown() override;
   void OnSignedIn() override;
   void OnSignedOut() override;
@@ -128,7 +131,7 @@ class GCMDriverDesktop : public GCMDriver,
                      const std::string& authorized_entity,
                      const std::string& scope,
                      const std::string& token,
-                     const ValidateTokenCallback& callback) override;
+                     ValidateTokenCallback callback) override;
   void DeleteToken(const std::string& app_id,
                    const std::string& authorized_entity,
                    const std::string& scope,
@@ -150,7 +153,7 @@ class GCMDriverDesktop : public GCMDriver,
 
   void DoValidateRegistration(scoped_refptr<RegistrationInfo> registration_info,
                               const std::string& registration_id,
-                              const ValidateRegistrationCallback& callback);
+                              ValidateRegistrationCallback callback);
 
   //  Stops the GCM service. It can be restarted by calling EnsureStarted again.
   void Stop();

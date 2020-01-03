@@ -8,10 +8,13 @@
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/chromeos/extensions/default_web_app_ids.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
-#include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/services/app_service/public/mojom/app_service.mojom.h"
 #include "extensions/common/constants.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
+#endif  // OS_CHROMEOS
 
 namespace {
 
@@ -129,14 +132,14 @@ void RecordAppLaunch(const std::string& app_id,
                            launch_source);
   else if (app_id == ash::kReleaseNotesAppId)
     RecordBuiltInAppLaunch(BuiltInAppName::kReleaseNotes, launch_source);
-  else if (app_id == ash::kInternalAppIdCamera)
-    RecordBuiltInAppLaunch(BuiltInAppName::kCamera, launch_source);
   else if (app_id == ash::kInternalAppIdDiscover)
     RecordBuiltInAppLaunch(BuiltInAppName::kDiscover, launch_source);
   else if (app_id == ash::kInternalAppIdSettings)
     RecordBuiltInAppLaunch(BuiltInAppName::kSettings, launch_source);
+#if defined(OS_CHROMEOS)
   else if (app_id == plugin_vm::kPluginVmAppId)
     RecordBuiltInAppLaunch(BuiltInAppName::kPluginVm, launch_source);
+#endif  // OS_CHROMEOS
 }
 
 void RecordBuiltInAppSearchResult(const std::string& app_id) {
@@ -146,18 +149,17 @@ void RecordBuiltInAppSearchResult(const std::string& app_id) {
   } else if (app_id == ash::kReleaseNotesAppId) {
     UMA_HISTOGRAM_ENUMERATION("Apps.AppListSearchResultInternalApp.Show",
                               BuiltInAppName::kReleaseNotes);
-  } else if (app_id == ash::kInternalAppIdCamera) {
-    UMA_HISTOGRAM_ENUMERATION("Apps.AppListSearchResultInternalApp.Show",
-                              BuiltInAppName::kCamera);
   } else if (app_id == ash::kInternalAppIdDiscover) {
     UMA_HISTOGRAM_ENUMERATION("Apps.AppListSearchResultInternalApp.Show",
                               BuiltInAppName::kDiscover);
   } else if (app_id == ash::kInternalAppIdSettings) {
     UMA_HISTOGRAM_ENUMERATION("Apps.AppListSearchResultInternalApp.Show",
                               BuiltInAppName::kSettings);
+#if defined(OS_CHROMEOS)
   } else if (app_id == plugin_vm::kPluginVmAppId) {
     UMA_HISTOGRAM_ENUMERATION("Apps.AppListSearchResultInternalApp.Show",
                               BuiltInAppName::kPluginVm);
+#endif  // OS_CHROMEOS
   }
 }
 

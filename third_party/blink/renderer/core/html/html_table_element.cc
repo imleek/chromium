@@ -79,7 +79,7 @@ void HTMLTableElement::setCaption(HTMLTableCaptionElement* new_caption,
 }
 
 HTMLTableSectionElement* HTMLTableElement::tHead() const {
-  return ToHTMLTableSectionElement(Traversal<HTMLElement>::FirstChild(
+  return To<HTMLTableSectionElement>(Traversal<HTMLElement>::FirstChild(
       *this, HasHTMLTagName(html_names::kTheadTag)));
 }
 
@@ -107,7 +107,7 @@ void HTMLTableElement::setTHead(HTMLTableSectionElement* new_head,
 }
 
 HTMLTableSectionElement* HTMLTableElement::tFoot() const {
-  return ToHTMLTableSectionElement(Traversal<HTMLElement>::FirstChild(
+  return To<HTMLTableSectionElement>(Traversal<HTMLElement>::FirstChild(
       *this, HasHTMLTagName(html_names::kTfootTag)));
 }
 
@@ -173,7 +173,7 @@ void HTMLTableElement::deleteCaption() {
 }
 
 HTMLTableSectionElement* HTMLTableElement::LastBody() const {
-  return ToHTMLTableSectionElement(Traversal<HTMLElement>::LastChild(
+  return To<HTMLTableSectionElement>(Traversal<HTMLElement>::LastChild(
       *this, HasHTMLTagName(html_names::kTbodyTag)));
 }
 
@@ -267,7 +267,7 @@ void HTMLTableElement::SetNeedsTableStyleRecalc() const {
     element->SetNeedsStyleRecalc(
         kLocalStyleChange,
         StyleChangeReasonForTracing::FromAttribute(html_names::kRulesAttr));
-    if (IsHTMLTableCellElement(*element))
+    if (IsA<HTMLTableCellElement>(*element))
       element = ElementTraversal::NextSkippingChildren(*element, this);
     else
       element = ElementTraversal::Next(*element, this);
@@ -327,11 +327,11 @@ void HTMLTableElement::CollectStyleForPresentationAttribute(
       UseCounter::Count(
           GetDocument(),
           WebFeature::kHTMLTableElementPresentationAttributeBackground);
-      CSSImageValue* image_value =
-          CSSImageValue::Create(url, GetDocument().CompleteURL(url),
-                                Referrer(GetDocument().OutgoingReferrer(),
-                                         GetDocument().GetReferrerPolicy()),
-                                OriginClean::kTrue);
+      CSSImageValue* image_value = MakeGarbageCollected<CSSImageValue>(
+          AtomicString(url), GetDocument().CompleteURL(url),
+          Referrer(GetDocument().OutgoingReferrer(),
+                   GetDocument().GetReferrerPolicy()),
+          OriginClean::kTrue);
       style->SetProperty(
           CSSPropertyValue(GetCSSPropertyBackgroundImage(), *image_value));
     }

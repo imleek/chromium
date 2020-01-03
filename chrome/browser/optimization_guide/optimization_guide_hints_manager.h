@@ -144,15 +144,15 @@ class OptimizationGuideHintsManager
 
  private:
   FRIEND_TEST_ALL_PREFIXES(OptimizationGuideHintsManagerTest, IsGoogleURL);
-  FRIEND_TEST_ALL_PREFIXES(OptimizationGuideHintsManagerTest,
+  FRIEND_TEST_ALL_PREFIXES(OptimizationGuideHintsManagerFetchingTest,
                            HintsFetched_AtSRP_ECT_SLOW_2G);
-  FRIEND_TEST_ALL_PREFIXES(OptimizationGuideHintsManagerTest,
+  FRIEND_TEST_ALL_PREFIXES(OptimizationGuideHintsManagerFetchingTest,
                            HintsFetched_AtSRP_ECT_4G);
-  FRIEND_TEST_ALL_PREFIXES(OptimizationGuideHintsManagerTest,
+  FRIEND_TEST_ALL_PREFIXES(OptimizationGuideHintsManagerFetchingTest,
                            HintsFetched_AtNonSRP_ECT_SLOW_2G);
-  FRIEND_TEST_ALL_PREFIXES(OptimizationGuideHintsManagerTest,
+  FRIEND_TEST_ALL_PREFIXES(OptimizationGuideHintsManagerFetchingTest,
                            HintsFetched_AtSRP_ECT_SLOW_2G_DuplicatesRemoved);
-  FRIEND_TEST_ALL_PREFIXES(OptimizationGuideHintsManagerTest,
+  FRIEND_TEST_ALL_PREFIXES(OptimizationGuideHintsManagerFetchingTest,
                            HintsFetched_AtSRP_ECT_SLOW_2G_InsecureHostsRemoved);
   // Processes the hints component.
   //
@@ -344,8 +344,10 @@ class OptimizationGuideHintsManager
   // Used in testing to subscribe to an update event in this class.
   base::OnceClosure next_update_closure_;
 
-  // Hosts for which hints were last fetched in the real-time.
-  std::vector<std::string> navigation_hosts_last_fetched_real_time_;
+  // Hosts for which hints are currently being fetched with the PAGE_NAVIGATION
+  // request context.
+  // This will be cleared at request completion.
+  std::vector<std::string> page_navigation_hosts_being_fetched_;
 
   // Used to get |weak_ptr_| to self on the UI thread.
   base::WeakPtrFactory<OptimizationGuideHintsManager> ui_weak_ptr_factory_{

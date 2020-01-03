@@ -78,44 +78,40 @@ _NEGATIVE_FILTER = [
     'ChromeDriverTest.testAlertOnNewWindow',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2532
     'ChromeDriverPageLoadTimeoutTest.testRefreshWithPageLoadTimeout',
-    # https://bugs.chromium.org/p/chromium/issues/detail?id=1011225
-    'ChromeDriverTest.testActionsMultiTouchPoint',
+    # testFocus is failing
+    'JavaScriptTests.testFocus',
 ]
 
 
 _OS_SPECIFIC_FILTER = {}
 _OS_SPECIFIC_FILTER['win'] = [
+    # https://crbug.com/1036055
+    'MobileEmulationCapabilityTest.testClickElement',
+    # https://crbug.com/1036636
+    'MobileEmulationCapabilityTest.testTapElement',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=299
     'ChromeLogPathCapabilityTest.testChromeLogPath',
-    # https://bugs.chromium.org/p/chromium/issues/detail?id=946704
-    'ChromeDownloadDirTest.testFileDownloadWithClick',
-    'ChromeDriverTest.testBackNavigationAfterClickElement',
-    'ChromeDriverTest.testCanClickInIframes',
-    'ChromeDriverTest.testClickElementAfterNavigation',
-    'ChromeDriverTest.testCloseWindow',
-    'ChromeDriverTest.testCloseWindowUsingJavascript',
-    'ChromeDriverTest.testGetLogOnClosedWindow',
-    'ChromeDriverTest.testGetWindowHandles',
-    'ChromeDriverTest.testShouldHandleNewWindowLoadingProperly',
-    'ChromeDriverTest.testSwitchToWindow',
+    # https://bugs.chromium.org/p/chromium/issues/detail?id=1011095
     'ChromeDownloadDirTest.testFileDownloadAfterTabHeadless',
     'ChromeDownloadDirTest.testFileDownloadWithClickHeadless',
     'ChromeDownloadDirTest.testFileDownloadWithGetHeadless',
 ]
 _OS_SPECIFIC_FILTER['linux'] = [
-    # https://bugs.chromium.org/p/chromium/issues/detail?id=1026018
-    'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
+    # https://crbug.com/1036055
+    'MobileEmulationCapabilityTest.testClickElement',
+    # https://crbug.com/1036636
+    'MobileEmulationCapabilityTest.testTapElement',
 ]
 _OS_SPECIFIC_FILTER['mac'] = [
+    # https://crbug.com/1036055
+    'MobileEmulationCapabilityTest.testClickElement',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1927
+    # https://crbug.com/1036636
     'MobileEmulationCapabilityTest.testTapElement',
     # https://bugs.chromium.org/p/chromium/issues/detail?id=946023
     'ChromeDriverTest.testWindowFullScreen',
-    # https://bugs.chromium.org/p/chromium/issues/detail?id=1025981
-    'ChromeDriverSiteIsolation.testCanClickOOPIF',
-    # https://bugs.chromium.org/p/chromium/issues/detail?id=1026018
-    'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
-    'ChromeDriverTest.testNoSuchElementExceptionMessage',
+    # https://bugs.chromium.org/p/chromium/issues/detail?id=1011225
+    'ChromeDriverTest.testActionsMultiTouchPoint',
 ]
 
 _DESKTOP_NEGATIVE_FILTER = [
@@ -141,7 +137,6 @@ _INTEGRATION_NEGATIVE_FILTER = [
     # already tested by other test cases.
     'ChromeDriverTest.testGetCurrentWindowHandle',
     'ChromeDriverTest.testStartStop',
-    'ChromeDriverTest.testSendCommand*',
     # https://crbug.com/867511
     'ChromeDriverTest.testWindowMaximize',
     # LaunchApp is an obsolete API.
@@ -240,6 +235,8 @@ _ANDROID_NEGATIVE_FILTER['chrome'] = (
         'ChromeDriverTest.testPushAndNotificationsPermissions',
         'ChromeDriverTest.testSensorPermissions',
         'ChromeDriverTest.testSettingPermissionDoesNotAffectOthers',
+        # Android does not allow changing window size
+        'JavaScriptTests.*',
     ]
 )
 _ANDROID_NEGATIVE_FILTER['chrome_stable'] = (
@@ -900,6 +897,7 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
       ],
       'parameters': {'pointerType': 'mouse'},
       'id': 'pointer1'}]})
+    time.sleep(1)
     self._driver.PerformActions(actions)
     rect = target.GetRect()
     self.assertEquals(150, rect['x'])
@@ -917,6 +915,7 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
       ],
       'parameters': {'pointerType': 'mouse'},
       'id': 'pointer1'}]})
+    time.sleep(1)
     self._driver.PerformActions(actions)
     rect = target.GetRect()
     self.assertEquals(180, rect['x'])
@@ -936,6 +935,7 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
       ],
       'parameters': {'pointerType': 'mouse'},
       'id': 'pointer1'}]})
+    time.sleep(1)
     self._driver.PerformActions(actions)
     rect = target.GetRect()
     self.assertEquals(180, rect['x'])
@@ -982,6 +982,7 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
               {type: event.type});
         });
         ''')
+    time.sleep(1)
 
     actions = ({"actions": [{
       "type":"pointer",
@@ -999,13 +1000,7 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
       "id": "pointer2"}]})
     self._driver.PerformActions(actions)
     time.sleep(1)
-    for _ in range(5):
-      events = self._driver.ExecuteScript('return window.events')
-      if len(events) == 4:
-        break
-      # Wait 100 more ms for the event handler to be executed.
-      time.sleep(0.1)
-
+    events = self._driver.ExecuteScript('return window.events')
     self.assertEquals(4, len(events))
     self.assertEquals("touchstart", events[0]['type'])
     self.assertEquals("touchstart", events[1]['type'])
@@ -1015,6 +1010,8 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self.assertEquals(50, events[0]['y'])
     self.assertEquals(60, events[1]['x'])
     self.assertEquals(60, events[1]['y'])
+
+    self._driver.ReleaseActions()
 
   def testActionsMulti(self):
     self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
@@ -1618,18 +1615,6 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     # navigation tracker to block the call to Load() above.
     self.WaitForCondition(lambda: 'is not available' in self._driver.GetTitle())
 
-  def testSendCommand(self):
-    """Sends a custom command to the DevTools debugger"""
-    params = {}
-    res = self._driver.SendCommandAndGetResult('CSS.enable', params)
-    self.assertEqual({}, res)
-
-  def testSendCommandNoParams(self):
-    """Sends a custom command to the DevTools debugger without params"""
-    self.assertRaisesRegexp(
-            chromedriver.InvalidArgument, "params not passed",
-            self._driver.SendCommandAndGetResult, 'CSS.enable', None)
-
   def testSendCommandAndGetResult(self):
     """Sends a custom command to the DevTools debugger and gets the result"""
     self._driver.Load(self.GetHttpUrlForFile('/chromedriver/page_test.html'))
@@ -2009,6 +1994,56 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self._driver.Load(self._http_server.GetUrl('localhost')
                       + '/chromedriver/empty.html')
 
+  def testWaitForCurrentFrameToLoad(self):
+    """Verify ChromeDriver waits for loading events of current frame
+    Regression test for bug
+    https://bugs.chromium.org/p/chromedriver/issues/detail?id=3164
+    Clicking element in frame triggers reload of that frame, click should not
+    return until loading is complete.
+    """
+    def waitAndRespond():
+      # test may not detect regression without small sleep.
+      # locally, .2 didn't fail before code change, .3 did
+      time.sleep(.5)
+      self._sync_server.RespondWithContent(
+          """
+          <html>
+            <body>
+              <p id='valueToRead'>11</p>
+            </body>
+          </html>
+          """)
+
+    self._http_server.SetDataForPath('/page10.html',
+      """
+      <html>
+        <head>
+          <title>
+            Frame
+          </title>
+          <script>
+            function reloadWith(i) {
+              window.location.assign('%s');
+            }
+          </script>
+        </head>
+        <body>
+          <button id='prev' onclick="reloadWith(9)">-1</button>
+          <button id='next' onclick="reloadWith(11)">+1</button>
+          <p id='valueToRead'>10</p>
+        </body>
+      </html>
+      """ % self._sync_server.GetUrl())
+    self._driver.Load(self.GetHttpUrlForFile(
+        '/chromedriver/page_for_next_iframe.html'))
+    frame = self._driver.FindElement('tag name', 'iframe')
+    self._driver.SwitchToFrame(frame);
+    thread = threading.Thread(target=waitAndRespond)
+    thread.start()
+    self._driver.FindElement('css selector', '#next').Click()
+    value_display = self._driver.FindElement('css selector', '#valueToRead')
+    self.assertEquals('11', value_display.GetText())
+
   def testSlowIFrame(self):
     """Verify ChromeDriver does not wait for slow frames to load.
     Regression test for bugs
@@ -2018,7 +2053,8 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     def waitAndRespond():
       # Send iframe contents slowly
       time.sleep(2)
-      self._sync_server.RespondWithContent('<html>IFrame contents</html>')
+      self._sync_server.RespondWithContent(
+        '<html><div id=iframediv>IFrame contents</div></html>')
 
     self._http_server.SetDataForPath('/top.html',
         """
@@ -2038,15 +2074,18 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self._driver.Load(self._http_server.GetUrl() + '/top.html')
     thread = threading.Thread(target=waitAndRespond)
     thread.start()
+    start = time.time()
+    # Click should not wait for frame to load, so elapsed time from this
+    # command should be < 2 seconds.
     self._driver.FindElement('css selector', '#button').Click()
-    # Correct ChromeDriver behavior should not wait for iframe to
-    # load. Therefore, SwitchToFrame should fail, we remain in the top
-    # frame, and FindElement should succeed. If ChromeDriver incorrectly
-    # waits for slow iframe to load, then SwitchToFrame succeeds,
-    # and element with id='top' won't be found.
+    self.assertLess(time.time() - start, 2.0)
     frame = self._driver.FindElement('css selector', '#iframe')
+    # WaitForPendingNavigations examines the load state of the current frame
+    # so ChromeDriver will wait for frame to load after SwitchToFrame
+    # start is reused because that began the pause for the frame load
     self._driver.SwitchToFrame(frame)
-    self._driver.FindElement('css selector', '#top')
+    self.assertGreaterEqual(time.time() - start, 2.0)
+    self._driver.FindElement('css selector', '#iframediv')
     thread.join()
 
   @staticmethod
@@ -2297,14 +2336,45 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     # parameters['descriptor']['sysex'] = True should be denied.
 
   def testClipboardPermissions(self):
-    """ Assures both clipboard permissions are set simultaneously. """
+    """ Tests clipboard permission requirements.
+
+    clipboard-read with allowWithoutSanitization: true or false, and
+    clipboard-write with allowWithoutSanitization: true are bundled together
+    into one CLIPBOARD_READ_WRITE permission.
+
+    clipboard write with allowWithoutSanitization: false is an auto-granted
+    permission.
+    """
     self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
     parameters = {
-      'descriptor': { 'name': 'clipboard-read' },
+      'descriptor': {
+        'name': 'clipboard-read' ,
+        'allowWithoutSanitization': False
+      },
       'state': 'granted'
     }
+    raw_write_parameters = {
+      'descriptor': {
+        'name': 'clipboard-write',
+        'allowWithoutSanitization': True
+      }
+    }
+
+    self.CheckPermission(self.GetPermissionWithQuery(parameters['descriptor']),
+                        'prompt')
+    self.CheckPermission(self.GetPermissionWithQuery(
+                          raw_write_parameters['descriptor']), 'prompt')
+
     self._driver.SetPermission(parameters)
-    self.CheckPermission(self.GetPermission('clipboard-read'), 'granted')
+    self.CheckPermission(self.GetPermissionWithQuery(parameters['descriptor']),
+                        'granted')
+    parameters['descriptor']['allowWithoutSanitization'] = True
+    self.CheckPermission(self.GetPermissionWithQuery(parameters['descriptor']),
+                        'granted')
+    parameters['descriptor']['name'] = 'clipboard-write'
+    self.CheckPermission(self.GetPermissionWithQuery(parameters['descriptor']),
+                        'granted')
+
     parameters = {
       'descriptor': { 'name': 'clipboard-write' },
       'state': 'prompt'
@@ -4135,6 +4205,47 @@ class SupportIPv4AndIPv6(ChromeDriverBaseTest):
       self.CreateDriver('http://[::1]:' +
                                  str(chromedriver_server.GetPort()))
 
+class JavaScriptTests(ChromeDriverBaseTestWithWebServer):
+  def GetFileUrl(self, filename):
+    return 'file://' + self.js_root + filename
+
+  def setUp(self):
+    self._driver = self.CreateDriver()
+    self.js_root = os.path.dirname(os.path.realpath(__file__)) + '/../js/'
+    self._driver.SetWindowRect(1000, 1000, 0, 0)
+
+  def checkTestResult(self):
+    def getStatus():
+      return self._driver.ExecuteScript('return window.CDCJStestRunStatus')
+
+    self.WaitForCondition(getStatus)
+    self.assertEquals('PASS', getStatus())
+
+  def testAllJS(self):
+    self._driver.Load(self.GetFileUrl('call_function_test.html'))
+    self.checkTestResult()
+
+    self._driver.Load(self.GetFileUrl('dispatch_touch_event_test.html'))
+    self.checkTestResult()
+
+    self._driver.Load(self.GetFileUrl('execute_async_script_test.html'))
+    self.checkTestResult()
+
+    self._driver.Load(self.GetFileUrl('execute_script_test.html'))
+    self.checkTestResult()
+
+    self._driver.Load(self.GetFileUrl('get_element_location_test.html'))
+    self.checkTestResult()
+
+    self._driver.Load(self.GetFileUrl('get_element_region_test.html'))
+    self.checkTestResult()
+
+    self._driver.Load(self.GetFileUrl('is_option_element_toggleable_test.html'))
+    self.checkTestResult()
+
+  def testFocus(self):
+    self._driver.Load(self.GetFileUrl('focus_test.html'))
+    self.checkTestResult()
 
 # 'Z' in the beginning is to make test executed in the end of suite.
 class ZChromeStartRetryCountTest(unittest.TestCase):

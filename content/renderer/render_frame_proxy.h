@@ -180,14 +180,13 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
                           blink::WebRemoteFrame* targetFrame,
                           blink::WebSecurityOrigin target,
                           blink::WebDOMMessageEvent event) override;
-  void Navigate(
-      const blink::WebURLRequest& request,
-      bool should_replace_current_entry,
-      bool is_opener_navigation,
-      bool has_download_sandbox_flag,
-      bool blocking_downloads_in_sandbox_without_user_activation_enabled,
-      bool initiator_frame_is_ad,
-      mojo::ScopedMessagePipeHandle blob_url_token) override;
+  void Navigate(const blink::WebURLRequest& request,
+                bool should_replace_current_entry,
+                bool is_opener_navigation,
+                bool has_download_sandbox_flag,
+                bool blocking_downloads_in_sandbox_enabled,
+                bool initiator_frame_is_ad,
+                mojo::ScopedMessagePipeHandle blob_url_token) override;
   void FrameRectsChanged(const blink::WebRect& local_frame_rect,
                          const blink::WebRect& screen_space_rect) override;
   void UpdateRemoteViewportIntersection(
@@ -209,6 +208,9 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   bool is_pinch_gesture_active_for_testing() {
     return pending_visual_properties_.is_pinch_gesture_active;
   }
+
+  // Called when the associated FrameSinkId has changed.
+  void FrameSinkIdChanged(const viz::FrameSinkId& frame_sink_id);
 
  private:
   RenderFrameProxy(int routing_id);
@@ -239,15 +241,12 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   void OnForwardResourceTimingToParent(
       const ResourceTimingInfo& resource_timing);
   void OnSetNeedsOcclusionTracking(bool);
-  void OnCollapse(bool collapsed);
   void OnDidUpdateName(const std::string& name, const std::string& unique_name);
   void OnAddContentSecurityPolicies(
       const std::vector<ContentSecurityPolicyHeader>& header);
   void OnEnforceInsecureRequestPolicy(blink::WebInsecureRequestPolicy policy);
   void OnSetFrameOwnerProperties(const FrameOwnerProperties& properties);
   void OnSetPageFocus(bool is_focused);
-  void OnSetFocusedFrame();
-  void OnWillEnterFullscreen();
   void OnUpdateUserActivationState(blink::UserActivationUpdateType update_type);
   void OnTransferUserActivationFrom(int32_t source_routing_id);
   void OnScrollRectToVisible(const gfx::Rect& rect_to_scroll,
@@ -257,7 +256,6 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   void OnDidUpdateVisualProperties(const cc::RenderFrameMetadata& metadata);
   void OnEnableAutoResize(const gfx::Size& min_size, const gfx::Size& max_size);
   void OnDisableAutoResize();
-  void OnSetHasReceivedUserGestureBeforeNavigation(bool value);
   void OnRenderFallbackContent() const;
 
   // ChildFrameCompositor:

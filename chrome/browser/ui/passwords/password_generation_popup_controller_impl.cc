@@ -30,16 +30,13 @@
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/native_web_keyboard_event.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/text_utils.h"
-
-#if defined(OS_ANDROID)
-#include "chrome/browser/android/preferences/preferences_launcher.h"
-#endif
 
 // Handles registration for key events with RenderFrameHost.
 class PasswordGenerationPopupControllerImpl::KeyPressRegistrator {
@@ -261,6 +258,14 @@ void PasswordGenerationPopupControllerImpl::DidAttachInterstitialPage() {
 
 void PasswordGenerationPopupControllerImpl::WebContentsDestroyed() {
   Hide();
+}
+
+void PasswordGenerationPopupControllerImpl::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (navigation_handle->HasCommitted() && navigation_handle->IsInMainFrame() &&
+      !navigation_handle->IsSameDocument()) {
+    Hide();
+  }
 }
 
 #if !defined(OS_ANDROID)

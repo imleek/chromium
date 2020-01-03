@@ -29,6 +29,8 @@ void MergeRemovedHeaders(std::vector<std::string>* removed_headers_A,
 
 }  // namespace
 
+const char ThrottlingURLLoader::kFollowRedirectReason[] = "FollowRedirect";
+
 class ThrottlingURLLoader::ForwardingThrottleDelegate
     : public URLLoaderThrottle::Delegate {
  public:
@@ -98,12 +100,13 @@ class ThrottlingURLLoader::ForwardingThrottleDelegate
     loader_->ResumeReadingBodyFromNet(throttle_);
   }
 
-  void InterceptResponse(network::mojom::URLLoaderPtr new_loader,
-                         mojo::PendingReceiver<network::mojom::URLLoaderClient>
-                             new_client_receiver,
-                         network::mojom::URLLoaderPtr* original_loader,
-                         mojo::PendingReceiver<network::mojom::URLLoaderClient>*
-                             original_client_receiver) override {
+  void InterceptResponse(
+      mojo::PendingRemote<network::mojom::URLLoader> new_loader,
+      mojo::PendingReceiver<network::mojom::URLLoaderClient>
+          new_client_receiver,
+      mojo::PendingRemote<network::mojom::URLLoader>* original_loader,
+      mojo::PendingReceiver<network::mojom::URLLoaderClient>*
+          original_client_receiver) override {
     if (!loader_)
       return;
 
@@ -198,8 +201,6 @@ ThrottlingURLLoader::PriorityInfo::PriorityInfo(
     int32_t in_intra_priority_value)
     : priority(in_priority), intra_priority_value(in_intra_priority_value) {}
 
-ThrottlingURLLoader::PriorityInfo::~PriorityInfo() = default;
-
 // static
 std::unique_ptr<ThrottlingURLLoader> ThrottlingURLLoader::CreateLoaderAndStart(
     scoped_refptr<network::SharedURLLoaderFactory> factory,
@@ -234,7 +235,7 @@ ThrottlingURLLoader::~ThrottlingURLLoader() {
 }
 
 void ThrottlingURLLoader::FollowRedirectForcingRestart() {
-  url_loader_.reset();
+  ResetForFollowRedirect();
   client_receiver_.reset();
   CHECK(throttle_will_redirect_redirect_url_.is_empty());
 
@@ -246,6 +247,12 @@ void ThrottlingURLLoader::FollowRedirectForcingRestart() {
   modified_headers_.Clear();
 
   StartNow();
+}
+
+void ThrottlingURLLoader::ResetForFollowRedirect() {
+  url_loader_.ResetWithReason(
+      network::mojom::URLLoader::kClientDisconnectReason,
+      kFollowRedirectReason);
 }
 
 void ThrottlingURLLoader::RestartWithFactory(
@@ -392,7 +399,6 @@ void ThrottlingURLLoader::StartNow() {
 
     net::RedirectInfo redirect_info = net::RedirectInfo::ComputeRedirectInfo(
         start_info_->url_request.method, start_info_->url_request.url,
-        start_info_->url_request.request_initiator,
         start_info_->url_request.site_for_cookies, first_party_url_policy,
         start_info_->url_request.referrer_policy,
         start_info_->url_request.referrer.spec(),
@@ -833,16 +839,16 @@ void ThrottlingURLLoader::ResumeReadingBodyFromNet(
 }
 
 void ThrottlingURLLoader::InterceptResponse(
-    network::mojom::URLLoaderPtr new_loader,
+    mojo::PendingRemote<network::mojom::URLLoader> new_loader,
     mojo::PendingReceiver<network::mojom::URLLoaderClient> new_client_receiver,
-    network::mojom::URLLoaderPtr* original_loader,
+    mojo::PendingRemote<network::mojom::URLLoader>* original_loader,
     mojo::PendingReceiver<network::mojom::URLLoaderClient>*
         original_client_receiver) {
   response_intercepted_ = true;
 
   if (original_loader)
-    *original_loader = network::mojom::URLLoaderPtr(url_loader_.Unbind());
-  url_loader_.Bind(new_loader.PassInterface());
+    *original_loader = url_loader_.Unbind();
+  url_loader_.Bind(std::move(new_loader));
 
   if (original_client_receiver)
     *original_client_receiver = client_receiver_.Unbind();

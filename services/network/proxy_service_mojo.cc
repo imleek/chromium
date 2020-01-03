@@ -19,7 +19,8 @@ namespace network {
 
 std::unique_ptr<net::ProxyResolutionService>
 CreateProxyResolutionServiceUsingMojoFactory(
-    proxy_resolver::mojom::ProxyResolverFactoryPtr mojo_proxy_factory,
+    mojo::PendingRemote<proxy_resolver::mojom::ProxyResolverFactory>
+        mojo_proxy_factory,
     std::unique_ptr<net::ProxyConfigService> proxy_config_service,
     std::unique_ptr<net::PacFileFetcher> pac_file_fetcher,
     std::unique_ptr<net::DhcpPacFileFetcher> dhcp_pac_file_fetcher,
@@ -36,8 +37,9 @@ CreateProxyResolutionServiceUsingMojoFactory(
           std::move(proxy_config_service),
           std::make_unique<ProxyResolverFactoryMojo>(
               std::move(mojo_proxy_factory), host_resolver,
-              base::Bind(&net::NetworkDelegateErrorObserver::Create,
-                         network_delegate, base::ThreadTaskRunnerHandle::Get()),
+              base::BindRepeating(&net::NetworkDelegateErrorObserver::Create,
+                                  network_delegate,
+                                  base::ThreadTaskRunnerHandle::Get()),
               net_log),
           net_log));
 

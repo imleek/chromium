@@ -770,6 +770,14 @@ TEST_F(CleanerInterfaceRegistryTest, NtChangeRegistryValue_AllowNormalization) {
                                            normalize_all_values));
 }
 
+class CleanerSandboxInterfaceRunningServiceTest : public ::testing::Test {
+ public:
+  static void SetUpTestCase() {
+    // Tests calling StartService() need this.
+    ASSERT_TRUE(chrome_cleaner::ResetAclForUcrtbase());
+  }
+};
+
 TEST(CleanerSandboxInterface, DeleteService_NotExisting) {
   EXPECT_TRUE(SandboxDeleteService(
       chrome_cleaner::RandomUnusedServiceNameForTesting().c_str()));
@@ -787,8 +795,7 @@ TEST(CleanerSandboxInterface, DeleteService_Success) {
   EXPECT_FALSE(chrome_cleaner::DoesServiceExist(service_handle.service_name()));
 }
 
-// Disabled: https://crbug.com/956016
-TEST(CleanerSandboxInterface, DISABLED_DeleteService_Running) {
+TEST_F(CleanerSandboxInterfaceRunningServiceTest, DeleteService_Running) {
   ASSERT_TRUE(chrome_cleaner::EnsureNoTestServicesRunning());
 
   chrome_cleaner::TestScopedServiceHandle service_handle;
@@ -801,8 +808,7 @@ TEST(CleanerSandboxInterface, DISABLED_DeleteService_Running) {
   EXPECT_FALSE(chrome_cleaner::DoesServiceExist(service_handle.service_name()));
 }
 
-// Disabled: https://crbug.com/956016
-TEST(CleanerSandboxInterface, DISABLED_DeleteService_HandleHeld) {
+TEST_F(CleanerSandboxInterfaceRunningServiceTest, DeleteService_HandleHeld) {
   ASSERT_TRUE(chrome_cleaner::EnsureNoTestServicesRunning());
 
   chrome_cleaner::TestScopedServiceHandle service_handle;

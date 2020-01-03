@@ -247,6 +247,7 @@ class PLATFORM_EXPORT HeapObjectHeader {
   size_t size() const;
   void SetSize(size_t size);
 
+  template <AccessMode = AccessMode::kNonAtomic>
   bool IsLargeObject() const;
 
   template <AccessMode = AccessMode::kNonAtomic>
@@ -1072,8 +1073,7 @@ NO_SANITIZE_ADDRESS inline size_t HeapObjectHeader::size() const {
     internal::AsanUnpoisonScope unpoison_scope(
         static_cast<const void*>(&encoded_low_), sizeof(encoded_low_));
     encoded_low_value =
-        reinterpret_cast<const std::atomic<uint16_t>&>(encoded_low_)
-            .load(std::memory_order_relaxed);
+        WTF::AsAtomicPtr(&encoded_low_)->load(std::memory_order_relaxed);
   }
   const size_t result = internal::DecodeSize(encoded_low_value);
   // Large objects should not refer to header->size() but use
@@ -1090,8 +1090,18 @@ NO_SANITIZE_ADDRESS inline void HeapObjectHeader::SetSize(size_t size) {
                                        (encoded_low_ & ~kHeaderSizeMask));
 }
 
+template <HeapObjectHeader::AccessMode mode>
 NO_SANITIZE_ADDRESS inline bool HeapObjectHeader::IsLargeObject() const {
-  return internal::DecodeSize(encoded_low_) == kLargeObjectSizeInHeader;
+  uint16_t encoded_low_value;
+  if (mode == AccessMode::kNonAtomic) {
+    encoded_low_value = encoded_low_;
+  } else {
+    internal::AsanUnpoisonScope unpoison_scope(
+        static_cast<const void*>(&encoded_low_), sizeof(encoded_low_));
+    encoded_low_value =
+        WTF::AsAtomicPtr(&encoded_low_)->load(std::memory_order_relaxed);
+  }
+  return internal::DecodeSize(encoded_low_value) == kLargeObjectSizeInHeader;
 }
 
 template <HeapObjectHeader::AccessMode mode>
@@ -1158,8 +1168,7 @@ NO_SANITIZE_ADDRESS inline bool HeapObjectHeader::TryMark() {
   }
   internal::AsanUnpoisonScope unpoison_scope(
       static_cast<const void*>(&encoded_low_), sizeof(encoded_low_));
-  auto* atomic_encoded =
-      reinterpret_cast<std::atomic<uint16_t>*>(&encoded_low_);
+  auto* atomic_encoded = WTF::AsAtomicPtr(&encoded_low_);
   uint16_t old_value = atomic_encoded->load(std::memory_order_relaxed);
   if (old_value & kHeaderMarkBitMask)
     return false;
@@ -1283,8 +1292,7 @@ NO_SANITIZE_ADDRESS inline uint16_t HeapObjectHeader::LoadEncoded() const {
                                              sizeof(half));
   if (mode == AccessMode::kNonAtomic)
     return half;
-  return reinterpret_cast<const std::atomic<uint16_t>&>(half).load(
-      std::memory_order_acquire);
+  return WTF::AsAtomicPtr(&half)->load(std::memory_order_acquire);
 }
 
 // Sets bits selected by the mask to the given value. Please note that atomicity
@@ -1302,7 +1310,7 @@ NO_SANITIZE_ADDRESS inline void HeapObjectHeader::StoreEncoded(uint16_t bits,
   }
   // We don't perform CAS loop here assuming that the data is constant and no
   // one except for us can change this half concurrently.
-  auto* atomic_encoded = reinterpret_cast<std::atomic<uint16_t>*>(half);
+  auto* atomic_encoded = WTF::AsAtomicPtr(half);
   uint16_t value = atomic_encoded->load(std::memory_order_relaxed);
   value = (value & ~mask) | bits;
   atomic_encoded->store(value, std::memory_order_release);

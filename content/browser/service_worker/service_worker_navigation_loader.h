@@ -29,8 +29,8 @@
 
 namespace content {
 
+class ServiceWorkerContainerHost;
 class ServiceWorkerVersion;
-class ServiceWorkerProviderHost;
 
 // ServiceWorkerNavigationLoader is the URLLoader used for main resource
 // requests (i.e., navigation and shared worker requests) that go through a
@@ -67,7 +67,7 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
   // is used instead of NavigationURLLoaderImpl.
   ServiceWorkerNavigationLoader(
       NavigationLoaderInterceptor::FallbackCallback fallback_callback,
-      base::WeakPtr<ServiceWorkerProviderHost> provider_host,
+      base::WeakPtr<ServiceWorkerContainerHost> container_host,
       scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter);
 
   ~ServiceWorkerNavigationLoader() override;
@@ -158,7 +158,9 @@ class CONTENT_EXPORT ServiceWorkerNavigationLoader
   NavigationLoaderInterceptor::FallbackCallback fallback_callback_;
 
   network::ResourceRequest resource_request_;
-  base::WeakPtr<ServiceWorkerProviderHost> provider_host_;
+
+  base::WeakPtr<ServiceWorkerContainerHost> container_host_;
+
   scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter_;
   std::unique_ptr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
   std::unique_ptr<StreamWaiter> stream_waiter_;

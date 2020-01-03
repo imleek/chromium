@@ -42,6 +42,8 @@
 #include "chrome/browser/ui/webui/extensions/extension_basic_info.h"
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
+#include "chrome/browser/web_applications/components/file_handler_manager.h"
+#include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_finalizer_utils.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
 #include "chrome/common/buildflags.h"
@@ -658,7 +660,10 @@ void AppLauncherHandler::HandleInstallAppLocally(const base::ListValue* args) {
   SetBookmarkAppIsLocallyInstalled(profile, extension, true);
   if (extensions::CanBookmarkAppCreateOsShortcuts()) {
     extensions::BookmarkAppCreateOsShortcuts(
-        profile, extension, true /* add_to_desktop */, base::DoNothing());
+        profile, extension, true /* add_to_desktop */,
+        base::BindOnce(&AppLauncherHandler::
+                           OnExtensionShortcutsCreatedRegisterFileHandlers,
+                       weak_ptr_factory_.GetWeakPtr(), extension_id));
   }
 
   // Use the appAdded to update the app icon's color to no longer be greyscale.
@@ -805,16 +810,13 @@ void AppLauncherHandler::HandlePageSelected(const base::ListValue* args) {
 void AppLauncherHandler::OnFaviconForApp(
     std::unique_ptr<AppInstallInfo> install_info,
     const favicon_base::FaviconImageResult& image_result) {
-  std::unique_ptr<WebApplicationInfo> web_app(new WebApplicationInfo());
+  auto web_app = std::make_unique<WebApplicationInfo>();
   web_app->title = install_info->title;
   web_app->app_url = install_info->app_url;
 
   if (!image_result.image.IsEmpty()) {
-    WebApplicationIconInfo icon;
-    icon.data = image_result.image.AsBitmap();
-    icon.width = icon.data.width();
-    icon.height = icon.data.height();
-    web_app->icons.push_back(icon);
+    web_app->icon_bitmaps[image_result.image.Width()] =
+        image_result.image.AsBitmap();
   }
 
   scoped_refptr<CrxInstaller> installer(
@@ -853,6 +855,15 @@ void AppLauncherHandler::PromptToEnableApp(const std::string& extension_id) {
   extension_enable_flow_ = std::make_unique<ExtensionEnableFlow>(
       Profile::FromWebUI(web_ui()), extension_id, this);
   extension_enable_flow_->StartForWebContents(web_ui()->GetWebContents());
+}
+
+void AppLauncherHandler::OnExtensionShortcutsCreatedRegisterFileHandlers(
+    const extensions::ExtensionId& extension_id,
+    bool /*shortcuts_created*/) {
+  auto* provider = web_app::WebAppProviderBase::GetProviderBase(
+      extension_service_->profile());
+  provider->file_handler_manager().EnableAndRegisterOsFileHandlers(
+      extension_id);
 }
 
 void AppLauncherHandler::OnExtensionUninstallDialogClosed(

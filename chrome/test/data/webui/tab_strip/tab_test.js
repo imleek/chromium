@@ -7,7 +7,7 @@ import 'chrome://tab-strip/tab.js';
 import {getFavicon} from 'chrome://resources/js/icon.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {TabStripEmbedderProxy} from 'chrome://tab-strip/tab_strip_embedder_proxy.js';
-import {TabNetworkState, TabsApiProxy} from 'chrome://tab-strip/tabs_api_proxy.js';
+import {CloseTabAction, TabNetworkState, TabsApiProxy} from 'chrome://tab-strip/tabs_api_proxy.js';
 
 import {TestTabStripEmbedderProxy} from './test_tab_strip_embedder_proxy.js';
 import {TestTabsApiProxy} from './test_tabs_api_proxy.js';
@@ -39,6 +39,7 @@ suite('Tab', function() {
 
     // Set CSS variable for animations
     document.body.style.setProperty('--tabstrip-tab-width', '280px');
+    document.body.style.setProperty('--tabstrip-tab-spacing', '20px');
 
     testTabStripEmbedderProxy = new TestTabStripEmbedderProxy();
     TabStripEmbedderProxy.instance_ = testTabStripEmbedderProxy;
@@ -51,46 +52,73 @@ suite('Tab', function() {
     document.body.appendChild(tabElement);
   });
 
-  test('slideIn animates in the element', async () => {
+  test('slideIn animates scale for the last tab', async () => {
     document.documentElement.dir = 'ltr';
-    tabElement.style.marginRight = '100px';
+    tabElement.style.paddingRight = '100px';
     const tabElementStyle = window.getComputedStyle(tabElement);
 
     const animationPromise = tabElement.slideIn();
     // Before animation completes.
-    assertEquals('0px', tabElementStyle.marginRight);
+    assertEquals('20px', tabElementStyle.paddingRight);
+    assertEquals('none', tabElementStyle.maxWidth);
+    assertEquals('matrix(0, 0, 0, 0, 0, 0)', tabElementStyle.transform);
+    await animationPromise;
+    // After animation completes.
+    assertEquals('100px', tabElementStyle.paddingRight);
+    assertEquals('none', tabElementStyle.maxWidth);
+    assertEquals('matrix(1, 0, 0, 1, 0, 0)', tabElementStyle.transform);
+  });
+
+  test('slideIn animations for not the last tab', async () => {
+    // Add another element to make sure the element being tested is not the
+    // last.
+    document.body.appendChild(document.createElement('div'));
+
+    document.documentElement.dir = 'ltr';
+    tabElement.style.paddingRight = '100px';
+    const tabElementStyle = window.getComputedStyle(tabElement);
+
+    const animationPromise = tabElement.slideIn();
+    // Before animation completes.
+    assertEquals('0px', tabElementStyle.paddingRight);
     assertEquals('0px', tabElementStyle.maxWidth);
     assertEquals('matrix(0, 0, 0, 0, 0, 0)', tabElementStyle.transform);
     await animationPromise;
     // After animation completes.
-    assertEquals('100px', tabElementStyle.marginRight);
+    assertEquals('100px', tabElementStyle.paddingRight);
     assertEquals('none', tabElementStyle.maxWidth);
     assertEquals('matrix(1, 0, 0, 1, 0, 0)', tabElementStyle.transform);
   });
 
   test('slideIn animations right to left for RTL languages', async () => {
+    // Add another element to make sure the element being tested is not the
+    // last.
+    document.body.appendChild(document.createElement('div'));
+
     document.documentElement.dir = 'rtl';
-    tabElement.style.marginLeft = '100px';
+    tabElement.style.paddingLeft = '100px';
     const tabElementStyle = window.getComputedStyle(tabElement);
 
     const animationPromise = tabElement.slideIn();
     // Before animation completes.
-    assertEquals('0px', tabElementStyle.marginLeft);
+    assertEquals('0px', tabElementStyle.paddingLeft);
     assertEquals('0px', tabElementStyle.maxWidth);
     assertEquals('matrix(0, 0, 0, 0, 0, 0)', tabElementStyle.transform);
     await animationPromise;
     // After animation completes.
-    assertEquals('100px', tabElementStyle.marginLeft);
+    assertEquals('100px', tabElementStyle.paddingLeft);
     assertEquals('none', tabElementStyle.maxWidth);
     assertEquals('matrix(1, 0, 0, 1, 0, 0)', tabElementStyle.transform);
   });
 
   test('slideOut animates out the element', async () => {
     testTabStripEmbedderProxy.setVisible(true);
+    const tabElementStyle = window.getComputedStyle(tabElement);
     const animationPromise = tabElement.slideOut();
     // Before animation completes.
-    assertEquals('1', window.getComputedStyle(tabElement).opacity);
-    assertEquals('none', window.getComputedStyle(tabElement).maxWidth);
+    assertEquals('1', tabElementStyle.opacity);
+    assertEquals('none', tabElementStyle.maxWidth);
+    assertEquals('matrix(1, 0, 0, 1, 0, 0)', tabElementStyle.transform);
     assertTrue(tabElement.isConnected);
     await animationPromise;
     // After animation completes.
@@ -261,10 +289,23 @@ suite('Tab', function() {
     assertEquals('1001', tabElement.getAttribute('data-tab-id'));
   });
 
-  test('closes the tab', () => {
+  test('closes the tab when clicking close button', () => {
     tabElement.shadowRoot.querySelector('#close').click();
-    return testTabsApiProxy.whenCalled('closeTab').then(tabId => {
+    return testTabsApiProxy.whenCalled('closeTab').then(([
+                                                          tabId, closeTabAction
+                                                        ]) => {
       assertEquals(tabId, tab.id);
+      assertEquals(closeTabAction, CloseTabAction.CLOSE_BUTTON);
+    });
+  });
+
+  test('closes the tab on swipe', () => {
+    tabElement.dispatchEvent(new CustomEvent('swipe'));
+    return testTabsApiProxy.whenCalled('closeTab').then(([
+                                                          tabId, closeTabAction
+                                                        ]) => {
+      assertEquals(tabId, tab.id);
+      assertEquals(closeTabAction, CloseTabAction.SWIPED_TO_CLOSE);
     });
   });
 
@@ -328,9 +369,10 @@ suite('Tab', function() {
     assertFalse(tabElement.hasAttribute('dragging_'));
   });
 
-  test('getting the drag image grabs the contents', () => {
+  test('gets the drag image', () => {
     assertEquals(
-        tabElement.getDragImage(), tabElement.shadowRoot.querySelector('#tab'));
+        tabElement.getDragImage(),
+        tabElement.shadowRoot.querySelector('#dragImage'));
   });
 
   test('has custom context menu', async () => {

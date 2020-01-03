@@ -28,6 +28,15 @@ void EmitAppNotificationStatusHistogram() {
                             kAppNotificationStatusBoundary);
 }
 
+void RecordCustomTabsFlags() {
+  UMA_HISTOGRAM_ENUMERATION("CustomTabs.Visible",
+                            chrome::android::GetCustomTabsVisibleValue(),
+                            chrome::android::CUSTOM_TABS_VISIBILITY_MAX);
+
+  UMA_HISTOGRAM_ENUMERATION("Android.ChromeActivity.Type",
+                            chrome::android::GetActivityType());
+}
+
 }  // namespace
 
 ChromeAndroidMetricsProvider::ChromeAndroidMetricsProvider() {}
@@ -35,20 +44,19 @@ ChromeAndroidMetricsProvider::ChromeAndroidMetricsProvider() {}
 ChromeAndroidMetricsProvider::~ChromeAndroidMetricsProvider() {}
 
 void ChromeAndroidMetricsProvider::OnDidCreateMetricsLog() {
-  if (base::FeatureList::IsEnabled(kLogCustomTabStateOnLogStart)) {
-    UMA_HISTOGRAM_ENUMERATION("CustomTabs.Visible",
-                              chrome::android::GetCustomTabsVisibleValue(),
-                              chrome::android::CUSTOM_TABS_VISIBILITY_MAX);
-  }
+  if (base::FeatureList::IsEnabled(kLogCustomTabStateOnLogStart))
+    RecordCustomTabsFlags();
+
+  UMA_HISTOGRAM_ENUMERATION("CustomTabs.Experimental.Visible",
+                            chrome::android::GetCustomTabsVisibleValue(),
+                            chrome::android::CUSTOM_TABS_VISIBILITY_MAX);
 }
 
 void ChromeAndroidMetricsProvider::ProvideCurrentSessionData(
     metrics::ChromeUserMetricsExtension* uma_proto) {
-  if (!base::FeatureList::IsEnabled(kLogCustomTabStateOnLogStart)) {
-    UMA_HISTOGRAM_ENUMERATION("CustomTabs.Visible",
-                              chrome::android::GetCustomTabsVisibleValue(),
-                              chrome::android::CUSTOM_TABS_VISIBILITY_MAX);
-  }
+  if (!base::FeatureList::IsEnabled(kLogCustomTabStateOnLogStart))
+    RecordCustomTabsFlags();
+
   UMA_HISTOGRAM_BOOLEAN("Android.MultiWindowMode.Active",
                         chrome::android::GetIsInMultiWindowModeValue());
   UmaSessionStats::GetInstance()->ProvideCurrentSessionData();

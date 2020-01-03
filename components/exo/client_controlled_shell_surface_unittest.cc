@@ -20,8 +20,8 @@
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_browser_window_drag_delegate.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "ash/wm/tablet_mode/tablet_mode_window_drag_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_window_drag_delegate.h"
+#include "ash/wm/tablet_mode/tablet_mode_window_resizer.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_resizer.h"
 #include "ash/wm/window_state.h"
@@ -483,6 +483,10 @@ TEST_F(ClientControlledShellSurfaceTest, Frame) {
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
 
+  int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  display::DisplayManager* display_manager =
+      ash::Shell::Get()->display_manager();
+
   std::unique_ptr<Surface> surface(new Surface);
 
   gfx::Rect client_bounds(20, 50, 300, 200);
@@ -492,6 +496,8 @@ TEST_F(ClientControlledShellSurfaceTest, Frame) {
 
   auto shell_surface =
       exo_test_helper()->CreateClientControlledShellSurface(surface.get());
+  shell_surface->SetSystemUiVisibility(true);  // disable shelf.
+
   surface->Attach(buffer.get());
   shell_surface->SetGeometry(client_bounds);
   surface->SetFrame(SurfaceFrameType::NORMAL);
@@ -520,6 +526,18 @@ TEST_F(ClientControlledShellSurfaceTest, Frame) {
   EXPECT_EQ(
       gfx::Size(800, 568),
       frame_view->GetClientBoundsForWindowBounds(fullscreen_bounds).size());
+
+  // With work area top insets.
+  display_manager->UpdateWorkAreaOfDisplay(display_id,
+                                           gfx::Insets(200, 0, 0, 0));
+  shell_surface->SetGeometry(gfx::Rect(0, 0, 800, 368));
+  surface->Commit();
+
+  widget->LayoutRootViewIfNecessary();
+  EXPECT_TRUE(frame_view->GetVisible());
+  EXPECT_EQ(gfx::Rect(0, 200, 800, 400), widget->GetWindowBoundsInScreen());
+
+  display_manager->UpdateWorkAreaOfDisplay(display_id, gfx::Insets(0, 0, 0, 0));
 
   // AutoHide
   surface->SetFrame(SurfaceFrameType::AUTOHIDE);
@@ -1198,8 +1216,8 @@ class ClientControlledShellSurfaceDragTest : public test::ExoTestBase {
     ash::WindowState* window_state = ash::WindowState::Get(window);
     window_state->CreateDragDetails(gfx::Point(0, 0), HTCLIENT,
                                     ::wm::WINDOW_MOVE_SOURCE_TOUCH);
-    std::unique_ptr<ash::TabletModeWindowDragController> controller_ =
-        std::make_unique<ash::TabletModeWindowDragController>(
+    std::unique_ptr<ash::TabletModeWindowResizer> controller_ =
+        std::make_unique<ash::TabletModeWindowResizer>(
             window_state,
             std::make_unique<ash::TabletModeBrowserWindowDragDelegate>());
     controller_->drag_delegate_for_testing()
@@ -1357,6 +1375,12 @@ TEST_F(ClientControlledShellSurfaceDisplayTest, MoveToAnotherDisplayByDrag) {
 
   aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
   EXPECT_EQ(root_windows[0], window->GetRootWindow());
+  // Prevent snapping |window|. It only distracts from the purpose of the test.
+  // TODO: Remove this code after adding functionality where the mouse has to
+  // dwell in the snap region before the dragged window can get snapped.
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      aura::client::kResizeBehaviorNone);
+  ASSERT_FALSE(ash::WindowState::Get(window)->CanSnap());
 
   std::unique_ptr<ash::WindowResizer> resizer(
       CreateDragWindowResizer(window, gfx::Point(), HTCAPTION));

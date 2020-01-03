@@ -7,22 +7,23 @@ import os
 import time
 
 from core.results_processor import util
+from core.tbmv3 import trace_processor
 
 from tracing.metrics import metric_runner
 
 
-# Aggregated trace is saved under this name.
+# Aggregated TBMv2 trace is saved under this name.
 HTML_TRACE_NAME = 'trace.html'
+
+# Concatenated proto trace is saved under this name.
+CONCATENATED_PROTO_NAME = 'trace.pb'
 
 
 def _RunMetric(test_result, metrics):
   html_trace = test_result['outputArtifacts'][HTML_TRACE_NAME]
   html_local_path = html_trace['filePath']
-  html_remote_url = html_trace.get('remoteUrl')
+  html_remote_url = html_trace.get('viewUrl')
 
-  logging.info('%s: Starting to compute metrics on trace.',
-               test_result['testPath'])
-  start = time.time()
   # The timeout needs to be coordinated with the Swarming IO timeout for the
   # task that runs this code. If this timeout is longer or close in length
   # to the swarming IO timeout then we risk being forcibly killed for not
@@ -33,8 +34,6 @@ def _RunMetric(test_result, metrics):
       html_local_path, metrics, canonical_url=html_remote_url,
       timeout=TEN_MINUTES,
       extra_import_options={'trackDetailedModelStats': True})
-  logging.info('%s: Computing metrics took %.3f seconds.' % (
-      test_result['testPath'], time.time() - start))
 
   if mre_result.failures:
     util.SetUnexpectedFailure(test_result)
@@ -60,7 +59,7 @@ def ComputeTBMv2Metrics(test_result):
   metrics = [tag['value'] for tag in test_result.get('tags', [])
              if tag['key'] == 'tbmv2']
   if not metrics:
-    logging.info('%s: No metrics specified.', test_result['testPath'])
+    logging.debug('%s: No TBMv2 metrics specified.', test_result['testPath'])
     return
 
   if HTML_TRACE_NAME not in artifacts:
@@ -79,4 +78,38 @@ def ComputeTBMv2Metrics(test_result):
                   test_result['testPath'], trace_size_in_mib)
     return
 
+  start = time.time()
   test_result['_histograms'].ImportDicts(_RunMetric(test_result, metrics))
+  logging.info('%s: Computing TBMv2 metrics took %.3f seconds.' % (
+      test_result['testPath'], time.time() - start))
+
+
+def ComputeTBMv3Metrics(test_result, trace_processor_path):
+  artifacts = test_result.get('outputArtifacts', {})
+
+  if test_result['status'] == 'SKIP':
+    return
+
+  metrics = [tag['value'] for tag in test_result.get('tags', [])
+             if tag['key'] == 'tbmv3']
+  if not metrics:
+    logging.debug('%s: No TBMv3 metrics specified.', test_result['testPath'])
+    return
+
+  if CONCATENATED_PROTO_NAME not in artifacts:
+    # TODO(crbug.com/990304): This is only a warning now, because proto trace
+    # generation is enabled only on selected bots. Make this an error
+    # when Telemetry is switched over to proto trace generation everywhere.
+    # Also don't forget to call util.SetUnexpectedFailure(test_result).
+    logging.warning('%s: No proto traces to compute metrics on.',
+                    test_result['testPath'])
+    return
+
+  start = time.time()
+  for metric in metrics:
+    histograms = trace_processor.RunMetric(
+        trace_processor_path, artifacts[CONCATENATED_PROTO_NAME]['filePath'],
+        metric)
+    test_result['_histograms'].Merge(histograms)
+  logging.info('%s: Computing TBMv3 metrics took %.3f seconds.' % (
+      test_result['testPath'], time.time() - start))

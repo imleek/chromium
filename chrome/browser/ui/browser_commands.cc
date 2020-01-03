@@ -24,6 +24,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/media/router/media_router_dialog_controller.h"  // nogncheck
 #include "chrome/browser/media/router/media_router_feature.h"
+#include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -120,6 +121,7 @@
 
 #if BUILDFLAG(ENABLE_PRINTING)
 #include "chrome/browser/printing/print_view_manager_common.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/printing/print_preview_dialog_controller.h"
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -162,6 +164,37 @@ translate::TranslateBubbleUiEvent TranslateBubbleResultToUiEvent(
       return translate::TranslateBubbleUiEvent::
           BUBBLE_NOT_SHOWN_EDITABLE_FIELD_IS_ACTIVE;
   }
+}
+
+// Creates a new tabbed browser window, with the same size, type and profile as
+// |original_browser|'s window, inserts |contents| into it, and shows it.
+void CreateAndShowNewWindowWithContents(
+    std::unique_ptr<content::WebContents> contents,
+    const Browser* original_browser) {
+  Browser* new_browser = nullptr;
+  if (original_browser->deprecated_is_app()) {
+    new_browser = new Browser(Browser::CreateParams::CreateForApp(
+        original_browser->app_name(), original_browser->is_trusted_source(),
+        gfx::Rect(), original_browser->profile(), true));
+  } else {
+    new_browser = new Browser(Browser::CreateParams(
+        original_browser->type(), original_browser->profile(), true));
+  }
+  // Preserve the size of the original window. The new window has already
+  // been given an offset by the OS, so we shouldn't copy the old bounds.
+  BrowserWindow* new_window = new_browser->window();
+  new_window->SetBounds(
+      gfx::Rect(new_window->GetRestoredBounds().origin(),
+                original_browser->window()->GetRestoredBounds().size()));
+
+  // We need to show the browser now.  Otherwise ContainerWin assumes the
+  // WebContents is invisible and won't size it.
+  new_browser->window()->Show();
+
+  // The page transition below is only for the purpose of inserting the tab.
+  new_browser->tab_strip_model()->AddWebContents(std::move(contents), -1,
+                                                 ui::PAGE_TRANSITION_LINK,
+                                                 TabStripModel::ADD_ACTIVE);
 }
 
 }  // namespace
@@ -727,6 +760,17 @@ bool CanDuplicateKeyboardFocusedTab(const Browser* browser) {
   return CanDuplicateTabAt(browser, *GetKeyboardFocusedTabIndex(browser));
 }
 
+bool CanMoveTabToNewWindow(Browser* browser) {
+  return browser->tab_strip_model()->count() > 1;
+}
+
+void MoveTabToNewWindow(Browser* browser) {
+  int index = browser->tab_strip_model()->active_index();
+  auto contents = browser->tab_strip_model()->DetachWebContentsAt(index);
+  CHECK(contents);
+  CreateAndShowNewWindowWithContents(std::move(contents), browser);
+}
+
 bool CanCloseTabsToRight(const Browser* browser) {
   return browser->tab_strip_model()->IsContextMenuCommandEnabled(
       browser->tab_strip_model()->active_index(),
@@ -749,40 +793,17 @@ WebContents* DuplicateTabAt(Browser* browser, int index) {
   if (browser->CanSupportWindowFeature(Browser::FEATURE_TABSTRIP)) {
     // If this is a tabbed browser, just create a duplicate tab inside the same
     // window next to the tab being duplicated.
-    const int index =
-        browser->tab_strip_model()->GetIndexOfWebContents(contents);
-    pinned = browser->tab_strip_model()->IsTabPinned(index);
+    TabStripModel* tab_strip_model = browser->tab_strip_model();
+    const int index = tab_strip_model->GetIndexOfWebContents(contents);
+    pinned = tab_strip_model->IsTabPinned(index);
     int add_types = TabStripModel::ADD_ACTIVE |
                     TabStripModel::ADD_INHERIT_OPENER |
                     (pinned ? TabStripModel::ADD_PINNED : 0);
-    const auto old_group = browser->tab_strip_model()->GetTabGroupForTab(index);
-    browser->tab_strip_model()->InsertWebContentsAt(
-        index + 1, std::move(contents_dupe), add_types, old_group);
+    const auto old_group = tab_strip_model->GetTabGroupForTab(index);
+    tab_strip_model->InsertWebContentsAt(index + 1, std::move(contents_dupe),
+                                         add_types, old_group);
   } else {
-    Browser* new_browser = NULL;
-    if (browser->deprecated_is_app()) {
-      new_browser = new Browser(Browser::CreateParams::CreateForApp(
-          browser->app_name(), browser->is_trusted_source(), gfx::Rect(),
-          browser->profile(), true));
-    } else {
-      new_browser = new Browser(
-          Browser::CreateParams(browser->type(), browser->profile(), true));
-    }
-    // Preserve the size of the original window. The new window has already
-    // been given an offset by the OS, so we shouldn't copy the old bounds.
-    BrowserWindow* new_window = new_browser->window();
-    new_window->SetBounds(
-        gfx::Rect(new_window->GetRestoredBounds().origin(),
-                  browser->window()->GetRestoredBounds().size()));
-
-    // We need to show the browser now.  Otherwise ContainerWin assumes the
-    // WebContents is invisible and won't size it.
-    new_browser->window()->Show();
-
-    // The page transition below is only for the purpose of inserting the tab.
-    new_browser->tab_strip_model()->AddWebContents(std::move(contents_dupe), -1,
-                                                   ui::PAGE_TRANSITION_LINK,
-                                                   TabStripModel::ADD_ACTIVE);
+    CreateAndShowNewWindowWithContents(std::move(contents_dupe), browser);
   }
 
   SessionService* session_service =
@@ -910,7 +931,7 @@ void BookmarkCurrentTabAllowingExtensionOverrides(Browser* browser) {
   DCHECK(!chrome::ShouldRemoveBookmarkThisTabUI(browser->profile()));
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  const extensions::Extension* extension = NULL;
+  const extensions::Extension* extension = nullptr;
   extensions::Command command;
   if (GetBookmarkOverrideCommand(browser->profile(), &extension, &command)) {
     switch (command.type()) {
@@ -1062,7 +1083,7 @@ void Print(Browser* browser) {
 #if BUILDFLAG(ENABLE_PRINTING)
   auto* web_contents = browser->tab_strip_model()->GetActiveWebContents();
   printing::StartPrint(
-      web_contents, nullptr /* print_renderer */,
+      web_contents, mojo::NullAssociatedRemote() /* print_renderer */,
       browser->profile()->GetPrefs()->GetBoolean(prefs::kPrintPreviewDisabled),
       false /* has_selection? */);
 #endif
@@ -1107,7 +1128,7 @@ bool CanRouteMedia(Browser* browser) {
          !IsShowingWebContentsModalDialog(browser);
 }
 
-void RouteMedia(Browser* browser) {
+void RouteMediaInvokedFromAppMenu(Browser* browser) {
   DCHECK(CanRouteMedia(browser));
 
   media_router::MediaRouterDialogController* dialog_controller =
@@ -1116,7 +1137,8 @@ void RouteMedia(Browser* browser) {
   if (!dialog_controller)
     return;
 
-  dialog_controller->ShowMediaRouterDialog();
+  dialog_controller->ShowMediaRouterDialog(
+      media_router::MediaRouterDialogOpenOrigin::APP_MENU);
 }
 
 void EmailPageLocation(Browser* browser) {
@@ -1302,7 +1324,7 @@ void ToggleDistilledView(Browser* browser) {
 
 bool CanRequestTabletSite(WebContents* current_tab) {
   return current_tab &&
-         current_tab->GetController().GetLastCommittedEntry() != NULL;
+         current_tab->GetController().GetLastCommittedEntry() != nullptr;
 }
 
 bool IsRequestingTabletSite(Browser* browser) {

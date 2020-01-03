@@ -46,8 +46,8 @@ namespace network {
 namespace mojom {
 class NetworkContext;
 }
+class PendingSharedURLLoaderFactory;
 class SharedURLLoaderFactory;
-class SharedURLLoaderFactoryInfo;
 }  // namespace network
 
 namespace prefs {
@@ -180,6 +180,8 @@ class SafeBrowsingService : public SafeBrowsingServiceInterface,
 
   // Get the cache manager by profile.
   VerdictCacheManager* GetVerdictCacheManager(Profile* profile) const;
+  base::WeakPtr<VerdictCacheManager> GetVerdictCacheManagerWeakPtr(
+      Profile* profile) const;
 
   // Get the binary upload service by profile.
   BinaryUploadService* GetBinaryUploadService(Profile* profile) const;
@@ -220,8 +222,8 @@ class SafeBrowsingService : public SafeBrowsingServiceInterface,
 
   // Called to initialize objects that are used on the io_thread.  This may be
   // called multiple times during the life of the SafeBrowsingService.
-  void StartOnIOThread(
-      std::unique_ptr<network::SharedURLLoaderFactoryInfo> url_loader_factory);
+  void StartOnIOThread(std::unique_ptr<network::PendingSharedURLLoaderFactory>
+                           url_loader_factory);
 
   // Called to stop or shutdown operations on the io_thread. This may be called
   // multiple times to stop during the life of the SafeBrowsingService. If

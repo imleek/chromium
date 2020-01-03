@@ -20,9 +20,6 @@ extern const base::TimeDelta kSendMessageTimeout;
 // Amount of time before an ack message is expired.
 extern const base::TimeDelta kAckTimeToLive;
 
-// Amount of offline time before decice is consider expired.
-extern const base::TimeDelta kDeviceExpiration;
-
 // Amount of time before FCM registration should happen again.
 extern const base::TimeDelta kRegistrationExpiration;
 
@@ -44,6 +41,17 @@ enum class SharingFeatureName {
   kClickToCall,
   kSharedClipboard,
   kMaxValue = kSharedClipboard,
+};
+
+// The device platform that the user is sharing from/with.
+enum class SharingDevicePlatform {
+  kUnknown,
+  kAndroid,
+  kChromeOS,
+  kIOS,
+  kLinux,
+  kMac,
+  kWindows,
 };
 
 #endif  // CHROME_BROWSER_SHARING_SHARING_CONSTANTS_H_

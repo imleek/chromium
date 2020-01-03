@@ -40,7 +40,6 @@
 #include "content/public/common/favicon_url.h"
 #include "content/public/common/frame_navigate_params.h"
 #include "content/public/common/javascript_dialog_type.h"
-#include "content/public/common/page_importance_signals.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/referrer.h"
@@ -56,11 +55,11 @@
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/common/frame/user_activation_update_type.h"
+#include "third_party/blink/public/common/input/web_scroll_types.h"
 #include "third_party/blink/public/common/media/media_player_action.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/common/messaging/transferable_message.h"
 #include "third_party/blink/public/common/navigation/triggering_event_info.h"
-#include "third_party/blink/public/common/sudden_termination_disabler_type.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
@@ -72,7 +71,6 @@
 #include "third_party/blink/public/platform/web_insecure_request_policy.h"
 #include "third_party/blink/public/platform/web_intrinsic_sizing_info.h"
 #include "third_party/blink/public/platform/web_scroll_into_view_params.h"
-#include "third_party/blink/public/platform/web_scroll_types.h"
 #include "third_party/blink/public/web/web_frame_owner_properties.h"
 #include "third_party/blink/public/web/web_tree_scope_type.h"
 #include "ui/events/types/scroll_types.h"
@@ -120,17 +118,18 @@ IPC_ENUM_TRAITS_MIN_MAX_VALUE(content::JavaScriptDialogType,
 IPC_ENUM_TRAITS_MAX_VALUE(blink::ContextMenuDataMediaType,
                           blink::ContextMenuDataMediaType::kLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::ContextMenuDataInputFieldType,
-                          blink::ContextMenuDataInputFieldType::kLast)
+                          blink::ContextMenuDataInputFieldType::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebFocusType, blink::kWebFocusTypeLast)
-IPC_ENUM_TRAITS_MAX_VALUE(blink::WebFrameOwnerProperties::ScrollingMode,
-                          blink::WebFrameOwnerProperties::ScrollingMode::kLast)
+IPC_ENUM_TRAITS_MAX_VALUE(
+    blink::WebFrameOwnerProperties::ScrollingMode,
+    blink::WebFrameOwnerProperties::ScrollingMode::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(content::StopFindAction,
                           content::STOP_FIND_ACTION_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(content::FaviconURL::IconType,
                           content::FaviconURL::IconType::kMax)
 IPC_ENUM_TRAITS(blink::WebSandboxFlags)  // Bitmask.
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebTreeScopeType,
-                          blink::WebTreeScopeType::kLast)
+                          blink::WebTreeScopeType::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(ui::MenuSourceType, ui::MENU_SOURCE_TYPE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(content::CSPDirective::Name,
                           content::CSPDirective::NameLast)
@@ -147,10 +146,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::MediaPlayerAction::Type,
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(blink::WebScrollDirection,
                               blink::kFirstScrollDirection,
                               blink::kLastScrollDirection)
-IPC_ENUM_TRAITS_MIN_MAX_VALUE(
-    ui::input_types::ScrollGranularity,
-    ui::input_types::ScrollGranularity::kFirstScrollGranularity,
-    ui::input_types::ScrollGranularity::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::FeaturePolicyDisposition,
                           blink::mojom::FeaturePolicyDisposition::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::FrameVisibility,
@@ -287,18 +282,16 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(blink::FramePolicy)
   IPC_STRUCT_TRAITS_MEMBER(sandbox_flags)
   IPC_STRUCT_TRAITS_MEMBER(container_policy)
-  IPC_STRUCT_TRAITS_MEMBER(allowed_to_download_without_user_activation)
+  IPC_STRUCT_TRAITS_MEMBER(required_document_policy)
+  IPC_STRUCT_TRAITS_MEMBER(allowed_to_download)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(blink::ViewportIntersectionState)
   IPC_STRUCT_TRAITS_MEMBER(viewport_offset)
   IPC_STRUCT_TRAITS_MEMBER(viewport_intersection)
+  IPC_STRUCT_TRAITS_MEMBER(main_frame_document_intersection)
   IPC_STRUCT_TRAITS_MEMBER(compositor_visible_rect)
   IPC_STRUCT_TRAITS_MEMBER(occlusion_state)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(content::PageImportanceSignals)
-  IPC_STRUCT_TRAITS_MEMBER(had_form_interaction)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::ResourceLoadTiming)
@@ -329,6 +322,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::ResourceTimingInfo)
   IPC_STRUCT_TRAITS_MEMBER(timing)
   IPC_STRUCT_TRAITS_MEMBER(last_redirect_end_time)
   IPC_STRUCT_TRAITS_MEMBER(response_end)
+  IPC_STRUCT_TRAITS_MEMBER(context_type)
   IPC_STRUCT_TRAITS_MEMBER(transfer_size)
   IPC_STRUCT_TRAITS_MEMBER(encoded_body_size)
   IPC_STRUCT_TRAITS_MEMBER(decoded_body_size)
@@ -738,11 +732,6 @@ IPC_MESSAGE_ROUTED1(FrameMsg_SetAccessibilityMode, ui::AXMode)
 IPC_MESSAGE_ROUTED1(FrameMsg_ForwardResourceTimingToParent,
                     content::ResourceTimingInfo)
 
-// Sent to a subframe to control whether to collapse its the frame owner element
-// in the embedder document, that is, to remove it from the layout as if it did
-// not exist.
-IPC_MESSAGE_ROUTED1(FrameMsg_Collapse, bool /* collapsed */)
-
 // Notifies the frame that its parent has changed the frame's sandbox flags or
 // container policy.
 IPC_MESSAGE_ROUTED1(FrameMsg_DidUpdateFramePolicy, blink::FramePolicy)
@@ -774,17 +763,10 @@ IPC_MESSAGE_ROUTED1(FrameMsg_EnforceInsecureRequestPolicy,
 IPC_MESSAGE_ROUTED1(FrameMsg_ViewChanged,
                     content::FrameMsg_ViewChanged_Params /* params */)
 
-// Notifies this frame or proxy that it is now focused.  This is used to
-// support cross-process focused frame changes.
-IPC_MESSAGE_ROUTED0(FrameMsg_SetFocusedFrame)
-
 // Send to the RenderFrame to set text tracks state and style settings.
 // Sent for top-level frames.
 IPC_MESSAGE_ROUTED1(FrameMsg_SetTextTrackSettings,
                     FrameMsg_TextTrackSettings_Params /* params */)
-
-// Tells the RenderFrame to clear the focused element (if any).
-IPC_MESSAGE_ROUTED0(FrameMsg_ClearFocusedElement)
 
 // Informs the parent renderer that the child has completed an autoresize
 // transaction and should update with the provided viz::LocalSurfaceId.
@@ -868,14 +850,6 @@ IPC_MESSAGE_ROUTED2(FrameMsg_SetPepperVolume,
                     double /* volume */)
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
-// Used to instruct the RenderFrame to go into "view source" mode. This should
-// only be sent to the main frame.
-IPC_MESSAGE_ROUTED0(FrameMsg_EnableViewSourceMode)
-
-// Tells the frame to suppress any further modal dialogs. This ensures that no
-// ScopedPageLoadDeferrer is on the stack for SwapOut.
-IPC_MESSAGE_ROUTED0(FrameMsg_SuppressFurtherDialogs)
-
 // Notifies a parent frame that the child frame requires information about
 // whether it is occluded or has visual effects applied.
 IPC_MESSAGE_ROUTED1(FrameMsg_SetNeedsOcclusionTracking,
@@ -886,11 +860,6 @@ IPC_MESSAGE_ROUTED1(FrameMsg_SetNeedsOcclusionTracking,
 // consumption).
 IPC_MESSAGE_ROUTED1(FrameMsg_UpdateUserActivationState,
                     blink::UserActivationUpdateType /* type of state update */)
-
-// Tells the frame to mark that the previous document on that frame had received
-// a user gesture on the same eTLD+1.
-IPC_MESSAGE_ROUTED1(FrameMsg_SetHasReceivedUserGestureBeforeNavigation,
-                    bool /* value */)
 
 // Updates the renderer with a list of unique WebFeature values representing
 // Blink features used, performed or encountered by the browser during the
@@ -1209,11 +1178,6 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_UpdateUserActivationState,
 IPC_MESSAGE_ROUTED1(FrameMsg_TransferUserActivationFrom,
                     int /* source_routing_id */)
 
-// Indicates that this frame received a user gesture on a previous navigation on
-// the same eTLD+1. This ensures the state is propagated to any remote frames.
-IPC_MESSAGE_ROUTED1(FrameHostMsg_SetHasReceivedUserGestureBeforeNavigation,
-                    bool /* value */)
-
 // Used to tell the parent that the user right clicked on an area of the
 // content area, and a context menu should be shown for it. The params
 // object contains information about the node(s) that were selected when the
@@ -1266,12 +1230,6 @@ IPC_MESSAGE_ROUTED3(FrameHostMsg_DidBlockNavigation,
 // The message is delivered using RenderWidget::QueueMessage.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_VisualStateResponse, uint64_t /* id */)
 
-// Sent when a new sudden termination disabler condition is either introduced or
-// removed.
-IPC_MESSAGE_ROUTED2(FrameHostMsg_SuddenTerminationDisablerChanged,
-                    bool /* present */,
-                    blink::SuddenTerminationDisablerType /* disabler_type */)
-
 // Requests that the resource timing info be added to the performance entries of
 // a remote parent frame.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_ForwardResourceTimingToParent,
@@ -1318,10 +1276,6 @@ IPC_MESSAGE_ROUTED0(FrameHostMsg_SavableResourceLinksError)
 IPC_MESSAGE_ROUTED2(FrameHostMsg_SerializedHtmlWithLocalLinksResponse,
                     std::string /* data buffer */,
                     bool /* end of data? */)
-
-// Sent when the renderer updates hint for importance of a tab.
-IPC_MESSAGE_ROUTED1(FrameHostMsg_UpdatePageImportanceSignals,
-                    content::PageImportanceSignals)
 
 // This message is sent from a RenderFrameProxy when sequential focus
 // navigation needs to advance into its actual frame.  |source_routing_id|

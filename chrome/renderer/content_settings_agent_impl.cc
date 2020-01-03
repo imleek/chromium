@@ -19,6 +19,7 @@
 #include "components/content_settings/core/common/content_settings.mojom.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
+#include "content/public/child/child_thread.h"
 #include "content/public/common/client_hints.mojom.h"
 #include "content/public/common/origin_util.h"
 #include "content/public/common/previews_state.h"
@@ -104,9 +105,12 @@ bool IsScriptDisabledForPreview(content::RenderFrame* render_frame) {
   return render_frame->GetPreviewsState() & content::NOSCRIPT_ON;
 }
 
-bool IsUniqueFrame(WebFrame* frame) {
-  return frame->GetSecurityOrigin().IsUnique() ||
-         frame->Top()->GetSecurityOrigin().IsUnique();
+bool IsFrameWithOpaqueOrigin(WebFrame* frame) {
+  // Storage access is keyed off the top origin and the frame's origin.
+  // It will be denied any opaque origins so have this method to return early
+  // instead of making a Sync IPC call.
+  return frame->GetSecurityOrigin().IsOpaque() ||
+         frame->Top()->GetSecurityOrigin().IsOpaque();
 }
 
 }  // namespace
@@ -184,13 +188,13 @@ void ContentSettingsAgentImpl::DidBlockContentType(
     ContentSettingsType settings_type) {
   bool newly_blocked = content_blocked_.insert(settings_type).second;
   if (newly_blocked)
-    GetContentSettingsManager().OnContentBlocked(settings_type);
+    GetContentSettingsManager().OnContentBlocked(routing_id(), settings_type);
 }
 
 void ContentSettingsAgentImpl::BindContentSettingsManager(
     mojo::Remote<chrome::mojom::ContentSettingsManager>* manager) {
   DCHECK(!*manager);
-  render_frame()->GetBrowserInterfaceBroker()->GetInterface(
+  content::ChildThread::Get()->BindHostReceiver(
       manager->BindNewPipeAndPassReceiver());
 }
 
@@ -248,6 +252,10 @@ void ContentSettingsAgentImpl::SetAsInterstitial() {
   is_interstitial_page_ = true;
 }
 
+void ContentSettingsAgentImpl::SetDisabledMixedContentUpgrades() {
+  mixed_content_autoupgrades_disabled_ = true;
+}
+
 void ContentSettingsAgentImpl::OnContentSettingsAgentRequest(
     mojo::PendingAssociatedReceiver<chrome::mojom::ContentSettingsAgent>
         receiver) {
@@ -262,12 +270,13 @@ bool ContentSettingsAgentImpl::AllowDatabase() {
 void ContentSettingsAgentImpl::RequestFileSystemAccessAsync(
     base::OnceCallback<void(bool)> callback) {
   WebLocalFrame* frame = render_frame()->GetWebFrame();
-  if (IsUniqueFrame(frame)) {
+  if (IsFrameWithOpaqueOrigin(frame)) {
     std::move(callback).Run(false);
     return;
   }
 
   GetContentSettingsManager().AllowStorageAccess(
+      routing_id(),
       chrome::mojom::ContentSettingsManager::StorageType::FILE_SYSTEM,
       frame->GetSecurityOrigin(), frame->GetDocument().SiteForCookies(),
       frame->GetDocument().TopFrameOrigin(), std::move(callback));
@@ -360,7 +369,7 @@ bool ContentSettingsAgentImpl::AllowScriptFromSource(
 
 bool ContentSettingsAgentImpl::AllowStorage(bool local) {
   WebLocalFrame* frame = render_frame()->GetWebFrame();
-  if (IsUniqueFrame(frame))
+  if (IsFrameWithOpaqueOrigin(frame))
     return false;
 
   StoragePermissionsKey key(
@@ -371,6 +380,7 @@ bool ContentSettingsAgentImpl::AllowStorage(bool local) {
 
   bool result = false;
   GetContentSettingsManager().AllowStorageAccess(
+      routing_id(),
       local
           ? chrome::mojom::ContentSettingsManager::StorageType::LOCAL_STORAGE
           : chrome::mojom::ContentSettingsManager::StorageType::SESSION_STORAGE,
@@ -442,17 +452,6 @@ bool ContentSettingsAgentImpl::AllowRunningInsecureContent(
   FilteredReportInsecureContentRan(GURL(resource_url));
 
   return allow;
-}
-
-bool ContentSettingsAgentImpl::AllowAutoplay(bool default_value) {
-  if (!content_setting_rules_)
-    return default_value;
-
-  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
-  return GetContentSettingFromRules(
-             content_setting_rules_->autoplay_rules, frame,
-             url::Origin(frame->GetDocument().GetSecurityOrigin()).GetURL()) ==
-         CONTENT_SETTING_ALLOW;
 }
 
 bool ContentSettingsAgentImpl::AllowPopupsAndRedirects(bool default_value) {
@@ -537,6 +536,19 @@ void ContentSettingsAgentImpl::GetAllowedClientHintsFromSource(
       url, content_setting_rules_->client_hints_rules, client_hints);
 }
 
+bool ContentSettingsAgentImpl::ShouldAutoupgradeMixedContent() {
+  if (mixed_content_autoupgrades_disabled_)
+    return false;
+
+  if (content_setting_rules_) {
+    auto setting =
+        GetContentSettingFromRules(content_setting_rules_->mixed_content_rules,
+                                   render_frame()->GetWebFrame(), GURL());
+    return setting != CONTENT_SETTING_ALLOW;
+  }
+  return false;
+}
+
 void ContentSettingsAgentImpl::DidNotAllowPlugins() {
   DidBlockContentType(ContentSettingsType::PLUGINS);
 }
@@ -602,7 +614,7 @@ bool ContentSettingsAgentImpl::IsWhitelistedForContentSettings(
   if (document_url.GetString() == content::kUnreachableWebDataURL)
     return true;
 
-  if (origin.IsUnique())
+  if (origin.IsOpaque())
     return false;  // Uninitialized document?
 
   blink::WebString protocol = origin.Protocol();
@@ -630,12 +642,12 @@ bool ContentSettingsAgentImpl::IsWhitelistedForContentSettings(
 bool ContentSettingsAgentImpl::AllowStorageAccess(
     chrome::mojom::ContentSettingsManager::StorageType storage_type) {
   WebLocalFrame* frame = render_frame()->GetWebFrame();
-  if (IsUniqueFrame(frame))
+  if (IsFrameWithOpaqueOrigin(frame))
     return false;
 
   bool result = false;
   GetContentSettingsManager().AllowStorageAccess(
-      storage_type, frame->GetSecurityOrigin(),
+      routing_id(), storage_type, frame->GetSecurityOrigin(),
       frame->GetDocument().SiteForCookies(),
       frame->GetDocument().TopFrameOrigin(), &result);
   return result;

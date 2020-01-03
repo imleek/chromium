@@ -107,6 +107,8 @@ IPC_STRUCT_TRAITS_BEGIN(network::URLLoaderCompletionStatus)
   IPC_STRUCT_TRAITS_MEMBER(ssl_info)
   IPC_STRUCT_TRAITS_MEMBER(should_report_corb_blocking)
   IPC_STRUCT_TRAITS_MEMBER(proxy_server)
+  IPC_STRUCT_TRAITS_MEMBER(resolve_error_info)
+
 IPC_STRUCT_TRAITS_END()
 
 IPC_ENUM_TRAITS_MAX_VALUE(network::mojom::FetchResponseType,
@@ -116,7 +118,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(network::OriginPolicyState,
                           network::OriginPolicyState::kMaxValue)
 
 IPC_STRUCT_TRAITS_BEGIN(network::OriginPolicyContents)
-  IPC_STRUCT_TRAITS_MEMBER(features)
+  IPC_STRUCT_TRAITS_MEMBER(feature_policy)
   IPC_STRUCT_TRAITS_MEMBER(content_security_policies)
   IPC_STRUCT_TRAITS_MEMBER(content_security_policies_report_only)
 IPC_STRUCT_TRAITS_END()

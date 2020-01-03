@@ -29,10 +29,6 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
     : public StaticBitmapImage {
  public:
   ~AcceleratedStaticBitmapImage() override;
-  // SkImage with a texture backing.
-  static scoped_refptr<AcceleratedStaticBitmapImage> CreateFromSkImage(
-      sk_sp<SkImage>,
-      base::WeakPtr<WebGraphicsContext3DProviderWrapper>);
 
   // Can specify the GrContext that created the texture backing. Ideally all
   // callers would use this option.
@@ -75,11 +71,8 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
   bool CurrentFrameKnownToBeOpaque() override;
   IntSize Size() const override;
   bool IsTextureBacked() const override { return true; }
-  scoped_refptr<StaticBitmapImage> MakeAccelerated(
-      base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_wrapper)
-      override {
-    return this;
-  }
+  scoped_refptr<StaticBitmapImage> ConvertToColorSpace(sk_sp<SkColorSpace>,
+                                                       SkColorType) override;
 
   void Draw(cc::PaintCanvas*,
             const cc::PaintFlags&,
@@ -120,13 +113,13 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
     return mailbox_texture_holder_ ? mailbox_texture_holder_->GetSyncToken()
                                    : sync_token;
   }
+  bool IsOriginTopLeft() const final {
+    return texture_holder()->IsOriginTopLeft();
+  }
 
   PaintImage PaintImageForCurrentFrame() override;
 
  private:
-  AcceleratedStaticBitmapImage(
-      sk_sp<SkImage>,
-      base::WeakPtr<WebGraphicsContext3DProviderWrapper>&&);
   AcceleratedStaticBitmapImage(
       const gpu::Mailbox&,
       const gpu::SyncToken&,
@@ -173,12 +166,6 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
 
   THREAD_CHECKER(thread_checker_);
   PaintImage::ContentId paint_image_content_id_;
-
-  // For RetainOriginalSkImageForCopyOnWrite()
-  sk_sp<SkImage> original_skia_image_;
-  scoped_refptr<base::SingleThreadTaskRunner> original_skia_image_task_runner_;
-  base::WeakPtr<WebGraphicsContext3DProviderWrapper>
-      original_skia_image_context_provider_wrapper_;
 };
 
 }  // namespace blink

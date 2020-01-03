@@ -22,11 +22,12 @@ namespace autofill {
 
 LocalCardMigrationIconView::LocalCardMigrationIconView(
     CommandUpdater* command_updater,
-    PageActionIconView::Delegate* delegate)
+    IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+    PageActionIconView::Delegate* page_action_icon_delegate)
     : PageActionIconView(command_updater,
                          IDC_MIGRATE_LOCAL_CREDIT_CARD_FOR_PAGE,
-                         delegate) {
-  DCHECK(delegate);
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate) {
   SetID(VIEW_ID_MIGRATE_LOCAL_CREDIT_CARD_BUTTON);
   if (base::FeatureList::IsEnabled(
           features::kAutofillCreditCardUploadFeedback)) {
@@ -58,9 +59,9 @@ views::BubbleDialogDelegateView* LocalCardMigrationIconView::GetBubble() const {
   }
 }
 
-bool LocalCardMigrationIconView::Update() {
+void LocalCardMigrationIconView::UpdateImpl() {
   if (!GetWebContents())
-    return false;
+    return;
 
   // |controller| may be nullptr due to lazy initialization.
   ManageMigrationUiController* controller = GetController();
@@ -121,10 +122,6 @@ bool LocalCardMigrationIconView::Update() {
     // Handle corner cases where users navigate away or close the tab.
     UnpauseAnimation();
   }
-
-  // Need to return true since in both MIGRATION_RESULT_PENDING and
-  // MIGRATION_FINISHED cases the credit card icon is visible.
-  return true;
 }
 
 void LocalCardMigrationIconView::OnExecuting(
@@ -141,6 +138,10 @@ const gfx::VectorIcon& LocalCardMigrationIconView::GetVectorIconBadge() const {
     return kBlockedBadgeIcon;
   }
   return gfx::kNoneIcon;
+}
+
+const char* LocalCardMigrationIconView::GetClassName() const {
+  return "LocalCardMigrationIconView";
 }
 
 base::string16 LocalCardMigrationIconView::GetTextForTooltipAndAccessibleName()

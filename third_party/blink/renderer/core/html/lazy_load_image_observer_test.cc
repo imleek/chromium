@@ -321,7 +321,7 @@ TEST_P(LazyLoadImagesSimTest, LargeImageStyleHeight1Width100) {
   VerifyImageElementWithDimensionDeferred("style='height: 1px; width: 100px;'");
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          LazyLoadImagesSimTest,
                          ::testing::Bool() /*is_lazyload_image_enabled*/);
 
@@ -1444,6 +1444,7 @@ TEST_F(LazyLoadAutomaticImagesTest, LazyLoadDisabledOnReload) {
                                      "image/png");
     Compositor().BeginFrame();
     test::RunPendingTasks();
+    Compositor().BeginFrame();
     lazy_image.Complete(ReadTestImage());
     test::RunPendingTasks();
     histogram_tester.ExpectTotalCount(

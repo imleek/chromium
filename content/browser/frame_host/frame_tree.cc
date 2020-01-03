@@ -177,7 +177,8 @@ FrameTreeNode* FrameTree::AddFrame(
     FrameTreeNode* parent,
     int process_id,
     int new_routing_id,
-    service_manager::mojom::InterfaceProviderRequest interface_provider_request,
+    mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
+        interface_provider_receiver,
     mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
         browser_interface_broker_receiver,
     blink::WebTreeScopeType scope,
@@ -208,8 +209,11 @@ FrameTreeNode* FrameTree::AddFrame(
   // empty document in the frame. This needs to happen before the call to
   // AddChild so that the effective policy is sent to any newly-created
   // RenderFrameProxy objects when the RenderFrameHost is created.
+  // SetPendingFramePolicy is necessary here because next navigation on this
+  // frame will need the value of pending frame policy instead of effective
+  // frame policy.
   new_node->SetPendingFramePolicy(frame_policy);
-  new_node->CommitPendingFramePolicy();
+  new_node->CommitFramePolicy(frame_policy);
 
   if (was_discarded)
     new_node->set_was_discarded();
@@ -218,9 +222,9 @@ FrameTreeNode* FrameTree::AddFrame(
   FrameTreeNode* added_node = parent->current_frame_host()->AddChild(
       std::move(new_node), process_id, new_routing_id);
 
-  DCHECK(interface_provider_request.is_pending());
-  added_node->current_frame_host()->BindInterfaceProviderRequest(
-      std::move(interface_provider_request));
+  DCHECK(interface_provider_receiver.is_valid());
+  added_node->current_frame_host()->BindInterfaceProviderReceiver(
+      std::move(interface_provider_receiver));
 
   DCHECK(browser_interface_broker_receiver.is_valid());
   added_node->current_frame_host()->BindBrowserInterfaceBrokerReceiver(
@@ -374,8 +378,8 @@ void FrameTree::SetFocusedFrame(FrameTreeNode* node, SiteInstance* source) {
 }
 
 void FrameTree::SetFrameRemoveListener(
-    const base::Callback<void(RenderFrameHost*)>& on_frame_removed) {
-  on_frame_removed_ = on_frame_removed;
+    base::RepeatingCallback<void(RenderFrameHost*)> on_frame_removed) {
+  on_frame_removed_ = std::move(on_frame_removed);
 }
 
 scoped_refptr<RenderViewHostImpl> FrameTree::CreateRenderViewHost(

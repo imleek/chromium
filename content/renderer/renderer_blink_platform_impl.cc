@@ -17,7 +17,6 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/shared_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
@@ -91,7 +90,6 @@
 #include "third_party/blink/public/platform/web_url_loader_factory.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/platform/web_vector.h"
-#include "third_party/blink/public/web/modules/peerconnection/peer_connection_dependency_factory.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_user_media_request.h"
 #include "third_party/sqlite/sqlite3.h"
@@ -209,15 +207,7 @@ RendererBlinkPlatformImpl::~RendererBlinkPlatformImpl() {
   main_thread_scheduler_->SetTopLevelBlameContext(nullptr);
 }
 
-void RendererBlinkPlatformImpl::Shutdown() {
-#if defined(OS_LINUX) || defined(OS_MACOSX)
-  // SandboxSupport contains a map of OutOfProcessFont objects, which hold
-  // WebStrings and WebVectors, which become invalidated when blink is shut
-  // down. Hence, we need to clear that map now, just before blink::shutdown()
-  // is called.
-  sandbox_support_.reset();
-#endif
-}
+void RendererBlinkPlatformImpl::Shutdown() {}
 
 //------------------------------------------------------------------------------
 
@@ -330,11 +320,6 @@ uint64_t RendererBlinkPlatformImpl::VisitedLinkHash(const char* canonical_url,
 
 bool RendererBlinkPlatformImpl::IsLinkVisited(uint64_t link_hash) {
   return GetContentClient()->renderer()->IsLinkVisited(link_hash);
-}
-
-blink::WebPrescientNetworking*
-RendererBlinkPlatformImpl::PrescientNetworking() {
-  return GetContentClient()->renderer()->GetPrescientNetworking();
 }
 
 blink::WebString RendererBlinkPlatformImpl::UserAgent() {
@@ -885,9 +870,9 @@ void RendererBlinkPlatformImpl::RecordRapporURL(const char* metric,
 std::unique_ptr<blink::WebDedicatedWorkerHostFactoryClient>
 RendererBlinkPlatformImpl::CreateDedicatedWorkerHostFactoryClient(
     blink::WebDedicatedWorker* worker,
-    service_manager::InterfaceProvider* interface_provider) {
+    const blink::BrowserInterfaceBrokerProxy& interface_broker) {
   return std::make_unique<DedicatedWorkerHostFactoryClient>(worker,
-                                                            interface_provider);
+                                                            interface_broker);
 }
 
 void RendererBlinkPlatformImpl::DidStartWorkerThread() {

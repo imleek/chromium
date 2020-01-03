@@ -3,7 +3,6 @@
 <translationbundle lang="zh-TW">
 <translation id="1065672644894730302">系統無法讀取你的偏好設定。部分功能可能無法使用，且系統也不會儲存任何偏好設定的變更。</translation>
 <translation id="1104942323762546749">Chromium 要求匯出你的密碼。如果允許，請輸入你的 Windows 密碼。</translation>
-<translation id="1115445892567829615">Chromium 無法同步處理你的資料，請更新你的同步通關密語。</translation>
 <translation id="113122355610423240">Chromium 是你的預設瀏覽器</translation>
 <translation id="1185134272377778587">關於 Chromium</translation>
 <translation id="1396446129537741364">Chromium 即將顯示密碼。</translation>
@@ -20,7 +19,7 @@
 <translation id="1929939181775079593">Chromium 沒有回應，要立即重新啟動嗎？</translation>
 <translation id="1966382378801805537">Chromium 無法偵測或設定預設瀏覽器</translation>
 <translation id="2008474315282236005">登出後，系統會將 1 個項目從這個裝置上刪除。日後如要重新取得你的資料，請以 <ph name="USER_EMAIL" /> 身分登入 Chromium。</translation>
-<translation id="2119636228670142020">關於 Chromium 作業系統(&amp;C)</translation>
+<translation id="2147976119693222405">Chromium 作業系統無法同步處理你的資料。立即修正。</translation>
 <translation id="2241627712206172106">如果你與親朋好友共用電腦，人人皆可享有獨立的瀏覽空間，依照自己的偏好設定 Chromium。</translation>
 <translation id="2347108572062610441">這個擴充功能已變更 Chromium 啟動時所顯示的網頁。</translation>
 <translation id="2396765026452590966">擴充功能「<ph name="EXTENSION_NAME" />」已變更 Chromium 啟動時所顯示的網頁。</translation>
@@ -36,6 +35,7 @@
 <translation id="2718390899429598676">為了提升安全性，Chromium 會將您的資料加密保護。</translation>
 <translation id="2770231113462710648">將預設瀏覽器變更為：</translation>
 <translation id="2799223571221894425">重新啟動</translation>
+<translation id="2805036593126168338">Chromium 作業系統無法同步處理你的密碼。立即修正。</translation>
 <translation id="2838154144102149890">這台電腦上的 Chromium 必須停止執行，才能進行更新。這可能會導致其他登入這台電腦的使用者遺失尚未儲存的變更。</translation>
 <translation id="2847479871509788944">從 Chromium 中移除...</translation>
 <translation id="2886012850691518054">選用：將使用統計資料及當機報告自動傳送給 Google，助我們一臂之力，讓 Chromium 更臻完美。</translation>
@@ -107,7 +107,6 @@
 <translation id="5631814766731275228">Chromium 名稱和相片</translation>
 <translation id="5634636535844844681">Chromium 僅支援 Windows 7 以上版本的作業系統。</translation>
 <translation id="5653831366781983928">請立即重新啟動 Chromium</translation>
-<translation id="5680901439334282664">登入 Chromium</translation>
 <translation id="5698481217667032250">將 Chromium 的介面文字設為這種語言</translation>
 <translation id="5820394555380036790">Chromium 作業系統</translation>
 <translation id="5862307444128926510">歡迎使用 Chromium</translation>
@@ -199,7 +198,7 @@ Chromium 無法復原你的設定。</translation>
 <translation id="8417404458978023919">{0,plural, =1{請在 1 天內重新啟動 Chromium}other{請在 # 天內重新啟動 Chromium}}</translation>
 <translation id="8453117565092476964">安裝程式封存檔案已毀損或無效，請重新下載 Chromium。</translation>
 <translation id="8493179195440786826">Chromium 版本過舊</translation>
-<translation id="8586442755830160949">Copyright <ph name="YEAR" /> The Chromium Authors. 版權所有。</translation>
+<translation id="8586442755830160949">Copyright <ph name="YEAR" /> The Chromium Authors. 保留所有權利。</translation>
 <translation id="8619360774459241877">正在啟動 Chromium…</translation>
 <translation id="8621669128220841554">不明錯誤導致安裝失敗，請重新下載 Chromium。</translation>
 <translation id="8682540261359803721">如果這個頁面上並未顯示你的設定，請檢查 <ph name="LINK_BEGIN" />

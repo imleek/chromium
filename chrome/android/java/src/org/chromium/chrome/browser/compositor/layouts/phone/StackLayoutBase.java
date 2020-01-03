@@ -18,6 +18,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.IntDef;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.MathUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
@@ -48,7 +49,6 @@ import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.ResourceManager;
@@ -593,11 +593,6 @@ public abstract class StackLayoutBase extends Layout {
     }
 
     @Override
-    public void onTabsAllClosing(long time, boolean incognito) {
-        super.onTabsAllClosing(time, incognito);
-    }
-
-    @Override
     public boolean handlesCloseAll() {
         return true;
     }
@@ -1007,7 +1002,8 @@ public abstract class StackLayoutBase extends Layout {
     }
 
     class PortraitViewport {
-        protected float mWidth, mHeight;
+        protected float mWidth;
+        protected float mHeight;
         PortraitViewport() {
             mWidth = StackLayoutBase.this.getWidth();
             mHeight = StackLayoutBase.this.getHeightMinusBrowserControls();
@@ -1590,7 +1586,7 @@ public abstract class StackLayoutBase extends Layout {
 
         mSceneLayer.pushLayers(getContext(), viewport, contentViewport, this, layerTitleCache,
                 tabContentManager, resourceManager, fullscreenManager,
-                SceneLayer.INVALID_RESOURCE_ID, 0);
+                SceneLayer.INVALID_RESOURCE_ID, 0, 0);
     }
 
     /**
@@ -1642,11 +1638,6 @@ public abstract class StackLayoutBase extends Layout {
                 mLayoutAnimations.get(i).first.cancel();
             }
         }
-    }
-
-    @Override
-    public void destroy() {
-        super.destroy();
     }
 
     @Override

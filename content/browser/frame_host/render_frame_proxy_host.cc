@@ -325,7 +325,7 @@ void RenderFrameProxyHost::UpdateOpener() {
 }
 
 void RenderFrameProxyHost::SetFocusedFrame() {
-  Send(new FrameMsg_SetFocusedFrame(routing_id_));
+  GetAssociatedRemoteFrame()->Focus();
 }
 
 void RenderFrameProxyHost::ScrollRectToVisible(
@@ -577,8 +577,16 @@ void RenderFrameProxyHost::OnAdvanceFocus(blink::WebFocusType type,
 }
 
 void RenderFrameProxyHost::DidFocusFrame() {
-  frame_tree_node_->current_frame_host()->delegate()->SetFocusedFrame(
-      frame_tree_node_, GetSiteInstance());
+  RenderFrameHostImpl* render_frame_host =
+      frame_tree_node_->current_frame_host();
+
+  // We need to handle this case due to a race, see documentation in
+  // RenderFrameHostImpl::DidFocusFrame for more details.
+  if (render_frame_host->InsidePortal())
+    return;
+
+  render_frame_host->delegate()->SetFocusedFrame(frame_tree_node_,
+                                                 GetSiteInstance());
 }
 
 void RenderFrameProxyHost::OnPrintCrossProcessSubframe(const gfx::Rect& rect,

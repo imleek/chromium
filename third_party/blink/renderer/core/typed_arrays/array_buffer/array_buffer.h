@@ -73,13 +73,6 @@ class CORE_EXPORT ArrayBuffer : public RefCounted<ArrayBuffer> {
   inline void* DataMaybeShared();
   inline const void* DataMaybeShared() const;
   inline size_t ByteLengthAsSizeT() const;
-  // This function is deprecated and should not be used. Use {ByteLengthAsSizeT}
-  // instead.
-  inline unsigned ByteLengthAsUnsigned() const;
-
-  // Creates a new ArrayBuffer object with copy of bytes in this object
-  // ranging from |begin| up to but not including |end|.
-  inline scoped_refptr<ArrayBuffer> Slice(unsigned begin, unsigned end) const;
 
   void AddView(ArrayBufferView*);
   void RemoveView(ArrayBufferView*);
@@ -90,11 +83,11 @@ class CORE_EXPORT ArrayBuffer : public RefCounted<ArrayBuffer> {
   bool ShareNonSharedForInternalUse(ArrayBufferContents&);
   bool IsDetached() const { return is_detached_; }
   bool IsShared() const { return contents_.IsShared(); }
-
+  ArrayBufferContents* Content() { return &contents_; }
   ~ArrayBuffer() = default;
 
  protected:
-  explicit ArrayBuffer(ArrayBufferContents&);
+  inline explicit ArrayBuffer(ArrayBufferContents&);
 
  private:
   static inline scoped_refptr<ArrayBuffer> Create(
@@ -110,10 +103,8 @@ class CORE_EXPORT ArrayBuffer : public RefCounted<ArrayBuffer> {
       size_t element_byte_size,
       ArrayBufferContents::InitializationPolicy);
 
-  inline unsigned ClampIndex(unsigned index) const;
-
   ArrayBufferContents contents_;
-  HashSet<ArrayBufferView*> views_;
+  ArrayBufferView* first_view_;
   bool is_detached_;
 };
 
@@ -207,6 +198,14 @@ scoped_refptr<ArrayBuffer> ArrayBuffer::CreateShared(
   return base::AdoptRef(new ArrayBuffer(contents));
 }
 
+ArrayBuffer::ArrayBuffer(ArrayBufferContents& contents)
+    : first_view_(nullptr), is_detached_(false) {
+  if (contents.IsShared())
+    contents.ShareWith(contents_);
+  else
+    contents.Transfer(contents_);
+}
+
 void* ArrayBuffer::Data() {
   return contents_.Data();
 }
@@ -234,30 +233,6 @@ const void* ArrayBuffer::DataMaybeShared() const {
 size_t ArrayBuffer::ByteLengthAsSizeT() const {
   return contents_.DataLength();
 }
-
-// This function is deprecated and should not be used. Use {ByteLengthAsSizeT}
-// instead.
-unsigned ArrayBuffer::ByteLengthAsUnsigned() const {
-  CHECK_LE(contents_.DataLength(),
-           static_cast<size_t>(std::numeric_limits<unsigned>::max()));
-  // TODO(dtapuska): Revisit this cast. ArrayBufferContents
-  // uses size_t for storing data. Whereas ArrayBuffer IDL is
-  // only uint32_t based.
-  return static_cast<unsigned>(contents_.DataLength());
-}
-
-scoped_refptr<ArrayBuffer> ArrayBuffer::Slice(unsigned begin,
-                                              unsigned end) const {
-  begin = ClampIndex(begin);
-  end = ClampIndex(end);
-  size_t size = static_cast<size_t>(begin <= end ? end - begin : 0);
-  return ArrayBuffer::Create(static_cast<const char*>(Data()) + begin, size);
-}
-
-unsigned ArrayBuffer::ClampIndex(unsigned index) const {
-  return index < ByteLengthAsUnsigned() ? index : ByteLengthAsUnsigned();
-}
-
 }  // namespace blink
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_TYPED_ARRAYS_ARRAY_BUFFER_ARRAY_BUFFER_H_

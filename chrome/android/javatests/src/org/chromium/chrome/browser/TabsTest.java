@@ -40,6 +40,7 @@ import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.compositor.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChrome;
@@ -55,15 +56,15 @@ import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackTab;
 import org.chromium.chrome.browser.jsdialog.JavascriptTabModalDialog;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabbedModeTabPersistencePolicy;
 import org.chromium.chrome.browser.toolbar.top.ToggleTabStackButton;
 import org.chromium.chrome.browser.util.UrlConstants;
@@ -93,6 +94,7 @@ import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.File;
 import java.util.Locale;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -166,12 +168,13 @@ public class TabsTest {
             return;
         }
         mActivityTestRule.startMainActivityOnBlankPage();
-        mActivityTestRule.getActivity().getLayoutManager().getAnimationHandler().setTestingMode(
-                true);
+        CompositorAnimationHandler.setTestingMode(true);
     }
 
     @After
     public void tearDown() {
+        mActivityTestRule.getActivity().setRequestedOrientation(
+                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         if (mTestServer != null) {
             mTestServer.stopAndDestroyServer();
         }
@@ -719,17 +722,20 @@ public class TabsTest {
      * @return               The new number of tabs in the model.
      */
     private int openTabs(final int targetTabCount, boolean waitToLoad) {
-        int tabCount = mActivityTestRule.getActivity().getCurrentTabModel().getCount();
+        final ChromeTabbedActivity activity = mActivityTestRule.getActivity();
+        Callable<Integer> countOnUi = () -> {
+            return activity.getCurrentTabModel().getCount();
+        };
+        int tabCount = TestThreadUtils.runOnUiThreadBlockingNoException(countOnUi);
         while (tabCount < targetTabCount) {
-            ChromeTabUtils.newTabFromMenu(
-                    InstrumentationRegistry.getInstrumentation(), mActivityTestRule.getActivity());
+            ChromeTabUtils.newTabFromMenu(InstrumentationRegistry.getInstrumentation(), activity);
             tabCount++;
             Assert.assertEquals("The tab count is wrong", tabCount,
-                    mActivityTestRule.getActivity().getCurrentTabModel().getCount());
-            Tab tab = TabModelUtils.getCurrentTab(
-                    mActivityTestRule.getActivity().getCurrentTabModel());
-            while (waitToLoad && tab.isLoading()) {
-                Thread.yield();
+                    (int) TestThreadUtils.runOnUiThreadBlockingNoException(countOnUi));
+            if (waitToLoad) {
+                CriteriaHelper.pollUiThread(() -> {
+                    return !TabModelUtils.getCurrentTab(activity.getCurrentTabModel()).isLoading();
+                });
             }
         }
         return tabCount;
@@ -1029,7 +1035,8 @@ public class TabsTest {
 
             float tabOffsetX = layoutTab.getX();
             float tabOffsetY = layoutTab.getY();
-            float tabRightX, tabBottomY;
+            float tabRightX;
+            float tabBottomY;
             if (isLandscape) {
                 tabRightX = nextLayoutTab != null
                         ? nextLayoutTab.getX()

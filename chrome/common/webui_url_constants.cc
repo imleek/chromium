@@ -10,6 +10,10 @@
 #include "components/safe_browsing/web_ui/constants.h"
 #include "extensions/buildflags/buildflags.h"
 
+#if defined(OS_CHROMEOS)
+#include "chromeos/constants/chromeos_features.h"
+#endif
+
 namespace chrome {
 
 // Please keep this file in the same order as the header.
@@ -219,6 +223,8 @@ const char kChromeUIConfirmPasswordChangeUrl[] =
     "chrome://confirm-password-change";
 const char kChromeUICrostiniInstallerHost[] = "crostini-installer";
 const char kChromeUICrostiniInstallerUrl[] = "chrome://crostini-installer";
+const char kChromeUICrostiniUpgraderHost[] = "crostini-upgrader";
+const char kChromeUICrostiniUpgraderUrl[] = "chrome://crostini-upgrader";
 const char kChromeUICryptohomeHost[] = "cryptohome";
 const char kChromeUIDeviceEmulatorHost[] = "device-emulator";
 const char kChromeUIDiscoverURL[] = "chrome://oobe/discover";
@@ -386,7 +392,7 @@ const char kTriggeredResetProfileSettingsSubPage[] =
 const char kAccessibilitySubPage[] = "accessibility";
 const char kAccountManagerSubPage[] = "accountManager";
 const char kAccountSubPage[] = "accounts";
-const char kAndroidAppsDetailsSubPage[] = "apps/androidAppsDetails";
+const char kAndroidAppsDetailsSubPage[] = "androidAppsDetails";
 const char kAndroidAppsDetailsSubPageInBrowserSettings[] =
     "androidApps/details";
 const char kAppManagementDetailSubPage[] = "app-management/detail";
@@ -468,8 +474,6 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       kStorageSubPage,
       kStylusSubPage,
       kSwitchAccessSubPage,
-      // sync is both an OS and browser sub page, but prefer the OS version
-      kSyncSetupSubPage,
       kVPNSettingsSubPage,
       kWiFiSettingsSubPage,
   };
@@ -478,6 +482,12 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
   std::string::size_type index = sub_page.find('?');
   if (index != std::string::npos)
     sub_page_without_query.resize(index);
+
+  // SplitSettingsSync doesn't use the same sync subpage as browser.
+  if (!chromeos::features::IsSplitSettingsSyncEnabled() &&
+      sub_page_without_query == kSyncSetupSubPage) {
+    return true;
+  }
 
   for (const char* p : kSubPages) {
     if (sub_page_without_query == p)
@@ -637,6 +647,8 @@ const char* const kChromeDebugURLs[] = {
     content::kChromeUIGpuCrashURL,
     content::kChromeUIGpuHangURL,
     content::kChromeUIMemoryExhaustURL,
+    content::kChromeUIMemoryPressureCriticalURL,
+    content::kChromeUIMemoryPressureModerateURL,
     content::kChromeUIPpapiFlashCrashURL,
     content::kChromeUIPpapiFlashHangURL,
 #if defined(OS_WIN)

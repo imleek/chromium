@@ -32,8 +32,10 @@
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/memory/oom_memory_details.h"
+#include "chrome/browser/performance_manager/graph/policies/policy_features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/background_tab_navigation_throttle.h"
+#include "chrome/browser/resource_coordinator/local_site_characteristics_webcontents_observer.h"
 #include "chrome/browser/resource_coordinator/resource_coordinator_parts.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
@@ -65,9 +67,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/page_importance_signals.h"
 #include "net/base/network_change_notifier.h"
-#include "third_party/blink/public/common/sudden_termination_disabler_type.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/resource_coordinator/tab_manager_delegate_chromeos.h"
@@ -192,16 +192,23 @@ void TabManager::Start() {
 // MemoryPressureMonitor is not implemented on Linux so far and tabs are never
 // discarded.
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
-  // Create a |MemoryPressureListener| to listen for memory events when
-  // MemoryCoordinator is disabled. When MemoryCoordinator is enabled
-  // it asks TabManager to do tab discarding.
-  base::MemoryPressureMonitor* monitor = base::MemoryPressureMonitor::Get();
-  if (monitor) {
-    RegisterMemoryPressureListener();
-    base::MemoryPressureListener::MemoryPressureLevel level =
-        monitor->GetCurrentPressureLevel();
-    if (level == base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
-      OnMemoryPressure(level);
+  // Don't handle memory pressure events here if this is done by
+  // PerformanceManager.
+  if (!base::FeatureList::IsEnabled(
+          performance_manager::features::
+              kUrgentDiscardingFromPerformanceManager)) {
+    // Create a |MemoryPressureListener| to listen for memory events when
+    // MemoryCoordinator is disabled. When MemoryCoordinator is enabled
+    // it asks TabManager to do tab discarding.
+    base::MemoryPressureMonitor* monitor = base::MemoryPressureMonitor::Get();
+    if (monitor) {
+      RegisterMemoryPressureListener();
+      base::MemoryPressureListener::MemoryPressureLevel level =
+          monitor->GetCurrentPressureLevel();
+      if (level ==
+          base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
+        OnMemoryPressure(level);
+      }
     }
   }
 #endif
@@ -262,6 +269,8 @@ WebContents* TabManager::DiscardTabByExtension(content::WebContents* contents) {
 }
 
 void TabManager::LogMemoryAndDiscardTab(LifecycleUnitDiscardReason reason) {
+  DCHECK(!base::FeatureList::IsEnabled(
+      performance_manager::features::kUrgentDiscardingFromPerformanceManager));
   // Discard immediately without waiting for LogMemory() (https://crbug/850545).
   // Consider removing LogMemory() at all if nobody cares about the log.
   LogMemory("Tab Discards Memory details");
@@ -774,6 +783,11 @@ void TabManager::SchedulePerformStateTransitions(base::TimeDelta delay) {
 void TabManager::PerformStateTransitions() {
   if (!base::FeatureList::IsEnabled(features::kProactiveTabFreezeAndDiscard))
     return;
+
+  if (base::FeatureList::IsEnabled(
+          performance_manager::features::kPageFreezingFromPerformanceManager)) {
+    return;
+  }
 
   base::TimeTicks next_state_transition_time = base::TimeTicks::Max();
   const base::TimeTicks now = NowTicks();

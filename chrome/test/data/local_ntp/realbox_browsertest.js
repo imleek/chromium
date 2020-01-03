@@ -17,6 +17,7 @@ test.realbox2 = {};
  */
 test.realbox.IDS = {
   REALBOX: 'realbox',
+  REALBOX_ICON: 'realbox-icon',
   REALBOX_INPUT_WRAPPER: 'realbox-input-wrapper',
   REALBOX_MATCHES: 'realbox-matches',
 };
@@ -171,10 +172,72 @@ test.realbox1.testEmptyValueDoesntQueryAutocomplete = function() {
   assertEquals(test.realbox.queries.length, 0);
 };
 
+test.realbox1.testFocusDoesntQueryAutocomplete = function() {
+  test.realbox.realboxEl.dispatchEvent(new Event('focus'));
+  assertEquals(0, test.realbox.queries.length);
+};
+
+test.realbox1.testTabbingWhenNonEmptyDoesntQueryAutocomplete = function() {
+  test.realbox.realboxEl.value = '   ';
+
+  // Give the realbox focus programmatically.
+  test.realbox.realboxEl.focus();
+
+  test.realbox.realboxEl.dispatchEvent(new KeyboardEvent(
+      'keyup', {bubbles: true, cancelable: true, key: 'Tab'}));
+  assertEquals(0, test.realbox.queries.length);
+};
+
 test.realbox1.testSpacesDontQueryAutocomplete = function() {
   test.realbox.realboxEl.value = '   ';
   test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
   assertEquals(test.realbox.queries.length, 0);
+};
+
+test.realbox1.testTabbingWhenEmptyQueriesAutocomplete = function() {
+  // Give the realbox focus programmatically.
+  test.realbox.realboxEl.focus();
+
+  test.realbox.realboxEl.dispatchEvent(new KeyboardEvent(
+      'keyup', {bubbles: true, cancelable: true, key: 'Tab'}));
+  assertEquals(1, test.realbox.queries.length);
+  assertEquals('', test.realbox.queries[0].input);
+};
+
+test.realbox1.testArrowUpDownQueryAutocomplete = function() {
+  test.realbox.realboxEl.dispatchEvent(new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    key: 'ArrowUp',
+  }));
+  assertEquals(1, test.realbox.queries.length);
+  assertEquals('', test.realbox.queries[0].input);
+
+  test.realbox.realboxEl.value = 'hello';
+  test.realbox.realboxEl.dispatchEvent(new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    key: 'ArrowDown',
+  }));
+  assertEquals(2, test.realbox.queries.length);
+  assertEquals(test.realbox.realboxEl.value, test.realbox.queries[1].input);
+};
+
+test.realbox1.testLeftClickWhenEmptyQueriesAutocomplete = function() {
+  test.realbox.realboxEl.onclick(test.realbox.trustedEventFacade(
+      'click', {button: 1, target: test.realbox.realboxEl}));
+  assertEquals(0, test.realbox.queries.length);
+
+  test.realbox.realboxEl.value = '   ';
+  test.realbox.realboxEl.onclick(test.realbox.trustedEventFacade(
+      'click', {button: 0, target: test.realbox.realboxEl}));
+  assertEquals(0, test.realbox.queries.length);
+
+  test.realbox.realboxEl.value = '';
+  test.realbox.realboxEl.onclick(test.realbox.trustedEventFacade(
+      'click', {button: 0, target: test.realbox.realboxEl}));
+  assertEquals(1, test.realbox.queries.length);
+  assertEquals('', test.realbox.queries[0].input);
 };
 
 test.realbox1.testInputSentAsQuery = function() {
@@ -185,14 +248,14 @@ test.realbox1.testInputSentAsQuery = function() {
 };
 
 test.realbox1.testReplyWithMatches = function() {
-  test.realbox.realboxEl.value = 'hello world';
+  test.realbox.realboxEl.value = '      hello world';
   test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
   assertEquals(1, test.realbox.queries.length);
-  assertEquals('hello world', test.realbox.queries[0].input);
+  assertEquals(test.realbox.realboxEl.value, test.realbox.queries[0].input);
 
   const matches = [test.realbox.getSearchMatch(), test.realbox.getUrlMatch()];
   chrome.embeddedSearch.searchBox.autocompleteresultchanged(
-      {input: test.realbox.realboxEl.value, matches});
+      {input: test.realbox.realboxEl.value.trimLeft(), matches});
 
   assertTrue(test.realbox.areMatchesShowing());
 
@@ -235,41 +298,52 @@ test.realbox1.testReplyWithInlineAutocompletion = function() {
   assertEquals('world', realboxValue.substring(start, end));
 };
 
-// Ensures that deleting text from input informs the backend to prevent inline
-// autocompletion for the default match.
-test.realbox1.testDeleteWithInlineAutocompletion = function() {
+// Ensures that deleting text from the input, pasting text into the input, or
+// changing the input when caret is not at the end of the text informs the
+// backend to prevent inline autocompletion for the default match.
+test.realbox1.testPreventInlineAutocompletion = function() {
   test.realbox.realboxEl.value = 'supercal';
   test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
   assertEquals(1, test.realbox.queries.length);
   assertEquals('supercal', test.realbox.queries[0].input);
   assertFalse(test.realbox.queries[0].preventInlineAutocomplete);
 
-  const match = test.realbox.getSearchMatch({
-    contents: 'supercal',
-    inlineAutocompletion: 'ifragilisticexpialidocious',
-  });
-  chrome.embeddedSearch.searchBox.autocompleteresultchanged({
-    input: test.realbox.realboxEl.value,
-    matches: [match],
-  });
-
-  const realboxValue = test.realbox.realboxEl.value;
-  assertEquals('supercalifragilisticexpialidocious', realboxValue);
-
+  // Deleting text from input prevents inline autocompletion.
   test.realbox.realboxEl.value = 'superca';
   test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
   assertEquals(2, test.realbox.queries.length);
   assertEquals('superca', test.realbox.queries[1].input);
   assertTrue(test.realbox.queries[1].preventInlineAutocomplete)
 
-  match.contents = 'superca';
-  match.inlineAutocompletion = '';
-  chrome.embeddedSearch.searchBox.autocompleteresultchanged({
-    input: test.realbox.realboxEl.value,
-    matches: [match],
-  });
+  test.realbox.realboxEl.value = 'supercal';
+  test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
+  assertEquals(3, test.realbox.queries.length);
+  assertEquals('supercal', test.realbox.queries[2].input);
+  assertFalse(test.realbox.queries[2].preventInlineAutocomplete);
 
-  assertEquals('superca', test.realbox.realboxEl.value);
+  // Pasting text into the input prevents inline autocompletion.
+  const pasteEvent = test.realbox.clipboardEvent('paste');
+  test.realbox.realboxEl.dispatchEvent(pasteEvent);
+  assertFalse(pasteEvent.defaultPrevented);
+  test.realbox.realboxEl.value = 'supercal';
+  test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
+  assertEquals(4, test.realbox.queries.length);
+  assertEquals('supercal', test.realbox.queries[3].input);
+  assertTrue(test.realbox.queries[3].preventInlineAutocomplete);
+
+  test.realbox.realboxEl.value = 'supercali';
+  test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
+  assertEquals(5, test.realbox.queries.length);
+  assertEquals('supercali', test.realbox.queries[4].input);
+  assertFalse(test.realbox.queries[4].preventInlineAutocomplete);
+
+  // If caret isn't at the end of the text inline autocompletion is prevented.
+  test.realbox.realboxEl.value = 'supercali';
+  test.realbox.realboxEl.setSelectionRange(0, 0);  // Move caret to beginning.
+  test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
+  assertEquals(6, test.realbox.queries.length);
+  assertEquals('supercali', test.realbox.queries[5].input);
+  assertTrue(test.realbox.queries[5].preventInlineAutocomplete);
 };
 
 test.realbox.testTypeInlineAutocompletion = function() {
@@ -743,6 +817,7 @@ test.realbox2.testRemoveIcon = function() {
 };
 
 test.realbox2.testPressEnterOnSelectedMatch = function() {
+  test.realbox.realboxEl.dispatchEvent(new Event('focus'));
   test.realbox.realboxEl.value = 'hello world';
   test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
 
@@ -769,8 +844,55 @@ test.realbox2.testPressEnterOnSelectedMatch = function() {
   test.realbox.realboxEl.dispatchEvent(shiftEnter);
   assertTrue(shiftEnter.defaultPrevented);
 
-  assertTrue(clicked);
+  assertFalse(clicked);
+  assertEquals(1, test.realbox.opens.length);
+};
+
+test.realbox2.testPressEnterTooQuickly = function() {
+  test.realbox.realboxEl.dispatchEvent(new Event('focus'));
+  test.realbox.realboxEl.value = 'hello';
+  test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
+
+  chrome.embeddedSearch.searchBox.autocompleteresultchanged({
+    input: test.realbox.realboxEl.value,
+    matches: [test.realbox.getSearchMatch({supportsDeletion: true})]
+  });
+
+  const matchEls1 = $(test.realbox.IDS.REALBOX_MATCHES).children;
+  assertEquals(1, matchEls1.length);
+
+  // First match is selected.
+  assertTrue(matchEls1[0].classList.contains(test.realbox.CLASSES.SELECTED));
+
+  test.realbox.realboxEl.value = 'hello world';
+  test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
+
+  const shiftEnter = new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    key: 'Enter',
+    target: test.realbox.realboxEl,
+    shiftKey: true,
+  });
+  test.realbox.realboxEl.dispatchEvent(shiftEnter);
+
+  // Did not navigate to the first match as it is stale.
   assertEquals(0, test.realbox.opens.length);
+
+  const matches = [test.realbox.getUrlMatch({supportsDeletion: true})];
+  chrome.embeddedSearch.searchBox.autocompleteresultchanged(
+      {input: test.realbox.realboxEl.value, matches});
+
+  const matchEls2 = $(test.realbox.IDS.REALBOX_MATCHES).children;
+  assertEquals(1, matchEls2.length);
+
+  // First match is selected.
+  assertTrue(matchEls2[0].classList.contains(test.realbox.CLASSES.SELECTED));
+
+  // Navigated to the first new match.
+  assertEquals(1, test.realbox.opens.length);
+  assertEquals(0, test.realbox.opens[0].index);
+  assertEquals(matches[0].destinationUrl, test.realbox.opens[0].url);
 };
 
 test.realbox2.testPressEnterNoSelectedMatch = function() {
@@ -885,11 +1007,7 @@ test.realbox2.testPressEnterAfterFocusout = function() {
     relatedTarget: document.body,
   }));
 
-  test.realbox.realboxEl.dispatchEvent(new Event('focusin', {
-    bubbles: true,
-    cancelable: true,
-    target: test.realbox.realboxEl,
-  }));
+  test.realbox.realboxEl.dispatchEvent(new Event('focus'));
 
   let clicked = false;
   matchEls[1].onclick = () => clicked = true;
@@ -902,8 +1020,8 @@ test.realbox2.testPressEnterAfterFocusout = function() {
   test.realbox.realboxEl.dispatchEvent(enter);
   assertTrue(enter.defaultPrevented);
 
-  assertTrue(clicked);
-  assertEquals(0, test.realbox.opens.length);
+  assertFalse(clicked);
+  assertEquals(1, test.realbox.opens.length);
 };
 
 test.realbox2.testInputAfterFocusoutPrefixMatches = function() {
@@ -942,15 +1060,9 @@ test.realbox2.testInputAfterFocusoutPrefixMatches = function() {
 };
 
 test.realbox2.testInputAfterFocusoutZeroPrefixMatches = function() {
-  test.realbox.realboxEl.value = '';
-  test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
-
-  // Empty input doesn't query autocomplete.
-  test.realbox.realboxEl.dispatchEvent(new Event('focusin', {
-    bubbles: true,
-    cancelable: true,
-    target: test.realbox.realboxEl,
-  }));
+  // Trigger zero suggest querying autocomplete.
+  test.realbox.realboxEl.onclick(test.realbox.trustedEventFacade(
+      'click', {button: 0, target: test.realbox.realboxEl}));
   assertEquals(1, test.realbox.queries.length);
 
   chrome.embeddedSearch.searchBox.autocompleteresultchanged({
@@ -1001,11 +1113,7 @@ test.realbox2.testArrowUpDownShowsMatchesWhenHidden = function() {
 
   assertFalse(test.realbox.areMatchesShowing());
 
-  test.realbox.realboxEl.dispatchEvent(new Event('focusin', {
-    bubbles: true,
-    cancelable: true,
-    target: test.realbox.realboxEl,
-  }));
+  test.realbox.realboxEl.dispatchEvent(new Event('focus'));
 
   const arrowDown = new KeyboardEvent('keydown', {
     bubbles: true,
@@ -1028,6 +1136,7 @@ test.realbox2.testArrowUpDownShowsMatchesWhenHidden = function() {
 
 // Test that trying to open e.g. chrome:// links goes through the mojo API.
 test.realbox2.testPrivilegedDestinationUrls = function() {
+  test.realbox.realboxEl.dispatchEvent(new Event('focus'));
   test.realbox.realboxEl.value = 'about';
   test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
 
@@ -1080,4 +1189,114 @@ test.realbox2.testPrivilegedDestinationUrls = function() {
   matchEls[0].querySelector(`.${test.realbox.CLASSES.REMOVE_ICON}`).click();
   assertEquals(1, test.realbox.deletedLines.length);
   assertEquals(3, test.realbox.opens.length);
+};
+
+test.realbox2.testRealboxIconZeroSuggest = function() {
+  const realboxIcon = $(test.realbox.IDS.REALBOX_ICON);
+  assertFalse(!!realboxIcon.style.backgroundImage);
+
+  // Trigger zero suggest querying autocomplete.
+  test.realbox.realboxEl.onclick(test.realbox.trustedEventFacade(
+      'click', {button: 0, target: test.realbox.realboxEl}));
+  assertEquals(1, test.realbox.queries.length);
+
+  chrome.embeddedSearch.searchBox.autocompleteresultchanged({
+    input: test.realbox.realboxEl.value,
+    matches: [
+      test.realbox.getSearchMatch({allowedToBeDefaultMatch: false}),
+      test.realbox.getUrlMatch(),
+    ],
+  });
+
+  // Zero suggest matches should be showing but no selection nor icon should be
+  // present.
+  assertTrue(test.realbox.areMatchesShowing());
+
+  const matchEls = $(test.realbox.IDS.REALBOX_MATCHES).children;
+  assertEquals(2, matchEls.length);
+  assertFalse(matchEls[0].classList.contains(test.realbox.CLASSES.SELECTED));
+  assertFalse(!!realboxIcon.style.backgroundImage);
+
+  const arrowDown = new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    key: 'ArrowDown',
+  });
+  test.realbox.realboxEl.dispatchEvent(arrowDown);
+  assertTrue(arrowDown.defaultPrevented);
+
+  // Arrow down should create a selection. Because the first item is a search
+  // match, it shouldn't change the realbox icon (as it's search by default).
+  assertTrue(matchEls[0].classList.contains(test.realbox.CLASSES.SELECTED));
+  assertFalse(!!realboxIcon.style.backgroundImage);
+
+  test.realbox.realboxEl.dispatchEvent(new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    key: 'ArrowDown',
+  }));
+
+  // The second item is a URL and therefore should attempt to load the URL's
+  // favicon via background-image on #realbox-icon.
+  assertTrue(matchEls[1].classList.contains(test.realbox.CLASSES.SELECTED));
+  assertTrue(!!realboxIcon.style.backgroundImage);
+};
+
+test.realbox2.testRealboxIconPrefixSearch = function() {
+  const realboxIcon = $(test.realbox.IDS.REALBOX_ICON);
+  assertFalse(!!realboxIcon.style.backgroundImage);
+
+  test.realbox.realboxEl.value = 'about';
+  test.realbox.realboxEl.dispatchEvent(new CustomEvent('input'));
+
+  chrome.embeddedSearch.searchBox.autocompleteresultchanged({
+    input: test.realbox.realboxEl.value,
+    matches: [
+      test.realbox.getUrlMatch({allowedToBeDefaultMatch: true}),
+      test.realbox.getSearchMatch(),
+    ],
+  });
+  assertTrue(test.realbox.areMatchesShowing());
+
+  // First URL match should be showing and the favicon should be in the realbox.
+  const matchEls = $(test.realbox.IDS.REALBOX_MATCHES).children;
+  assertEquals(2, matchEls.length);
+  assertTrue(matchEls[0].classList.contains(test.realbox.CLASSES.SELECTED));
+  assertTrue(!!realboxIcon.style.backgroundImage);
+
+  const arrowDown = new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    key: 'ArrowDown',
+  });
+  test.realbox.realboxEl.dispatchEvent(arrowDown);
+  assertTrue(arrowDown.defaultPrevented);
+
+  // Second search match should clear the favicon.
+  assertTrue(matchEls[1].classList.contains(test.realbox.CLASSES.SELECTED));
+  assertFalse(!!realboxIcon.style.backgroundImage);
+
+  const escapeToDefaultMatch = new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    key: 'Escape',
+  });
+  test.realbox.realboxEl.dispatchEvent(escapeToDefaultMatch);
+  assertTrue(escapeToDefaultMatch.defaultPrevented);
+
+  // Pressing Escape should revert to first match (URL + icon in realbox).
+  assertTrue(matchEls[0].classList.contains(test.realbox.CLASSES.SELECTED));
+  assertTrue(!!realboxIcon.style.backgroundImage);
+
+  const escapeToClear = new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    key: 'Escape',
+  });
+  test.realbox.realboxEl.dispatchEvent(escapeToClear);
+  assertTrue(escapeToClear.defaultPrevented);
+
+  // Escape again should clear/hide matches and favicon.
+  assertFalse(test.realbox.areMatchesShowing());
+  assertFalse(!!realboxIcon.style.backgroundImage);
 };

@@ -31,11 +31,11 @@
 #include "chromeos/services/network_config/public/cpp/cros_network_config_util.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "components/device_event_log/device_event_log.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/scroll_view.h"
@@ -175,6 +175,7 @@ void NetworkListView::OnGetNetworkStateList(
         network.get(), network_icon::ICON_TYPE_LIST, false /* badge_vpn */);
     info->disable = activation_state == ActivationStateType::kActivating ||
                     network->prohibited_by_policy;
+    info->connectable = network->connectable;
     if (network->prohibited_by_policy) {
       info->tooltip =
           l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_PROHIBITED);
@@ -230,7 +231,17 @@ void NetworkListView::UpdateNetworkListInternal() {
 
   views::View* selected_view = nullptr;
   for (const auto& iter : network_guid_map_) {
-    if (iter.second->IsMouseHovered()) {
+    // The within_bounds check is necessary when the network list goes beyond
+    // the visible area (i.e. scrolling) and the mouse is below the tray pop-up.
+    // The items not in view in the tray pop-up keep going down and have
+    // View::GetVisibility() == true but they are masked and not seen by the
+    // user. When the mouse is below the list where the item would be if the
+    // list continued downward, IsMouseHovered() is true and this will trigger
+    // an incorrect programmatic scroll if we don't stop it. The bounds check
+    // ensures the view is actually visible within the tray pop-up.
+    bool within_bounds =
+        this->GetBoundsInScreen().Intersects(iter.second->GetBoundsInScreen());
+    if (within_bounds && iter.second->IsMouseHovered()) {
       selected_view = iter.second;
       break;
     }
@@ -390,11 +401,23 @@ void NetworkListView::UpdateViewForNetwork(HoverHighlightView* view,
   }
 
   view->SetAccessibleName(GenerateAccessibilityLabel(info));
+  view->GetViewAccessibility().OverrideDescription(
+      GenerateAccessibilityDescription(info));
 
   needs_relayout_ = true;
 }
 
 base::string16 NetworkListView::GenerateAccessibilityLabel(
+    const NetworkInfo& info) {
+  if (CanNetworkConnect(info.connection_state, info.type, info.connectable)) {
+    return l10n_util::GetStringFUTF16(
+        IDS_ASH_STATUS_TRAY_NETWORK_A11Y_LABEL_CONNECT, info.label);
+  }
+  return l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_NETWORK_A11Y_LABEL_OPEN,
+                                    info.label);
+}
+
+base::string16 NetworkListView::GenerateAccessibilityDescription(
     const NetworkInfo& info) {
   base::string16 connection_status;
   if (StateIsConnected(info.connection_state) ||
@@ -410,16 +433,14 @@ base::string16 NetworkListView::GenerateAccessibilityLabel(
       if (!connection_status.empty()) {
         if (IsManagedByPolicy(info)) {
           return l10n_util::GetStringFUTF16(
-              IDS_ASH_STATUS_TRAY_ETHERNET_A11Y_LABEL_MANAGED_WITH_CONNECTION_STATUS,
-              info.label, connection_status);
+              IDS_ASH_STATUS_TRAY_ETHERNET_A11Y_DESC_MANAGED_WITH_CONNECTION_STATUS,
+              connection_status);
         }
-        return l10n_util::GetStringFUTF16(
-            IDS_ASH_STATUS_TRAY_ETHERNET_A11Y_LABEL_WITH_CONNECTION_STATUS,
-            info.label, connection_status);
+        return connection_status;
       }
       if (IsManagedByPolicy(info)) {
         return l10n_util::GetStringFUTF16(
-            IDS_ASH_STATUS_TRAY_ETHERNET_A11Y_LABEL_MANAGED, info.label,
+            IDS_ASH_STATUS_TRAY_ETHERNET_A11Y_DESC_MANAGED, info.label,
             connection_status);
       }
       return info.label;
@@ -430,59 +451,56 @@ base::string16 NetworkListView::GenerateAccessibilityLabel(
       if (!connection_status.empty()) {
         if (IsManagedByPolicy(info)) {
           return l10n_util::GetStringFUTF16(
-              IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_LABEL_MANAGED_WITH_CONNECTION_STATUS,
-              info.label, security_label, connection_status,
+              IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_DESC_MANAGED_WITH_CONNECTION_STATUS,
+              security_label, connection_status,
               base::FormatPercent(info.signal_strength));
         }
         return l10n_util::GetStringFUTF16(
-            IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_LABEL_WITH_CONNECTION_STATUS,
-            info.label, security_label, connection_status,
+            IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_DESC_WITH_CONNECTION_STATUS,
+            security_label, connection_status,
             base::FormatPercent(info.signal_strength));
       }
       if (IsManagedByPolicy(info)) {
         return l10n_util::GetStringFUTF16(
-            IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_LABEL_MANAGED, info.label,
-            security_label, base::FormatPercent(info.signal_strength));
+            IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_DESC_MANAGED, security_label,
+            base::FormatPercent(info.signal_strength));
       }
       return l10n_util::GetStringFUTF16(
-          IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_LABEL, info.label,
-          security_label, base::FormatPercent(info.signal_strength));
+          IDS_ASH_STATUS_TRAY_WIFI_NETWORK_A11Y_DESC, security_label,
+          base::FormatPercent(info.signal_strength));
     }
     case NetworkType::kCellular:
       if (!connection_status.empty()) {
         if (IsManagedByPolicy(info)) {
           return l10n_util::GetStringFUTF16(
-              IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_LABEL_MANAGED_WITH_CONNECTION_STATUS,
-              info.label, connection_status,
-              base::FormatPercent(info.signal_strength));
+              IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_DESC_MANAGED_WITH_CONNECTION_STATUS,
+              connection_status, base::FormatPercent(info.signal_strength));
         }
         return l10n_util::GetStringFUTF16(
-            IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_LABEL_WITH_CONNECTION_STATUS,
-            info.label, connection_status,
-            base::FormatPercent(info.signal_strength));
+            IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_DESC_WITH_CONNECTION_STATUS,
+            connection_status, base::FormatPercent(info.signal_strength));
       }
       if (IsManagedByPolicy(info)) {
         return l10n_util::GetStringFUTF16(
-            IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_LABEL_MANAGED, info.label,
+            IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_DESC_MANAGED,
             base::FormatPercent(info.signal_strength));
       }
       return l10n_util::GetStringFUTF16(
-          IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_LABEL, info.label,
+          IDS_ASH_STATUS_TRAY_CELLULAR_NETWORK_A11Y_DESC,
           base::FormatPercent(info.signal_strength));
     case NetworkType::kTether:
       if (!connection_status.empty()) {
         return l10n_util::GetStringFUTF16(
-            IDS_ASH_STATUS_TRAY_TETHER_NETWORK_A11Y_LABEL_WITH_CONNECTION_STATUS,
-            info.label, connection_status,
-            base::FormatPercent(info.signal_strength),
+            IDS_ASH_STATUS_TRAY_TETHER_NETWORK_A11Y_DESC_WITH_CONNECTION_STATUS,
+            connection_status, base::FormatPercent(info.signal_strength),
             base::FormatPercent(info.battery_percentage));
       }
       return l10n_util::GetStringFUTF16(
-          IDS_ASH_STATUS_TRAY_TETHER_NETWORK_A11Y_LABEL, info.label,
+          IDS_ASH_STATUS_TRAY_TETHER_NETWORK_A11Y_DESC,
           base::FormatPercent(info.signal_strength),
           base::FormatPercent(info.battery_percentage));
     default:
-      return info.label;
+      return base::ASCIIToUTF16("");
   }
 }  // namespace tray
 

@@ -21,7 +21,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/skia_util.h"
-#include "ui/native_theme/native_theme.h"
 #include "ui/views/accessibility/ax_virtual_view.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
@@ -53,8 +52,9 @@ constexpr int kIconLabelBubbleFadeOutDurationMs = 175;
 
 }  // namespace
 
-//////////////////////////////////////////////////////////////////
-// SeparatorView class
+SkColor IconLabelBubbleView::Delegate::GetIconLabelBubbleInkDropColor() const {
+  return GetIconLabelBubbleSurroundingForegroundColor();
+}
 
 IconLabelBubbleView::SeparatorView::SeparatorView(IconLabelBubbleView* owner) {
   DCHECK(owner);
@@ -103,19 +103,11 @@ void IconLabelBubbleView::SeparatorView::UpdateOpacity() {
     duration = kIconLabelBubbleFadeInDurationMs;
   }
 
-  if (disable_animation_for_test_) {
-    layer()->SetOpacity(opacity);
-  } else {
-    ui::ScopedLayerAnimationSettings animation(layer()->GetAnimator());
-    animation.SetTransitionDuration(
-        base::TimeDelta::FromMilliseconds(duration));
-    animation.SetTweenType(gfx::Tween::Type::EASE_IN);
-    layer()->SetOpacity(opacity);
-  }
+  ui::ScopedLayerAnimationSettings animation(layer()->GetAnimator());
+  animation.SetTransitionDuration(base::TimeDelta::FromMilliseconds(duration));
+  animation.SetTweenType(gfx::Tween::Type::EASE_IN);
+  layer()->SetOpacity(opacity);
 }
-
-//////////////////////////////////////////////////////////////////
-// HighlightPathGenerator class
 
 class IconLabelBubbleView::HighlightPathGenerator
     : public views::HighlightPathGenerator {
@@ -131,12 +123,13 @@ class IconLabelBubbleView::HighlightPathGenerator
   DISALLOW_COPY_AND_ASSIGN(HighlightPathGenerator);
 };
 
-//////////////////////////////////////////////////////////////////
-// IconLabelBubbleView class
-
-IconLabelBubbleView::IconLabelBubbleView(const gfx::FontList& font_list)
+IconLabelBubbleView::IconLabelBubbleView(const gfx::FontList& font_list,
+                                         Delegate* delegate)
     : LabelButton(nullptr, base::string16()),
+      delegate_(delegate),
       separator_view_(new SeparatorView(this)) {
+  DCHECK(delegate_);
+
   SetFontList(font_list);
   SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
@@ -194,6 +187,10 @@ void IconLabelBubbleView::SetImage(const gfx::ImageSkia& image_skia) {
 
 void IconLabelBubbleView::SetFontList(const gfx::FontList& font_list) {
   label()->SetFontList(font_list);
+}
+
+SkColor IconLabelBubbleView::GetForegroundColor() const {
+  return delegate_->GetIconLabelBubbleSurroundingForegroundColor();
 }
 
 SkColor IconLabelBubbleView::GetParentBackgroundColor() const {
@@ -310,7 +307,7 @@ void IconLabelBubbleView::OnThemeChanged() {
   // under certain conditions. We don't want that, so unset the background.
   label()->SetBackground(nullptr);
 
-  SetEnabledTextColors(GetTextColor());
+  SetEnabledTextColors(GetForegroundColor());
   label()->SetBackgroundColor(GetParentBackgroundColor());
   SchedulePaint();
 }
@@ -321,6 +318,10 @@ std::unique_ptr<views::InkDrop> IconLabelBubbleView::CreateInkDrop() {
   ink_drop->SetShowHighlightOnFocus(!focus_ring());
   ink_drop->AddObserver(this);
   return std::move(ink_drop);
+}
+
+SkColor IconLabelBubbleView::GetInkDropBaseColor() const {
+  return delegate_->GetIconLabelBubbleInkDropColor();
 }
 
 bool IconLabelBubbleView::IsTriggerableEvent(const ui::Event& event) {
@@ -363,7 +364,7 @@ void IconLabelBubbleView::AnimationEnded(const gfx::Animation* animation) {
   }
 
   GetInkDrop()->SetShowHighlightOnHover(true);
-  GetInkDrop()->SetShowHighlightOnFocus(true);
+  GetInkDrop()->SetShowHighlightOnFocus(!focus_ring());
 }
 
 void IconLabelBubbleView::AnimationProgressed(const gfx::Animation* animation) {
@@ -414,8 +415,7 @@ gfx::Size IconLabelBubbleView::GetSizeForLabelWidth(int label_width) const {
       shrinking ? image_size.width() : grow_animation_starting_width_;
   const int max_width = image_size.width() + GetInternalSpacing() + label_width;
 
-  // Height is ignored.
-  return gfx::Size(GetWidthBetween(min_width, max_width), 1);
+  return gfx::Size(GetWidthBetween(min_width, max_width), image_size.height());
 }
 
 int IconLabelBubbleView::GetInternalSpacing() const {

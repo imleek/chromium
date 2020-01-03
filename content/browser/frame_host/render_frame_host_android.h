@@ -16,6 +16,7 @@
 #include "base/macros.h"
 #include "base/supports_user_data.h"
 #include "content/common/content_export.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
 
 namespace content {
@@ -29,7 +30,8 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
  public:
   RenderFrameHostAndroid(
       RenderFrameHostImpl* render_frame_host,
-      service_manager::mojom::InterfaceProviderPtr interface_provider_ptr);
+      mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
+          interface_provider_remote);
   ~RenderFrameHostAndroid() override;
 
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
@@ -47,6 +49,10 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>&,
       const base::android::JavaParamRef<jobject>& jcallback) const;
+
+  bool IsPaymentFeaturePolicyEnabled(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>&) const;
 
   // Returns UnguessableToken.
   base::android::ScopedJavaLocalRef<jobject> GetAndroidOverlayRoutingToken(
@@ -67,7 +73,8 @@ class RenderFrameHostAndroid : public base::SupportsUserData::Data {
 
  private:
   RenderFrameHostImpl* const render_frame_host_;
-  service_manager::mojom::InterfaceProviderPtr interface_provider_ptr_;
+  mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
+      interface_provider_remote_;
   JavaObjectWeakGlobalRef obj_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderFrameHostAndroid);

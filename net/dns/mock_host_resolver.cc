@@ -29,6 +29,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
 #include "net/dns/host_cache.h"
+#include "net/dns/public/resolve_error_info.h"
 #include "net/url_request/url_request_context.h"
 
 #if defined(OS_WIN)
@@ -76,6 +77,7 @@ class MockHostResolverBase::RequestImpl
                                         : ResolveHostParameters()),
         priority_(parameters_.initial_priority),
         host_resolver_flags_(ParametersToHostResolverFlags(parameters_)),
+        resolve_error_info_(ResolveErrorInfo(ERR_IO_PENDING)),
         id_(0),
         resolver_(resolver),
         complete_(false) {}
@@ -143,6 +145,11 @@ class MockHostResolverBase::RequestImpl
     return *nullopt_result;
   }
 
+  net::ResolveErrorInfo GetResolveErrorInfo() const override {
+    DCHECK(complete_);
+    return resolve_error_info_;
+  }
+
   const base::Optional<HostCache::EntryStaleness>& GetStaleInfo()
       const override {
     DCHECK(complete_);
@@ -151,6 +158,12 @@ class MockHostResolverBase::RequestImpl
 
   void ChangeRequestPriority(RequestPriority priority) override {
     priority_ = priority;
+  }
+
+  void SetError(int error) {
+    // Should only be called before request is marked completed.
+    DCHECK(!complete_);
+    resolve_error_info_ = ResolveErrorInfo(error);
   }
 
   void set_address_results(
@@ -169,6 +182,11 @@ class MockHostResolverBase::RequestImpl
   void OnAsyncCompleted(size_t id, int error) {
     DCHECK_EQ(id_, id);
     id_ = 0;
+
+    // Check that error information has been set and that the top-level error
+    // code is valid.
+    DCHECK(resolve_error_info_.error != ERR_IO_PENDING);
+    DCHECK(error == OK || error == ERR_NAME_NOT_RESOLVED);
 
     DCHECK(!complete_);
     complete_ = true;
@@ -209,6 +227,7 @@ class MockHostResolverBase::RequestImpl
 
   base::Optional<AddressList> address_results_;
   base::Optional<HostCache::EntryStaleness> staleness_;
+  ResolveErrorInfo resolve_error_info_;
 
   // Used while stored with the resolver for async resolution.  Otherwise 0.
   size_t id_;
@@ -422,9 +441,10 @@ void MockHostResolverBase::ResolveNow(size_t id) {
       req->request_host(), req->network_isolation_key(),
       DnsQueryTypeToAddressFamily(req->parameters().dns_query_type),
       req->host_resolver_flags(), req->parameters().source, &addresses);
+  req->SetError(error);
   if (error == OK && !req->parameters().is_speculative)
     req->set_address_results(addresses, base::nullopt);
-  req->OnAsyncCompleted(id, error);
+  req->OnAsyncCompleted(id, SquashErrorCode(error));
 }
 
 void MockHostResolverBase::DetachRequest(size_t id) {
@@ -543,17 +563,21 @@ int MockHostResolverBase::Resolve(RequestImpl* request) {
       request->parameters().dns_query_type, request->host_resolver_flags(),
       request->parameters().source, request->parameters().cache_usage,
       &addresses, &stale_info);
+
+  request->SetError(rv);
   if (rv == OK && !request->parameters().is_speculative)
     request->set_address_results(addresses, std::move(stale_info));
   if (rv != ERR_DNS_CACHE_MISS ||
       request->parameters().source == HostResolverSource::LOCAL_ONLY) {
-    return rv;
+    return SquashErrorCode(rv);
   }
 
   // Just like the real resolver, refuse to do anything with invalid
   // hostnames.
-  if (!IsValidDNSDomain(request->request_host().host()))
+  if (!IsValidDNSDomain(request->request_host().host())) {
+    request->SetError(ERR_NAME_NOT_RESOLVED);
     return ERR_NAME_NOT_RESOLVED;
+  }
 
   if (synchronous_mode_) {
     int rv = ResolveProc(
@@ -561,9 +585,11 @@ int MockHostResolverBase::Resolve(RequestImpl* request) {
         DnsQueryTypeToAddressFamily(request->parameters().dns_query_type),
         request->host_resolver_flags(), request->parameters().source,
         &addresses);
+
+    request->SetError(rv);
     if (rv == OK && !request->parameters().is_speculative)
       request->set_address_results(addresses, base::nullopt);
-    return rv;
+    return SquashErrorCode(rv);
   }
 
   // Store the request for asynchronous resolution
@@ -825,6 +851,15 @@ void RuleBasedHostResolverProc::AddSimulatedFailure(
   AddRuleInternal(rule);
 }
 
+void RuleBasedHostResolverProc::AddSimulatedTimeoutFailure(
+    const std::string& host_pattern) {
+  HostResolverFlags flags = HOST_RESOLVER_LOOPBACK_ONLY |
+                            HOST_RESOLVER_DEFAULT_FAMILY_SET_DUE_TO_NO_IPV6;
+  Rule rule(Rule::kResolverTypeFailTimeout, host_pattern,
+            ADDRESS_FAMILY_UNSPECIFIED, flags, std::string(), std::string(), 0);
+  AddRuleInternal(rule);
+}
+
 void RuleBasedHostResolverProc::ClearRules() {
   CHECK(modifications_allowed_);
   base::AutoLock lock(rule_lock_);
@@ -878,6 +913,8 @@ int RuleBasedHostResolverProc::Resolve(const std::string& host,
       switch (r->resolver_type) {
         case Rule::kResolverTypeFail:
           return ERR_NAME_NOT_RESOLVED;
+        case Rule::kResolverTypeFailTimeout:
+          return ERR_DNS_TIMED_OUT;
         case Rule::kResolverTypeSystem:
 #if defined(OS_WIN)
           EnsureWinsockInit();
@@ -989,6 +1026,10 @@ class HangingHostResolver::RequestImpl
   }
 
   const base::Optional<EsniContent>& GetEsniResults() const override {
+    IMMEDIATE_CRASH();
+  }
+
+  net::ResolveErrorInfo GetResolveErrorInfo() const override {
     IMMEDIATE_CRASH();
   }
 

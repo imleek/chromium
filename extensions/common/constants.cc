@@ -6,6 +6,7 @@
 
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
+#include "build/chromecast_buildflags.h"
 
 namespace extensions {
 
@@ -97,7 +98,7 @@ const char kMimeTypePng[] = "image/png";
 
 namespace extension_misc {
 
-#if defined(OS_CHROMEOS) || defined(IS_CHROMECAST)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_CHROMECAST)
 // The extension id for the built-in component extension.
 const char kChromeVoxExtensionId[] = "mndnfokpggljbaajbnioimlmbfngpief";
 #else
@@ -114,6 +115,7 @@ const char kQuickOfficeExtensionId[] = "gbkeegbaiigmenfmjfclcdgdpimamgkj";
 const char kMimeHandlerPrivateTestExtensionId[] =
     "oickdpebdnfbgkcaoklfcdhjniefkcji";
 const char kCameraAppId[] = "hfhhnacclhffhdffklopdkcgdhifgngh";
+const char kCameraAppDevId[] = "flgnmkgjffmkephdokeeliiopbjaafpm";
 const char kChromeAppId[] = "mgndgikekgjfcpckkfioiadnlibdjbkf";
 const char kFilesManagerAppId[] = "hhaomjibdihmijegdhdafkllkbggdgoj";
 const char kGoogleKeepAppId[] = "hmjkmjkepdijhoojdojkdfohbdgmmhki";
@@ -130,6 +132,7 @@ const char kScreensaverAppId[] = "mnoijifedipmbjaoekhadjcijipaijjc";
 const char kScreensaverEveAppId[] = "gdobaoeekhiklaljmhladjfdfkigampc";
 const char kScreensaverNocturneAppId[] = "lminefdanffajachfahfpmphfkhahcnj";
 const char kScreensaverAltAppId[] = "bnabjkecnachpogjlfilfcnlpcmacglh";
+const char kScreensaverKukuiAppId[] = "fafhbhdboeiciklpkminlncemohljlkj";
 
 bool IsSystemUIApp(base::StringPiece extension_id) {
   static const char* const kApps[] = {

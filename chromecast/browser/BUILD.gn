@@ -40,6 +40,21 @@ cast_source_set("prefs") {
   }
 }
 
+cast_source_set("feature_list") {
+  sources = [
+    "cast_feature_list_creator.cc",
+    "cast_feature_list_creator.h",
+  ]
+  deps = [
+    ":prefs",
+    "//base",
+    "//chromecast/base",
+    "//chromecast/browser/metrics",
+    "//components/prefs",
+    "//components/proxy_config",
+  ]
+}
+
 cast_source_set("browser") {
   sources = [
     "application_media_capabilities.cc",
@@ -61,8 +76,6 @@ cast_source_set("browser") {
     "cast_content_gesture_handler.h",
     "cast_download_manager_delegate.cc",
     "cast_download_manager_delegate.h",
-    "cast_feature_list_creator.cc",
-    "cast_feature_list_creator.h",
     "cast_http_user_agent_settings.cc",
     "cast_http_user_agent_settings.h",
     "cast_media_blocker.cc",
@@ -117,6 +130,8 @@ cast_source_set("browser") {
     "renderer_prelauncher.h",
     "service/cast_service_simple.cc",
     "service/cast_service_simple.h",
+    "service_connector.cc",
+    "service_connector.h",
     "tts/tts_controller.h",
     "tts/tts_controller_impl.cc",
     "tts/tts_controller_impl.h",
@@ -137,6 +152,7 @@ cast_source_set("browser") {
   }
 
   public_deps = [
+    ":feature_list",
     ":prefs",
     ":public",
     "//chromecast/browser/metrics",
@@ -170,6 +186,7 @@ cast_source_set("browser") {
     "//chromecast/media/service",
     "//chromecast/media/service/mojom",
     "//chromecast/net",
+    "//chromecast/net:connectivity_checker",
     "//chromecast/service",
     "//components/download/public/common:public",
     "//components/metrics",
@@ -195,9 +212,9 @@ cast_source_set("browser") {
     "//gpu",
     "//ipc",
     "//media",
-    "//media/mojo/services:media_manifest",
     "//net",
     "//services/media_session/public/mojom",
+    "//services/network/public/mojom",
     "//services/service_manager/public/cpp",
     "//ui/base",
     "//ui/compositor",
@@ -279,10 +296,7 @@ cast_source_set("browser") {
   }
 
   if (enable_mojo_media) {
-    deps += [
-      "//media/mojo/mojom:constants",
-      "//media/mojo/services",
-    ]
+    deps += [ "//media/mojo/services" ]
   }
 
   if (enable_external_mojo_services) {
@@ -405,8 +419,6 @@ cast_source_set("browser") {
       "webview/webview_controller.h",
       "webview/webview_grpc_service.cc",
       "webview/webview_grpc_service.h",
-      "webview/webview_layout_manager.cc",
-      "webview/webview_layout_manager.h",
       "webview/webview_navigation_throttle.cc",
       "webview/webview_navigation_throttle.h",
       "webview/webview_rpc_instance.cc",
@@ -420,6 +432,7 @@ cast_source_set("browser") {
       "//chromecast/browser/webview/proto",
       "//components/exo",
       "//components/exo/wayland",
+      "//content/public/browser",
       "//services/viz/privileged/mojom/compositing",
       "//ui/display/manager",
     ]

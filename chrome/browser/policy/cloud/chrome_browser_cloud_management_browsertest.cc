@@ -24,6 +24,7 @@
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/net/system_network_context_manager.h"
+#include "chrome/browser/policy/browser_dm_token_storage.h"
 #include "chrome/browser/policy/chrome_browser_cloud_management_controller.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/fake_browser_dm_token_storage.h"
@@ -144,7 +145,7 @@ class ChromeBrowserExtraSetUp : public ChromeBrowserMainExtraParts {
 };
 
 // Two observers that quit run_loop when policy is fetched and stored or in case
-// there is any error.
+// the core is disconnected in case of error.
 class PolicyFetchStoreObserver : public CloudPolicyStore::Observer {
  public:
   PolicyFetchStoreObserver(CloudPolicyStore* store,
@@ -167,30 +168,31 @@ class PolicyFetchStoreObserver : public CloudPolicyStore::Observer {
   DISALLOW_COPY_AND_ASSIGN(PolicyFetchStoreObserver);
 };
 
-class PolicyFetchClientObserver : public CloudPolicyClient::Observer {
+class PolicyFetchCoreObserver : public CloudPolicyCore::Observer {
  public:
-  PolicyFetchClientObserver(CloudPolicyClient* client,
-                            base::OnceClosure quit_closure)
-      : client_(client), quit_closure_(std::move(quit_closure)) {
-    client_->AddObserver(this);
+  PolicyFetchCoreObserver(CloudPolicyCore* core, base::OnceClosure quit_closure)
+      : core_(core), quit_closure_(std::move(quit_closure)) {
+    core_->AddObserver(this);
   }
-  ~PolicyFetchClientObserver() override { client_->RemoveObserver(this); }
+  ~PolicyFetchCoreObserver() override { core_->RemoveObserver(this); }
 
-  void OnPolicyFetched(CloudPolicyClient* client) override {
+  void OnCoreConnected(CloudPolicyCore* core) override {}
+
+  void OnRefreshSchedulerStarted(CloudPolicyCore* core) override {}
+
+  void OnCoreDisconnecting(CloudPolicyCore* core) override {
+    // This is called when policy fetching fails and is used in
+    // ChromeBrowserCloudManagementController to unenroll the browser. The
+    // status must be DM_STATUS_SERVICE_DEVICE_NOT_FOUND for this to happen.
+    EXPECT_EQ(core->client()->status(), DM_STATUS_SERVICE_DEVICE_NOT_FOUND);
     std::move(quit_closure_).Run();
   }
 
-  void OnRegistrationStateChanged(CloudPolicyClient* client) override {}
-
-  void OnClientError(CloudPolicyClient* client) override {
-    std::move(quit_closure_).Run();
-  }
+  void OnRemoteCommandsServiceStarted(CloudPolicyCore* core) override {}
 
  private:
-  CloudPolicyClient* client_;
+  CloudPolicyCore* core_;
   base::OnceClosure quit_closure_;
-  std::unique_ptr<PolicyFetchStoreObserver> store_observer_;
-  DISALLOW_COPY_AND_ASSIGN(PolicyFetchClientObserver);
 };
 
 }  // namespace
@@ -384,10 +386,12 @@ class MachineLevelUserCloudPolicyManagerTest : public InProcessBrowserTest {
     CloudPolicyStoreObserverStub observer;
 
     base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
-
+    DMToken browser_dm_token =
+        dm_token.empty() ? DMToken::CreateEmptyTokenForTesting()
+                         : DMToken::CreateValidTokenForTesting(dm_token);
     std::unique_ptr<MachineLevelUserCloudPolicyStore> policy_store =
         MachineLevelUserCloudPolicyStore::Create(
-            dm_token, client_id, user_data_dir,
+            browser_dm_token, client_id, user_data_dir,
             /*cloud_policy_overrides=*/false,
             base::CreateSequencedTaskRunner({base::ThreadPool(),
                                              base::MayBlock(),
@@ -471,7 +475,7 @@ class ChromeBrowserCloudManagementEnrollmentTest
   }
 
   void VerifyEnrollmentResult() {
-    auto dm_token = BrowserDMTokenStorage::Get()->RetrieveBrowserDMToken();
+    DMToken dm_token = BrowserDMTokenStorage::Get()->RetrieveDMToken();
     if (is_enrollment_token_valid()) {
       EXPECT_TRUE(dm_token.is_valid());
       EXPECT_EQ("fake_device_management_token", dm_token.value());
@@ -535,7 +539,7 @@ IN_PROC_BROWSER_TEST_P(ChromeBrowserCloudManagementEnrollmentTest, MAYBE_Test) {
 #endif
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(ChromeBrowserCloudManagementEnrollmentTest,
                          ChromeBrowserCloudManagementEnrollmentTest,
                          ::testing::Combine(::testing::Bool(),
                                             ::testing::Bool(),
@@ -578,6 +582,8 @@ class MachineLevelUserCloudPolicyPolicyFetchTest
     test_server_->RegisterClient(kDMToken, kClientID, {} /* state_keys */);
   }
 
+  DMToken retrieve_dm_token() { return storage_.RetrieveDMToken(); }
+
   const std::string dm_token() const { return GetParam(); }
 
  private:
@@ -597,13 +603,13 @@ IN_PROC_BROWSER_TEST_P(MachineLevelUserCloudPolicyPolicyFetchTest, Test) {
   if (manager->core()->client()->last_policy_timestamp().is_null()) {
     base::RunLoop run_loop;
     // Listen to store event which is fired after policy validation if token is
-    // valid. Otherwise listen to the client event because there is no store
-    // event.
-    std::unique_ptr<PolicyFetchClientObserver> client_observer;
+    // valid. Otherwise listen to the core since it gets disconnected by
+    // unenrollment.
+    std::unique_ptr<PolicyFetchCoreObserver> core_observer;
     std::unique_ptr<PolicyFetchStoreObserver> store_observer;
     if (dm_token() == kInvalidDMToken) {
-      client_observer = std::make_unique<PolicyFetchClientObserver>(
-          manager->core()->client(), run_loop.QuitClosure());
+      core_observer = std::make_unique<PolicyFetchCoreObserver>(
+          manager->core(), run_loop.QuitClosure());
     } else {
       store_observer = std::make_unique<PolicyFetchStoreObserver>(
           manager->store(), run_loop.QuitClosure());
@@ -620,8 +626,23 @@ IN_PROC_BROWSER_TEST_P(MachineLevelUserCloudPolicyPolicyFetchTest, Test) {
   if (dm_token() != kInvalidDMToken) {
     EXPECT_EQ(1u, policy_map.size());
     EXPECT_EQ(base::Value(true), *(policy_map.Get("ShowHomeButton")->value));
+
+    // The token in storage should be valid.
+    DMToken token = retrieve_dm_token();
+    EXPECT_TRUE(token.is_valid());
+
+    // The test server will register with "fake_device_management_token" if
+    // Chrome is started without a DM token.
+    if (dm_token().empty())
+      EXPECT_EQ(token.value(), "fake_device_management_token");
+    else
+      EXPECT_EQ(token.value(), kDMToken);
   } else {
     EXPECT_EQ(0u, policy_map.size());
+
+    // The token in storage should be invalid.
+    DMToken token = retrieve_dm_token();
+    EXPECT_TRUE(token.is_invalid());
   }
 }
 
@@ -632,7 +653,7 @@ IN_PROC_BROWSER_TEST_P(MachineLevelUserCloudPolicyPolicyFetchTest, Test) {
 //  get an error. There should be no more cloud policy applied.
 //  3) Start Chrome without DM token. Chrome will register itself and fetch
 //  policy after it.
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(MachineLevelUserCloudPolicyPolicyFetchTest,
                          MachineLevelUserCloudPolicyPolicyFetchTest,
                          ::testing::Values(kDMToken, kInvalidDMToken, ""));
 

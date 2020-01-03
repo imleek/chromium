@@ -21,8 +21,8 @@ namespace features {
 extern const base::Feature kOptimizationHints;
 extern const base::Feature kOptimizationHintsExperiments;
 constexpr char kOptimizationHintsExperimentNameParam[] = "experiment_name";
-extern const base::Feature kOptimizationHintsFetching;
-extern const base::Feature kOptimizationHintsFetchingAnonymousDataConsent;
+extern const base::Feature kRemoteOptimizationGuideFetching;
+extern const base::Feature kRemoteOptimizationGuideFetchingAnonymousDataConsent;
 extern const base::Feature kOptimizationTargetPrediction;
 
 // The maximum number of hosts that can be stored in the
@@ -67,13 +67,13 @@ GURL GetOptimizationGuideServiceGetModelsURL();
 // Whether server optimization hints are enabled.
 bool IsOptimizationHintsEnabled();
 
-// Returns true if the feature to fetch hints from the remote Optimization Guide
+// Returns true if the feature to fetch from the remote Optimization Guide
 // Service is enabled.
-bool IsHintsFetchingEnabled();
+bool IsRemoteFetchingEnabled();
 
-// Returns true if the feature to fetch hints for users that have consented to
+// Returns true if the feature to fetch data for users that have consented to
 // anonymous data collection is enabled but are not Data Saver users.
-bool IsHintsFetchingForAnonymousDataConsentEnabled();
+bool IsRemoteFetchingForAnonymousDataConsentEnabled();
 
 // The maximum data byte size for a server-provided bloom filter. This is
 // a client-side safety limit for RAM use in case server sends too large of
@@ -99,11 +99,27 @@ bool IsOptimizationTargetPredictionEnabled();
 // to be used and remain in the OptimizationGuideStore.
 base::TimeDelta StoredHostModelFeaturesFreshnessDuration();
 
+// The maximum number of hosts allowed to be requested by the client to the
+// remote Optimzation Guide Service for use by prediction models.
+size_t MaxHostsForOptimizationGuideServiceModelsFetch();
+
+// The maximum number of hosts allowed to be maintained in a least-recently-used
+// cache by the prediction manager.
+size_t MaxHostModelFeaturesCacheSize();
+
 // Returns true if the optimization target decision for |optimization_target|
 // should not be propagated to the caller in an effort to fully understand the
 // statistics for the served model and not taint the resulting data.
 bool ShouldOverrideOptimizationTargetDecisionForMetricsPurposes(
     proto::OptimizationTarget optimization_target);
+
+// Returns the minimum number of seconds to randomly delay before starting to
+// fetch for prediction models and host model features.
+int PredictionModelFetchRandomMinDelaySecs();
+
+// Returns the maximum number of seconds to randomly delay before starting to
+// fetch for prediction models and host model features.
+int PredictionModelFetchRandomMaxDelaySecs();
 
 }  // namespace features
 }  // namespace optimization_guide

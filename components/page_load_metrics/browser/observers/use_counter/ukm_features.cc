@@ -48,7 +48,6 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kPaymentHandler,
           WebFeature::kPaymentRequestShowWithoutGesture,
           WebFeature::kHTMLImports,
-          WebFeature::kHTMLImportsHasStyleSheets,
           WebFeature::kHTMLImportsOnReverseOriginTrials,
           WebFeature::kElementCreateShadowRoot,
           WebFeature::kElementCreateShadowRootOnReverseOriginTrials,
@@ -99,7 +98,6 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kOpenerNavigationDownloadCrossOrigin,
           WebFeature::kLinkRelPrerender,
           WebFeature::kAdClickNavigation,
-          WebFeature::kDownloadInSandboxWithoutUserGesture,
           WebFeature::kV8HTMLVideoElement_RequestPictureInPicture_Method,
           WebFeature::kMediaCapabilitiesDecodingInfoWithKeySystemConfig,
           WebFeature::kTextFragmentAnchor,
@@ -128,7 +126,6 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kRequestedFileSystemPersistent,
           WebFeature::kSMSReceiverStart,
           WebFeature::kRequestFileSystem,
-          WebFeature::kMediaCapabilitiesFramerateRatio,
           WebFeature::kBaseElement,
           WebFeature::kBaseWithCrossOriginHref,
           WebFeature::kWakeLockAcquireScreenLock,
@@ -146,6 +143,10 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kCSSSelectorInternalMediaControlsOverlayCastButton,
           WebFeature::kWebBluetoothRequestDevice,
           WebFeature::kWebBluetoothRequestScan,
+          WebFeature::
+              kV8VideoPlaybackQuality_CorruptedVideoFrames_AttributeGetter,
+          WebFeature::kInputTypeCheckboxRenderedNonSquare,
+          WebFeature::kInputTypeRadioRenderedNonSquare,
       }));
   return *opt_in_features;
 }

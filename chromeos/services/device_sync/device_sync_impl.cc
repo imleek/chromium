@@ -18,10 +18,12 @@
 #include "chromeos/services/device_sync/cryptauth_client_impl.h"
 #include "chromeos/services/device_sync/cryptauth_device_activity_getter_impl.h"
 #include "chromeos/services/device_sync/cryptauth_device_manager_impl.h"
+#include "chromeos/services/device_sync/cryptauth_device_notifier_impl.h"
 #include "chromeos/services/device_sync/cryptauth_device_registry_impl.h"
 #include "chromeos/services/device_sync/cryptauth_enroller_factory_impl.h"
 #include "chromeos/services/device_sync/cryptauth_enrollment_manager_impl.h"
 #include "chromeos/services/device_sync/cryptauth_feature_status_setter_impl.h"
+#include "chromeos/services/device_sync/cryptauth_feature_type.h"
 #include "chromeos/services/device_sync/cryptauth_gcm_manager_impl.h"
 #include "chromeos/services/device_sync/cryptauth_key_registry_impl.h"
 #include "chromeos/services/device_sync/cryptauth_scheduler_impl.h"
@@ -29,7 +31,6 @@
 #include "chromeos/services/device_sync/cryptauth_v2_enrollment_manager_impl.h"
 #include "chromeos/services/device_sync/device_sync_type_converters.h"
 #include "chromeos/services/device_sync/proto/cryptauth_api.pb.h"
-#include "chromeos/services/device_sync/proto/cryptauth_common.pb.h"
 #include "chromeos/services/device_sync/proto/device_classifier_util.h"
 #include "chromeos/services/device_sync/public/cpp/gcm_device_info_provider.h"
 #include "chromeos/services/device_sync/remote_device_provider_impl.h"
@@ -483,6 +484,8 @@ void DeviceSyncImpl::SetSoftwareFeatureState(
     bool enabled,
     bool is_exclusive,
     SetSoftwareFeatureStateCallback callback) {
+  DCHECK(features::ShouldUseV1DeviceSync());
+
   if (status_ != Status::READY) {
     PA_LOG(WARNING) << "DeviceSyncImpl::SetSoftwareFeatureState() invoked "
                     << "before initialization was complete. Cannot set state.";
@@ -516,6 +519,7 @@ void DeviceSyncImpl::SetFeatureStatus(const std::string& device_instance_id,
                                       multidevice::SoftwareFeature feature,
                                       FeatureStatusChange status_change,
                                       SetFeatureStatusCallback callback) {
+  DCHECK(features::ShouldUseV2DeviceSync);
   DCHECK(!device_instance_id.empty());
 
   if (status_ != Status::READY) {
@@ -533,17 +537,40 @@ void DeviceSyncImpl::SetFeatureStatus(const std::string& device_instance_id,
                       device_instance_id, feature, status_change,
                       remote_device_provider_.get(), std::move(callback)));
 
-  feature_status_setter_->SetFeatureStatus(
-      device_instance_id, feature, status_change,
-      base::BindOnce(&DeviceSyncImpl::OnSetFeatureStatusSuccess,
-                     weak_ptr_factory_.GetWeakPtr()),
-      base::BindOnce(&DeviceSyncImpl::OnSetFeatureStatusError,
-                     weak_ptr_factory_.GetWeakPtr(), request_id));
+  // Before v1 DeviceSync is disabled, we need to use the
+  // CryptAuthFeatureStatusSetter indirectly via the SoftwareFeatureManager to
+  // ensure an ordering of SetSoftwareFeatureState() and SetFeatureStatus()
+  // calls. These two functions have similar effects on the CryptAuth backend,
+  // so the order of the calls matters. For example, say that, during setup, we
+  // select a device without an Instance ID to be the multi-device host, then we
+  // change our mind and select a device with an Instance ID. These calls to
+  // SetSoftwareFeatureState() and SetFeatureStatus(), respectively, need to be
+  // ordered so that the device with the Instance ID will always be set as the
+  // multi-device host. When v1 DeviceSync is disabled,
+  // SetSoftwareFeatureState() will not longer be called, and the queue
+  // maintained by the FeatureStatusSetter will be sufficient.
+  if (features::ShouldUseV1DeviceSync()) {
+    software_feature_manager_->SetFeatureStatus(
+        device_instance_id, feature, status_change,
+        base::BindOnce(&DeviceSyncImpl::OnSetFeatureStatusSuccess,
+                       weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(&DeviceSyncImpl::OnSetFeatureStatusError,
+                       weak_ptr_factory_.GetWeakPtr(), request_id));
+  } else {
+    feature_status_setter_->SetFeatureStatus(
+        device_instance_id, feature, status_change,
+        base::BindOnce(&DeviceSyncImpl::OnSetFeatureStatusSuccess,
+                       weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(&DeviceSyncImpl::OnSetFeatureStatusError,
+                       weak_ptr_factory_.GetWeakPtr(), request_id));
+  }
 }
 
 void DeviceSyncImpl::FindEligibleDevices(
     multidevice::SoftwareFeature software_feature,
     FindEligibleDevicesCallback callback) {
+  DCHECK(features::ShouldUseV1DeviceSync());
+
   if (status_ != Status::READY) {
     PA_LOG(WARNING) << "DeviceSyncImpl::FindEligibleDevices() invoked before "
                     << "initialization was complete. Cannot find devices.";
@@ -560,6 +587,33 @@ void DeviceSyncImpl::FindEligibleDevices(
                  weak_ptr_factory_.GetWeakPtr(), callback_holder),
       base::Bind(&DeviceSyncImpl::OnFindEligibleDevicesError,
                  weak_ptr_factory_.GetWeakPtr(), callback_holder));
+}
+
+void DeviceSyncImpl::NotifyDevices(
+    const std::vector<std::string>& device_instance_ids,
+    cryptauthv2::TargetService target_service,
+    multidevice::SoftwareFeature feature,
+    NotifyDevicesCallback callback) {
+  DCHECK(features::ShouldUseV2DeviceSync);
+
+  if (status_ != Status::READY) {
+    PA_LOG(WARNING) << "DeviceSyncImpl::NotifyDevices() invoked before "
+                    << "initialization was complete. Cannot notify devices.";
+    std::move(callback).Run(
+        mojom::NetworkRequestResult::kServiceNotYetInitialized);
+    return;
+  }
+
+  auto request_id = base::UnguessableToken::Create();
+  pending_notify_devices_callbacks_.emplace(request_id, std::move(callback));
+
+  device_notifier_->NotifyDevices(
+      device_instance_ids, target_service,
+      CryptAuthFeatureTypeFromSoftwareFeature(feature),
+      base::Bind(&DeviceSyncImpl::OnNotifyDevicesSuccess,
+                 weak_ptr_factory_.GetWeakPtr(), request_id),
+      base::Bind(&DeviceSyncImpl::OnNotifyDevicesError,
+                 weak_ptr_factory_.GetWeakPtr(), request_id));
 }
 
 void DeviceSyncImpl::GetDevicesActivityStatus(
@@ -588,28 +642,6 @@ void DeviceSyncImpl::GetDevicesActivityStatus(
                  weak_ptr_factory_.GetWeakPtr(), request_id),
       base::Bind(&DeviceSyncImpl::OnGetDevicesActivityStatusError,
                  weak_ptr_factory_.GetWeakPtr(), request_id));
-}
-
-void DeviceSyncImpl::OnGetDevicesActivityStatusFinished(
-    const base::UnguessableToken& request_id,
-    CryptAuthDeviceActivityGetter::DeviceActivityStatusResult
-        device_activity_status_result) {
-  auto iter = get_devices_activity_status_callbacks_.find(request_id);
-  DCHECK(iter != get_devices_activity_status_callbacks_.end());
-  std::move(iter->second)
-      .Run(mojom::NetworkRequestResult::kSuccess,
-           base::make_optional(std::move(device_activity_status_result)));
-  get_devices_activity_status_callbacks_.erase(iter);
-}
-
-void DeviceSyncImpl::OnGetDevicesActivityStatusError(
-    const base::UnguessableToken& request_id,
-    NetworkRequestError error) {
-  auto iter = get_devices_activity_status_callbacks_.find(request_id);
-  DCHECK(iter != get_devices_activity_status_callbacks_.end());
-  std::move(iter->second)
-      .Run(mojo::ConvertTo<mojom::NetworkRequestResult>(error), base::nullopt);
-  get_devices_activity_status_callbacks_.erase(iter);
 }
 
 void DeviceSyncImpl::GetDebugInfo(GetDebugInfoCallback callback) {
@@ -683,14 +715,16 @@ void DeviceSyncImpl::OnSyncDeviceListChanged() {
 }
 
 void DeviceSyncImpl::Shutdown() {
+  cryptauth_device_activity_getter_.reset();
   software_feature_manager_.reset();
   feature_status_setter_.reset();
+  device_notifier_.reset();
   remote_device_provider_.reset();
-  cryptauth_v2_device_manager_.reset();
   cryptauth_device_manager_.reset();
   cryptauth_enrollment_manager_.reset();
-  cryptauth_scheduler_.reset();
+  cryptauth_v2_device_manager_.reset();
   cryptauth_device_registry_.reset();
+  cryptauth_scheduler_.reset();
   cryptauth_key_registry_.reset();
   cryptauth_client_factory_.reset();
   cryptauth_gcm_manager_.reset();
@@ -819,17 +853,26 @@ void DeviceSyncImpl::CompleteInitializationAfterSuccessfulEnrollment() {
   }
 
   remote_device_provider_ = RemoteDeviceProviderImpl::Factory::NewInstance(
-      cryptauth_device_manager_.get(), primary_account_info_.account_id,
+      cryptauth_device_manager_.get(), cryptauth_v2_device_manager_.get(),
+      primary_account_info_.email,
       cryptauth_enrollment_manager_->GetUserPrivateKey());
   remote_device_provider_->AddObserver(this);
 
-  software_feature_manager_ = SoftwareFeatureManagerImpl::Factory::NewInstance(
-      cryptauth_client_factory_.get());
+  if (features::ShouldUseV2DeviceSync()) {
+    feature_status_setter_ =
+        CryptAuthFeatureStatusSetterImpl::Factory::Get()->BuildInstance(
+            client_app_metadata_provider_, cryptauth_client_factory_.get(),
+            cryptauth_gcm_manager_.get());
 
-  feature_status_setter_ =
-      CryptAuthFeatureStatusSetterImpl::Factory::Get()->BuildInstance(
-          client_app_metadata_provider_, cryptauth_client_factory_.get(),
-          cryptauth_gcm_manager_.get());
+    device_notifier_ =
+        CryptAuthDeviceNotifierImpl::Factory::Get()->BuildInstance(
+            client_app_metadata_provider_, cryptauth_client_factory_.get(),
+            cryptauth_gcm_manager_.get());
+  }
+
+  // |feature_status_setter_| is null if v2 DeviceSync is disabled.
+  software_feature_manager_ = SoftwareFeatureManagerImpl::Factory::NewInstance(
+      cryptauth_client_factory_.get(), feature_status_setter_.get());
 
   status_ = Status::READY;
 
@@ -973,6 +1016,58 @@ void DeviceSyncImpl::OnFindEligibleDevicesError(
   RecordFindEligibleDevicesResultFailureReason(
       GetDeviceSyncRequestFailureReason(
           mojo::ConvertTo<mojom::NetworkRequestResult>(error)));
+}
+
+void DeviceSyncImpl::OnNotifyDevicesSuccess(
+    const base::UnguessableToken& request_id) {
+  auto it = pending_notify_devices_callbacks_.find(request_id);
+  if (it == pending_notify_devices_callbacks_.end()) {
+    PA_LOG(ERROR) << "DeviceSyncImpl::OnNotifyDevicesSuccess(): "
+                  << "Could not find request entry with ID " << request_id;
+    NOTREACHED();
+    return;
+  }
+
+  std::move(it->second).Run(mojom::NetworkRequestResult::kSuccess);
+  pending_notify_devices_callbacks_.erase(it);
+}
+
+void DeviceSyncImpl::OnNotifyDevicesError(
+    const base::UnguessableToken& request_id,
+    NetworkRequestError error) {
+  auto it = pending_notify_devices_callbacks_.find(request_id);
+  if (it == pending_notify_devices_callbacks_.end()) {
+    PA_LOG(ERROR) << "DeviceSyncImpl::OnNotifyDevicesError(): "
+                  << "Could not find request entry with ID " << request_id;
+    NOTREACHED();
+    return;
+  }
+
+  std::move(it->second)
+      .Run(mojo::ConvertTo<mojom::NetworkRequestResult>(error));
+  pending_notify_devices_callbacks_.erase(it);
+}
+
+void DeviceSyncImpl::OnGetDevicesActivityStatusFinished(
+    const base::UnguessableToken& request_id,
+    CryptAuthDeviceActivityGetter::DeviceActivityStatusResult
+        device_activity_status_result) {
+  auto iter = get_devices_activity_status_callbacks_.find(request_id);
+  DCHECK(iter != get_devices_activity_status_callbacks_.end());
+  std::move(iter->second)
+      .Run(mojom::NetworkRequestResult::kSuccess,
+           base::make_optional(std::move(device_activity_status_result)));
+  get_devices_activity_status_callbacks_.erase(iter);
+}
+
+void DeviceSyncImpl::OnGetDevicesActivityStatusError(
+    const base::UnguessableToken& request_id,
+    NetworkRequestError error) {
+  auto iter = get_devices_activity_status_callbacks_.find(request_id);
+  DCHECK(iter != get_devices_activity_status_callbacks_.end());
+  std::move(iter->second)
+      .Run(mojo::ConvertTo<mojom::NetworkRequestResult>(error), base::nullopt);
+  get_devices_activity_status_callbacks_.erase(iter);
 }
 
 void DeviceSyncImpl::StartSetSoftwareFeatureTimer() {

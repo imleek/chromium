@@ -39,6 +39,17 @@ int LayoutManagerBase::GetPreferredHeightForWidth(const View* host,
   return cached_height_for_width_->height();
 }
 
+SizeBounds LayoutManagerBase::GetAvailableSize(const View* host,
+                                               const View* view) const {
+  DCHECK_EQ(host_view_, host);
+  if (cached_layout_size_) {
+    for (const auto& child_layout : cached_layout_.child_layouts)
+      if (child_layout.child_view == view)
+        return child_layout.available_size;
+  }
+  return SizeBounds();
+}
+
 void LayoutManagerBase::Layout(View* host) {
   DCHECK_EQ(host_view_, host);
   // A handful of views will cause invalidations while they are being
@@ -109,10 +120,25 @@ void LayoutManagerBase::ApplyLayout(const ProposedLayout& layout) {
     // Since we have a non-const reference to the parent here, we can safely use
     // a non-const reference to the child.
     View* const child_view = child_layout.child_view;
+    // Should not be attempting to modify a child view that has been removed.
+    DCHECK(host_view()->GetIndexOf(child_view) >= 0);
     if (child_view->GetVisible() != child_layout.visible)
       SetViewVisibility(child_view, child_layout.visible);
-    if (child_layout.visible)
-      child_view->SetBoundsRect(child_layout.bounds);
+
+    // If the child view is not visible and we haven't bothered to specify
+    // bounds, don't bother setting them (which would cause another cascade of
+    // events that wouldn't do anything useful).
+    if (child_layout.visible || !child_layout.bounds.IsEmpty()) {
+      if (child_view->bounds() != child_layout.bounds)
+        child_view->SetBoundsRect(child_layout.bounds);
+      // Child layouts which are not invalid will not be laid out by the default
+      // View::Layout() implementation, but if there is an available size
+      // constraint it's important that the child view be laid out. So we'll do
+      // it here.
+      // TODO(dfried): figure out a better way to handle this.
+      else if (child_layout.available_size != SizeBounds())
+        child_view->Layout();
+    }
   }
 }
 
@@ -211,16 +237,18 @@ void LayoutManagerBase::ViewRemoved(View* host, View* view) {
 
 void LayoutManagerBase::ViewVisibilitySet(View* host,
                                           View* view,
-                                          bool visible) {
+                                          bool old_visibility,
+                                          bool new_visibility) {
   DCHECK_EQ(host_view_, host);
   auto it = child_infos_.find(view);
   DCHECK(it != child_infos_.end());
   const bool was_ignored = it->second.ignored;
-  if (it->second.can_be_visible == visible)
+  if (it->second.can_be_visible == new_visibility)
     return;
 
   base::AutoReset<bool> setter(&suppress_invalidate_, true);
-  const bool invalidate = PropagateViewVisibilitySet(host, view, visible);
+  const bool invalidate =
+      PropagateViewVisibilitySet(host, view, new_visibility);
   if (invalidate || !was_ignored)
     InvalidateHost(false);
 }
@@ -303,8 +331,8 @@ bool LayoutManagerBase::PropagateViewVisibilitySet(View* host,
 
 void LayoutManagerBase::PropagateInstalled(View* host) {
   host_view_ = host;
-  for (auto it = host->children().begin(); it != host->children().end(); ++it) {
-    child_infos_.emplace(*it, ChildInfo{(*it)->GetVisible(), false});
+  for (auto* it : host->children()) {
+    child_infos_.emplace(it, ChildInfo{it->GetVisible(), false});
   }
 
   for (auto& owned_layout : owned_layouts_)

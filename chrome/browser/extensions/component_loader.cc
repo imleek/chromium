@@ -387,9 +387,8 @@ void ComponentLoader::AddKeyboardApp() {
 void ComponentLoader::AddChromeCameraApp() {
   base::FilePath resources_path;
   if (base::PathService::Get(chrome::DIR_RESOURCES, &resources_path)) {
-    AddComponentFromDir(
-        resources_path.Append(extension_misc::kChromeCameraAppPath),
-        extension_misc::kChromeCameraAppId, base::RepeatingClosure());
+    AddComponentFromDir(resources_path.Append(extension_misc::kCameraAppPath),
+                        extension_misc::kCameraAppId, base::RepeatingClosure());
   }
 }
 
@@ -459,14 +458,13 @@ void ComponentLoader::AddDefaultComponentExtensions(
 #if defined(OS_CHROMEOS)
     AddChromeApp();
 #endif  // defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_PDF)
+    Add(pdf_extension_util::GetManifest(),
+        base::FilePath(FILE_PATH_LITERAL("pdf")));
+#endif  // BUILDFLAG(ENABLE_PDF)
   }
 
   AddDefaultComponentExtensionsWithBackgroundPages(skip_session_components);
-
-#if BUILDFLAG(ENABLE_PDF)
-  Add(pdf_extension_util::GetManifest(),
-      base::FilePath(FILE_PATH_LITERAL("pdf")));
-#endif
 }
 
 void ComponentLoader::AddDefaultComponentExtensionsForKioskMode(

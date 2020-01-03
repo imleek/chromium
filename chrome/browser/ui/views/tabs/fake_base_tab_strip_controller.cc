@@ -8,7 +8,11 @@
 
 #include "chrome/browser/ui/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
+#include "components/tab_groups/tab_group_color.h"
+#include "components/tab_groups/tab_group_id.h"
+#include "components/tab_groups/tab_group_visual_data.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/color_utils.h"
 
 FakeBaseTabStripController::FakeBaseTabStripController() {}
 
@@ -35,7 +39,7 @@ void FakeBaseTabStripController::AddPinnedTab(int index, bool is_active) {
 }
 
 void FakeBaseTabStripController::MoveTab(int from_index, int to_index) {
-  base::Optional<TabGroupId> prev_group;
+  base::Optional<tab_groups::TabGroupId> prev_group;
   if (from_index < int{tab_groups_.size()}) {
     prev_group = tab_groups_[from_index];
     tab_groups_.erase(tab_groups_.begin() + from_index);
@@ -63,33 +67,54 @@ void FakeBaseTabStripController::RemoveTab(int index) {
 
 void FakeBaseTabStripController::MoveTabIntoGroup(
     int index,
-    base::Optional<TabGroupId> new_group) {
-  base::Optional<TabGroupId> old_group;
+    base::Optional<tab_groups::TabGroupId> new_group) {
+  bool group_exists = base::Contains(tab_groups_, new_group);
+  base::Optional<tab_groups::TabGroupId> old_group;
   if (index >= int{tab_groups_.size()})
     tab_groups_.resize(index + 1);
   else
     old_group = tab_groups_[index];
+
   tab_groups_[index] = new_group;
-  tab_strip_->ChangeTabGroup(index, old_group, new_group);
+
+  if (old_group.has_value()) {
+    tab_strip_->AddTabToGroup(base::nullopt, index);
+    if (!base::Contains(tab_groups_, old_group))
+      tab_strip_->OnGroupClosed(old_group.value());
+    else
+      tab_strip_->OnGroupContentsChanged(old_group.value());
+  }
+  if (new_group.has_value()) {
+    if (!group_exists)
+      tab_strip_->OnGroupCreated(new_group.value());
+    tab_strip_->AddTabToGroup(new_group.value(), index);
+    tab_strip_->OnGroupContentsChanged(new_group.value());
+  }
+}
+base::string16 FakeBaseTabStripController::GetGroupTitle(
+    tab_groups::TabGroupId group_id) const {
+  return fake_group_data_.title();
 }
 
-const TabGroupVisualData* FakeBaseTabStripController::GetVisualDataForGroup(
-    TabGroupId group) const {
-  return &fake_group_data_;
+tab_groups::TabGroupColorId FakeBaseTabStripController::GetGroupColorId(
+    tab_groups::TabGroupId group_id) const {
+  return fake_group_data_.color();
 }
 
 void FakeBaseTabStripController::SetVisualDataForGroup(
-    TabGroupId group,
-    TabGroupVisualData visual_data) {
+    tab_groups::TabGroupId group,
+    tab_groups::TabGroupVisualData visual_data) {
   fake_group_data_ = visual_data;
 }
 
-void FakeBaseTabStripController::UngroupAllTabsInGroup(TabGroupId group) {}
+void FakeBaseTabStripController::UngroupAllTabsInGroup(
+    tab_groups::TabGroupId group) {}
 
-void FakeBaseTabStripController::AddNewTabInGroup(TabGroupId group) {}
+void FakeBaseTabStripController::AddNewTabInGroup(
+    tab_groups::TabGroupId group) {}
 
 std::vector<int> FakeBaseTabStripController::ListTabsInGroup(
-    TabGroupId group) const {
+    tab_groups::TabGroupId group) const {
   std::vector<int> result;
   for (size_t i = 0; i < tab_groups_.size(); i++) {
     if (tab_groups_[i] == group)

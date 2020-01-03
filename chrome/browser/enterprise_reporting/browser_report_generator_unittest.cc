@@ -21,6 +21,10 @@
 #include "device_management_backend.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/common/chrome_constants.h"
+#endif  // defined(OS_CHROMEOS)
+
 namespace em = enterprise_management;
 
 namespace enterprise_reporting {
@@ -45,8 +49,6 @@ class BrowserReportGeneratorTest : public ::testing::Test {
 
   void SetUp() override {
     ASSERT_TRUE(profile_manager_.SetUp());
-    profile_manager_.CreateGuestProfile();
-    profile_manager_.CreateSystemProfile();
     content::PluginService::GetInstance()->Init();
   }
 
@@ -55,6 +57,16 @@ class BrowserReportGeneratorTest : public ::testing::Test {
         profile_manager()->profiles_dir().AppendASCII(kProfileId),
         base::ASCIIToUTF16(kProfileName), std::string(), base::string16(),
         false, 0, std::string(), EmptyAccountId());
+  }
+
+  void InitializeIrregularProfiles() {
+    profile_manager_.CreateGuestProfile();
+    profile_manager_.CreateSystemProfile();
+
+#if defined(OS_CHROMEOS)
+    profile_manager_.CreateTestingProfile(chrome::kInitialProfile);
+    profile_manager_.CreateTestingProfile(chrome::kLockScreenAppProfile);
+#endif  // defined(OS_CHROMEOS)
   }
 
   void InitializePlugin() {
@@ -78,9 +90,15 @@ class BrowserReportGeneratorTest : public ::testing::Test {
         [&run_loop](std::unique_ptr<em::BrowserReport> report) {
           EXPECT_TRUE(report.get());
 
+#if defined(OS_CHROMEOS)
+          EXPECT_FALSE(report->has_browser_version());
+          EXPECT_FALSE(report->has_channel());
+#else
           EXPECT_NE(std::string(), report->browser_version());
-          EXPECT_NE(std::string(), report->executable_path());
           EXPECT_TRUE(report->has_channel());
+#endif
+
+          EXPECT_NE(std::string(), report->executable_path());
 
           EXPECT_EQ(1, report->chrome_user_profile_infos_size());
           em::ChromeUserProfileInfo profile =
@@ -89,12 +107,16 @@ class BrowserReportGeneratorTest : public ::testing::Test {
           EXPECT_EQ(kProfileName, profile.name());
           EXPECT_FALSE(profile.is_full_report());
 
+#if defined(OS_CHROMEOS)
+          EXPECT_EQ(0, report->plugins_size());
+#else
           EXPECT_LE(1, report->plugins_size());
           em::Plugin plugin = report->plugins(0);
           EXPECT_EQ(kPluginName, plugin.name());
           EXPECT_EQ(kPluginVersion, plugin.version());
           EXPECT_EQ(kPluginFileName, plugin.filename());
           EXPECT_EQ(kPluginDescription, plugin.description());
+#endif
           run_loop.Quit();
         }));
     run_loop.Run();
@@ -112,6 +134,7 @@ class BrowserReportGeneratorTest : public ::testing::Test {
 
 TEST_F(BrowserReportGeneratorTest, GenerateBasicReport) {
   InitializeProfile();
+  InitializeIrregularProfiles();
   InitializePlugin();
   GenerateAndVerify();
 }

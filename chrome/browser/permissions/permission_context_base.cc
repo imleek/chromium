@@ -32,7 +32,9 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/prefs/pref_service.h"
 #include "components/variations/variations_associated_data.h"
+#include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -40,13 +42,6 @@
 #include "content/public/common/origin_util.h"
 #include "extensions/common/constants.h"
 #include "url/gurl.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/app_mode/web_app/web_kiosk_app_data.h"
-#include "chrome/browser/chromeos/app_mode/web_app/web_kiosk_app_manager.h"
-#include "components/user_manager/user.h"
-#include "components/user_manager/user_manager.h"
-#endif
 
 namespace {
 
@@ -177,7 +172,6 @@ void PermissionContextBase::RequestPermission(
       case PermissionStatusSource::INSECURE_ORIGIN:
       case PermissionStatusSource::UNSPECIFIED:
       case PermissionStatusSource::VIRTUAL_URL_DIFFERENT_ORIGIN:
-      case PermissionStatusSource::WEB_KIOSK_APP_MODE:
         break;
     }
 
@@ -187,6 +181,15 @@ void PermissionContextBase::RequestPermission(
     NotifyPermissionSet(id, requesting_origin, embedding_origin,
                         std::move(callback), false /* persist */,
                         result.content_setting);
+    return;
+  }
+
+  // Make sure we do not show a UI for cached documents
+  if (content::BackForwardCache::EvictIfCached(
+          content::GlobalFrameRoutingId(id.render_process_id(),
+                                        id.render_frame_id()),
+          "PermissionContextBase::RequestPermission")) {
+    std::move(callback).Run(result.content_setting);
     return;
   }
 
@@ -261,22 +264,7 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
     return PermissionResult(content_setting,
                             PermissionStatusSource::UNSPECIFIED);
   }
-#if defined(OS_CHROMEOS)
-  if (user_manager::UserManager::IsInitialized() &&
-      user_manager::UserManager::Get()->IsLoggedInAsWebKioskApp()) {
-    const AccountId& account_id =
-        user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId();
-    DCHECK(chromeos::WebKioskAppManager::IsInitialized());
 
-    const chromeos::WebKioskAppData* app_data =
-        chromeos::WebKioskAppManager::Get()->GetAppByAccountId(account_id);
-    DCHECK(app_data);
-    if (url::Origin::Create(requesting_origin) ==
-        url::Origin::Create(app_data->install_url()))
-      return PermissionResult(CONTENT_SETTING_ALLOW,
-                              PermissionStatusSource::WEB_KIOSK_APP_MODE);
-  }
-#endif
   PermissionResult result =
       PermissionDecisionAutoBlocker::GetForProfile(profile_)->GetEmbargoResult(
           requesting_origin, content_settings_type_);

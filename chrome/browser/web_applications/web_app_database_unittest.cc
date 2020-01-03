@@ -36,6 +36,34 @@ class WebAppDatabaseTest : public WebAppTest {
     test_registry_controller_->SetUp(profile());
   }
 
+  static WebApp::FileHandlers CreateFileHandlers(int suffix) {
+    WebApp::FileHandlers file_handlers;
+
+    for (unsigned int i = 0; i < 5; ++i) {
+      std::string suffix_str =
+          base::NumberToString(suffix) + base::NumberToString(i);
+
+      WebApp::FileHandlerAccept file_handler_accept1;
+      file_handler_accept1.mimetype = "application/" + suffix_str + "+foo";
+      file_handler_accept1.file_extensions.insert("." + suffix_str + "a");
+      file_handler_accept1.file_extensions.insert("." + suffix_str + "b");
+
+      WebApp::FileHandlerAccept file_handler_accept2;
+      file_handler_accept2.mimetype = "application/" + suffix_str + "+bar";
+      file_handler_accept2.file_extensions.insert("." + suffix_str + "a");
+      file_handler_accept2.file_extensions.insert("." + suffix_str + "b");
+
+      WebApp::FileHandler file_handler;
+      file_handler.action = GURL("https://example.com/open-" + suffix_str);
+      file_handler.accept.push_back(std::move(file_handler_accept1));
+      file_handler.accept.push_back(std::move(file_handler_accept2));
+
+      file_handlers.push_back(std::move(file_handler));
+    }
+
+    return file_handlers;
+  }
+
   static std::unique_ptr<WebApp> CreateWebApp(const std::string& base_url,
                                               int suffix) {
     const auto launch_url = base_url + base::NumberToString(suffix);
@@ -79,14 +107,14 @@ class WebAppDatabaseTest : public WebAppTest {
         DisplayMode::kStandalone, DisplayMode::kFullscreen};
     app->SetDisplayMode(display_modes[(suffix >> 4) & 3]);
 
-    const std::string icon_url =
-        base_url + "/icon" + base::NumberToString(suffix);
-    const int icon_size_in_px = 256;
+    WebApplicationIconInfo icon;
+    icon.url = GURL(base_url + "/icon" + base::NumberToString(suffix));
+    const SquareSizePx size = 256;
+    icon.square_size_px = size;
+    app->SetIconInfos({std::move(icon)});
+    app->SetDownloadedIconSizes({size});
 
-    WebApp::Icons icons;
-    icons.push_back({GURL(icon_url), icon_size_in_px});
-
-    app->SetIcons(std::move(icons));
+    app->SetFileHandlers(CreateFileHandlers(suffix));
 
     WebApp::SyncData sync_data;
     sync_data.name = "Sync" + name;
@@ -265,7 +293,7 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   app->SetIsLocallyInstalled(false);
 
   EXPECT_FALSE(app->HasAnySources());
-  for (int i = Source::kMinValue; i < Source::kMaxValue; ++i) {
+  for (int i = Source::kMinValue; i <= Source::kMaxValue; ++i) {
     app->AddSource(static_cast<Source::Type>(i));
     EXPECT_TRUE(app->HasAnySources());
   }
@@ -275,10 +303,12 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_TRUE(app->description().empty());
   EXPECT_TRUE(app->scope().is_empty());
   EXPECT_FALSE(app->theme_color().has_value());
-  EXPECT_TRUE(app->icons().empty());
+  EXPECT_TRUE(app->icon_infos().empty());
+  EXPECT_TRUE(app->downloaded_icon_sizes().empty());
   EXPECT_FALSE(app->is_in_sync_install());
   EXPECT_TRUE(app->sync_data().name.empty());
   EXPECT_FALSE(app->sync_data().theme_color.has_value());
+  EXPECT_TRUE(app->file_handlers().empty());
   controller().RegisterApp(std::move(app));
 
   Registry registry = database_factory().ReadRegistry();
@@ -293,7 +323,7 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_EQ(user_display_mode, app_copy->user_display_mode());
   EXPECT_FALSE(app_copy->is_locally_installed());
 
-  for (int i = Source::kMinValue; i < Source::kMaxValue; ++i) {
+  for (int i = Source::kMinValue; i <= Source::kMaxValue; ++i) {
     EXPECT_TRUE(app_copy->HasAnySources());
     app_copy->RemoveSource(static_cast<Source::Type>(i));
   }
@@ -304,10 +334,12 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_TRUE(app_copy->description().empty());
   EXPECT_TRUE(app_copy->scope().is_empty());
   EXPECT_FALSE(app_copy->theme_color().has_value());
-  EXPECT_TRUE(app_copy->icons().empty());
+  EXPECT_TRUE(app_copy->icon_infos().empty());
+  EXPECT_TRUE(app_copy->downloaded_icon_sizes().empty());
   EXPECT_FALSE(app_copy->is_in_sync_install());
   EXPECT_TRUE(app_copy->sync_data().name.empty());
   EXPECT_FALSE(app_copy->sync_data().theme_color.has_value());
+  EXPECT_TRUE(app_copy->file_handlers().empty());
 }
 
 TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
@@ -319,15 +351,18 @@ TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
   auto app = CreateWebApp(base_url, 0);
   auto app_id = app->app_id();
 
-  WebApp::Icons icons;
+  std::vector<WebApplicationIconInfo> icons;
+  std::vector<SquareSizePx> sizes;
   for (int i = 1; i <= num_icons; ++i) {
-    const std::string icon_url =
-        base_url + "/icon" + base::NumberToString(num_icons);
+    WebApplicationIconInfo icon;
+    icon.url = GURL(base_url + "/icon" + base::NumberToString(num_icons));
     // Let size equals the icon's number squared.
-    const int icon_size_in_px = i * i;
-    icons.push_back({GURL(icon_url), icon_size_in_px});
+    icon.square_size_px = i * i;
+    sizes.push_back(icon.square_size_px);
+    icons.push_back(std::move(icon));
   }
-  app->SetIcons(std::move(icons));
+  app->SetIconInfos(std::move(icons));
+  app->SetDownloadedIconSizes(std::move(sizes));
 
   controller().RegisterApp(std::move(app));
 
@@ -335,11 +370,49 @@ TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
   EXPECT_EQ(1UL, registry.size());
 
   std::unique_ptr<WebApp>& app_copy = registry.at(app_id);
-  EXPECT_EQ(static_cast<unsigned>(num_icons), app_copy->icons().size());
+  EXPECT_EQ(static_cast<unsigned>(num_icons), app_copy->icon_infos().size());
   for (int i = 1; i <= num_icons; ++i) {
     const int icon_size_in_px = i * i;
-    EXPECT_EQ(icon_size_in_px, app_copy->icons()[i - 1].size_in_px);
+    EXPECT_EQ(icon_size_in_px, app_copy->icon_infos()[i - 1].square_size_px);
   }
+}
+
+TEST_F(WebAppDatabaseTest, WebAppWithFileHandlersRoundTrip) {
+  controller().Init();
+
+  const std::string base_url = "https://example.com/path";
+  auto app = CreateWebApp(base_url, 0);
+  auto app_id = app->app_id();
+
+  WebApp::FileHandlers file_handlers;
+
+  WebApp::FileHandler file_handler1;
+  file_handler1.action = GURL("https://example.com/path/csv");
+  WebApp::FileHandlerAccept accept_csv;
+  accept_csv.mimetype = "text/csv";
+  accept_csv.file_extensions.insert(".csv");
+  accept_csv.file_extensions.insert(".txt");
+  file_handler1.accept.push_back(std::move(accept_csv));
+  file_handlers.push_back(std::move(file_handler1));
+
+  WebApp::FileHandler file_handler2;
+  file_handler2.action = GURL("https://example.com/path/svg");
+  WebApp::FileHandlerAccept accept_xml;
+  accept_xml.mimetype = "text/xml";
+  accept_xml.file_extensions.insert(".xml");
+  file_handler2.accept.push_back(std::move(accept_xml));
+  WebApp::FileHandlerAccept accept_svg;
+  accept_svg.mimetype = "text/xml+svg";
+  accept_svg.file_extensions.insert(".svg");
+  file_handler2.accept.push_back(std::move(accept_svg));
+  file_handlers.push_back(std::move(file_handler2));
+
+  app->SetFileHandlers(std::move(file_handlers));
+
+  controller().RegisterApp(std::move(app));
+
+  Registry registry = database_factory().ReadRegistry();
+  EXPECT_TRUE(IsRegistryEqual(mutable_registrar().registry(), registry));
 }
 
 }  // namespace web_app

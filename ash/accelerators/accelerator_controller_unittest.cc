@@ -15,7 +15,7 @@
 #include "ash/app_list/test/app_list_test_helper.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
-#include "ash/ime/ime_controller.h"
+#include "ash/ime/ime_controller_impl.h"
 #include "ash/ime/mode_indicator_observer.h"
 #include "ash/ime/test_ime_controller_client.h"
 #include "ash/magnifier/docked_magnifier_controller_impl.h"
@@ -24,9 +24,9 @@
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/ash_switches.h"
+#include "ash/public/cpp/ime_info.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/test/shell_test_api.h"
-#include "ash/public/mojom/ime_info.mojom.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
@@ -38,12 +38,14 @@
 #include "ash/test_screenshot_delegate.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "ash/wm/test_session_state_animator.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "base/command_line.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_writer.h"
 #include "base/optional.h"
@@ -76,7 +78,6 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/message_center/message_center.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_client_view.h"
 #include "ui/wm/core/accelerator_filter.h"
 
 namespace ash {
@@ -86,15 +87,15 @@ using media_session::mojom::MediaSessionAction;
 namespace {
 
 void AddTestImes() {
-  mojom::ImeInfoPtr ime1 = mojom::ImeInfo::New();
-  ime1->id = "id1";
-  mojom::ImeInfoPtr ime2 = mojom::ImeInfo::New();
-  ime2->id = "id2";
-  std::vector<mojom::ImeInfoPtr> available_imes;
+  ImeInfo ime1;
+  ime1.id = "id1";
+  ImeInfo ime2;
+  ime2.id = "id2";
+  std::vector<ImeInfo> available_imes;
   available_imes.push_back(std::move(ime1));
   available_imes.push_back(std::move(ime2));
-  Shell::Get()->ime_controller()->RefreshIme(
-      "id1", std::move(available_imes), std::vector<mojom::ImeMenuItemPtr>());
+  Shell::Get()->ime_controller()->RefreshIme("id1", std::move(available_imes),
+                                             std::vector<ImeMenuItem>());
 }
 
 ui::Accelerator CreateReleaseAccelerator(ui::KeyboardCode key_code,
@@ -227,12 +228,24 @@ class AcceleratorControllerTest : public AshTestBase {
 
   void AcceptConfirmationDialog() {
     DCHECK(test_api_->GetConfirmationDialog());
-    test_api_->GetConfirmationDialog()->GetDialogClientView()->AcceptWindow();
+    test_api_->GetConfirmationDialog()->AcceptDialog();
   }
 
   void CancelConfirmationDialog() {
     DCHECK(test_api_->GetConfirmationDialog());
-    test_api_->GetConfirmationDialog()->GetDialogClientView()->CancelWindow();
+    test_api_->GetConfirmationDialog()->CancelDialog();
+  }
+
+  void TriggerRotateScreenShortcut() {
+    ui::test::EventGenerator* generator = GetEventGenerator();
+    generator->PressKey(ui::VKEY_BROWSER_REFRESH,
+                        ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+    generator->ReleaseKey(ui::VKEY_BROWSER_REFRESH,
+                          ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+    if (IsConfirmationDialogOpen()) {
+      AcceptConfirmationDialog();
+      base::RunLoop().RunUntilIdle();
+    }
   }
 
   void RemoveAllNotifications() const {
@@ -592,6 +605,126 @@ TEST_F(AcceleratorControllerTest, RotateScreen) {
       GetActiveDisplayRotation(display.id());
   // |new_rotation| is determined by the AcceleratorController.
   EXPECT_NE(initial_rotation, rotation_after_accept);
+}
+
+// Tests that using the keyboard shortcut to rotate the display while the device
+// is in physical tablet state behaves like a request to lock the user
+// orientation to the next rotation of the internal display, and disables auto-
+// rotation.
+TEST_F(AcceleratorControllerTest, RotateScreenInPhysicalTabletState) {
+  display::test::DisplayManagerTestApi(display_manager())
+      .SetFirstDisplayAsInternalDisplay();
+  ash::ShellTestApi().SetTabletModeEnabledForTest(true);
+  auto* tablet_mode_controller = Shell::Get()->tablet_mode_controller();
+  auto* screen_orientation_controller =
+      Shell::Get()->screen_orientation_controller();
+  EXPECT_TRUE(tablet_mode_controller->is_in_tablet_physical_state());
+  EXPECT_FALSE(screen_orientation_controller->user_rotation_locked());
+  EXPECT_FALSE(screen_orientation_controller->rotation_locked());
+  EXPECT_EQ(OrientationLockType::kLandscapePrimary,
+            screen_orientation_controller->GetCurrentOrientation());
+
+  TriggerRotateScreenShortcut();
+
+  EXPECT_TRUE(screen_orientation_controller->user_rotation_locked());
+  EXPECT_TRUE(screen_orientation_controller->rotation_locked());
+  EXPECT_EQ(OrientationLockType::kPortraitSecondary,
+            screen_orientation_controller->GetCurrentOrientation());
+
+  // When the device is no longer used as a tablet, the original rotation will
+  // be restored.
+  ash::ShellTestApi().SetTabletModeEnabledForTest(false);
+  EXPECT_FALSE(tablet_mode_controller->is_in_tablet_physical_state());
+  EXPECT_EQ(OrientationLockType::kLandscapePrimary,
+            screen_orientation_controller->GetCurrentOrientation());
+  // User rotation lock remains in place to be restored again when the device
+  // goes to physical tablet state again.
+  EXPECT_TRUE(screen_orientation_controller->user_rotation_locked());
+  EXPECT_FALSE(screen_orientation_controller->rotation_locked());
+}
+
+// Tests the behavior of the shortcut when the active window requests to lock
+// the rotation to a particular orientation.
+TEST_F(AcceleratorControllerTest, RotateScreenWithWindowLockingOrientation) {
+  display::test::DisplayManagerTestApi(display_manager())
+      .SetFirstDisplayAsInternalDisplay();
+  ash::ShellTestApi().SetTabletModeEnabledForTest(true);
+  auto* tablet_mode_controller = Shell::Get()->tablet_mode_controller();
+  auto* screen_orientation_controller =
+      Shell::Get()->screen_orientation_controller();
+  EXPECT_TRUE(tablet_mode_controller->is_in_tablet_physical_state());
+  EXPECT_FALSE(screen_orientation_controller->user_rotation_locked());
+  auto win0 = CreateAppWindow(gfx::Rect{100, 300});
+  auto win1 = CreateAppWindow(gfx::Rect{200, 200});
+  screen_orientation_controller->LockOrientationForWindow(
+      win0.get(), OrientationLockType::kPortraitPrimary);
+  screen_orientation_controller->LockOrientationForWindow(
+      win1.get(), OrientationLockType::kLandscape);
+
+  // `win0` requests to lock the orientation to only portrait-primary. The
+  // shortcut therefore won't be able to change the current rotation at all.
+  wm::ActivateWindow(win0.get());
+  EXPECT_TRUE(screen_orientation_controller->rotation_locked());
+  EXPECT_FALSE(screen_orientation_controller->user_rotation_locked());
+  EXPECT_EQ(OrientationLockType::kPortraitPrimary,
+            screen_orientation_controller->GetCurrentOrientation());
+
+  TriggerRotateScreenShortcut();
+  // Nothing happens; user rotation is still not locked, but the rotation is
+  // app-locked.
+  EXPECT_TRUE(screen_orientation_controller->rotation_locked());
+  EXPECT_FALSE(screen_orientation_controller->user_rotation_locked());
+  EXPECT_EQ(OrientationLockType::kPortraitPrimary,
+            screen_orientation_controller->GetCurrentOrientation());
+
+  // Activate `win1` which allows any landscape orientations (either primary or
+  // secondary). The shortcut will switch between the two allowed orientations
+  // only.
+  wm::ActivateWindow(win1.get());
+  EXPECT_TRUE(screen_orientation_controller->rotation_locked());
+  EXPECT_FALSE(screen_orientation_controller->user_rotation_locked());
+  EXPECT_EQ(OrientationLockType::kLandscapePrimary,
+            screen_orientation_controller->GetCurrentOrientation());
+
+  TriggerRotateScreenShortcut();
+  // User rotation will now be locked.
+  EXPECT_TRUE(screen_orientation_controller->rotation_locked());
+  EXPECT_TRUE(screen_orientation_controller->user_rotation_locked());
+  EXPECT_EQ(OrientationLockType::kLandscapeSecondary,
+            screen_orientation_controller->GetCurrentOrientation());
+  TriggerRotateScreenShortcut();
+  EXPECT_TRUE(screen_orientation_controller->rotation_locked());
+  EXPECT_TRUE(screen_orientation_controller->user_rotation_locked());
+  EXPECT_EQ(OrientationLockType::kLandscapePrimary,
+            screen_orientation_controller->GetCurrentOrientation());
+
+  // Hook a mouse device, exiting tablet mode to clamshell mode (but remaining
+  // in a tablet physical state). Expect that the shortcut changes the user
+  // rotation lock in all directions regardless of which window is active, even
+  // those that requested window rotation locks.
+  TabletModeControllerTestApi().AttachExternalMouse();
+  EXPECT_TRUE(tablet_mode_controller->is_in_tablet_physical_state());
+  EXPECT_FALSE(tablet_mode_controller->InTabletMode());
+
+  wm::ActivateWindow(win0.get());
+  EXPECT_TRUE(screen_orientation_controller->rotation_locked());
+  EXPECT_TRUE(screen_orientation_controller->user_rotation_locked());
+  EXPECT_EQ(OrientationLockType::kLandscapePrimary,
+            screen_orientation_controller->GetCurrentOrientation());
+  TriggerRotateScreenShortcut();
+  EXPECT_EQ(OrientationLockType::kPortraitSecondary,
+            screen_orientation_controller->GetCurrentOrientation());
+  TriggerRotateScreenShortcut();
+  EXPECT_EQ(OrientationLockType::kLandscapeSecondary,
+            screen_orientation_controller->GetCurrentOrientation());
+
+  wm::ActivateWindow(win1.get());
+  TriggerRotateScreenShortcut();
+  EXPECT_EQ(OrientationLockType::kPortraitPrimary,
+            screen_orientation_controller->GetCurrentOrientation());
+  TriggerRotateScreenShortcut();
+  EXPECT_EQ(OrientationLockType::kLandscapePrimary,
+            screen_orientation_controller->GetCurrentOrientation());
 }
 
 TEST_F(AcceleratorControllerTest, AutoRepeat) {
@@ -1310,10 +1443,10 @@ namespace {
 
 // Tests the TOGGLE_CAPS_LOCK accelerator.
 TEST_F(AcceleratorControllerTest, ToggleCapsLockAccelerators) {
-  ImeController* controller = Shell::Get()->ime_controller();
+  ImeControllerImpl* controller = Shell::Get()->ime_controller();
 
   TestImeControllerClient client;
-  controller->SetClient(client.CreateRemote());
+  controller->SetClient(&client);
   EXPECT_EQ(0, client.set_caps_lock_count_);
 
   // 1. Press Alt, Press Search, Release Search, Release Alt.
@@ -1326,7 +1459,6 @@ TEST_F(AcceleratorControllerTest, ToggleCapsLockAccelerators) {
   const ui::Accelerator release_search_before_alt(
       CreateReleaseAccelerator(ui::VKEY_LWIN, ui::EF_ALT_DOWN));
   EXPECT_TRUE(ProcessInController(release_search_before_alt));
-  controller->FlushMojoForTesting();
   EXPECT_EQ(1, client.set_caps_lock_count_);
   EXPECT_TRUE(controller->IsCapsLockEnabled());
   controller->UpdateCapsLockState(false);
@@ -1336,7 +1468,6 @@ TEST_F(AcceleratorControllerTest, ToggleCapsLockAccelerators) {
                                               ui::EF_COMMAND_DOWN);
   EXPECT_FALSE(ProcessInController(press_search_then_alt));
   EXPECT_TRUE(ProcessInController(release_search_before_alt));
-  controller->FlushMojoForTesting();
   EXPECT_EQ(2, client.set_caps_lock_count_);
   EXPECT_TRUE(controller->IsCapsLockEnabled());
   controller->UpdateCapsLockState(false);
@@ -1346,7 +1477,6 @@ TEST_F(AcceleratorControllerTest, ToggleCapsLockAccelerators) {
   const ui::Accelerator release_alt_before_search(
       CreateReleaseAccelerator(ui::VKEY_MENU, ui::EF_COMMAND_DOWN));
   EXPECT_TRUE(ProcessInController(release_alt_before_search));
-  controller->FlushMojoForTesting();
   EXPECT_EQ(3, client.set_caps_lock_count_);
   EXPECT_TRUE(controller->IsCapsLockEnabled());
   controller->UpdateCapsLockState(false);
@@ -1354,7 +1484,6 @@ TEST_F(AcceleratorControllerTest, ToggleCapsLockAccelerators) {
   // 4. Press Search, Press Alt, Release Alt, Release Search.
   EXPECT_FALSE(ProcessInController(press_search_then_alt));
   EXPECT_TRUE(ProcessInController(release_alt_before_search));
-  controller->FlushMojoForTesting();
   EXPECT_EQ(4, client.set_caps_lock_count_);
   EXPECT_TRUE(controller->IsCapsLockEnabled());
   controller->UpdateCapsLockState(false);
@@ -1366,7 +1495,6 @@ TEST_F(AcceleratorControllerTest, ToggleCapsLockAccelerators) {
   generator->PressKey(ui::VKEY_MENU, ui::EF_NONE);
   generator->PressKey(ui::VKEY_LWIN, ui::EF_ALT_DOWN);
   generator->ReleaseKey(ui::VKEY_MENU, ui::EF_COMMAND_DOWN);
-  controller->FlushMojoForTesting();
   EXPECT_FALSE(controller->IsCapsLockEnabled());
   controller->UpdateCapsLockState(false);
   generator->ReleaseKey(ui::VKEY_M, ui::EF_NONE);
@@ -1401,7 +1529,6 @@ TEST_F(AcceleratorControllerTest, ToggleCapsLockAccelerators) {
     // triggered.
     EXPECT_FALSE(ProcessInController(press_search_then_alt));
     EXPECT_TRUE(ProcessInController(release_search_before_alt));
-    controller->FlushMojoForTesting();
     EXPECT_EQ(5, client.set_caps_lock_count_);
     EXPECT_TRUE(controller->IsCapsLockEnabled());
     controller->UpdateCapsLockState(false);
@@ -1416,7 +1543,6 @@ TEST_F(AcceleratorControllerTest, ToggleCapsLockAccelerators) {
   // triggered.
   EXPECT_FALSE(ProcessInController(press_search_then_alt));
   EXPECT_TRUE(ProcessInController(release_search_before_alt));
-  controller->FlushMojoForTesting();
   EXPECT_EQ(6, client.set_caps_lock_count_);
   EXPECT_TRUE(controller->IsCapsLockEnabled());
   controller->UpdateCapsLockState(false);
@@ -2096,7 +2222,7 @@ class MediaSessionAcceleratorTest
 };
 
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     MediaSessionAcceleratorTest,
     testing::Values(
         MediaSessionAcceleratorTestConfig{true, MediaSessionAction::kPlay,
@@ -2370,12 +2496,11 @@ TEST_F(AcceleratorControllerTest, ChangeIMEMode_SwitchesInputMethod) {
   ImeController* controller = Shell::Get()->ime_controller();
 
   TestImeControllerClient client;
-  controller->SetClient(client.CreateRemote());
+  controller->SetClient(&client);
 
   EXPECT_EQ(0, client.next_ime_count_);
 
   ProcessInController(ui::Accelerator(ui::VKEY_MODECHANGE, ui::EF_NONE));
-  controller->FlushMojoForTesting();
 
   EXPECT_EQ(1, client.next_ime_count_);
 }

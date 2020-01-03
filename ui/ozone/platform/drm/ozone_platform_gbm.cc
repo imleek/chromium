@@ -40,7 +40,6 @@
 #include "ui/ozone/platform/drm/host/drm_display_host_manager.h"
 #include "ui/ozone/platform/drm/host/drm_gpu_platform_support_host.h"
 #include "ui/ozone/platform/drm/host/drm_native_display_delegate.h"
-#include "ui/ozone/platform/drm/host/drm_overlay_manager_host.h"
 #include "ui/ozone/platform/drm/host/drm_window_host.h"
 #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
 #include "ui/ozone/platform/drm/host/host_drm_device.h"
@@ -150,7 +149,7 @@ class OzonePlatformGbm : public OzonePlatform {
     drm_thread_started_ = true;
   }
 
-  std::unique_ptr<PlatformWindowBase> CreatePlatformWindow(
+  std::unique_ptr<PlatformWindow> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
       PlatformWindowInitProperties properties) override {
     GpuThreadAdapter* adapter = gpu_platform_support_host_.get();
@@ -202,12 +201,13 @@ class OzonePlatformGbm : public OzonePlatform {
     cursor_ = std::make_unique<DrmCursor>(window_manager_.get());
 
 #if BUILDFLAG(USE_XKBCOMMON)
-    KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
-        std::make_unique<XkbKeyboardLayoutEngine>(xkb_evdev_code_converter_));
+    keyboard_layout_engine_ =
+        std::make_unique<XkbKeyboardLayoutEngine>(xkb_evdev_code_converter_);
 #else
-    KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
-        std::make_unique<StubKeyboardLayoutEngine>());
+    keyboard_layout_engine_ = std::make_unique<StubKeyboardLayoutEngine>();
 #endif
+    KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
+        keyboard_layout_engine_.get());
 
     event_factory_ozone_ = std::make_unique<EventFactoryEvdev>(
         cursor_.get(), device_manager_.get(),
@@ -226,23 +226,13 @@ class OzonePlatformGbm : public OzonePlatform {
       adapter = gpu_platform_support_host_.get();
     }
 
-    std::unique_ptr<DrmOverlayManagerHost> overlay_manager_host;
-    if (!args.viz_display_compositor) {
-      overlay_manager_host = std::make_unique<DrmOverlayManagerHost>(
-          adapter, window_manager_.get());
-    }
-
     display_manager_ = std::make_unique<DrmDisplayHostManager>(
         adapter, device_manager_.get(), &host_properties_,
-        overlay_manager_host.get(), event_factory_ozone_->input_controller());
+        event_factory_ozone_->input_controller());
     cursor_factory_ozone_ = std::make_unique<BitmapCursorFactoryOzone>();
 
-    if (using_mojo_) {
-      host_drm_device_->ProvideManagers(display_manager_.get(),
-                                        overlay_manager_host.get());
-    }
-
-    overlay_manager_ = std::move(overlay_manager_host);
+    if (using_mojo_)
+      host_drm_device_->SetDisplayManager(display_manager_.get());
   }
 
   void InitializeGPU(const InitParams& args) override {
@@ -267,10 +257,8 @@ class OzonePlatformGbm : public OzonePlatform {
       drm_thread_proxy_->BindThreadIntoMessagingProxy(itmp);
     }
 
-    if (args.viz_display_compositor) {
-      overlay_manager_ =
-          std::make_unique<DrmOverlayManagerGpu>(drm_thread_proxy_.get());
-    }
+    overlay_manager_ =
+        std::make_unique<DrmOverlayManagerGpu>(drm_thread_proxy_.get());
 
     // If gpu is in a separate process, rest of the initialization happens after
     // entering the sandbox.
@@ -356,6 +344,10 @@ class OzonePlatformGbm : public OzonePlatform {
   std::unique_ptr<DrmGpuPlatformSupportHost> gpu_platform_support_host_;
 
   // Objects in the host process.
+#if BUILDFLAG(USE_XKBCOMMON)
+  XkbEvdevCodes xkb_evdev_code_converter_;
+#endif
+  std::unique_ptr<KeyboardLayoutEngine> keyboard_layout_engine_;
   std::unique_ptr<DrmDeviceConnector> drm_device_connector_;
   scoped_refptr<HostDrmDevice> host_drm_device_;
   base::PlatformThreadRef host_thread_;
@@ -367,10 +359,6 @@ class OzonePlatformGbm : public OzonePlatform {
   std::unique_ptr<DrmDisplayHostManager> display_manager_;
   std::unique_ptr<DrmOverlayManager> overlay_manager_;
   InitializedHostProperties host_properties_;
-
-#if BUILDFLAG(USE_XKBCOMMON)
-  XkbEvdevCodes xkb_evdev_code_converter_;
-#endif
 
   base::WeakPtrFactory<OzonePlatformGbm> weak_factory_{this};
 

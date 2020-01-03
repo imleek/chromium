@@ -116,17 +116,16 @@ constexpr char kReceiverActionTypeStop[] = "stop";
 
 base::ListValue CapabilitiesToListValue(uint8_t capabilities) {
   base::ListValue value;
-  auto& storage = value.GetList();
   if (capabilities & cast_channel::VIDEO_OUT)
-    storage.emplace_back("video_out");
+    value.Append("video_out");
   if (capabilities & cast_channel::VIDEO_IN)
-    storage.emplace_back("video_in");
+    value.Append("video_in");
   if (capabilities & cast_channel::AUDIO_OUT)
-    storage.emplace_back("audio_out");
+    value.Append("audio_out");
   if (capabilities & cast_channel::AUDIO_IN)
-    storage.emplace_back("audio_in");
+    value.Append("audio_in");
   if (capabilities & cast_channel::MULTIZONE_GROUP)
-    storage.emplace_back("multizone_group");
+    value.Append("multizone_group");
   return value;
 }
 
@@ -192,7 +191,7 @@ blink::mojom::PresentationConnectionMessagePtr CreateReceiverActionMessage(
 
 base::Value CreateAppMessageBody(
     const std::string& session_id,
-    const cast_channel::CastMessage& cast_message) {
+    const cast::channel::CastMessage& cast_message) {
   // TODO(https://crbug.com/862532): Investigate whether it is possible to move
   // instead of copying the contents of |cast_message|. Right now copying is
   // done because the message is passed as a const ref at the
@@ -201,10 +200,10 @@ base::Value CreateAppMessageBody(
   message.SetKey("sessionId", base::Value(session_id));
   message.SetKey("namespaceName", base::Value(cast_message.namespace_()));
   switch (cast_message.payload_type()) {
-    case cast_channel::CastMessage_PayloadType_STRING:
+    case cast::channel::CastMessage_PayloadType_STRING:
       message.SetKey("message", base::Value(cast_message.payload_utf8()));
       break;
-    case cast_channel::CastMessage_PayloadType_BINARY: {
+    case cast::channel::CastMessage_PayloadType_BINARY: {
       const auto& payload = cast_message.payload_binary();
       message.SetKey("message",
                      base::Value(base::Value::BlobStorage(
@@ -489,7 +488,7 @@ blink::mojom::PresentationConnectionMessagePtr CreateAppMessageAck(
 blink::mojom::PresentationConnectionMessagePtr CreateAppMessage(
     const std::string& session_id,
     const std::string& client_id,
-    const cast_channel::CastMessage& cast_message) {
+    const cast::channel::CastMessage& cast_message) {
   return CreateMessageCommon(CastInternalMessage::Type::kAppMessage,
                              CreateAppMessageBody(session_id, cast_message),
                              client_id);
@@ -520,15 +519,14 @@ blink::mojom::PresentationConnectionMessagePtr CreateErrorMessage(
 
 base::Value SupportedMediaRequestsToListValue(int media_requests) {
   base::Value value(base::Value::Type::LIST);
-  auto& storage = value.GetList();
   if (media_requests & 1)
-    storage.emplace_back("pause");
+    value.Append("pause");
   if (media_requests & 2)
-    storage.emplace_back("seek");
+    value.Append("seek");
   if (media_requests & 4)
-    storage.emplace_back("stream_volume");
+    value.Append("stream_volume");
   if (media_requests & 8)
-    storage.emplace_back("stream_mute");
+    value.Append("stream_mute");
   return value;
 }
 

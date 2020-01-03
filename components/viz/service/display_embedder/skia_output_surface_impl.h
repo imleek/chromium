@@ -94,10 +94,9 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
       SkYUVColorSpace yuv_color_space,
       sk_sp<SkColorSpace> dst_color_space,
       bool has_alpha) override;
-  gpu::SyncToken SkiaSwapBuffers(OutputSurfaceFrame frame,
-                                 bool wants_sync_token) override;
+  void SkiaSwapBuffers(OutputSurfaceFrame frame) override;
   void ScheduleOutputSurfaceAsOverlay(
-      OverlayProcessor::OutputSurfaceOverlayPlane output_surface_plane)
+      OverlayProcessorInterface::OutputSurfaceOverlayPlane output_surface_plane)
       override;
 
   SkCanvas* BeginPaintRenderPass(const RenderPassId& id,
@@ -115,10 +114,11 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
       sk_sp<SkColorSpace> color_space) override;
 
   void RemoveRenderPassResource(std::vector<RenderPassId> ids) override;
+  void ScheduleOverlays(OverlayList overlays,
+                        std::vector<gpu::SyncToken> sync_tokens) override;
+
 #if defined(OS_WIN)
   void SetEnableDCLayers(bool enable) override;
-  void ScheduleDCLayers(std::vector<DCLayerOverlay> overlays,
-                        std::vector<gpu::SyncToken> sync_tokens) override;
 #endif
   void CopyOutput(RenderPassId id,
                   const copy_output::RenderPassGeometry& geometry,
@@ -154,14 +154,11 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
       base::flat_set<gpu::Mailbox> promotion_denied,
       base::flat_map<gpu::Mailbox, gfx::Rect> possible_promotions) override;
 
-  // Notify the overlay candidate to render.
-  void RenderToOverlay(gpu::SyncToken sync_token,
-                       gpu::Mailbox overlay_candidate_mailbox,
-                       const gfx::Rect& bounds) override;
-
  private:
   bool Initialize();
-  void InitializeOnGpuThread(base::WaitableEvent* event, bool* result);
+  void InitializeOnGpuThread(GpuVSyncCallback vsync_callback_runner,
+                             base::WaitableEvent* event,
+                             bool* result);
   SkSurfaceCharacterization CreateSkSurfaceCharacterization(
       const gfx::Size& surface_size,
       ResourceFormat format,

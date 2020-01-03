@@ -82,17 +82,14 @@ void MarkingVerifier::VerifyChild(void* object, void* base_object_payload) {
   // ones.
   CHECK(child_header);
   if (!child_header->IsMarked()) {
-    // Pre-finalizers may allocate. In that case the newly allocated objects
-    // reside on a page that is not scheduled for sweeping.
-    if (PageFromObject(child_header->Payload())->HasBeenSwept())
-      return;
-
-    LOG(FATAL) << "MarkingVerifier: Encountered unmarked object. " << std::endl
-               << std::endl
-               << "Hint (use v8_enable_raw_heap_snapshots for better naming): "
-               << std::endl
-               << parent_->Name() << std::endl
-               << "\\-> " << child_header->Name() << std::endl;
+    CHECK(!PageFromObject(child_header->Payload())->HasBeenSwept());
+    LOG(FATAL)
+        << "MarkingVerifier: Encountered unmarked object. " << std::endl
+        << std::endl
+        << "Hint (use enable_additional_blink_object_names for better naming): "
+        << std::endl
+        << parent_->Name() << std::endl
+        << "\\-> " << child_header->Name() << std::endl;
   }
 }
 

@@ -27,7 +27,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.InMemorySharedPreferencesContext;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
@@ -41,7 +40,7 @@ import java.util.Arrays;
 /**
  * Tests that file inputs work as expected.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
+@RunWith(WebLayerJUnit4ClassRunner.class)
 public class InputTypesTest {
     @Rule
     public InstrumentationActivityTestRule mActivityTestRule =
@@ -124,20 +123,21 @@ public class InputTypesTest {
 
     @Before
     public void setUp() throws Exception {
-        InstrumentationActivity activity = mActivityTestRule.launchShell(new Bundle());
+        Bundle extras = new Bundle();
+        // We need to override the context with which to create WebLayer.
+        extras.putBoolean(InstrumentationActivity.EXTRA_CREATE_WEBLAYER, false);
+        InstrumentationActivity activity = mActivityTestRule.launchShell(extras);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            activity.createWebLayer(
-                            new InMemorySharedPreferencesContext(activity.getApplication()) {
-                                @Override
-                                public int checkPermission(String permission, int pid, int uid) {
-                                    if (permission.equals(Manifest.permission.CAMERA)) {
-                                        return mCameraPermission;
-                                    }
-                                    return getBaseContext().checkPermission(permission, pid, uid);
-                                }
-                            },
-                            null)
-                    .get();
+            activity.loadWebLayerSync(
+                    new InMemorySharedPreferencesContext(activity.getApplication()) {
+                        @Override
+                        public int checkPermission(String permission, int pid, int uid) {
+                            if (permission.equals(Manifest.permission.CAMERA)) {
+                                return mCameraPermission;
+                            }
+                            return getBaseContext().checkPermission(permission, pid, uid);
+                        }
+                    });
         });
         mActivityTestRule.navigateAndWait(mActivityTestRule.getTestDataURL("input_types.html"));
         mTempFile = File.createTempFile("file", null);

@@ -4,10 +4,6 @@
 
 package org.chromium.chrome.browser.preferences;
 
-import org.chromium.chrome.browser.crash.MinidumpUploadService.ProcessType;
-
-import java.util.HashSet;
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -38,46 +34,6 @@ public class ChromePreferenceManager {
      */
     public static ChromePreferenceManager getInstance() {
         return LazyHolder.INSTANCE;
-    }
-
-    /**
-     * @return Number of times of successful crash upload.
-     */
-    public int getCrashSuccessUploadCount(@ProcessType String process) {
-        // Convention to keep all the key in preference lower case.
-        return mManager.readInt(successUploadKey(process));
-    }
-
-    public void setCrashSuccessUploadCount(@ProcessType String process, int count) {
-        // Convention to keep all the key in preference lower case.
-        mManager.writeInt(successUploadKey(process), count);
-    }
-
-    public void incrementCrashSuccessUploadCount(@ProcessType String process) {
-        setCrashSuccessUploadCount(process, getCrashSuccessUploadCount(process) + 1);
-    }
-
-    private String successUploadKey(@ProcessType String process) {
-        return process.toLowerCase(Locale.US) + ChromePreferenceKeys.SUCCESS_UPLOAD_SUFFIX;
-    }
-
-    /**
-     * @return Number of times of failure crash upload after reaching the max number of tries.
-     */
-    public int getCrashFailureUploadCount(@ProcessType String process) {
-        return mManager.readInt(failureUploadKey(process));
-    }
-
-    public void setCrashFailureUploadCount(@ProcessType String process, int count) {
-        mManager.writeInt(failureUploadKey(process), count);
-    }
-
-    public void incrementCrashFailureUploadCount(@ProcessType String process) {
-        setCrashFailureUploadCount(process, getCrashFailureUploadCount(process) + 1);
-    }
-
-    private String failureUploadKey(@ProcessType String process) {
-        return process.toLowerCase(Locale.US) + ChromePreferenceKeys.FAILURE_UPLOAD_SUFFIX;
     }
 
     /**
@@ -118,7 +74,8 @@ public class ChromePreferenceManager {
      * @return the epoch time in milliseconds (see {@link System#currentTimeMillis()}).
      */
     public long getNewTabPageSigninPromoSuppressionPeriodStart() {
-        return mManager.readLong(ChromePreferenceKeys.NTP_SIGNIN_PROMO_SUPPRESSION_PERIOD_START);
+        return mManager.readLong(
+                ChromePreferenceKeys.SIGNIN_PROMO_NTP_PROMO_SUPPRESSION_PERIOD_START);
     }
 
     /**
@@ -128,7 +85,7 @@ public class ChromePreferenceManager {
      */
     public void setNewTabPageSigninPromoSuppressionPeriodStart(long timeMillis) {
         mManager.writeLong(
-                ChromePreferenceKeys.NTP_SIGNIN_PROMO_SUPPRESSION_PERIOD_START, timeMillis);
+                ChromePreferenceKeys.SIGNIN_PROMO_NTP_PROMO_SUPPRESSION_PERIOD_START, timeMillis);
     }
 
     /**
@@ -136,59 +93,6 @@ public class ChromePreferenceManager {
      * Tab Page are no longer suppressed.
      */
     public void clearNewTabPageSigninPromoSuppressionPeriodStart() {
-        mManager.removeKey(ChromePreferenceKeys.NTP_SIGNIN_PROMO_SUPPRESSION_PERIOD_START);
-    }
-
-    /**
-     * Gets a set of Strings representing digital asset links that have been verified.
-     * Set by {@link #setVerifiedDigitalAssetLinks(Set)}.
-     */
-    public Set<String> getVerifiedDigitalAssetLinks() {
-        // From the official docs, modifying the result of a SharedPreferences.getStringSet can
-        // cause bad things to happen including exceptions or ruining the data.
-        return new HashSet<>(
-                mManager.readStringSet(ChromePreferenceKeys.VERIFIED_DIGITAL_ASSET_LINKS));
-    }
-
-    /**
-     * Sets a set of digital asset links (represented a strings) that have been verified.
-     * Can be retrieved by {@link #getVerifiedDigitalAssetLinks()}.
-     */
-    public void setVerifiedDigitalAssetLinks(Set<String> links) {
-        mManager.writeStringSet(ChromePreferenceKeys.VERIFIED_DIGITAL_ASSET_LINKS, links);
-    }
-
-    /** Do not modify the set returned by this method. */
-    private Set<String> getTrustedWebActivityDisclosureAcceptedPackages() {
-        return mManager.readStringSet(
-                ChromePreferenceKeys.TRUSTED_WEB_ACTIVITY_DISCLOSURE_ACCEPTED_PACKAGES);
-    }
-
-    /**
-     * Sets that the user has accepted the Trusted Web Activity "Running in Chrome" disclosure for
-     * TWAs launched by the given package.
-     */
-    public void setUserAcceptedTwaDisclosureForPackage(String packageName) {
-        mManager.addToStringSet(
-                ChromePreferenceKeys.TRUSTED_WEB_ACTIVITY_DISCLOSURE_ACCEPTED_PACKAGES,
-                packageName);
-    }
-
-    /**
-     * Removes the record of accepting the Trusted Web Activity "Running in Chrome" disclosure for
-     * TWAs launched by the given package.
-     */
-    public void removeTwaDisclosureAcceptanceForPackage(String packageName) {
-        mManager.removeFromStringSet(
-                ChromePreferenceKeys.TRUSTED_WEB_ACTIVITY_DISCLOSURE_ACCEPTED_PACKAGES,
-                packageName);
-    }
-
-    /**
-     * Checks whether the given package was previously passed to
-     * {@link #setUserAcceptedTwaDisclosureForPackage(String)}.
-     */
-    public boolean hasUserAcceptedTwaDisclosureForPackage(String packageName) {
-        return getTrustedWebActivityDisclosureAcceptedPackages().contains(packageName);
+        mManager.removeKey(ChromePreferenceKeys.SIGNIN_PROMO_NTP_PROMO_SUPPRESSION_PERIOD_START);
     }
 }

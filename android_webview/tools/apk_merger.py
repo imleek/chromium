@@ -26,7 +26,7 @@ anything.
 
 To use this script, you need to
 1. Build 32-bit APK as usual.
-2. Build 64-bit APK with GN variable build_apk_secondary_abi=false OR true.
+2. Build 64-bit APK.
 3. Use this script to merge the 2 APKs.
 
 """
@@ -252,9 +252,9 @@ def main():
   try:
     MergeApk(args, tmp_apk, tmp_dir_32, tmp_dir_64)
 
-    apksigner_path = os.path.join(
-        os.path.dirname(args.zipalign_path), 'apksigner')
-    finalize_apk.FinalizeApk(apksigner_path, args.zipalign_path,
+    apksigner_jar = os.path.join(
+        os.path.dirname(args.zipalign_path), 'lib', 'apksigner.jar')
+    finalize_apk.FinalizeApk(apksigner_jar, args.zipalign_path,
                              tmp_apk, new_apk, args.keystore_path,
                              args.key_password, args.key_name)
   finally:

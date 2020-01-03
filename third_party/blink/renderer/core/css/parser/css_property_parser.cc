@@ -157,7 +157,8 @@ bool CSSPropertyParser::ParseValueStart(CSSPropertyID unresolved_property,
 
     if (is_shorthand) {
       const cssvalue::CSSPendingSubstitutionValue& pending_value =
-          *cssvalue::CSSPendingSubstitutionValue::Create(property_id, variable);
+          *MakeGarbageCollected<cssvalue::CSSPendingSubstitutionValue>(
+              property_id, variable);
       css_property_parser_helpers::AddExpandedPropertyForValue(
           property_id, pending_value, important, *parsed_properties_);
     } else {
@@ -170,16 +171,19 @@ bool CSSPropertyParser::ParseValueStart(CSSPropertyID unresolved_property,
   return false;
 }
 
-static inline bool IsExposedInMode(const CSSProperty& property,
+static inline bool IsExposedInMode(const ExecutionContext* execution_context,
+                                   const CSSProperty& property,
                                    CSSParserMode mode) {
-  return mode == kUASheetMode ? property.IsUAExposed()
-                              : property.IsWebExposed();
+  return mode == kUASheetMode ? property.IsUAExposed(execution_context)
+                              : property.IsWebExposed(execution_context);
 }
 
 template <typename CharacterType>
-static CSSPropertyID UnresolvedCSSPropertyID(const CharacterType* property_name,
-                                             unsigned length,
-                                             CSSParserMode mode) {
+static CSSPropertyID UnresolvedCSSPropertyID(
+    const ExecutionContext* execution_context,
+    const CharacterType* property_name,
+    unsigned length,
+    CSSParserMode mode) {
   if (length == 0)
     return CSSPropertyID::kInvalid;
   if (length >= 2 && property_name[0] == '-' && property_name[1] == '-')
@@ -204,23 +208,30 @@ static CSSPropertyID UnresolvedCSSPropertyID(const CharacterType* property_name,
   CSSPropertyID property_id = static_cast<CSSPropertyID>(hash_table_entry->id);
   const CSSProperty& property =
       CSSProperty::Get(resolveCSSPropertyID(property_id));
-  bool exposed = IsExposedInMode(property, mode);
+  bool exposed = IsExposedInMode(execution_context, property, mode);
   return exposed ? property_id : CSSPropertyID::kInvalid;
 }
 
-CSSPropertyID unresolvedCSSPropertyID(const String& string) {
+CSSPropertyID unresolvedCSSPropertyID(const ExecutionContext* execution_context,
+                                      const String& string) {
   unsigned length = string.length();
   CSSParserMode mode = kHTMLStandardMode;
   return string.Is8Bit()
-             ? UnresolvedCSSPropertyID(string.Characters8(), length, mode)
-             : UnresolvedCSSPropertyID(string.Characters16(), length, mode);
+             ? UnresolvedCSSPropertyID(execution_context, string.Characters8(),
+                                       length, mode)
+             : UnresolvedCSSPropertyID(execution_context, string.Characters16(),
+                                       length, mode);
 }
 
-CSSPropertyID UnresolvedCSSPropertyID(StringView string, CSSParserMode mode) {
+CSSPropertyID UnresolvedCSSPropertyID(const ExecutionContext* execution_context,
+                                      StringView string,
+                                      CSSParserMode mode) {
   unsigned length = string.length();
   return string.Is8Bit()
-             ? UnresolvedCSSPropertyID(string.Characters8(), length, mode)
-             : UnresolvedCSSPropertyID(string.Characters16(), length, mode);
+             ? UnresolvedCSSPropertyID(execution_context, string.Characters8(),
+                                       length, mode)
+             : UnresolvedCSSPropertyID(execution_context, string.Characters16(),
+                                       length, mode);
 }
 
 template <typename CharacterType>

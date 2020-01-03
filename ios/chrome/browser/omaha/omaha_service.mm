@@ -113,16 +113,16 @@ class XmlWrapper : public OmahaXmlWriter {
 
 // XML parser for the server response.
 @interface ResponseParser : NSObject<NSXMLParserDelegate> {
-  BOOL hasError_;
-  BOOL responseIsParsed_;
-  BOOL appIsParsed_;
-  BOOL updateCheckIsParsed_;
-  BOOL urlIsParsed_;
-  BOOL manifestIsParsed_;
-  BOOL pingIsParsed_;
-  BOOL eventIsParsed_;
-  NSString* appId_;
-  std::unique_ptr<UpgradeRecommendedDetails> updateInformation_;
+  BOOL _hasError;
+  BOOL _responseIsParsed;
+  BOOL _appIsParsed;
+  BOOL _updateCheckIsParsed;
+  BOOL _urlIsParsed;
+  BOOL _manifestIsParsed;
+  BOOL _pingIsParsed;
+  BOOL _eventIsParsed;
+  NSString* _appId;
+  std::unique_ptr<UpgradeRecommendedDetails> _updateInformation;
 }
 
 // Initialization method. |appId| is the application id one expects to find in
@@ -142,7 +142,7 @@ class XmlWrapper : public OmahaXmlWriter {
 
 - (instancetype)initWithAppId:(NSString*)appId {
   if (self = [super init]) {
-    appId_ = appId;
+    _appId = appId;
   }
   return self;
 }
@@ -150,11 +150,11 @@ class XmlWrapper : public OmahaXmlWriter {
 - (BOOL)isCorrect {
   // A response should have either a ping ACK or an event ACK, depending on the
   // contents of the request.
-  return !hasError_ && (pingIsParsed_ || eventIsParsed_);
+  return !_hasError && (_pingIsParsed || _eventIsParsed);
 }
 
 - (UpgradeRecommendedDetails*)upgradeRecommendedDetails {
-  return updateInformation_.get();
+  return _updateInformation.get();
 }
 
 // This method is parsing a message with the following type:
@@ -191,7 +191,7 @@ class XmlWrapper : public OmahaXmlWriter {
        namespaceURI:(NSString*)namespaceURI
       qualifiedName:(NSString*)qualifiedName
          attributes:(NSDictionary*)attributeDict {
-  if (hasError_)
+  if (_hasError)
     return;
 
   // Array of uninteresting tags in the Omaha xml response.
@@ -200,79 +200,79 @@ class XmlWrapper : public OmahaXmlWriter {
   if ([ignoredTagNames containsObject:elementName])
     return;
 
-  if (!responseIsParsed_) {
+  if (!_responseIsParsed) {
     if ([elementName isEqualToString:@"response"] &&
         [[attributeDict valueForKey:@"protocol"] isEqualToString:@"3.0"] &&
         [[attributeDict valueForKey:@"server"] isEqualToString:@"prod"]) {
-      responseIsParsed_ = YES;
+      _responseIsParsed = YES;
     } else {
-      hasError_ = YES;
+      _hasError = YES;
     }
-  } else if (!appIsParsed_) {
+  } else if (!_appIsParsed) {
     if ([elementName isEqualToString:@"app"] &&
         [[attributeDict valueForKey:@"status"] isEqualToString:@"ok"] &&
-        [[attributeDict valueForKey:@"appid"] isEqualToString:appId_]) {
-      appIsParsed_ = YES;
+        [[attributeDict valueForKey:@"appid"] isEqualToString:_appId]) {
+      _appIsParsed = YES;
     } else {
-      hasError_ = YES;
+      _hasError = YES;
     }
-  } else if (!eventIsParsed_ && !updateCheckIsParsed_) {
+  } else if (!_eventIsParsed && !_updateCheckIsParsed) {
     if ([elementName isEqualToString:@"updatecheck"]) {
-      updateCheckIsParsed_ = YES;
+      _updateCheckIsParsed = YES;
       NSString* status = [attributeDict valueForKey:@"status"];
       if ([status isEqualToString:@"noupdate"]) {
         // No update is available on the Market, so we won't get a <url> or
         // <manifest> tag.
-        urlIsParsed_ = YES;
-        manifestIsParsed_ = YES;
+        _urlIsParsed = YES;
+        _manifestIsParsed = YES;
       } else if ([status isEqualToString:@"ok"]) {
-        updateInformation_ = std::make_unique<UpgradeRecommendedDetails>();
+        _updateInformation = std::make_unique<UpgradeRecommendedDetails>();
       } else {
-        hasError_ = YES;
+        _hasError = YES;
       }
     } else if ([elementName isEqualToString:@"event"]) {
       if ([[attributeDict valueForKey:@"status"] isEqualToString:@"ok"]) {
-        eventIsParsed_ = YES;
+        _eventIsParsed = YES;
       } else {
-        hasError_ = YES;
+        _hasError = YES;
       }
     } else {
-      hasError_ = YES;
+      _hasError = YES;
     }
-  } else if (!urlIsParsed_) {
+  } else if (!_urlIsParsed) {
     if ([elementName isEqualToString:@"url"] &&
         [[attributeDict valueForKey:@"codebase"] length] > 0) {
-      urlIsParsed_ = YES;
-      DCHECK(updateInformation_);
+      _urlIsParsed = YES;
+      DCHECK(_updateInformation);
       NSString* url = [attributeDict valueForKey:@"codebase"];
       if ([[url substringFromIndex:([url length] - 1)] isEqualToString:@"/"])
         url = [url substringToIndex:([url length] - 1)];
-      updateInformation_.get()->upgrade_url =
+      _updateInformation.get()->upgrade_url =
           GURL(base::SysNSStringToUTF8(url));
-      if (!updateInformation_.get()->upgrade_url.is_valid())
-        hasError_ = YES;
+      if (!_updateInformation.get()->upgrade_url.is_valid())
+        _hasError = YES;
     } else {
-      hasError_ = YES;
+      _hasError = YES;
     }
-  } else if (!manifestIsParsed_) {
+  } else if (!_manifestIsParsed) {
     if ([elementName isEqualToString:@"manifest"] &&
         [attributeDict valueForKey:@"version"]) {
-      manifestIsParsed_ = YES;
-      DCHECK(updateInformation_);
-      updateInformation_.get()->next_version =
+      _manifestIsParsed = YES;
+      DCHECK(_updateInformation);
+      _updateInformation.get()->next_version =
           base::SysNSStringToUTF8([attributeDict valueForKey:@"version"]);
     } else {
-      hasError_ = YES;
+      _hasError = YES;
     }
-  } else if (!pingIsParsed_) {
+  } else if (!_pingIsParsed) {
     if ([elementName isEqualToString:@"ping"] &&
         [[attributeDict valueForKey:@"status"] isEqualToString:@"ok"]) {
-      pingIsParsed_ = YES;
+      _pingIsParsed = YES;
     } else {
-      hasError_ = YES;
+      _hasError = YES;
     }
   } else {
-    hasError_ = YES;
+    _hasError = YES;
   }
 }
 
@@ -285,16 +285,16 @@ OmahaService* OmahaService::GetInstance() {
 }
 
 // static
-void OmahaService::Start(std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-                             url_loader_factory_info,
+void OmahaService::Start(std::unique_ptr<network::PendingSharedURLLoaderFactory>
+                             pending_url_loader_factory,
                          const UpgradeRecommendedCallback& callback) {
-  DCHECK(url_loader_factory_info);
+  DCHECK(pending_url_loader_factory);
   DCHECK(!callback.is_null());
   OmahaService* result = GetInstance();
   result->set_upgrade_recommended_callback(callback);
   // This should only be called once.
-  DCHECK(!result->url_loader_factory_info_ || !result->url_loader_factory_);
-  result->url_loader_factory_info_ = std::move(url_loader_factory_info);
+  DCHECK(!result->pending_url_loader_factory_ || !result->url_loader_factory_);
+  result->pending_url_loader_factory_ = std::move(pending_url_loader_factory);
   result->locale_lang_ = GetApplicationContext()->GetApplicationLocale();
   base::PostTask(FROM_HERE, {web::WebThread::IO},
                  base::BindOnce(&OmahaService::SendOrScheduleNextPing,
@@ -523,13 +523,13 @@ void OmahaService::SendPing() {
   }
 
   // There are 2 situations here:
-  // 1) production code, where |url_loader_factory_info_| is used.
+  // 1) production code, where |pending_url_loader_factory_| is used.
   // 2) testing code, where the |url_loader_factory_| creation is triggered by
   // the test.
-  if (url_loader_factory_info_) {
+  if (pending_url_loader_factory_) {
     DCHECK(!url_loader_factory_);
     url_loader_factory_ = network::SharedURLLoaderFactory::Create(
-        std::move(url_loader_factory_info_));
+        std::move(pending_url_loader_factory_));
   }
 
   DCHECK(url_loader_factory_);

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/optional.h"
+#include "components/autofill_assistant/browser/event_handler.h"
 #include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/rectf.h"
 #include "components/autofill_assistant/browser/state.h"
@@ -126,6 +127,9 @@ class UiDelegate {
   // Called when the user clicks a link on the terms & conditions message.
   virtual void OnTermsAndConditionsLinkClicked(int link) = 0;
 
+  // Called when the user clicks a link in the form action.
+  virtual void OnFormActionLinkClicked(int link) = 0;
+
   // Sets the start of the date/time range.
   virtual void SetDateTimeRangeStart(int year,
                                      int month,
@@ -197,6 +201,16 @@ class UiDelegate {
 
   // Remove a previously registered observer.
   virtual void RemoveObserver(const ControllerObserver* observer) = 0;
+
+  // Dispatches an event to the event handler.
+  virtual void DispatchEvent(const EventHandler::EventKey& key,
+                             const ValueProto& value) = 0;
+
+  // Returns the user model.
+  virtual UserModel* GetUserModel() = 0;
+
+  // Returns the event handler.
+  virtual EventHandler* GetEventHandler() = 0;
 
  protected:
  protected:

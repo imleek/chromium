@@ -28,12 +28,14 @@ import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.previews.PreviewsAndroidBridge;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.ssl.SecurityStateModel;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tab.TrustedCdn;
-import org.chromium.chrome.browser.ui.styles.ChromeColors;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.UrlConstants;
 import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.content_public.browser.WebContents;
@@ -119,6 +121,12 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
     @Override
     public String getCurrentUrl() {
+        // Provide NTP url instead of most recent tab url for searches in overview mode (when Start
+        // Surface is enabled). .
+        if (isInOverviewAndShowingOmnibox()) {
+            return UrlConstants.NTP_URL;
+        }
+
         // TODO(yusufo) : Consider using this for all calls from getTab() for accessing url.
         if (!hasTab()) return "";
 
@@ -171,12 +179,12 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
         }
 
         if (isOfflinePage()) {
-            String originalUrl = mTab.getOriginalUrl();
+            String originalUrl = ((TabImpl) mTab).getOriginalUrl();
             formattedUrl = UrlUtilities.stripScheme(
                     DomDistillerTabUtils.getFormattedUrlFromOriginalDistillerUrl(originalUrl));
 
             // Clear the editing text for untrusted offline pages.
-            if (!OfflinePageUtils.isShowingTrustedOfflinePage(mTab)) {
+            if (!OfflinePageUtils.isShowingTrustedOfflinePage(mTab.getWebContents())) {
                 return buildUrlBarData(url, formattedUrl, "");
             }
 
@@ -281,7 +289,10 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
     public Profile getProfile() {
         Profile lastUsedProfile = Profile.getLastUsedProfile();
         if (mIsIncognito) {
-            assert lastUsedProfile.hasOffTheRecordProfile();
+            // When in overview mode with no open tabs, there has not been created an
+            // OffTheRecordProfile yet. #getOffTheRecordProfile will create a profile if none
+            // exists.
+            assert lastUsedProfile.hasOffTheRecordProfile() || isInOverviewAndShowingOmnibox();
             return lastUsedProfile.getOffTheRecordProfile();
         }
         return lastUsedProfile.getOriginalProfile();
@@ -332,7 +343,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
     @Override
     public boolean isPreview() {
-        return hasTab() && mTab.isPreview();
+        return hasTab() && ((TabImpl) mTab).isPreview();
     }
 
     @Override
@@ -344,6 +355,11 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
     @Override
     public int getPageClassification(boolean isFocusedFromFakebox) {
         if (mNativeLocationBarModelAndroid == 0) return 0;
+
+        // Provide (NTP=1) as page class in overview mode (when Start Surface is enabled). No call
+        // to the backend necessary or possible, since there is no tab or navigation entry.
+        if (isInOverviewAndShowingOmnibox()) return 1;
+
         return LocationBarModelJni.get().getPageClassification(
                 mNativeLocationBarModelAndroid, LocationBarModel.this, isFocusedFromFakebox);
     }
@@ -353,7 +369,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
         // If we're showing a query in the omnibox, and the security level is high enough to show
         // the search icon, return that instead of the security icon.
         if (getDisplaySearchTerms() != null) {
-                return R.drawable.omnibox_search;
+            return R.drawable.ic_suggestion_magnifier;
         }
 
         return getSecurityIconResource(getSecurityLevel(), !isTablet, isOfflinePage(), isPreview());
@@ -366,7 +382,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
             return ConnectionSecurityLevel.NONE;
         }
 
-        int securityLevel = tab.getSecurityLevel();
+        int securityLevel = ((TabImpl) tab).getSecurityLevel();
         if (publisherUrl != null) {
             assert securityLevel != ConnectionSecurityLevel.DANGEROUS;
             return (URI.create(publisherUrl).getScheme().equals(UrlConstants.HTTPS_SCHEME))
@@ -396,6 +412,12 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
                         ? 0
                         : R.drawable.omnibox_info;
             case ConnectionSecurityLevel.WARNING:
+                if (mNativeLocationBarModelAndroid == 0) {
+                    return R.drawable.omnibox_info;
+                }
+                if (SecurityStateModel.shouldShowDangerTriangleForWarningLevel()) {
+                    return R.drawable.omnibox_not_secure_warning;
+                }
                 return R.drawable.omnibox_info;
             case ConnectionSecurityLevel.DANGEROUS:
                 return R.drawable.omnibox_not_secure_warning;
@@ -456,7 +478,9 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
     @Override
     public String getDisplaySearchTerms() {
         if (mNativeLocationBarModelAndroid == 0) return null;
-        if (mTab != null && !(mTab.getActivity() instanceof ChromeTabbedActivity)) return null;
+        if (mTab != null && !(((TabImpl) mTab).getActivity() instanceof ChromeTabbedActivity)) {
+            return null;
+        }
         if (isPreview()) return null;
         return LocationBarModelJni.get().getDisplaySearchTerms(
                 mNativeLocationBarModelAndroid, LocationBarModel.this);

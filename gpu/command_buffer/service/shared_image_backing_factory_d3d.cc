@@ -8,9 +8,11 @@
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
+#include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image_backing.h"
 #include "gpu/command_buffer/service/shared_image_manager.h"
 #include "gpu/command_buffer/service/shared_image_representation.h"
+#include "gpu/command_buffer/service/shared_image_representation_skia_gl.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gl/buildflags.h"
@@ -91,23 +93,6 @@ base::Optional<DXGI_FORMAT> VizFormatToDXGIFormat(
       return {};
   }
 }
-
-#if BUILDFLAG(USE_DAWN)
-base::Optional<WGPUTextureFormat> VizResourceFormatToWGPUTextureFormat(
-    viz::ResourceFormat viz_resource_format) {
-  switch (viz_resource_format) {
-    case viz::RGBA_F16:
-      return WGPUTextureFormat_RGBA16Float;
-    case viz::BGRA_8888:
-      return WGPUTextureFormat_BGRA8Unorm;
-    case viz::RGBA_8888:
-      return WGPUTextureFormat_RGBA8Unorm;
-    default:
-      NOTREACHED();
-      return {};
-  }
-}
-#endif  // BUILDFLAG(USE_DAWN)
 
 }  // anonymous namespace
 
@@ -232,14 +217,26 @@ class SharedImageBackingD3D : public SharedImageBacking {
   }
 
   ~SharedImageBackingD3D() override {
-    // Destroy() is safe to call even if it's already been called.
-    Destroy();
+    if (texture_) {
+      texture_->RemoveLightweightRef(have_context());
+      texture_ = nullptr;
+    } else if (texture_passthrough_) {
+      if (!have_context())
+        texture_passthrough_->MarkContextLost();
+      texture_passthrough_ = nullptr;
+    }
+    swap_chain_ = nullptr;
+    d3d11_texture_.Reset();
+    dxgi_keyed_mutex_.Reset();
+    keyed_mutex_acquire_key_ = 0;
+    keyed_mutex_acquired_ = false;
+    shared_handle_.Close();
   }
 
   // Texture is cleared on initialization.
-  bool IsCleared() const override { return true; }
+  gfx::Rect ClearedRect() const override { return gfx::Rect(size()); }
 
-  void SetCleared() override {}
+  void SetClearedRect(const gfx::Rect& cleared_rect) override {}
 
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override {
     DLOG(ERROR) << "SharedImageBackingD3D::Update : Trying to update "
@@ -265,23 +262,6 @@ class SharedImageBackingD3D : public SharedImageBacking {
 #else
     return nullptr;
 #endif  // BUILDFLAG(USE_DAWN)
-  }
-
-  void Destroy() override {
-    if (texture_) {
-      texture_->RemoveLightweightRef(have_context());
-      texture_ = nullptr;
-    } else if (texture_passthrough_) {
-      if (!have_context())
-        texture_passthrough_->MarkContextLost();
-      texture_passthrough_ = nullptr;
-    }
-    swap_chain_ = nullptr;
-    d3d11_texture_.Reset();
-    dxgi_keyed_mutex_.Reset();
-    keyed_mutex_acquire_key_ = 0;
-    keyed_mutex_acquired_ = false;
-    shared_handle_.Close();
   }
 
   void OnMemoryDump(const std::string& dump_name,
@@ -405,6 +385,15 @@ class SharedImageBackingD3D : public SharedImageBacking {
         manager, this, tracker, texture_passthrough_);
   }
 
+  std::unique_ptr<SharedImageRepresentationSkia> ProduceSkia(
+      SharedImageManager* manager,
+      MemoryTypeTracker* tracker,
+      scoped_refptr<SharedContextState> context_state) override {
+    return SharedImageRepresentationSkiaGL::CreateForPassthrough(
+        ProduceGLTexturePassthrough(manager, tracker), std::move(context_state),
+        manager, this, tracker);
+  }
+
  private:
   Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain_;
   gles2::Texture* texture_ = nullptr;
@@ -438,9 +427,8 @@ WGPUTexture SharedImageRepresentationDawnD3D::BeginAccess(
 
   const HANDLE shared_handle = d3d_image_backing->GetSharedHandle();
   const viz::ResourceFormat viz_resource_format = d3d_image_backing->format();
-  const base::Optional<WGPUTextureFormat> wgpu_texture_format =
-      VizResourceFormatToWGPUTextureFormat(viz_resource_format);
-  if (!wgpu_texture_format.has_value()) {
+  WGPUTextureFormat wgpu_format = viz::ToWGPUFormat(viz_resource_format);
+  if (wgpu_format == WGPUTextureFormat_Undefined) {
     DLOG(ERROR) << "Unsupported viz format found: " << viz_resource_format;
     return nullptr;
   }
@@ -452,7 +440,7 @@ WGPUTexture SharedImageRepresentationDawnD3D::BeginAccess(
 
   WGPUTextureDescriptor desc;
   desc.nextInChain = nullptr;
-  desc.format = wgpu_texture_format.value();
+  desc.format = wgpu_format;
   desc.usage = usage;
   desc.dimension = WGPUTextureDimension_2D;
   desc.size = {size().width(), size().height(), 1};
@@ -472,7 +460,7 @@ WGPUTexture SharedImageRepresentationDawnD3D::BeginAccess(
     // the result.
     // TODO(cwallez@chromium.org): This is incorrect and allows reading
     // uninitialized data. When !IsCleared we should tell dawn_native to
-    // consider the texture lazy-cleared.
+    // consider the texture lazy-cleared. crbug.com/1036080
     SetCleared();
   } else {
     d3d_image_backing->EndAccessD3D12();

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/public/web/modules/peerconnection/peer_connection_dependency_factory.h"
+#include "third_party/blink/renderer/modules/peerconnection/peer_connection_dependency_factory.h"
 
 #include <stddef.h>
 
@@ -26,18 +26,17 @@
 #include "third_party/blink/public/common/peerconnection/webrtc_ip_handling_policy.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_media_constraints.h"
 #include "third_party/blink/public/platform/web_media_stream.h"
 #include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
-#include "third_party/blink/public/platform/web_rtc_peer_connection_handler.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
-#include "third_party/blink/public/web/modules/webrtc/webrtc_audio_device_impl.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_handler.h"
+#include "third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl.h"
+#include "third_party/blink/renderer/platform/mediastream/media_constraints.h"
 #include "third_party/blink/renderer/platform/mediastream/webrtc_uma_histograms.h"
 #include "third_party/blink/renderer/platform/p2p/empty_network_manager.h"
 #include "third_party/blink/renderer/platform/p2p/filtering_network_manager.h"
@@ -47,6 +46,7 @@
 #include "third_party/blink/renderer/platform/p2p/port_allocator.h"
 #include "third_party/blink/renderer/platform/p2p/socket_dispatcher.h"
 #include "third_party/blink/renderer/platform/peerconnection/audio_codec_factory.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_peer_connection_handler_platform.h"
 #include "third_party/blink/renderer/platform/peerconnection/stun_field_trial.h"
 #include "third_party/blink/renderer/platform/peerconnection/video_codec_factory.h"
 #include "third_party/webrtc/api/call/call_factory_interface.h"
@@ -123,7 +123,7 @@ PeerConnectionDependencyFactory::PeerConnectionDependencyFactory(
 }
 
 PeerConnectionDependencyFactory::~PeerConnectionDependencyFactory() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DVLOG(1) << "~PeerConnectionDependencyFactory()";
   DCHECK(!pc_factory_);
 }
@@ -135,14 +135,14 @@ PeerConnectionDependencyFactory::GetInstance() {
   return &instance;
 }
 
-std::unique_ptr<blink::WebRTCPeerConnectionHandler>
+std::unique_ptr<RTCPeerConnectionHandlerPlatform>
 PeerConnectionDependencyFactory::CreateRTCPeerConnectionHandler(
-    blink::WebRTCPeerConnectionHandlerClient* client,
+    RTCPeerConnectionHandlerClient* client,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   // Save histogram data so we can see how much PeerConnection is used.
   // The histogram counts the number of calls to the JS API
   // RTCPeerConnection.
-  UpdateWebRTCMethodCount(blink::WebRTCAPIName::kRTCPeerConnection);
+  UpdateWebRTCMethodCount(RTCAPIName::kRTCPeerConnection);
 
   return std::make_unique<RTCPeerConnectionHandler>(client, this, task_runner);
 }
@@ -522,7 +522,7 @@ PeerConnectionDependencyFactory::CreateIceCandidate(const std::string& sdp_mid,
 
 blink::WebRtcAudioDeviceImpl*
 PeerConnectionDependencyFactory::GetWebRtcAudioDevice() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   EnsureWebRtcAudioDeviceImpl();
   return audio_device_.get();
 }
@@ -597,20 +597,20 @@ void PeerConnectionDependencyFactory::CleanupPeerConnectionFactory() {
 }
 
 void PeerConnectionDependencyFactory::EnsureInitialized() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   GetPcFactory();
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
 PeerConnectionDependencyFactory::GetWebRtcWorkerTaskRunner() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return chrome_worker_thread_.IsRunning() ? chrome_worker_thread_.task_runner()
                                            : nullptr;
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
 PeerConnectionDependencyFactory::GetWebRtcSignalingTaskRunner() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   EnsureInitialized();
   return chrome_signaling_thread_.IsRunning()
              ? chrome_signaling_thread_.task_runner()
@@ -618,7 +618,7 @@ PeerConnectionDependencyFactory::GetWebRtcSignalingTaskRunner() {
 }
 
 void PeerConnectionDependencyFactory::EnsureWebRtcAudioDeviceImpl() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (audio_device_.get())
     return;
 

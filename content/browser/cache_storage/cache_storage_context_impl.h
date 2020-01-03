@@ -18,6 +18,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/network/public/mojom/cross_origin_embedder_policy.mojom.h"
 #include "storage/browser/blob/mojom/blob_storage_context.mojom.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom-forward.h"
@@ -85,12 +86,18 @@ class CONTENT_EXPORT CacheStorageContextImpl
   void Shutdown();
 
   // Only callable on the UI thread.
-  void AddReceiver(mojo::PendingReceiver<blink::mojom::CacheStorage> receiver,
-                   const url::Origin& origin);
+  void AddReceiver(
+      network::mojom::CrossOriginEmbedderPolicy cross_origin_embedder_policy,
+      const url::Origin& origin,
+      mojo::PendingReceiver<blink::mojom::CacheStorage> receiver);
 
   // If called on the cache_storage target sequence the real manager will be
   // returned directly.  If called on any other sequence then a cross-sequence
   // wrapper object will be created and returned instead.
+  //
+  // Note, this may begun returning nullptr at any time if shutdown is initiated
+  // on a separate thread.  Prefer to call CacheManager() once and hold a
+  // reference to the returned object.
   scoped_refptr<CacheStorageManager> CacheManager() override;
 
   bool is_incognito() const { return is_incognito_; }
@@ -121,11 +128,12 @@ class CONTENT_EXPORT CacheStorageContextImpl
 
   void ShutdownOnTaskRunner();
 
-  void GetBlobStorageMojoContextOnIOThread(
-      ChromeBlobStorageContext* blob_storage_context);
+  void BindBlobStorageMojoContextOnIOThread(
+      ChromeBlobStorageContext* blob_storage_context,
+      mojo::PendingReceiver<storage::mojom::BlobStorageContext> receiver);
 
   void SetBlobParametersForCacheOnTaskRunner(
-      scoped_refptr<BlobStorageContextWrapper> blob_storage_context);
+      mojo::PendingRemote<storage::mojom::BlobStorageContext> remote);
 
   void CreateQuotaClientsOnIOThread(
       scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy);
@@ -136,6 +144,9 @@ class CONTENT_EXPORT CacheStorageContextImpl
 
   // Initialized in Init(); true if the user data directory is empty.
   bool is_incognito_ = false;
+
+  // True once Shutdown() has been called on the UI thread.
+  std::atomic<bool> shutdown_;
 
   // Initialized in Init().
   scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy_;

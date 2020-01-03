@@ -44,7 +44,7 @@ class HintsFetcherTest : public testing::Test {
                 &test_url_loader_factory_)) {
     base::test::ScopedFeatureList scoped_list;
     scoped_list.InitAndEnableFeatureWithParameters(
-        features::kOptimizationHintsFetching, {});
+        features::kRemoteOptimizationGuideFetching, {});
 
     pref_service_ = std::make_unique<TestingPrefServiceSimple>();
     prefs::RegisterProfilePrefs(pref_service_->registry());
@@ -176,6 +176,9 @@ TEST_F(HintsFetcherTest, FetchOptimizationGuideServiceHints) {
 
   histogram_tester.ExpectTotalCount(
       "OptimizationGuide.HintsFetcher.GetHintsRequest.FetchLatency", 1);
+  histogram_tester.ExpectTotalCount(
+      "OptimizationGuide.HintsFetcher.GetHintsRequest.FetchLatency.BatchUpdate",
+      1);
 }
 
 // Tests to ensure that multiple hint fetches by the same object cannot be in
@@ -310,6 +313,9 @@ TEST_F(HintsFetcherTest, FetchAttemptWhenNetworkOffline) {
 
   histogram_tester.ExpectTotalCount(
       "OptimizationGuide.HintsFetcher.GetHintsRequest.FetchLatency", 1);
+  histogram_tester.ExpectTotalCount(
+      "OptimizationGuide.HintsFetcher.GetHintsRequest.FetchLatency.BatchUpdate",
+      1);
 }
 
 TEST_F(HintsFetcherTest, HintsFetchSuccessfulHostsRecorded) {

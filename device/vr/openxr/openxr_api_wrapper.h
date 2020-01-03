@@ -14,6 +14,9 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/optional.h"
+
+#include "device/vr/openxr/openxr_util.h"
+#include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/vr_export.h"
 #include "third_party/openxr/src/include/openxr/openxr.h"
 #include "third_party/openxr/src/include/openxr/openxr_platform.h"
@@ -50,7 +53,8 @@ class OpenXrApiWrapper {
   XrResult EndFrame();
 
   XrResult GetHeadPose(base::Optional<gfx::Quaternion>* orientation,
-                       base::Optional<gfx::Point3F>* position) const;
+                       base::Optional<gfx::Point3F>* position,
+                       bool* emulated_position) const;
   void GetHeadFromEyes(XrView* left, XrView* right) const;
 
   gfx::Size GetViewSize() const;
@@ -61,6 +65,9 @@ class OpenXrApiWrapper {
   void RegisterInteractionProfileChangeCallback(
       const base::RepeatingCallback<void(XrResult*)>&
           interaction_profile_callback);
+  void RegisterVisibilityChangeCallback(
+      const base::RepeatingCallback<void(mojom::XRVisibilityState)>&
+          visibility_changed_callback);
 
   static void DEVICE_VR_EXPORT SetTestHook(VRTestHook* hook);
 
@@ -100,6 +107,8 @@ class OpenXrApiWrapper {
 
   base::RepeatingCallback<void(XrResult*)>
       interaction_profile_changed_callback_;
+  base::RepeatingCallback<void(mojom::XRVisibilityState)>
+      visibility_changed_callback_;
 
   // Testing objects
   static VRTestHook* test_hook_;
@@ -109,6 +118,7 @@ class OpenXrApiWrapper {
 
   // These objects are valid on successful initialization.
   XrInstance instance_;
+  OpenXRInstanceMetadata instance_metadata_;
   XrSystemId system_;
   std::vector<XrViewConfigurationView> view_configs_;
   XrEnvironmentBlendMode blend_mode_;
@@ -122,6 +132,7 @@ class OpenXrApiWrapper {
   XrSpace local_space_;
   XrSpace stage_space_;
   XrSpace view_space_;
+  XrSpace unbounded_space_;
 
   // These objects store information about the current frame. They're
   // valid only while a session is active, and they are updated each frame.

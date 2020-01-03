@@ -10,6 +10,7 @@
 
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
@@ -226,7 +227,7 @@ struct DumpAccessibilityEventsTestPassToString {
 };
 
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     DumpAccessibilityEventsTest,
     ::testing::Range(size_t{0},
                      AccessibilityEventRecorder::GetTestPasses().size()),
@@ -540,6 +541,15 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("form-required-changed.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsFocusListbox) {
+  RunEventTest(FILE_PATH_LITERAL("focus-listbox.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsFocusListboxMultiselect) {
+  RunEventTest(FILE_PATH_LITERAL("focus-listbox-multiselect.html"));
+}
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsInnerHtmlChange) {
   RunEventTest(FILE_PATH_LITERAL("inner-html-change.html"));

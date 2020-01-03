@@ -6,6 +6,7 @@
 
 #include "cc/layers/surface_layer.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy_manager.h"
@@ -48,8 +49,7 @@ RemoteFrame::RemoteFrame(
             page,
             owner,
             MakeGarbageCollected<RemoteWindowProxyManager>(*this),
-            inheriting_agent_factory),
-      security_context_(MakeGarbageCollected<RemoteSecurityContext>()) {
+            inheriting_agent_factory) {
   dom_window_ = MakeGarbageCollected<RemoteDOMWindow>(*this);
 
   interface_registry->AddAssociatedInterface(WTF::BindRepeating(
@@ -105,16 +105,24 @@ void RemoteFrame::Navigate(const FrameLoadRequest& passed_request,
                                         ->GetProperties()
                                         .GetFetchClientSettingsObject();
   }
+  LocalFrame* frame = frame_request.OriginDocument()
+                          ? frame_request.OriginDocument()->GetFrame()
+                          : nullptr;
   MixedContentChecker::UpgradeInsecureRequest(
       frame_request.GetResourceRequest(), fetch_client_settings_object,
-      frame_request.OriginDocument(), frame_request.GetFrameType());
+      frame_request.OriginDocument(), frame_request.GetFrameType(),
+      frame ? frame->GetContentSettingsClient() : nullptr);
+
+  // Navigations in portal contexts do not create back/forward entries.
+  if (GetPage()->InsidePortal() &&
+      frame_load_type == WebFrameLoadType::kStandard) {
+    frame_load_type = WebFrameLoadType::kReplaceCurrentItem;
+  }
 
   bool is_opener_navigation = false;
   bool initiator_frame_has_download_sandbox_flag = false;
   bool initiator_frame_is_ad = false;
-  LocalFrame* frame = frame_request.OriginDocument()
-                          ? frame_request.OriginDocument()->GetFrame()
-                          : nullptr;
+
   if (frame) {
     is_opener_navigation = frame->Client()->Opener() == this;
     initiator_frame_has_download_sandbox_flag =
@@ -173,8 +181,8 @@ void RemoteFrame::CheckCompleted() {
   Client()->CheckCompleted();
 }
 
-RemoteSecurityContext* RemoteFrame::GetSecurityContext() const {
-  return security_context_.Get();
+const RemoteSecurityContext* RemoteFrame::GetSecurityContext() const {
+  return &security_context_;
 }
 
 bool RemoteFrame::ShouldClose() {
@@ -258,6 +266,18 @@ void RemoteFrame::SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
   ApplyReplicatedFeaturePolicyHeader();
 }
 
+void RemoteFrame::SetReplicatedSandboxFlags(WebSandboxFlags flags) {
+  security_context_.ResetAndEnforceSandboxFlags(flags);
+}
+
+void RemoteFrame::SetInsecureRequestPolicy(WebInsecureRequestPolicy policy) {
+  security_context_.SetInsecureRequestPolicy(policy);
+}
+
+void RemoteFrame::SetInsecureNavigationsSet(const WebVector<unsigned>& set) {
+  security_context_.SetInsecureNavigationsSet(set);
+}
+
 void RemoteFrame::WillEnterFullscreen() {
   // This should only ever be called when the FrameOwner is local.
   HTMLFrameOwnerElement* owner_element = To<HTMLFrameOwnerElement>(Owner());
@@ -280,12 +300,12 @@ void RemoteFrame::WillEnterFullscreen() {
 }
 
 void RemoteFrame::ResetReplicatedContentSecurityPolicy() {
-  GetSecurityContext()->ResetReplicatedContentSecurityPolicy();
+  security_context_.ResetReplicatedContentSecurityPolicy();
 }
 
 void RemoteFrame::EnforceInsecureNavigationsSet(
     const WTF::Vector<uint32_t>& set) {
-  GetSecurityContext()->SetInsecureNavigationsSet(set);
+  security_context_.SetInsecureNavigationsSet(set);
 }
 
 void RemoteFrame::SetReplicatedOrigin(
@@ -294,7 +314,7 @@ void RemoteFrame::SetReplicatedOrigin(
   scoped_refptr<SecurityOrigin> security_origin = origin->IsolatedCopy();
   security_origin->SetOpaqueOriginIsPotentiallyTrustworthy(
       is_potentially_trustworthy_unique_origin);
-  GetSecurityContext()->SetReplicatedOrigin(security_origin);
+  security_context_.SetReplicatedOrigin(security_origin);
   ApplyReplicatedFeaturePolicyHeader();
 
   // If the origin of a remote frame changed, the accessibility object for the
@@ -317,6 +337,19 @@ void RemoteFrame::DispatchLoadEventForFrameOwner() {
   Owner()->DispatchLoad();
 }
 
+void RemoteFrame::Collapse(bool collapsed) {
+  FrameOwner* owner = Owner();
+  To<HTMLFrameOwnerElement>(owner)->SetCollapsed(collapsed);
+}
+
+void RemoteFrame::Focus() {
+  FocusImpl();
+}
+
+void RemoteFrame::SetHadStickyUserActivationBeforeNavigation(bool value) {
+  Frame::SetHadStickyUserActivationBeforeNavigation(value);
+}
+
 bool RemoteFrame::IsIgnoredForHitTest() const {
   HTMLFrameOwnerElement* owner = DeprecatedLocalOwner();
   if (!owner || !owner->GetLayoutObject())
@@ -324,6 +357,24 @@ bool RemoteFrame::IsIgnoredForHitTest() const {
 
   return owner->OwnerType() == FrameOwnerElementType::kPortal ||
          !visible_to_hit_testing_;
+}
+
+void RemoteFrame::UpdateHitTestOcclusionData() {
+  if (!cc_layer_ || !is_surface_layer_)
+    return;
+  bool unoccluded = false;
+  if (base::FeatureList::IsEnabled(
+          blink::features::kVizHitTestOcclusionCheck)) {
+    if (HTMLFrameOwnerElement* owner_element = DeprecatedLocalOwner()) {
+      if (LayoutObject* owner = owner_element->GetLayoutObject()) {
+        HitTestResult hit_test_result(owner->HitTestForOcclusion());
+        const Node* hit_node = hit_test_result.InnerNode();
+        unoccluded = (!hit_node || hit_node == owner_element);
+      }
+    }
+  }
+  static_cast<cc::SurfaceLayer*>(cc_layer_)->SetUnoccludedForHitTesting(
+      unoccluded);
 }
 
 void RemoteFrame::SetCcLayer(cc::Layer* cc_layer,
@@ -373,7 +424,7 @@ void RemoteFrame::ApplyReplicatedFeaturePolicyHeader() {
     container_policy = Owner()->GetFramePolicy().container_policy;
   const FeaturePolicy::FeatureState& opener_feature_state =
       OpenerFeatureState();
-  GetSecurityContext()->InitializeFeaturePolicy(
+  security_context_.InitializeFeaturePolicy(
       feature_policy_header_, container_policy, parent_feature_policy,
       opener_feature_state.empty() ? nullptr : &opener_feature_state);
 }

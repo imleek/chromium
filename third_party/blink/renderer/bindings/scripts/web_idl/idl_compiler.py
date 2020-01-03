@@ -13,6 +13,7 @@ from .database import Database
 from .database import DatabaseBody
 from .dictionary import Dictionary
 from .enumeration import Enumeration
+from .extended_attribute import ExtendedAttribute
 from .idl_type import IdlTypeFactory
 from .interface import Interface
 from .ir_map import IRMap
@@ -24,6 +25,7 @@ from .typedef import Typedef
 from .union import Union
 from .user_defined_type import StubUserDefinedType
 from .user_defined_type import UserDefinedType
+from .validator import validate_after_resolve_references
 
 
 class IdlCompiler(object):
@@ -76,10 +78,12 @@ class IdlCompiler(object):
         self._did_run = True
 
         # Merge partial definitions.
+        self._record_defined_in_partial_and_mixin()
         self._propagate_extattrs_per_idl_fragment()
         self._merge_partial_interface_likes()
         self._merge_partial_dictionaries()
         # Merge mixins.
+        self._set_owner_mixin_of_mixin_members()
         self._merge_interface_mixins()
 
         # Process inheritances.
@@ -87,7 +91,12 @@ class IdlCompiler(object):
 
         # Make groups of overloaded functions including inherited ones.
         self._group_overloaded_functions()
+        self._propagate_extattrs_to_overload_group()
         self._calculate_group_exposure()
+
+        self._fill_exposed_constructs()
+
+        self._sort_dictionary_members()
 
         # Updates on IRs are finished.  Create API objects.
         self._create_public_objects()
@@ -95,11 +104,31 @@ class IdlCompiler(object):
         # Resolve references.
         self._resolve_references_to_idl_def()
         self._resolve_references_to_idl_type()
+        validate_after_resolve_references(self._ir_map)
 
         # Build union API objects.
         self._create_public_unions()
 
         return Database(self._db)
+
+    def _record_defined_in_partial_and_mixin(self):
+        old_irs = self._ir_map.irs_of_kinds(
+            IRMap.IR.Kind.DICTIONARY, IRMap.IR.Kind.INTERFACE,
+            IRMap.IR.Kind.INTERFACE_MIXIN, IRMap.IR.Kind.NAMESPACE,
+            IRMap.IR.Kind.PARTIAL_DICTIONARY, IRMap.IR.Kind.PARTIAL_INTERFACE,
+            IRMap.IR.Kind.PARTIAL_INTERFACE_MIXIN,
+            IRMap.IR.Kind.PARTIAL_NAMESPACE)
+
+        self._ir_map.move_to_new_phase()
+
+        for old_ir in old_irs:
+            new_ir = make_copy(old_ir)
+            self._ir_map.add(new_ir)
+            for member in new_ir.iter_all_members():
+                member.code_generator_info.set_defined_in_partial(
+                    hasattr(new_ir, 'is_partial') and new_ir.is_partial)
+                member.code_generator_info.set_defined_in_mixin(
+                    hasattr(new_ir, 'is_mixin') and new_ir.is_mixin)
 
     def _propagate_extattrs_per_idl_fragment(self):
         def propagate_extattr(extattr_key_and_attr_name,
@@ -139,8 +168,8 @@ class IdlCompiler(object):
             if not hasattr(ir, 'iter_all_members'):
                 return
             if (only_to_members_of_partial_or_mixin
-                    and ((hasattr(ir, 'is_partial') and ir.is_partial) or
-                         (hasattr(ir, 'is_mixin') and ir.is_mixin))):
+                    and not ((hasattr(ir, 'is_partial') and ir.is_partial) or
+                             (hasattr(ir, 'is_mixin') and ir.is_mixin))):
                 return
             for member in ir.iter_all_members():
                 apply_to(member)
@@ -172,10 +201,11 @@ class IdlCompiler(object):
                       default_value=True)
 
         old_irs = self._ir_map.irs_of_kinds(
-            IRMap.IR.Kind.INTERFACE, IRMap.IR.Kind.INTERFACE_MIXIN,
-            IRMap.IR.Kind.DICTIONARY, IRMap.IR.Kind.PARTIAL_INTERFACE,
+            IRMap.IR.Kind.DICTIONARY, IRMap.IR.Kind.INTERFACE,
+            IRMap.IR.Kind.INTERFACE_MIXIN, IRMap.IR.Kind.NAMESPACE,
+            IRMap.IR.Kind.PARTIAL_DICTIONARY, IRMap.IR.Kind.PARTIAL_INTERFACE,
             IRMap.IR.Kind.PARTIAL_INTERFACE_MIXIN,
-            IRMap.IR.Kind.PARTIAL_DICTIONARY)
+            IRMap.IR.Kind.PARTIAL_NAMESPACE)
 
         self._ir_map.move_to_new_phase()
 
@@ -215,6 +245,19 @@ class IdlCompiler(object):
                     partial_dictionary.debug_info.all_locations)
                 new_dictionary.own_members.extend(
                     make_copy(partial_dictionary.own_members))
+
+    def _set_owner_mixin_of_mixin_members(self):
+        mixins = self._ir_map.irs_of_kind(IRMap.IR.Kind.INTERFACE_MIXIN)
+
+        self._ir_map.move_to_new_phase()
+
+        for old_ir in mixins:
+            new_ir = make_copy(old_ir)
+            self._ir_map.add(new_ir)
+            ref_to_mixin = self._ref_to_idl_def_factory.create(
+                new_ir.identifier)
+            for member in new_ir.iter_all_members():
+                member.set_owner_mixin(ref_to_mixin)
 
     def _merge_interface_mixins(self):
         interfaces = self._ir_map.find_by_kind(IRMap.IR.Kind.INTERFACE)
@@ -297,6 +340,31 @@ class IdlCompiler(object):
                 if identifier
             ]
 
+    def _propagate_extattrs_to_overload_group(self):
+        ANY_OF = ("CrossOrigin", "LenientThis", "NotEnumerable",
+                  "PerWorldBindings", "SecureContext", "Unforgeable",
+                  "Unscopable")
+
+        old_irs = self._ir_map.irs_of_kinds(IRMap.IR.Kind.INTERFACE,
+                                            IRMap.IR.Kind.NAMESPACE)
+
+        self._ir_map.move_to_new_phase()
+
+        for old_ir in old_irs:
+            new_ir = make_copy(old_ir)
+            self._ir_map.add(new_ir)
+
+            for group in new_ir.constructor_groups + new_ir.operation_groups:
+                for key in ANY_OF:
+                    if any(key in overload.extended_attributes
+                           for overload in group):
+                        group.extended_attributes.append(
+                            ExtendedAttribute(key=key))
+                if all((overload.extended_attributes.value_of("Affects") ==
+                        "Nothing") for overload in group):
+                    group.extended_attributes.append(
+                        ExtendedAttribute(key="Affects", values="Nothing"))
+
     def _calculate_group_exposure(self):
         old_irs = self._ir_map.irs_of_kinds(IRMap.IR.Kind.INTERFACE,
                                             IRMap.IR.Kind.NAMESPACE)
@@ -353,6 +421,44 @@ class IdlCompiler(object):
                             if exposure.only_in_secure_contexts is not True
                         ]))
                     group.exposure.set_only_in_secure_contexts(flag_names)
+
+    def _fill_exposed_constructs(self):
+        old_interfaces = self._ir_map.irs_of_kind(IRMap.IR.Kind.INTERFACE)
+        old_namespaces = self._ir_map.irs_of_kind(IRMap.IR.Kind.NAMESPACE)
+
+        exposed_map = {}  # global name: [construct's identifier...]
+        for ir in itertools.chain(old_interfaces, old_namespaces):
+            for pair in ir.exposure.global_names_and_features:
+                exposed_map.setdefault(pair.global_name,
+                                       []).append(ir.identifier)
+
+        self._ir_map.move_to_new_phase()
+
+        for old_ir in old_interfaces:
+            new_ir = make_copy(old_ir)
+            self._ir_map.add(new_ir)
+
+            assert not new_ir.exposed_constructs
+            global_names = new_ir.extended_attributes.values_of("Global")
+            if not global_names:
+                continue
+            constructs = set()
+            for global_name in global_names:
+                constructs.update(exposed_map.get(global_name, []))
+            new_ir.exposed_constructs = map(
+                self._ref_to_idl_def_factory.create, sorted(constructs))
+
+    def _sort_dictionary_members(self):
+        """Sorts dictionary members in alphabetical order."""
+        old_irs = self._ir_map.irs_of_kind(IRMap.IR.Kind.DICTIONARY)
+
+        self._ir_map.move_to_new_phase()
+
+        for old_ir in old_irs:
+            new_ir = make_copy(old_ir)
+            self._ir_map.add(new_ir)
+
+            new_ir.own_members.sort(key=lambda x: x.identifier)
 
     def _create_public_objects(self):
         """Creates public representations of compiled objects."""

@@ -15,7 +15,7 @@ const ADB_SIDELOADING_SCREEN_STATE = {
 Polymer({
   is: 'oobe-adb-sideloading-screen',
 
-  behaviors: [I18nBehavior, OobeDialogHostBehavior, LoginScreenBehavior],
+  behaviors: [OobeI18nBehavior, OobeDialogHostBehavior, LoginScreenBehavior],
 
   properties: {
     uiState_: String,
@@ -39,6 +39,13 @@ Polymer({
     } else if (this.uiState_ === ADB_SIDELOADING_SCREEN_STATE.ERROR) {
       this.$.enableAdbSideloadErrorDialog.focus();
     }
+  },
+
+  /*
+   * Executed on language change.
+   */
+  updateLocalizedContent: function() {
+    this.i18nUpdateLocale();
   },
 
   onBeforeShow: function(data) {

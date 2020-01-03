@@ -4,9 +4,6 @@
 
 #include "chrome/browser/sharing/features.h"
 
-const base::Feature kSharingDeviceRegistration{
-    "SharingDeviceRegistration", base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kSharingUseDeviceInfo{"SharingUseDeviceInfo",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -16,5 +13,8 @@ const base::Feature kSharingQRCodeGenerator{"SharingQRCodeGenerator",
 const base::Feature kSharingDeriveVapidKey{"SharingDeriveVapidKey",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kSharingRenameDevices{"SharingRenameDevices",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kSharingDeviceExpiration{"SharingDeviceExpiration",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::FeatureParam<int> kSharingDeviceExpirationHours = {
+    &kSharingDeviceExpiration, "SharingDeviceExpirationHours", 48};

@@ -148,6 +148,8 @@ gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::GetNativeObject() {
 void ViewAXPlatformNodeDelegate::NotifyAccessibilityEvent(
     ax::mojom::Event event_type) {
   DCHECK(ax_platform_node_);
+  if (accessibility_events_callback_)
+    accessibility_events_callback_.Run(this, event_type);
   if (g_is_queueing_events) {
     g_event_queue.Get().emplace_back(event_type, GetUniqueId());
     return;
@@ -191,7 +193,7 @@ void ViewAXPlatformNodeDelegate::NotifyAccessibilityEvent(
 }
 
 #if defined(OS_MACOSX)
-void ViewAXPlatformNodeDelegate::AnnounceText(base::string16& text) {
+void ViewAXPlatformNodeDelegate::AnnounceText(const base::string16& text) {
   ax_platform_node_->AnnounceText(text);
 }
 #endif
@@ -364,15 +366,10 @@ gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::HitTestSync(int x,
   if (!view()->HitTestPoint(point))
     return nullptr;
 
-  // GetEventHandlerForPoint correctly handles overlapping views but it
-  // only returns views that handle events. For accessibility, we want to
-  // return the deepest child view. This is why we need to continue
-  // searching from here.
-  View* v = view()->GetEventHandlerForPoint(point);
-
   // Check if the point is within any of the immediate children of this
   // view. We don't have to search further because AXPlatformNode will
   // do a recursive hit test if we return anything other than |this| or NULL.
+  View* v = view();
   const auto is_point_in_child = [point, v](View* child) {
     if (!child->GetVisible())
       return false;
@@ -383,7 +380,7 @@ gfx::NativeViewAccessible ViewAXPlatformNodeDelegate::HitTestSync(int x,
   const auto i = std::find_if(v->children().rbegin(), v->children().rend(),
                               is_point_in_child);
   // If it's not inside any of our children, it's inside this view.
-  return (i == v->children().rend()) ? v->GetNativeViewAccessible()
+  return (i == v->children().rend()) ? GetNativeObject()
                                      : (*i)->GetNativeViewAccessible();
 }
 
@@ -528,7 +525,7 @@ void ViewAXPlatformNodeDelegate::GetViewsInGroupForSet(
             ViewAXPlatformNodeDelegate* ax_delegate =
                 static_cast<ViewAXPlatformNodeDelegate*>(&view_accessibility);
             if (ax_delegate)
-              is_ignored = is_ignored || ui::IsIgnored(ax_delegate->GetData());
+              is_ignored = is_ignored || ax_delegate->GetData().IsIgnored();
             return is_ignored;
           }),
       views_in_group->end());

@@ -189,6 +189,7 @@ class AppListItemView::IconImageView : public views::ImageView {
     if (!layer()) {
       SetPaintToLayer();
       layer()->SetFillsBoundsOpaquely(false);
+      layer()->SetName(GetClassName());
     }
   }
 
@@ -501,7 +502,7 @@ void AppListItemView::OnContextMenuModelReceived(
   views::View::ConvertRectToScreen(parent(), &anchor_rect);
 
   AppLaunchedMetricParams metric_params = {
-      ash::AppListLaunchedFrom::kLaunchedFromGrid};
+      AppListLaunchedFrom::kLaunchedFromGrid};
   delegate_->GetAppLaunchedMetricParams(&metric_params);
 
   context_menu_ = std::make_unique<AppListMenuModelAdapter>(
@@ -724,9 +725,9 @@ void AppListItemView::OnGestureEvent(ui::GestureEvent* event) {
         touch_drag_timer_.Start(
             FROM_HERE,
             base::TimeDelta::FromMilliseconds(kTouchLongpressDelayInMs),
-            base::Bind(&AppListItemView::OnTouchDragTimer,
-                       base::Unretained(this), event->location(),
-                       event->root_location()));
+            base::BindOnce(&AppListItemView::OnTouchDragTimer,
+                           base::Unretained(this), event->location(),
+                           event->root_location()));
         event->SetHandled();
       }
       break;
@@ -916,8 +917,8 @@ gfx::Rect AppListItemView::GetProgressBarBoundsForTargetViewBounds(
   return progress_bar_bounds;
 }
 
-void AppListItemView::ItemIconChanged(ash::AppListConfigType config_type) {
-  if (config_type != ash::AppListConfigType::kShared &&
+void AppListItemView::ItemIconChanged(AppListConfigType config_type) {
+  if (config_type != AppListConfigType::kShared &&
       config_type != GetAppListConfig().type()) {
     return;
   }

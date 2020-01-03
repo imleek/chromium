@@ -51,6 +51,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/network_service_util.h"
 #include "content/public/common/url_constants.h"
@@ -82,8 +83,6 @@
 #include "net/url_request/url_request.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/network_connection_tracker.h"
-#include "services/network/public/cpp/resource_response.h"
-#include "services/network/public/cpp/resource_response_info.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
@@ -549,12 +548,13 @@ class NetworkContextConfigurationBrowserTest
     if (cookie_type == CookieType::kThirdParty)
       cookie_line += ";SameSite=None;Secure";
     request->url = server->GetURL("/set-cookie?" + cookie_line);
+    url::Origin origin;
     if (cookie_type == CookieType::kThirdParty)
-      request->site_for_cookies = GURL("http://example.com");
+      origin = url::Origin::Create(GURL("http://example.com"));
     else
-      request->site_for_cookies = server->base_url();
+      origin = url::Origin::Create(server->base_url());
+    request->site_for_cookies = net::SiteForCookies::FromOrigin(origin);
 
-    url::Origin origin = url::Origin::Create(request->site_for_cookies);
     request->trusted_params = network::ResourceRequest::TrustedParams();
     request->trusted_params->network_isolation_key =
         net::NetworkIsolationKey(origin, origin);
@@ -788,8 +788,8 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
   std::unique_ptr<network::ResourceRequest> request =
       std::make_unique<network::ResourceRequest>();
   request->url = https_server.GetURL("/echoheader?Cookie");
-  request->site_for_cookies = GURL(chrome::kChromeUIPrintURL);
-  url::Origin origin = url::Origin::Create(request->site_for_cookies);
+  url::Origin origin = url::Origin::Create(GURL(chrome::kChromeUIPrintURL));
+  request->site_for_cookies = net::SiteForCookies::FromOrigin(origin);
   request->trusted_params = network::ResourceRequest::TrustedParams();
   request->trusted_params->network_isolation_key =
       net::NetworkIsolationKey(origin, origin);
@@ -1777,11 +1777,15 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationDataPacBrowserTest, DataPac) {
 // results in an error, since the spawned test server is designed so that it can
 // run remotely (So can't just write a script to a local file and have the
 // server serve it).
+//
+// TODO(https://crbug.com/333943): Remove these tests when FTP support is
+// removed.
 class NetworkContextConfigurationFtpPacBrowserTest
     : public NetworkContextConfigurationBrowserTest {
  public:
   NetworkContextConfigurationFtpPacBrowserTest()
       : ftp_server_(net::SpawnedTestServer::TYPE_FTP, GetChromeTestDataDir()) {
+    scoped_feature_list_.InitAndEnableFeature(features::kFtpProtocol);
     EXPECT_TRUE(ftp_server_.Start());
   }
   ~NetworkContextConfigurationFtpPacBrowserTest() override {}
@@ -1794,6 +1798,7 @@ class NetworkContextConfigurationFtpPacBrowserTest
 
  private:
   net::SpawnedTestServer ftp_server_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkContextConfigurationFtpPacBrowserTest);
 };

@@ -173,8 +173,6 @@ void SearchBoxView::UpdateModel(bool initiated_by_user) {
   search_model_->search_box()->RemoveObserver(this);
   search_model_->search_box()->Update(search_box()->GetText(),
                                       initiated_by_user);
-  search_model_->search_box()->SetSelectionModel(
-      search_box()->GetSelectionModel());
   search_model_->search_box()->AddObserver(this);
 }
 
@@ -373,7 +371,7 @@ void SearchBoxView::UpdateOpacity() {
            ->ShouldShowSearchBox()) {
     return;
   }
-  const int shelf_height = view_delegate_->GetShelfHeight();
+  const int shelf_height = view_delegate_->GetShelfSize();
   float fraction =
       std::max<float>(
           0, contents_view_->app_list_view()->GetCurrentAppListHeight() -
@@ -748,11 +746,6 @@ void SearchBoxView::HintTextChanged() {
   search_box()->SetPlaceholderText(search_box_model->hint_text());
   search_box()->SetAccessibleName(search_box_model->accessible_name());
   SchedulePaint();
-}
-
-void SearchBoxView::SelectionModelChanged() {
-  search_box()->SelectSelectionModel(
-      search_model_->search_box()->selection_model());
 }
 
 void SearchBoxView::Update() {

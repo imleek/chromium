@@ -41,15 +41,19 @@ class TestSharedURLLoaderFactory : public SharedURLLoaderFactory {
                                 traffic_annotation) override;
   void Clone(mojo::PendingReceiver<mojom::URLLoaderFactory> receiver) override;
 
-  // SharedURLLoaderFactoryInfo implementation
-  std::unique_ptr<SharedURLLoaderFactoryInfo> Clone() override;
+  // PendingSharedURLLoaderFactory implementation
+  std::unique_ptr<PendingSharedURLLoaderFactory> Clone() override;
 
   NetworkContext* network_context() { return network_context_.get(); }
+
+  int num_created_loaders() const { return num_created_loaders_; }
 
  private:
   friend class base::RefCounted<TestSharedURLLoaderFactory>;
   ~TestSharedURLLoaderFactory() override;
 
+  // Tracks the number of times |CreateLoaderAndStart()| has been called.
+  int num_created_loaders_ = 0;
   std::unique_ptr<net::TestURLRequestContext> url_request_context_;
   std::unique_ptr<NetworkContext> network_context_;
   mojo::Remote<mojom::URLLoaderFactory> url_loader_factory_;

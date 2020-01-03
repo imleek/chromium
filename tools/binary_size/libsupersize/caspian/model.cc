@@ -5,11 +5,8 @@
 #include "tools/binary_size/libsupersize/caspian/model.h"
 
 #include <algorithm>
-#include <deque>
-#include <functional>
 #include <iostream>
 #include <list>
-#include <string>
 #include <tuple>
 #include <unordered_map>
 
@@ -111,6 +108,10 @@ float Symbol::PssWithoutPadding() const {
 
 float Symbol::PaddingPss() const {
   return static_cast<float>(Padding()) / NumAliases();
+}
+
+DiffStatus Symbol::GetDiffStatus() const {
+  return DiffStatus::kUnchanged;
 }
 
 // delta symbol
@@ -234,6 +235,19 @@ float DeltaSymbol::PaddingPss() const {
   return 0;
 }
 
+DiffStatus DeltaSymbol::GetDiffStatus() const {
+  if (!before_) {
+    return DiffStatus::kAdded;
+  }
+  if (!after_) {
+    return DiffStatus::kRemoved;
+  }
+  if (Size() || Pss() != 0) {
+    return DiffStatus::kChanged;
+  }
+  return DiffStatus::kUnchanged;
+}
+
 TreeNode::TreeNode() = default;
 TreeNode::~TreeNode() {
   // TODO(jaspercb): Could use custom allocator to delete all nodes in one go.
@@ -292,6 +306,10 @@ SectionId BaseSizeInfo::ShortSectionName(const char* section_name) {
 SizeInfo::SizeInfo() = default;
 SizeInfo::~SizeInfo() = default;
 
+bool SizeInfo::IsSparse() const {
+  return is_sparse;
+}
+
 DeltaSizeInfo::DeltaSizeInfo(const SizeInfo* before, const SizeInfo* after)
     : before(before), after(after) {}
 
@@ -299,43 +317,70 @@ DeltaSizeInfo::~DeltaSizeInfo() = default;
 DeltaSizeInfo::DeltaSizeInfo(const DeltaSizeInfo&) = default;
 DeltaSizeInfo& DeltaSizeInfo::operator=(const DeltaSizeInfo&) = default;
 
+bool DeltaSizeInfo::IsSparse() const {
+  return before->IsSparse() && after->IsSparse();
+}
+
 void TreeNode::WriteIntoJson(
-    Json::Value* out,
     int depth,
     std::function<bool(const TreeNode* const& l, const TreeNode* const& r)>
-        compare_func) {
+        compare_func,
+    bool is_sparse,
+    Json::Value* out) {
   if (symbol) {
-    if (symbol->IsDex()) {
-      (*out)["idPath"] = std::string(symbol->FullName());
-    } else {
-      (*out)["idPath"] = std::string(symbol->TemplateName());
-      (*out)["fullName"] = std::string(symbol->FullName());
+    (*out)["helpme"] = std::string(symbol->Name());
+    (*out)["idPath"] = std::string(symbol->TemplateName());
+    (*out)["fullName"] = std::string(symbol->FullName());
+    if (symbol->NumAliases() > 1) {
+      (*out)["numAliases"] = symbol->NumAliases();
+    }
+    if (symbol->SourcePath()) {
+      (*out)["srcPath"] = symbol->SourcePath();
+    }
+    if (symbol->Component()) {
+      (*out)["component"] = symbol->Component();
     }
   } else {
-    (*out)["idPath"] = std::string(this->id_path);
+    (*out)["idPath"] = id_path.ToString();
+
+    if (!is_sparse && !children.empty()) {
+      // Add tag to containers in which all child symbols were added/removed.
+      DiffStatus diff_status = node_stats.GetGlobalDiffStatus();
+      if (diff_status != DiffStatus::kUnchanged) {
+        (*out)["diffStatus"] = static_cast<uint8_t>(diff_status);
+      }
+    }
   }
-  (*out)["shortNameIndex"] = this->short_name_index;
+  (*out)["shortNameIndex"] = short_name_index;
   std::string type;
   if (container_type != ContainerType::kSymbol) {
     type += static_cast<char>(container_type);
   }
-  SectionId biggest_section = this->node_stats.ComputeBiggestSection();
+  SectionId biggest_section = node_stats.ComputeBiggestSection();
   type += static_cast<char>(biggest_section);
   (*out)["type"] = type;
 
-  (*out)["size"] = this->size;
-  (*out)["flags"] = this->flags;
-  this->node_stats.WriteIntoJson(&(*out)["childStats"]);
-  if (depth < 0 && this->children.size() > 1) {
+  (*out)["size"] = size;
+  (*out)["flags"] = flags;
+  node_stats.WriteIntoJson(&(*out)["childStats"]);
+
+  const size_t kMaxChildNodesToExpand = 1000;
+  if (children.size() > kMaxChildNodesToExpand) {
+    // When the tree is very flat, don't expand child nodes to avoid cost of
+    // sending thousands of children and grandchildren to renderer.
+    depth = 0;
+  }
+
+  if (depth < 0 && children.size() > 1) {
     (*out)["children"] = Json::Value();  // null
   } else {
     (*out)["children"] = Json::Value(Json::arrayValue);
     // Reorder children for output.
     // TODO: Support additional compare functions.
-    std::sort(this->children.begin(), this->children.end(), compare_func);
-    for (unsigned int i = 0; i < this->children.size(); i++) {
-      this->children[i]->WriteIntoJson(&(*out)["children"][i], depth - 1,
-                                       compare_func);
+    std::sort(children.begin(), children.end(), compare_func);
+    for (unsigned int i = 0; i < children.size(); i++) {
+      children[i]->WriteIntoJson(depth - 1, compare_func, is_sparse,
+                                 &(*out)["children"][i]);
     }
   }
 }
@@ -343,20 +388,36 @@ void TreeNode::WriteIntoJson(
 NodeStats::NodeStats() = default;
 NodeStats::~NodeStats() = default;
 
-NodeStats::NodeStats(SectionId sectionId,
-                     int32_t count,
-                     float size) {
-  child_stats[sectionId] = {count, size};
+NodeStats::NodeStats(const BaseSymbol& symbol) {
+  const SectionId section = symbol.Section();
+  Stat& section_stats = child_stats[section];
+  section_stats = {1, 0, 0, 0, symbol.Pss()};
+  switch (symbol.GetDiffStatus()) {
+    case DiffStatus::kUnchanged:
+      break;
+    case DiffStatus::kAdded:
+      section_stats.added = 1;
+      break;
+    case DiffStatus::kRemoved:
+      section_stats.removed = 1;
+      break;
+    case DiffStatus::kChanged:
+      section_stats.changed = 1;
+      break;
+  }
 }
 
 void NodeStats::WriteIntoJson(Json::Value* out) const {
   (*out) = Json::Value(Json::objectValue);
-  for (const auto kv : this->child_stats) {
+  for (const auto kv : child_stats) {
     const std::string sectionId = std::string(1, static_cast<char>(kv.first));
     const Stat stats = kv.second;
     (*out)[sectionId] = Json::Value(Json::objectValue);
     (*out)[sectionId]["size"] = stats.size;
     (*out)[sectionId]["count"] = stats.count;
+    (*out)[sectionId]["added"] = stats.added;
+    (*out)[sectionId]["removed"] = stats.removed;
+    (*out)[sectionId]["changed"] = stats.changed;
   }
 }
 
@@ -385,5 +446,31 @@ int32_t NodeStats::SumCount() const {
     count += pair.second.count;
   }
   return count;
+}
+
+int32_t NodeStats::SumAdded() const {
+  int32_t count = 0;
+  for (auto& pair : child_stats) {
+    count += pair.second.added;
+  }
+  return count;
+}
+
+int32_t NodeStats::SumRemoved() const {
+  int32_t count = 0;
+  for (auto& pair : child_stats) {
+    count += pair.second.removed;
+  }
+  return count;
+}
+
+DiffStatus NodeStats::GetGlobalDiffStatus() const {
+  int32_t count = SumCount();
+  if (SumAdded() == count) {
+    return DiffStatus::kAdded;
+  } else if (SumRemoved() == count) {
+    return DiffStatus::kRemoved;
+  }
+  return DiffStatus::kUnchanged;
 }
 }  // namespace caspian

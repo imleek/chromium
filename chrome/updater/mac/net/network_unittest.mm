@@ -12,7 +12,6 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -55,7 +54,7 @@ class ChromeUpdaterNetworkMacTest : public ::testing::Test {
                                    int net_error,
                                    const std::string& header_etag,
                                    int64_t xheader_retry_after_sec) {
-    EXPECT_EQ(net_error, 200);
+    EXPECT_EQ(net_error, 0);
     EXPECT_GT(header_etag.length(), 0u);
     EXPECT_EQ(xheader_retry_after_sec, 67);
     PostRequestCompleted();
@@ -105,7 +104,7 @@ TEST_F(ChromeUpdaterNetworkMacTest, NetworkFetcherMacPostRequest) {
   auto fetcher = base::MakeRefCounted<NetworkFetcherFactory>()->Create();
 
   net::EmbeddedTestServer test_server;
-  test_server.RegisterRequestHandler(base::Bind(
+  test_server.RegisterRequestHandler(base::BindRepeating(
       &ChromeUpdaterNetworkMacTest::HandleRequest, base::Unretained(this)));
   ASSERT_TRUE(test_server.Start());
   const GURL url = test_server.GetURL("/echo");
@@ -130,7 +129,7 @@ TEST_F(ChromeUpdaterNetworkMacTest, NetworkFetcherMacDownloadToFile) {
   auto fetcher = base::MakeRefCounted<NetworkFetcherFactory>()->Create();
 
   net::EmbeddedTestServer test_server;
-  test_server.RegisterRequestHandler(base::Bind(
+  test_server.RegisterRequestHandler(base::BindRepeating(
       &ChromeUpdaterNetworkMacTest::HandleRequest, base::Unretained(this)));
   ASSERT_TRUE(test_server.Start());
   const GURL url = test_server.GetURL("/echo");

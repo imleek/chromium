@@ -8,7 +8,6 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/mojo_embedder/async_layer_tree_frame_sink.h"
-#include "components/viz/client/hit_test_data_provider_draw_quad.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/switches.h"
 #include "components/viz/host/host_display_client.h"
@@ -19,7 +18,6 @@
 #include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom.h"
 #include "services/viz/privileged/mojom/compositing/vsync_parameter_observer.mojom.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
-#include "ui/compositor/reflector.h"
 
 #if defined(OS_WIN)
 #include "ui/gfx/win/rendering_window_manager.h"
@@ -136,6 +134,9 @@ void HostContextFactoryPrivate::ConfigureCompositor(
   if (command_line->HasSwitch(switches::kDisableFrameRateLimit))
     root_params->disable_frame_rate_limit = true;
 
+  root_params->use_preferred_interval_for_video =
+      features::IsUsingPreferredIntervalForVideo();
+
   // Connects the viz process end of CompositorFrameSink message pipes. The
   // browser compositor may request a new CompositorFrameSink on context loss,
   // which will destroy the existing CompositorFrameSink.
@@ -144,8 +145,6 @@ void HostContextFactoryPrivate::ConfigureCompositor(
   compositor_data.display_private->Resize(compositor->size());
   compositor_data.display_private->SetOutputIsSecure(
       compositor_data.output_is_secure);
-  compositor_data.display_private->SetDisplayTransformHint(
-      compositor->display_transform());
 
   // Create LayerTreeFrameSink with the browser end of CompositorFrameSink.
   cc::mojo_embedder::AsyncLayerTreeFrameSink::InitParams params;
@@ -154,12 +153,6 @@ void HostContextFactoryPrivate::ConfigureCompositor(
       compositor->context_factory()->GetGpuMemoryBufferManager();
   params.pipes.compositor_frame_sink_associated_remote = std::move(sink_remote);
   params.pipes.client_receiver = std::move(client_receiver);
-  if (!features::IsVizHitTestingSurfaceLayerEnabled()) {
-    params.hit_test_data_provider =
-        std::make_unique<viz::HitTestDataProviderDrawQuad>(
-            false /* should_ask_for_child_region */,
-            true /* root_accepts_events */);
-  }
   params.client_name = kBrowser;
   compositor->SetLayerTreeFrameSink(
       std::make_unique<cc::mojo_embedder::AsyncLayerTreeFrameSink>(
@@ -188,19 +181,6 @@ base::flat_set<Compositor*> HostContextFactoryPrivate::GetAllCompositors() {
   for (auto& pair : compositor_data_map_)
     all_compositors.insert(pair.first);
   return all_compositors;
-}
-
-std::unique_ptr<Reflector> HostContextFactoryPrivate::CreateReflector(
-    Compositor* source,
-    Layer* target) {
-  // TODO(crbug.com/601869): Reflector needs to be rewritten for viz.
-  NOTIMPLEMENTED();
-  return nullptr;
-}
-
-void HostContextFactoryPrivate::RemoveReflector(Reflector* reflector) {
-  // TODO(crbug.com/601869): Reflector needs to be rewritten for viz.
-  NOTIMPLEMENTED();
 }
 
 viz::FrameSinkId HostContextFactoryPrivate::AllocateFrameSinkId() {
@@ -314,17 +294,6 @@ void HostContextFactoryPrivate::AddVSyncParameterObserver(
     iter->second.display_private->AddVSyncParameterObserver(
         std::move(observer));
   }
-}
-
-void HostContextFactoryPrivate::SetDisplayTransformHint(
-    Compositor* compositor,
-    gfx::OverlayTransform transform) {
-  auto iter = compositor_data_map_.find(compositor);
-  if (iter == compositor_data_map_.end())
-    return;
-
-  if (iter->second.display_private)
-    iter->second.display_private->SetDisplayTransformHint(transform);
 }
 
 HostContextFactoryPrivate::CompositorData::CompositorData() = default;

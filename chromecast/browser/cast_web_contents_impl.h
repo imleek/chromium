@@ -29,6 +29,8 @@
 
 namespace chromecast {
 
+class QueryableDataHost;
+
 namespace shell {
 class RemoteDebuggingServer;
 }  // namespace shell
@@ -42,6 +44,9 @@ class CastWebContentsImpl : public CastWebContents,
 
   content::WebContents* web_contents() const override;
   PageState page_state() const override;
+  base::Optional<pid_t> GetMainFrameRenderProcessPid() const override;
+
+  QueryableDataHost* queryable_data_host() const override;
 
   // CastWebContents implementation:
   int tab_id() const override;
@@ -68,6 +73,8 @@ class CastWebContentsImpl : public CastWebContents,
       std::vector<mojo::ScopedMessagePipeHandle> channels) override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
+  bool is_websql_enabled() override;
+  bool is_mixer_audio_enabled() override;
 
   // content::WebContentsObserver implementation:
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
@@ -152,6 +159,8 @@ class CastWebContentsImpl : public CastWebContents,
   std::vector<RendererFeature> renderer_features_;
 
   const int tab_id_;
+  bool is_websql_enabled_;
+  bool is_mixer_audio_enabled_;
   base::TimeTicks start_loading_ticks_;
   bool main_frame_loaded_;
   bool closing_;
@@ -172,6 +181,8 @@ class CastWebContentsImpl : public CastWebContents,
   // Map of InterfaceSet -> InterfaceProvider pointer.
   base::flat_map<InterfaceSet, service_manager::InterfaceProvider*>
       interface_providers_map_;
+
+  std::unique_ptr<QueryableDataHost> queryable_data_host_;
 
   SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<CastWebContentsImpl> weak_factory_;

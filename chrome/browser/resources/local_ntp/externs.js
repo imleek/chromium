@@ -111,7 +111,8 @@ let og;
  *     ConvertPromoDataToDict()
  * @typedef {{promoHtml: (string|undefined),
  *            promoLogUrl: (string|undefined),
- *            promoId: (string|undefined)}}
+ *            promoId: (string|undefined),
+ *            canOpenExtensionsPage: boolean}}
  */
 let promo;
 
@@ -318,6 +319,7 @@ window.chrome.embeddedSearch.newTabPage.setBackgroundInfo;
  *   colorLight: (!Array<number>|undefined),
  *   colorPicked: (!Array<number>|undefined),
  *   customBackgroundConfigured: boolean,
+ *   customBackgroundDisabledByPolicy: boolean,
  *   iconBackgroundColor: !Array<number>,
  *   imageHorizontalAlignment: (string|undefined),
  *   imageTiling: (string|undefined),
@@ -391,6 +393,15 @@ window.chrome.embeddedSearch.newTabPage.updateCustomLink;
 window.chrome.embeddedSearch.newTabPage.blocklistPromo;
 
 /**
+ * @param {number} button
+ * @param {boolean} altKey
+ * @param {boolean} ctrlKey
+ * @param {boolean} metaKey
+ * @param {boolean} shiftKey
+ */
+window.chrome.embeddedSearch.newTabPage.openExtensionsPage;
+
+/**
  * Embedded Search API methods defined in
  * chrome/renderer/searchbox/searchbox_extension.cc:
  *  SearchBoxBindings::GetObjectTemplateBuilder()
@@ -417,7 +428,6 @@ let ACMatchClassification;
 /**
  * @typedef {{
  *   allowedToBeDefaultMatch: boolean,
- *   canDisplay: boolean,
  *   contents: string,
  *   contentsClass: !Array<!ACMatchClassification>,
  *   description: string,
@@ -447,6 +457,8 @@ window.chrome.embeddedSearch.searchBox.autocompleteresultchanged;
 /**
  * @param {number} line
  * @param {string} url
+ * @param {boolean} areMatchesShowing
+ * @param {number} timeElapsedSinceLastFocus
  * @param {number} button
  * @param {boolean} altKey
  * @param {boolean} ctrlKey
@@ -525,4 +537,5 @@ configData.translatedStrings.undoThumbnailRemove;
 configData.translatedStrings.uploadImage;
 configData.translatedStrings.urlField;
 configData.translatedStrings.voiceCloseTooltip;
+configData.translatedStrings.voiceSearchClosed;
 configData.translatedStrings.waiting;

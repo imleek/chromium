@@ -573,7 +573,7 @@ void ListedElement::UpdateAncestorDisabledState() const {
       last_legend_ancestor = ancestor;
       continue;
     }
-    if (!IsHTMLFieldSetElement(*ancestor))
+    if (!IsA<HTMLFieldSetElement>(*ancestor))
       continue;
     may_have_field_set_ancestor_ = true;
     if (ancestor->IsDisabledFormControl()) {
@@ -675,7 +675,7 @@ ListedElement* ListedElement::From(Element& element) {
     return form_control_element;
   if (html_element->IsFormAssociatedCustomElement())
     return &element.EnsureElementInternals();
-  if (auto* object = ToHTMLObjectElementOrNull(html_element))
+  if (auto* object = DynamicTo<HTMLObjectElement>(html_element))
     return object;
   return nullptr;
 }

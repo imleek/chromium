@@ -19,12 +19,13 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.ui.DisableAnimationsTestRule;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.ServerCertificate;
+import org.chromium.ui.test.util.DisableAnimationsTestRule;
 
 /** An integration test for shipping address and payer's contact information delegation. */
 @RunWith(ChromeJUnit4ClassRunner.class)
@@ -90,6 +91,9 @@ public class PaymentHandlerEnableDelegationsTest {
         // The pay button should be enabled when shipping address is requested and the selected
         // payment instrument can provide it.
         createPaymentRequestAndWaitFor("{requestShipping: true}", mRule.getReadyToPay());
+
+        // Click the pay button and wait for success.
+        mRule.clickAndWait(R.id.button_primary, mRule.getDismissed());
     }
 
     @Test
@@ -102,6 +106,9 @@ public class PaymentHandlerEnableDelegationsTest {
         createPaymentRequestAndWaitFor(
                 "{requestPayerName: true, requestPayerEmail: true, requestPayerPhone: true}",
                 mRule.getReadyToPay());
+
+        // Click the pay button and wait for success.
+        mRule.clickAndWait(R.id.button_primary, mRule.getDismissed());
     }
 
     @Test
@@ -116,6 +123,9 @@ public class PaymentHandlerEnableDelegationsTest {
                 "{requestShipping: true, requestPayerName: true, requestPayerEmail: true,"
                         + " requestPayerPhone: true}",
                 mRule.getReadyToPay());
+
+        // Click the pay button and wait for success.
+        mRule.clickAndWait(R.id.button_primary, mRule.getDismissed());
     }
 
     @Test

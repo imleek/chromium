@@ -38,6 +38,7 @@
 
 namespace gl {
 class GLFence;
+class ProgressReporter;
 }
 
 namespace gpu {
@@ -64,7 +65,7 @@ struct PassthroughResources {
   ~PassthroughResources();
 
   // api is null if we don't have a context (e.g. lost).
-  void Destroy(gl::GLApi* api);
+  void Destroy(gl::GLApi* api, gl::ProgressReporter* progress_reporter);
 
   // Resources stores a shared list of textures pending deletion.
   // If we have don't context when this function is called, we can mark
@@ -106,15 +107,7 @@ struct PassthroughResources {
       return representation_.get();
     }
 
-    bool BeginAccess(GLenum mode) {
-      DCHECK(!is_being_accessed());
-      scoped_access_.emplace(representation_.get(), mode);
-      if (!scoped_access_->success()) {
-        scoped_access_.reset();
-        return false;
-      }
-      return true;
-    }
+    bool BeginAccess(GLenum mode, gl::GLApi* api);
 
     void EndAccess() {
       DCHECK(is_being_accessed());
@@ -126,7 +119,7 @@ struct PassthroughResources {
    private:
     std::unique_ptr<SharedImageRepresentationGLTexturePassthrough>
         representation_;
-    base::Optional<SharedImageRepresentationGLTexturePassthrough::ScopedAccess>
+    std::unique_ptr<SharedImageRepresentationGLTexturePassthrough::ScopedAccess>
         scoped_access_;
     DISALLOW_COPY_AND_ASSIGN(SharedImageData);
   };
@@ -144,39 +137,6 @@ struct PassthroughResources {
   // Mapping of client buffer IDs that are mapped to the shared memory used to
   // back the mapping so that it can be flushed when the buffer is unmapped
   std::unordered_map<GLuint, MappedBuffer> mapped_buffer_map;
-};
-
-class ScopedFramebufferBindingReset {
- public:
-  explicit ScopedFramebufferBindingReset(gl::GLApi* api,
-                                         bool supports_separate_fbo_bindings);
-  ~ScopedFramebufferBindingReset();
-
- private:
-  gl::GLApi* api_;
-  bool supports_separate_fbo_bindings_;
-  GLint draw_framebuffer_;
-  GLint read_framebuffer_;
-};
-
-class ScopedRenderbufferBindingReset {
- public:
-  explicit ScopedRenderbufferBindingReset(gl::GLApi* api);
-  ~ScopedRenderbufferBindingReset();
-
- private:
-  gl::GLApi* api_;
-  GLint renderbuffer_;
-};
-
-class ScopedTexture2DBindingReset {
- public:
-  explicit ScopedTexture2DBindingReset(gl::GLApi* api);
-  ~ScopedTexture2DBindingReset();
-
- private:
-  gl::GLApi* api_;
-  GLint texture_;
 };
 
 class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {

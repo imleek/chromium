@@ -214,9 +214,6 @@ const char kDisableExtensionsExcept[] = "disable-extensions-except";
 const char kDisableExtensionsFileAccessCheck[] =
     "disable-extensions-file-access-check";
 
-// Disable pop-up blocking.
-const char kDisablePopupBlocking[]          = "disable-popup-blocking";
-
 // Disables print preview (For testing, and for users who don't like us. :[ )
 const char kDisablePrintPreview[]           = "disable-print-preview";
 
@@ -468,7 +465,8 @@ const char kOriginTrialDisabledFeatures[] = "origin-trial-disabled-features";
 // be disabled. Tokens should be separated by "|" characters.
 const char kOriginTrialDisabledTokens[] = "origin-trial-disabled-tokens";
 
-// Overrides the default public key for checking origin trial tokens.
+// Comma-separated list of keys which will override the default public keys for
+// checking origin trial tokens.
 const char kOriginTrialPublicKey[] = "origin-trial-public-key";
 
 // Packages an extension to a .crx installable file from a given directory.

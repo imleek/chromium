@@ -350,10 +350,6 @@ GLRenderer::GLRenderer(
       copier_(output_surface->context_provider(), &texture_deleter_),
       sync_queries_(gl_),
       bound_geometry_(NO_BINDING),
-      color_lut_cache_(gl_,
-                       output_surface_->context_provider()
-                           ->ContextCapabilities()
-                           .texture_half_float_linear),
       current_task_runner_(std::move(current_task_runner)) {
   DCHECK(gl_);
   DCHECK(context_support_);
@@ -2310,7 +2306,11 @@ void GLRenderer::DrawYUVVideoQuad(const YUVVideoDrawQuad* quad,
   // Force sRGB output on Windows for overlay candidate video quads to match
   // DirectComposition behavior in case these switch between overlays and
   // compositing. See https://crbug.com/811118 for details.
-  if (supports_dc_layers_ &&
+  // Currently if HDR is supported, OverlayProcessor doesn't promote HDR video
+  // frame as overlay candidate. So it's unnecessary to worry about the
+  // compositing-overlay switch here. In addition drawing a HDR video using sRGB
+  // can cancel the advantages of HDR.
+  if (supports_dc_layers_ && !src_color_space.IsHDR() &&
       resource_provider_->IsOverlayCandidate(quad->y_plane_resource_id())) {
     DCHECK(resource_provider_->IsOverlayCandidate(quad->u_plane_resource_id()));
     dst_color_space = gfx::ColorSpace::CreateSRGB();
@@ -2971,7 +2971,7 @@ void GLRenderer::DrawQuadGeometryWithAA(const DrawQuad* quad,
                    CenteredRect(tile_rect));
 }
 
-void GLRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
+void GLRenderer::SwapBuffers(SwapFrameData swap_frame_data) {
   DCHECK(visible_);
 
   TRACE_EVENT0("viz", "GLRenderer::SwapBuffers");
@@ -2980,7 +2980,9 @@ void GLRenderer::SwapBuffers(std::vector<ui::LatencyInfo> latency_info) {
   gfx::Size surface_size = surface_size_for_swap_buffers();
 
   OutputSurfaceFrame output_frame;
-  output_frame.latency_info = std::move(latency_info);
+  output_frame.latency_info = std::move(swap_frame_data.latency_info);
+  output_frame.top_controls_visible_height_changed =
+      swap_frame_data.top_controls_visible_height_changed;
   output_frame.size = surface_size;
   if (use_swap_with_bounds_) {
     output_frame.content_bounds = std::move(swap_content_bounds_);
@@ -3122,7 +3124,6 @@ void GLRenderer::DidReceiveTextureInUseResponses(
       awaiting_release_overlay_textures_.erase(it);
     }
   }
-  color_lut_cache_.Swap();
 }
 
 void GLRenderer::BindFramebufferToOutputSurface() {
@@ -3287,14 +3288,6 @@ void GLRenderer::SetUseProgram(const ProgramKey& program_key_no_color,
         static_cast<float>(current_window_space_viewport_.height()),
     };
     gl_->Uniform4fv(current_program_->viewport_location(), 1, viewport);
-  }
-  if (current_program_->lut_texture_location() != -1) {
-    ColorLUTCache::LUT lut = color_lut_cache_.GetLUT(color_transform);
-    gl_->ActiveTexture(GL_TEXTURE5);
-    gl_->BindTexture(GL_TEXTURE_2D, lut.texture);
-    gl_->Uniform1i(current_program_->lut_texture_location(), 5);
-    gl_->Uniform1f(current_program_->lut_size_location(), lut.size);
-    gl_->ActiveTexture(GL_TEXTURE0);
   }
 
   if (has_output_color_matrix) {

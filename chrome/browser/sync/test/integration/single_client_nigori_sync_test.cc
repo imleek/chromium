@@ -8,6 +8,7 @@
 #include "base/base64.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -21,11 +22,13 @@
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/sync/base/time.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/engine/sync_engine_switches.h"
 #include "components/sync/nigori/cryptographer_impl.h"
 #include "components/sync/nigori/nigori.h"
+#include "content/public/test/test_launcher.h"
 #include "crypto/ec_private_key.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -52,6 +55,31 @@ MATCHER_P(IsDataEncryptedWith, key_params, "") {
   return encrypted_data.key_name() == nigori_name;
 }
 
+MATCHER_P4(StatusLabelsMatch,
+           message_type,
+           status_label_string_id,
+           link_label_string_id,
+           action_type,
+           "") {
+  if (arg.message_type != message_type) {
+    *result_listener << "Wrong message type";
+    return false;
+  }
+  if (arg.status_label_string_id != status_label_string_id) {
+    *result_listener << "Wrong status label";
+    return false;
+  }
+  if (arg.link_label_string_id != link_label_string_id) {
+    *result_listener << "Wrong link label";
+    return false;
+  }
+  if (arg.action_type != action_type) {
+    *result_listener << "Wrong action type";
+    return false;
+  }
+  return true;
+}
+
 GURL GetTrustedVaultRetrievalURL(
     const net::test_server::EmbeddedTestServer& test_server,
     const std::string& encryption_key) {
@@ -61,13 +89,9 @@ GURL GetTrustedVaultRetrievalURL(
                          encryption_key.c_str()));
 }
 
-KeyParams KeystoreKeyParams(const std::string& key) {
-  // Due to mis-encode of keystore keys to base64 we have to always encode such
-  // keys to provide backward compatibility.
-  std::string encoded_key;
-  base::Base64Encode(key, &encoded_key);
+KeyParams KeystoreKeyParams(const std::vector<uint8_t>& key) {
   return {syncer::KeyDerivationParams::CreateForPbkdf2(),
-          std::move(encoded_key)};
+          base::Base64Encode(key)};
 }
 
 std::string ComputeKeyName(const KeyParams& key_params) {
@@ -132,8 +156,11 @@ sync_pb::NigoriSpecifics BuildTrustedVaultNigoriSpecifics(
   std::unique_ptr<syncer::CryptographerImpl> cryptographer =
       syncer::CryptographerImpl::CreateEmpty();
   for (const std::string& trusted_vault_key : trusted_vault_keys) {
+    std::string encoded_key;
+    base::Base64Encode(trusted_vault_key, &encoded_key);
+
     const std::string key_name = cryptographer->EmplaceKey(
-        trusted_vault_key, syncer::KeyDerivationParams::CreateForPbkdf2());
+        encoded_key, syncer::KeyDerivationParams::CreateForPbkdf2());
     cryptographer->SelectDefaultEncryptionKey(key_name);
   }
 
@@ -241,6 +268,25 @@ class SingleClientNigoriSyncTestWithNotAwaitQuiescence
   DISALLOW_COPY_AND_ASSIGN(SingleClientNigoriSyncTestWithNotAwaitQuiescence);
 };
 
+class SingleClientKeystoreKeysMigrationSyncTest : public SyncTest {
+ public:
+  SingleClientKeystoreKeysMigrationSyncTest() : SyncTest(SINGLE_CLIENT) {
+    if (content::IsPreTest()) {
+      override_features_.InitAndDisableFeature(switches::kSyncUSSNigori);
+    } else {
+      override_features_.InitWithFeatures(
+          /*enabled_features=*/{switches::kSyncUSSPasswords,
+                                switches::kSyncUSSNigori},
+          /*disabled_features=*/{});
+    }
+  }
+
+  ~SingleClientKeystoreKeysMigrationSyncTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList override_features_;
+};
+
 IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
                        ShouldCommitKeystoreNigoriWhenReceivedDefault) {
   // SetupSync() should make FakeServer send default NigoriSpecifics.
@@ -250,7 +296,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
   sync_pb::NigoriSpecifics specifics;
   EXPECT_TRUE(GetServerNigori(GetFakeServer(), &specifics));
 
-  const std::vector<std::string>& keystore_keys =
+  const std::vector<std::vector<uint8_t>>& keystore_keys =
       GetFakeServer()->GetKeystoreKeys();
   ASSERT_TRUE(keystore_keys.size() == 1);
   EXPECT_THAT(specifics.encryption_keybag(),
@@ -294,7 +340,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
 // successfully received and decrypted this password form.
 IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
                        ShouldDecryptWithKeystoreNigori) {
-  const std::vector<std::string>& keystore_keys =
+  const std::vector<std::vector<uint8_t>>& keystore_keys =
       GetFakeServer()->GetKeystoreKeys();
   ASSERT_THAT(keystore_keys, SizeIs(1));
   const KeyParams kKeystoreKeyParams = KeystoreKeyParams(keystore_keys.back());
@@ -319,7 +365,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
 // with a keystore key).
 IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
                        ShouldDecryptWithBackwardCompatibleKeystoreNigori) {
-  const std::vector<std::string>& keystore_keys =
+  const std::vector<std::vector<uint8_t>>& keystore_keys =
       GetFakeServer()->GetKeystoreKeys();
   ASSERT_THAT(keystore_keys, SizeIs(1));
   const KeyParams kKeystoreKeyParams = KeystoreKeyParams(keystore_keys.back());
@@ -345,7 +391,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
   ASSERT_TRUE(SetupSync());
 
   GetFakeServer()->TriggerKeystoreKeyRotation();
-  const std::vector<std::string>& keystore_keys =
+  const std::vector<std::vector<uint8_t>>& keystore_keys =
       GetFakeServer()->GetKeystoreKeys();
   ASSERT_THAT(keystore_keys, SizeIs(2));
   const KeyParams new_keystore_key_params = KeystoreKeyParams(keystore_keys[1]);
@@ -358,7 +404,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
 
 IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
                        ShouldExposeExperimentalAuthenticationKey) {
-  const std::vector<std::string>& keystore_keys =
+  const std::vector<std::vector<uint8_t>>& keystore_keys =
       GetFakeServer()->GetKeystoreKeys();
   ASSERT_THAT(keystore_keys, SizeIs(1));
   const KeyParams kKeystoreKeyParams = KeystoreKeyParams(keystore_keys.back());
@@ -374,10 +420,10 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
   // be stable across different browser versions.
 
   // Default birthday determined by LoopbackServer.
-  const std::string kDefaultBirthday = "0";
+  const std::string kDefaultBirthday = GetFakeServer()->GetStoreBirthday();
   const std::string kSeparator("|");
-  std::string base64_encoded_keystore_key;
-  base::Base64Encode(keystore_keys.back(), &base64_encoded_keystore_key);
+  const std::string base64_encoded_keystore_key =
+      base::Base64Encode(keystore_keys.back());
   const std::string authentication_id_before_hashing =
       std::string("gaia_id_for_user_gmail.com") + kSeparator +
       kDefaultBirthday + kSeparator + base64_encoded_keystore_key;
@@ -422,6 +468,33 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithNotAwaitQuiescence,
 INSTANTIATE_TEST_SUITE_P(USS,
                          SingleClientNigoriSyncTestWithNotAwaitQuiescence,
                          ::testing::Values(false, true));
+
+// Setups Sync with Directory Nigori, so keystore keys are persisted in prefs.
+IN_PROC_BROWSER_TEST_F(SingleClientKeystoreKeysMigrationSyncTest,
+                       PRE_ShouldMigrateKeystoreKeysFromPrefs) {
+  ASSERT_TRUE(SetupSync());
+}
+
+// Disallows population of keystore keys from the server, so preferences are
+// the only source for keystore keys.
+IN_PROC_BROWSER_TEST_F(SingleClientKeystoreKeysMigrationSyncTest,
+                       ShouldMigrateKeystoreKeysFromPrefs) {
+  GetFakeServer()->DisallowSendingEncryptionKeys();
+  EXPECT_TRUE(SetupClients());
+
+  // Ensure that client can decrypt with keystore keys.
+  const std::vector<std::vector<uint8_t>>& keystore_keys =
+      GetFakeServer()->GetKeystoreKeys();
+  ASSERT_THAT(keystore_keys, SizeIs(1));
+  const KeyParams kKeystoreKeyParams = KeystoreKeyParams(keystore_keys.back());
+
+  const autofill::PasswordForm password_form =
+      passwords_helper::CreateTestPasswordForm(0);
+  passwords_helper::InjectEncryptedServerPassword(
+      password_form, kKeystoreKeyParams.password,
+      kKeystoreKeyParams.derivation_params, GetFakeServer());
+  EXPECT_TRUE(PasswordFormsChecker(0, {password_form}).Wait());
+}
 
 class SingleClientNigoriWithWebApiTest : public SyncTest {
  public:
@@ -474,6 +547,25 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
   ASSERT_FALSE(GetSyncService(0)->GetActiveDataTypes().Has(syncer::PASSWORDS));
   ASSERT_TRUE(sync_ui_util::ShouldShowSyncKeysMissingError(GetSyncService(0)));
 
+#if !defined(OS_CHROMEOS)
+  // Verify the profile-menu error string.
+  int description_string_id;
+  int button_string_id;
+  ASSERT_EQ(sync_ui_util::TRUSTED_VAULT_KEY_MISSING_FOR_PASSWORDS_ERROR,
+            sync_ui_util::GetMessagesForAvatarSyncError(
+                GetProfile(0), &description_string_id, &button_string_id));
+  ASSERT_EQ(IDS_SYNC_ERROR_USER_MENU_RETRIEVE_KEYS_MESSAGE,
+            description_string_id);
+  ASSERT_EQ(IDS_SYNC_ERROR_USER_MENU_RETRIEVE_KEYS_BUTTON, button_string_id);
+#endif  // !defined(OS_CHROMEOS)
+
+  // Verify the string that would be displayed in settings.
+  ASSERT_THAT(sync_ui_util::GetStatusLabels(GetProfile(0)),
+              StatusLabelsMatch(sync_ui_util::PASSWORDS_ONLY_SYNC_ERROR,
+                                IDS_SETTINGS_EMPTY_STRING,
+                                IDS_SYNC_STATUS_NEEDS_KEYS_LINK_LABEL,
+                                sync_ui_util::RETRIEVE_TRUSTED_VAULT_KEYS));
+
   // Mimic opening a web page where the user can interact with the retrieval
   // flow.
   sync_ui_util::OpenTabForSyncKeyRetrievalWithURLForTesting(GetBrowser(0),
@@ -493,6 +585,10 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
                    ->GetUserSettings()
                    ->IsTrustedVaultKeyRequiredForPreferredDataTypes());
   EXPECT_FALSE(sync_ui_util::ShouldShowSyncKeysMissingError(GetSyncService(0)));
+  EXPECT_THAT(
+      sync_ui_util::GetStatusLabels(GetProfile(0)),
+      StatusLabelsMatch(sync_ui_util::SYNCED, IDS_SYNC_ACCOUNT_SYNCING,
+                        IDS_SETTINGS_EMPTY_STRING, sync_ui_util::NO_ACTION));
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,

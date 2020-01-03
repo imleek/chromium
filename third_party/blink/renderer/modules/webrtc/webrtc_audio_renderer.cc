@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/public/web/modules/webrtc/webrtc_audio_renderer.h"
+#include "third_party/blink/renderer/modules/webrtc/webrtc_audio_renderer.h"
 
 #include <utility>
 
@@ -241,7 +241,7 @@ bool WebRtcAudioRenderer::Initialize(WebRtcAudioRendererSource* source) {
     // User must call Play() before any audio can be heard.
     state_ = PAUSED;
   }
-  source_->SetOutputDeviceForAec(output_device_id_);
+  source_->SetOutputDeviceForAec(String::FromUTF8(output_device_id_));
   sink_->Start();
   sink_->Play();  // Not all the sinks play on start.
 
@@ -433,7 +433,7 @@ void WebRtcAudioRenderer::SwitchOutputDevice(
     base::AutoLock auto_lock(lock_);
     source_->AudioRendererThreadStopped();
   }
-  source_->SetOutputDeviceForAec(output_device_id_);
+  source_->SetOutputDeviceForAec(String::FromUTF8(output_device_id_));
   PrepareSink();
   sink_->Start();
   sink_->Play();  // Not all the sinks play on start.
@@ -464,7 +464,7 @@ int WebRtcAudioRenderer::Render(base::TimeDelta delay,
     if (!audio_fifo_ && prior_frames_skipped != source_frames_per_buffer) {
       audio_fifo_ = std::make_unique<media::AudioPullFifo>(
           sink_params_.channels(), source_frames_per_buffer,
-          ConvertToBaseCallback(
+          ConvertToBaseRepeatingCallback(
               CrossThreadBindRepeating(&WebRtcAudioRenderer::SourceCallback,
                                        CrossThreadUnretained(this))));
     }
@@ -738,7 +738,7 @@ void WebRtcAudioRenderer::PrepareSink() {
          audio_fifo_->SizeInFrames() != source_frames_per_buffer)) {
       audio_fifo_ = std::make_unique<media::AudioPullFifo>(
           channels, source_frames_per_buffer,
-          ConvertToBaseCallback(
+          ConvertToBaseRepeatingCallback(
               CrossThreadBindRepeating(&WebRtcAudioRenderer::SourceCallback,
                                        CrossThreadUnretained(this))));
     }

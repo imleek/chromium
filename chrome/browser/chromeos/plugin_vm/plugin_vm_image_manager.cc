@@ -15,6 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_drive_image_download_service.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_metrics_util.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_pref_names.h"
@@ -34,6 +35,8 @@
 
 namespace {
 
+constexpr char kPitaDlc[] = "pita";
+
 chromeos::ConciergeClient* GetConciergeClient() {
   return chromeos::DBusThreadManager::Get()->GetConciergeClient();
 }
@@ -44,19 +47,18 @@ namespace plugin_vm {
 
 PluginVmImageManager::~PluginVmImageManager() = default;
 
-bool PluginVmImageManager::IsProcessingImage() {
+bool PluginVmImageManager::IsProcessing() {
   return State::NOT_STARTED < state_ && state_ < State::CONFIGURED;
 }
 
-void PluginVmImageManager::StartDownload() {
-  if (IsProcessingImage()) {
+void PluginVmImageManager::StartDlcDownload() {
+  if (IsProcessing()) {
     LOG(ERROR) << "Download of a PluginVm image couldn't be started as"
                << " another PluginVm image is currently being processed "
                << "in state " << GetStateName(state_);
     OnDownloadFailed(FailureReason::OPERATION_IN_PROGRESS);
     return;
   }
-
   // Defensive check preventing any download attempts when PluginVm is
   // not allowed to run (this might happen in rare cases if PluginVm has
   // been disabled but the installer icon is still visible).
@@ -67,18 +69,99 @@ void PluginVmImageManager::StartDownload() {
     return;
   }
 
+  State prev_state = state_;
+  state_ = State::DOWNLOADING_DLC;
+  dlc_download_start_tick_ = base::TimeTicks::Now();
+
+  if (prev_state != State::DOWNLOAD_DLC_CANCELLED) {
+    chromeos::DlcserviceClient::Get()->Install(
+        dlc_module_list_,
+        base::BindOnce(&PluginVmImageManager::OnDlcDownloadCompleted,
+                       weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(&PluginVmImageManager::OnDlcDownloadProgressUpdated,
+                            weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  if (observer_)
+    observer_->OnDlcDownloadStarted();
+}
+
+void PluginVmImageManager::CancelDlcDownload() {
+  state_ = State::DOWNLOAD_DLC_CANCELLED;
+
+  if (observer_)
+    observer_->OnDlcDownloadCancelled();
+}
+
+void PluginVmImageManager::StartDownload() {
+  if (state_ != State::DOWNLOADED_DLC) {
+    LOG(ERROR) << "Download of a PluginVm image couldn't be started as "
+               << "StartDlcDownload() was not called prior.";
+    OnDownloadFailed(FailureReason::DLC_DOWNLOAD_NOT_STARTED);
+    return;
+  }
+
   state_ = State::DOWNLOADING;
   GURL url = GetPluginVmImageDownloadUrl();
   if (url.is_empty()) {
     OnDownloadFailed(FailureReason::INVALID_IMAGE_URL);
     return;
   }
-  download_service_->StartDownload(GetDownloadParams(url));
+
+  using_drive_download_service_ = IsDriveUrl(url);
+
+  if (using_drive_download_service_) {
+    if (!drive_download_service_) {
+      drive_download_service_ =
+          std::make_unique<PluginVmDriveImageDownloadService>(this, profile_);
+    } else {
+      drive_download_service_->ResetState();
+    }
+
+    drive_download_service_->StartDownload(GetIdFromDriveUrl(url));
+  } else {
+    download_service_->StartDownload(GetDownloadParams(url));
+  }
 }
 
 void PluginVmImageManager::CancelDownload() {
   state_ = State::DOWNLOAD_CANCELLED;
-  download_service_->CancelDownload(current_download_guid_);
+
+  if (using_drive_download_service_) {
+    DCHECK(drive_download_service_);
+    drive_download_service_->CancelDownload();
+  } else {
+    download_service_->CancelDownload(current_download_guid_);
+  }
+}
+
+void PluginVmImageManager::OnDlcDownloadProgressUpdated(double progress) {
+  if (state_ != State::DOWNLOADING_DLC)
+    return;
+
+  if (observer_)
+    observer_->OnDlcDownloadProgressUpdated(
+        progress, base::TimeTicks::Now() - dlc_download_start_tick_);
+}
+
+void PluginVmImageManager::OnDlcDownloadCompleted(
+    const std::string& err,
+    const dlcservice::DlcModuleList& dlc_module_list) {
+  if (state_ != State::DOWNLOADING_DLC)
+    return;
+
+  // TODO(kimjae): Remove this check once PluginVM is converted to DLC.
+  if (err == dlcservice::kErrorInvalidDlc) {
+    LOG(ERROR) << "PluginVM DLC is probably not supported, skipping install.";
+  } else if (err != dlcservice::kErrorNone) {
+    if (observer_)
+      observer_->OnDownloadFailed(FailureReason::DLC_DOWNLOAD_FAILED);
+    return;
+  }
+
+  state_ = State::DOWNLOADED_DLC;
+  if (observer_)
+    observer_->OnDlcDownloadCompleted();
 }
 
 void PluginVmImageManager::OnDownloadStarted() {
@@ -120,6 +203,10 @@ void PluginVmImageManager::OnDownloadCancelled() {
 
   RemoveTemporaryPluginVmImageArchiveIfExists();
   current_download_guid_.clear();
+  if (using_drive_download_service_) {
+    drive_download_service_->ResetState();
+    using_drive_download_service_ = false;
+  }
   if (observer_)
     observer_->OnDownloadCancelled();
 
@@ -130,6 +217,12 @@ void PluginVmImageManager::OnDownloadFailed(FailureReason reason) {
   state_ = State::DOWNLOAD_FAILED;
   RemoveTemporaryPluginVmImageArchiveIfExists();
   current_download_guid_.clear();
+
+  if (using_drive_download_service_) {
+    drive_download_service_->ResetState();
+    using_drive_download_service_ = false;
+  }
+
   if (observer_)
     observer_->OnDownloadFailed(reason);
 }
@@ -410,10 +503,18 @@ std::string PluginVmImageManager::GetCurrentDownloadGuidForTesting() {
   return current_download_guid_;
 }
 
+void PluginVmImageManager::SetDriveDownloadServiceForTesting(
+    std::unique_ptr<PluginVmDriveImageDownloadService> drive_download_service) {
+  drive_download_service_ = std::move(drive_download_service);
+}
+
 PluginVmImageManager::PluginVmImageManager(Profile* profile)
     : profile_(profile),
       download_service_(
-          DownloadServiceFactory::GetForKey(profile->GetProfileKey())) {}
+          DownloadServiceFactory::GetForKey(profile->GetProfileKey())) {
+  auto* dlc_module_info = dlc_module_list_.add_dlc_module_infos();
+  dlc_module_info->set_dlc_id(kPitaDlc);
+}
 
 GURL PluginVmImageManager::GetPluginVmImageDownloadUrl() {
   const base::Value* url_ptr =
@@ -431,6 +532,12 @@ std::string PluginVmImageManager::GetStateName(State state) {
   switch (state) {
     case State::NOT_STARTED:
       return "NOT_STARTED";
+    case State::DOWNLOADING_DLC:
+      return "DOWNLOADING_DLC";
+    case State::DOWNLOAD_DLC_CANCELLED:
+      return "DOWNLOAD_DLC_CANCELLED";
+    case State::DOWNLOADED_DLC:
+      return "DOWNLOADED_DLC";
     case State::DOWNLOADING:
       return "DOWNLOADING";
     case State::DOWNLOAD_CANCELLED:
@@ -443,6 +550,8 @@ std::string PluginVmImageManager::GetStateName(State state) {
       return "IMPORT_CANCELLED";
     case State::CONFIGURED:
       return "CONFIGURED";
+    case State::DOWNLOAD_DLC_FAILED:
+      return "DOWNLOAD_DLC_FAILED";
     case State::DOWNLOAD_FAILED:
       return "DOWNLOAD_FAILED";
     case State::IMPORT_FAILED:
@@ -460,30 +569,8 @@ download::DownloadParams PluginVmImageManager::GetDownloadParams(
   params.callback = base::BindRepeating(&PluginVmImageManager::OnStartDownload,
                                         weak_ptr_factory_.GetWeakPtr());
 
-  net::NetworkTrafficAnnotationTag traffic_annotation =
-      net::DefineNetworkTrafficAnnotation("plugin_vm_image_download", R"(
-        semantics {
-          sender: "Plugin VM image manager"
-          description: "Request to download Plugin VM image is sent in order "
-            "to allow user to run Plugin VM."
-          trigger: "User clicking on Plugin VM icon when Plugin VM is not yet "
-            "installed."
-          data: "Request to download Plugin VM image. Sends cookies to "
-            "authenticate the user."
-          destination: WEBSITE
-        }
-        policy {
-          cookies_allowed: YES
-          cookies_store: "user"
-          chrome_policy {
-            PluginVmImage {
-              PluginVmImage: "{'url': 'example.com', 'hash': 'sha256hash'}"
-            }
-          }
-        }
-      )");
-  params.traffic_annotation =
-      net::MutableNetworkTrafficAnnotationTag(traffic_annotation);
+  params.traffic_annotation = net::MutableNetworkTrafficAnnotationTag(
+      kPluginVmNetworkTrafficAnnotation);
 
   // RequestParams
   params.request_params.url = url;
@@ -531,16 +618,22 @@ bool PluginVmImageManager::VerifyDownload(
 }
 
 void PluginVmImageManager::RemoveTemporaryPluginVmImageArchiveIfExists() {
-  if (!downloaded_plugin_vm_image_archive_.empty()) {
-    base::PostTaskAndReplyWithResult(
-        FROM_HERE,
-        {base::ThreadPool(), base::TaskPriority::USER_VISIBLE,
-         base::MayBlock()},
-        base::BindOnce(&base::DeleteFile, downloaded_plugin_vm_image_archive_,
-                       false /* recursive */),
-        base::BindOnce(
-            &PluginVmImageManager::OnTemporaryPluginVmImageArchiveRemoved,
-            weak_ptr_factory_.GetWeakPtr()));
+  if (using_drive_download_service_) {
+    drive_download_service_->RemoveTemporaryArchive(base::BindOnce(
+        &PluginVmImageManager::OnTemporaryPluginVmImageArchiveRemoved,
+        weak_ptr_factory_.GetWeakPtr()));
+  } else {
+    if (!downloaded_plugin_vm_image_archive_.empty()) {
+      base::PostTaskAndReplyWithResult(
+          FROM_HERE,
+          {base::ThreadPool(), base::TaskPriority::USER_VISIBLE,
+           base::MayBlock()},
+          base::BindOnce(&base::DeleteFile, downloaded_plugin_vm_image_archive_,
+                         false /* recursive */),
+          base::BindOnce(
+              &PluginVmImageManager::OnTemporaryPluginVmImageArchiveRemoved,
+              weak_ptr_factory_.GetWeakPtr()));
+    }
   }
 }
 

@@ -471,6 +471,13 @@ class SpdyServerPushHelper : public ServerPushDelegate::ServerPushHelper {
 
   const GURL& GetURL() const override { return request_url_; }
 
+  NetworkIsolationKey GetNetworkIsolationKey() const override {
+    if (session_) {
+      return session_->spdy_session_key().network_isolation_key();
+    }
+    return NetworkIsolationKey();
+  }
+
  private:
   base::WeakPtr<SpdySession> session_;
   const GURL request_url_;
@@ -1413,6 +1420,8 @@ base::Value SpdySession::GetInfoAsValue() const {
     dict.SetKey("aliases", std::move(alias_list));
   }
   dict.SetStringKey("proxy", host_port_proxy_pair().second.ToURI());
+  dict.SetStringKey("network_isolation_key",
+                    spdy_session_key_.network_isolation_key().ToDebugString());
 
   dict.SetIntKey("active_streams", active_streams_.size());
 

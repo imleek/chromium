@@ -6,6 +6,7 @@
 
 #include "base/strings/sys_string_conversions.h"
 #include "components/autofill/core/browser/payments/autofill_save_card_infobar_delegate_mobile.h"
+#include "components/autofill/core/common/autofill_payments_features.h"
 #include "ios/chrome/browser/infobars/infobar_controller_delegate.h"
 #import "ios/chrome/browser/infobars/infobar_type.h"
 #import "ios/chrome/browser/ui/autofill/save_card_message_with_links.h"
@@ -65,21 +66,21 @@
         initWithDelegate:self
            presentsModal:self.hasBadge
                     type:InfobarType::kInfobarTypeSaveCard];
-    if (self.saveCardInfoBarDelegate->upload()) {
-      self.bannerViewController.buttonText =
-          l10n_util::GetNSString(IDS_IOS_AUTOFILL_SAVE_ELLIPSIS);
-    } else {
-      self.bannerViewController.buttonText =
-          base::SysUTF16ToNSString(self.saveCardInfoBarDelegate->GetButtonLabel(
-              ConfirmInfoBarDelegate::BUTTON_OK));
-    }
-    self.bannerViewController.titleText = base::SysUTF16ToNSString(
-        self.saveCardInfoBarDelegate->GetMessageText());
-    self.bannerViewController.subTitleText =
-        base::SysUTF16ToNSString(self.saveCardInfoBarDelegate->card_label());
-    gfx::Image icon = self.saveCardInfoBarDelegate->GetIcon();
-    if (!icon.IsEmpty())
-      self.bannerViewController.iconImage = icon.ToUIImage();
+    [self.bannerViewController
+        setButtonText:self.saveCardInfoBarDelegate->upload()
+                          ? l10n_util::GetNSString(
+                                IDS_IOS_AUTOFILL_SAVE_ELLIPSIS)
+                          : base::SysUTF16ToNSString(
+                                self.saveCardInfoBarDelegate->GetButtonLabel(
+                                    ConfirmInfoBarDelegate::BUTTON_OK))];
+    [self.bannerViewController
+        setTitleText:base::SysUTF16ToNSString(
+                         self.saveCardInfoBarDelegate->GetMessageText())];
+    [self.bannerViewController
+        setSubtitleText:base::SysUTF16ToNSString(
+                            self.saveCardInfoBarDelegate->card_label())];
+    self.bannerViewController.iconImage =
+        [UIImage imageNamed:@"infobar_save_card_icon"];
   }
 }
 
@@ -99,6 +100,10 @@
 
 - (BOOL)isInfobarAccepted {
   return self.infobarAccepted;
+}
+
+- (BOOL)infobarBannerActionWillPresentModal {
+  return self.saveCardInfoBarDelegate->upload();
 }
 
 - (void)performInfobarAction {
@@ -166,6 +171,13 @@
       self.saveCardInfoBarDelegate->expiration_date_year());
   self.modalViewController.currentCardSaved = !self.infobarAccepted;
   self.modalViewController.legalMessages = [self legalMessagesForModal];
+  if ((base::FeatureList::IsEnabled(
+          autofill::features::kAutofillSaveCardInfobarEditSupport))) {
+    self.modalViewController.supportsEditing =
+        self.saveCardInfoBarDelegate->upload();
+  } else {
+    self.modalViewController.supportsEditing = NO;
+  }
 
   return YES;
 }

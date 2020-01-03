@@ -20,6 +20,7 @@
 #include "base/values.h"
 #include "printing/backend/print_backend.h"
 #include "printing/backend/print_backend_consts.h"
+#include "printing/printing_utils.h"
 #include "printing/units.h"
 #include "url/gurl.h"
 
@@ -107,12 +108,9 @@ void ParseLpOptions(const base::FilePath& filepath,
   }
 }
 
-void MarkLpOptions(base::StringPiece printer_name, ppd_file_t** ppd) {
-  cups_option_t* options = nullptr;
-  int num_options = 0;
-
-  const char kSystemLpOptionPath[] = "/etc/cups/lpoptions";
-  const char kUserLpOptionPath[] = ".cups/lpoptions";
+void MarkLpOptions(base::StringPiece printer_name, ppd_file_t* ppd) {
+  static constexpr char kSystemLpOptionPath[] = "/etc/cups/lpoptions";
+  static constexpr char kUserLpOptionPath[] = ".cups/lpoptions";
 
   std::vector<base::FilePath> file_locations;
   file_locations.push_back(base::FilePath(kSystemLpOptionPath));
@@ -121,11 +119,11 @@ void MarkLpOptions(base::StringPiece printer_name, ppd_file_t** ppd) {
   file_locations.push_back(base::FilePath(homedir.Append(kUserLpOptionPath)));
 
   for (const base::FilePath& location : file_locations) {
-    num_options = 0;
-    options = nullptr;
+    int num_options = 0;
+    cups_option_t* options = nullptr;
     ParseLpOptions(location, printer_name, &num_options, &options);
     if (num_options > 0 && options) {
-      cupsMarkOptions(*ppd, num_options, options);
+      cupsMarkOptions(ppd, num_options, options);
       cupsFreeOptions(num_options, options);
     }
   }
@@ -429,6 +427,7 @@ http_t* HttpConnectionCUPS::http() {
 }
 
 bool ParsePpdCapabilities(base::StringPiece printer_name,
+                          base::StringPiece locale,
                           base::StringPiece printer_capabilities,
                           PrinterSemanticCapsAndDefaults* printer_info) {
   base::FilePath ppd_file_path;
@@ -451,7 +450,7 @@ bool ParsePpdCapabilities(base::StringPiece printer_name,
     return false;
   }
   ppdMarkDefaults(ppd);
-  MarkLpOptions(printer_name, &ppd);
+  MarkLpOptions(printer_name, ppd);
 
   PrinterSemanticCapsAndDefaults caps;
   caps.collate_capable = true;
@@ -460,8 +459,9 @@ bool ParsePpdCapabilities(base::StringPiece printer_name,
 
   GetDuplexSettings(ppd, &caps.duplex_modes, &caps.duplex_default);
 
+  ColorModel cm_black = UNKNOWN_COLOR_MODEL;
+  ColorModel cm_color = UNKNOWN_COLOR_MODEL;
   bool is_color = false;
-  ColorModel cm_color = UNKNOWN_COLOR_MODEL, cm_black = UNKNOWN_COLOR_MODEL;
   if (!GetColorModelSettings(ppd, &cm_black, &cm_color, &is_color)) {
     VLOG(1) << "Unknown printer color model";
   }
@@ -476,11 +476,12 @@ bool ParsePpdCapabilities(base::StringPiece printer_name,
   if (ppd->num_sizes > 0 && ppd->sizes) {
     VLOG(1) << "Paper list size - " << ppd->num_sizes;
     ppd_option_t* paper_option = ppdFindOption(ppd, kPageSize);
+    bool is_default_found = false;
     for (int i = 0; i < ppd->num_sizes; ++i) {
       gfx::Size paper_size_microns(
           ConvertUnit(ppd->sizes[i].width, kPointsPerInch, kMicronsPerInch),
           ConvertUnit(ppd->sizes[i].length, kPointsPerInch, kMicronsPerInch));
-      if (paper_size_microns.width() > 0 && paper_size_microns.height() > 0) {
+      if (!paper_size_microns.IsEmpty()) {
         PrinterSemanticCapsAndDefaults::Paper paper;
         paper.size_um = paper_size_microns;
         paper.vendor_id = ppd->sizes[i].name;
@@ -494,10 +495,32 @@ bool ParsePpdCapabilities(base::StringPiece printer_name,
           }
         }
         caps.papers.push_back(paper);
-        if (i == 0 || ppd->sizes[i].marked) {
+        if (ppd->sizes[i].marked) {
           caps.default_paper = paper;
+          is_default_found = true;
         }
       }
+    }
+    if (!is_default_found) {
+      gfx::Size locale_paper_microns =
+          GetDefaultPaperSizeFromLocaleMicrons(locale);
+      for (const PrinterSemanticCapsAndDefaults::Paper& paper : caps.papers) {
+        // Set epsilon to 500 microns to allow tolerance of rounded paper sizes.
+        // While the above utility function returns paper sizes in microns, they
+        // are still rounded to the nearest millimeter (1000 microns).
+        constexpr int kSizeEpsilon = 500;
+        if (SizesEqualWithinEpsilon(paper.size_um, locale_paper_microns,
+                                    kSizeEpsilon)) {
+          caps.default_paper = paper;
+          is_default_found = true;
+          break;
+        }
+      }
+
+      // If no default was set in the PPD or if the locale default is not within
+      // the printer's capabilities, select the first on the list.
+      if (!is_default_found)
+        caps.default_paper = caps.papers[0];
     }
   }
 

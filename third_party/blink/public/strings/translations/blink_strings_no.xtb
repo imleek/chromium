@@ -82,7 +82,6 @@
 <translation id="3822383571486410024">Du må forlenge denne teksten til <ph name="MIN_CHARACTERS" /> tegn eller mer (for øyeblikket bruker du <ph name="CURRENT_LENGTH" /> tegn).</translation>
 <translation id="383465348367842624">En del etterfulgt av «<ph name="ATSIGN" />» kan ikke inneholde symbolet «<ph name="INVALIDCHARACTER" />».</translation>
 <translation id="3846214748874656680">Avslutt fullskjermmodus</translation>
-<translation id="3889183436948184105">versjon</translation>
 <translation id="3920932319529768807">konklusjon</translation>
 <translation id="3924558731517983934">program</translation>
 <translation id="3944740393230681990">prolog</translation>
@@ -114,9 +113,12 @@
 <translation id="479989351350248267">søk</translation>
 <translation id="4812940957355064477">Skriv inn et tall.</translation>
 <translation id="4912536737030637138">bibliografioppføring</translation>
+<translation id="492244087561876220">kommentar</translation>
+<translation id="4971739861736909480"><ph name="ACCNAME" /> er valgt</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> er valgt</translation>
 <translation id="4992066212339426712">Slå på lyden</translation>
 <translation id="49969490063480558">Skriv inn en del etterfulgt av «<ph name="ATSIGN" />». «<ph name="INVALIDADDRESS" />» er ufullstendig.</translation>
+<translation id="5022314756875057021">radgruppe</translation>
 <translation id="5034860022980953847">fremdriftsindikator</translation>
 <translation id="5090250355906949916">videotidslinje</translation>
 <translation id="5093189678851173835">epigraf</translation>
@@ -217,6 +219,7 @@
 <translation id="7888071071722539607">Inkluder en «<ph name="ATSIGN" />» i e-postadressen. «<ph name="INVALIDADDRESS" />» mangler en «<ph name="ATSIGN" />».</translation>
 <translation id="7891486169920085145">vindusdeler</translation>
 <translation id="795667975304826397">Ingen fil valgt</translation>
+<translation id="7962328325860248200"><ph name="ACCNAME" /> er ikke valgt</translation>
 <translation id="8034303206267677282">sterk</translation>
 <translation id="8053789581856978548">søketekstfelt</translation>
 <translation id="8057695513531652401">merknad</translation>

@@ -23,7 +23,6 @@ source_set("sad_tab") {
     "//ios/chrome/common/colors",
     "//ios/chrome/common/ui_util",
     "//ios/third_party/material_components_ios",
-    "//ios/third_party/material_roboto_font_loader_ios",
     "//ios/web",
     "//net",
     "//ui/base",
@@ -40,6 +39,7 @@ source_set("coordinator") {
   ]
   deps = [
     ":sad_tab",
+    "//components/ui_metrics",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",

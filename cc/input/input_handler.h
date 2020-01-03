@@ -176,12 +176,12 @@ class CC_EXPORT InputHandler {
   // a subsequent call to ScrollAnimated can begin on the impl thread.
   virtual ScrollStatus ScrollAnimatedBegin(ScrollState* scroll_state) = 0;
 
-  // Returns SCROLL_ON_IMPL_THREAD if an animation is initiated on the impl
-  // thread. delayed_by is the delay that is taken into account when determining
-  // the duration of the animation.
-  virtual ScrollStatus ScrollAnimated(const gfx::Point& viewport_point,
-                                      const gfx::Vector2dF& scroll_delta,
-                                      base::TimeDelta delayed_by) = 0;
+  // |delayed_by| is the delay that is taken into account when determining
+  // the duration of the animation. TODO(bokan): Should eventually be merged
+  // into ScrollBy. https://crbug.com/1016229.
+  virtual void ScrollAnimated(const gfx::Point& viewport_point,
+                              const gfx::Vector2dF& scroll_delta,
+                              base::TimeDelta delayed_by) = 0;
 
   // Scroll the layer selected by |ScrollBegin| by given |scroll_state| delta.
   // Internally, the delta is transformed to local layer's coordinate space for
@@ -208,7 +208,7 @@ class CC_EXPORT InputHandler {
 
   // Stop scrolling the selected layer. Should only be called if ScrollBegin()
   // returned SCROLL_STARTED. Snap to a snap position if |should_snap| is true.
-  virtual void ScrollEnd(ScrollState* scroll_state, bool should_snap) = 0;
+  virtual void ScrollEnd(bool should_snap) = 0;
 
   // Requests a callback to UpdateRootLayerStateForSynchronousInputHandler()
   // giving the current root scroll and page scale information.
@@ -250,8 +250,8 @@ class CC_EXPORT InputHandler {
   // scrolling layer.
   // |out_touch_action| is assigned the whitelisted touch action for the
   // |viewport_point|. In the case there are no touch handlers or touch action
-  // regions, |out_touch_action| is assigned kTouchActionAuto since the default
-  // touch action is auto.
+  // regions, |out_touch_action| is assigned TouchAction::kAuto since the
+  // default touch action is auto.
   virtual TouchStartOrMoveEventListenerType
   EventListenerTypeForTouchStartOrMoveAt(const gfx::Point& viewport_point,
                                          TouchAction* out_touch_action) = 0;
@@ -276,14 +276,19 @@ class CC_EXPORT InputHandler {
   virtual bool ScrollingShouldSwitchtoMainThread() = 0;
 
   // Sets the initial and target offset for scroll snapping for the currently
-  // scrolling node and the given natural displacement.
+  // scrolling node and the given natural displacement. Also sets the target
+  // element of the snap's scrolling animation.
   // |natural_displacement_in_viewport| is the estimated total scrolling for
   // the active scroll sequence.
   // Returns false if their is no position to snap to.
-  virtual bool GetSnapFlingInfoAndSetSnapTarget(
+  virtual bool GetSnapFlingInfoAndSetAnimatingSnapTarget(
       const gfx::Vector2dF& natural_displacement_in_viewport,
       gfx::Vector2dF* initial_offset,
       gfx::Vector2dF* target_offset) = 0;
+
+  // |did_finish| is true if the animation reached its target position (i.e.
+  // it wasn't aborted).
+  virtual void ScrollEndForSnapFling(bool did_finish) = 0;
 
  protected:
   InputHandler() = default;

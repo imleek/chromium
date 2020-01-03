@@ -19,6 +19,7 @@
 #include <memory>
 #include <string>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
@@ -33,7 +34,6 @@
 #include "content/public/browser/download_manager.h"
 #include "ui/gfx/font_list.h"
 #include "ui/views/animation/animation_delegate_views.h"
-#include "ui/views/animation/ink_drop_host_view.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
 
@@ -54,11 +54,12 @@ namespace views {
 class ImageButton;
 class Label;
 class MdTextButton;
+class StyledLabel;
 }
 
 // Represents a single download item on the download shelf. Encompasses an icon,
 // text, malicious download warnings, etc.
-class DownloadItemView : public views::InkDropHostView,
+class DownloadItemView : public views::View,
                          public views::ButtonListener,
                          public views::ContextMenuController,
                          public DownloadUIModel::Observer,
@@ -101,10 +102,6 @@ class DownloadItemView : public views::InkDropHostView,
   base::string16 GetTooltipText(const gfx::Point& p) const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
-  // view::InkDropHostView:
-  void OnInkDropCreated() override;
-  SkColor GetInkDropBaseColor() const override;
-
   // views::ContextMenuController.
   void ShowContextMenuForViewImpl(View* source,
                                   const gfx::Point& point,
@@ -115,6 +112,9 @@ class DownloadItemView : public views::InkDropHostView,
 
   // views::AnimationDelegateViews implementation.
   void AnimationProgressed(const gfx::Animation* animation) override;
+
+  // Adds styling to the filename in |label|, if present.
+  void StyleFilenameInLabel(views::StyledLabel* label);
 
  protected:
   // views::View:
@@ -157,12 +157,6 @@ class DownloadItemView : public views::InkDropHostView,
   // The space on the right side of the dangerous download label.
   static constexpr int kLabelPadding = 8;
 
-  // Height/width of the warning icon, also in dp.
-  static constexpr int kWarningIconSize = 20;
-
-  // Height/width of the erro icon, also in dp.
-  static constexpr int kErrorIconSize = 20;
-
   void OpenDownload();
 
   // Submits the downloaded file to the safebrowsing download feedback service.
@@ -201,9 +195,6 @@ class DownloadItemView : public views::InkDropHostView,
 
   // Sets the state and triggers a repaint.
   void SetDropdownState(State new_state);
-
-  // Configures the InkDrop. e.g. disables highlight when in dangerous mode.
-  void ConfigureInkDrop();
 
   void SetMode(Mode mode);
 
@@ -254,7 +245,11 @@ class DownloadItemView : public views::InkDropHostView,
   // line (if short), or broken across two lines.  In the latter case,
   // linebreaks near the middle of the string and sets the label's text
   // accordingly.  Returns the preferred size for the label.
-  static gfx::Size AdjustTextAndGetSize(views::Label* label);
+  template <typename T>
+  static gfx::Size AdjustTextAndGetSize(
+      T* label,
+      base::RepeatingCallback<void(T*, const base::string16&)>
+          update_text_and_style);
 
   // Reenables the item after it has been disabled when a user clicked it to
   // open the downloaded file.
@@ -304,6 +299,12 @@ class DownloadItemView : public views::InkDropHostView,
 
   // Opens a file while async scanning is still pending.
   void OpenDownloadDuringAsyncScanning();
+
+  // Returns the height/width of the warning icon, in dp.
+  static int GetWarningIconSize();
+
+  // Returns the height/width of the error icon, in dp.
+  static int GetErrorIconSize();
 
   // The download shelf that owns us.
   DownloadShelfView* shelf_;
@@ -377,7 +378,7 @@ class DownloadItemView : public views::InkDropHostView,
   views::ImageButton* dropdown_button_ = nullptr;
 
   // Dangerous mode label.
-  views::Label* dangerous_download_label_;
+  views::StyledLabel* dangerous_download_label_;
 
   // Whether the dangerous mode label has been sized yet.
   bool dangerous_download_label_sized_;
@@ -411,7 +412,7 @@ class DownloadItemView : public views::InkDropHostView,
   base::FilePath last_download_item_path_;
 
   // Deep scanning mode label.
-  views::Label* deep_scanning_label_ = nullptr;
+  views::StyledLabel* deep_scanning_label_ = nullptr;
 
   // Deep scanning open now button.
   views::MdTextButton* open_now_button_ = nullptr;

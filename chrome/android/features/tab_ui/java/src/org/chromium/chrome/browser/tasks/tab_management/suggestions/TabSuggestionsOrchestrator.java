@@ -4,14 +4,19 @@
 
 package org.chromium.chrome.browser.tasks.tab_management.suggestions;
 
+import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Represents the entry point for the TabSuggestions component. Responsible for
@@ -19,10 +24,11 @@ import java.util.List;
  */
 public class TabSuggestionsOrchestrator implements TabSuggestions, Destroyable {
     public static final String TAB_SUGGESTIONS_UMA_PREFIX = "TabSuggestionsOrchestrator";
-    private static final String TAG = "TabSuggestionsDetailed";
+    private static final String TAG = "TabSuggestDetailed";
     private static final int MIN_CLOSE_SUGGESTIONS_THRESHOLD = 3;
 
     protected TabContextObserver mTabContextObserver;
+    protected TabSuggestionFeedback mTabSuggestionFeedback;
     private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     private List<TabSuggestionsFetcher> mTabSuggestionsFetchers;
     private List<TabSuggestion> mPrefetchedResults = new LinkedList<>();
@@ -113,8 +119,8 @@ public class TabSuggestionsOrchestrator implements TabSuggestions, Destroyable {
                 mPrefetchedResults.addAll(suggestions.tabSuggestions);
                 if (mRemainingFetchers == 0) {
                     for (TabSuggestionsObserver tabSuggestionsObserver : mTabSuggestionsObservers) {
-                        tabSuggestionsObserver.onNewSuggestion(
-                                aggregateResults(mPrefetchedResults));
+                        tabSuggestionsObserver.onNewSuggestion(aggregateResults(mPrefetchedResults),
+                                res -> onTabSuggestionFeedback(res));
                     }
                 }
             }
@@ -129,5 +135,48 @@ public class TabSuggestionsOrchestrator implements TabSuggestions, Destroyable {
     @Override
     public void removeObserver(TabSuggestionsObserver tabSuggestionsObserver) {
         mTabSuggestionsObservers.removeObserver(tabSuggestionsObserver);
+    }
+
+    public void onTabSuggestionFeedback(TabSuggestionFeedback tabSuggestionFeedback) {
+        if (tabSuggestionFeedback == null) {
+            Log.e(TAG, "TabSuggestionFeedback is null");
+            return;
+        }
+        // Record TabSuggestionFeedback for testing purposes
+        mTabSuggestionFeedback = tabSuggestionFeedback;
+
+        if (tabSuggestionFeedback.tabSuggestionResponse
+                == TabSuggestionFeedback.TabSuggestionResponse.NOT_CONSIDERED) {
+            RecordUserAction.record("TabsSuggestions.Close.SuggestionsReview.Dismissed");
+            return;
+        } else {
+            RecordUserAction.record("TabsSuggestions.Close.SuggestionsReview.Accepted");
+            if (tabSuggestionFeedback.tabSuggestionResponse
+                    == TabSuggestionFeedback.TabSuggestionResponse.ACCEPTED) {
+                RecordUserAction.record("TabsSuggestions.Close.Accepted");
+            } else {
+                RecordUserAction.record("TabsSuggestions.Close.Dismissed");
+                return;
+            }
+        }
+
+        Set<Integer> suggestedTabIds = new HashSet<>();
+        for (TabContext.TabInfo tabInfo : tabSuggestionFeedback.tabSuggestion.getTabsInfo()) {
+            suggestedTabIds.add(tabInfo.id);
+        }
+
+        int numSelectFromSuggestion = 0;
+        int numSelectOutsideSuggestion = 0;
+        for (int selectedTabId : tabSuggestionFeedback.selectedTabIds) {
+            if (suggestedTabIds.contains(selectedTabId)) {
+                numSelectFromSuggestion++;
+            } else {
+                numSelectOutsideSuggestion++;
+            }
+        }
+        int numChanged = tabSuggestionFeedback.tabSuggestion.getTabsInfo().size()
+                - numSelectFromSuggestion + numSelectOutsideSuggestion;
+        RecordHistogram.recordCount100Histogram(
+                "TabsSuggestions.Close.NumSuggestionsChanged", numChanged);
     }
 }

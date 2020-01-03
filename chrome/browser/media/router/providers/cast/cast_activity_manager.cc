@@ -440,7 +440,7 @@ ActivityRecord* CastActivityManager::AddMirroringActivityRecord(
     const CastSinkExtraData& cast_data) {
   auto activity = std::make_unique<MirroringActivityRecord>(
       route, app_id, message_handler_, session_tracker_, tab_id, cast_data,
-      media_router_,
+      media_router_, media_sink_service_, this,
       // We could theoretically use base::Unretained() below instead of
       // GetWeakPtr(), the that seems like an unnecessary optimization here.
       // --jrw
@@ -453,7 +453,7 @@ ActivityRecord* CastActivityManager::AddMirroringActivityRecord(
 
 void CastActivityManager::OnAppMessage(
     int channel_id,
-    const cast_channel::CastMessage& message) {
+    const cast::channel::CastMessage& message) {
   // Note: app messages are received only after session is created.
   DVLOG(2) << "Received app message on cast channel " << channel_id;
   auto it = FindActivityByChannelId(channel_id);

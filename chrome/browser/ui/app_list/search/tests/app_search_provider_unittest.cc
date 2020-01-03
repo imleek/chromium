@@ -30,7 +30,6 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "chrome/browser/ui/app_list/arc/arc_default_app_list.h"
-#include "chrome/browser/ui/app_list/extension_app_model_builder.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/app_search_result_ranker.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/ranking_item_util.h"
@@ -385,16 +384,14 @@ TEST_F(AppSearchProviderTest, FetchRecommendations) {
   prefs->SetLastLaunchTime(kPackagedApp2Id, base::Time::FromInternalValue(5));
   // Allow async callbacks to run.
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings,Camera",
-            RunQuery(""));
+  EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings", RunQuery(""));
 
   prefs->SetLastLaunchTime(kHostedAppId, base::Time::FromInternalValue(5));
   prefs->SetLastLaunchTime(kPackagedApp1Id, base::Time::FromInternalValue(10));
   prefs->SetLastLaunchTime(kPackagedApp2Id, base::Time::FromInternalValue(20));
   // Allow async callbacks to run.
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ("Packaged App 2,Packaged App 1,Hosted App,Settings,Camera",
-            RunQuery(""));
+  EXPECT_EQ("Packaged App 2,Packaged App 1,Hosted App,Settings", RunQuery(""));
 
   // Times in the future should just be handled as highest priority.
   prefs->SetLastLaunchTime(kHostedAppId,
@@ -403,8 +400,7 @@ TEST_F(AppSearchProviderTest, FetchRecommendations) {
   prefs->SetLastLaunchTime(kPackagedApp2Id, base::Time::FromInternalValue(5));
   // Allow async callbacks to run.
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings,Camera",
-            RunQuery(""));
+  EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings", RunQuery(""));
 }
 
 TEST_F(AppSearchProviderTest, FetchRecommendationsWithContinueReading) {
@@ -471,7 +467,7 @@ TEST_F(AppSearchProviderTest, FetchRecommendationsWithContinueReading) {
     session_tracker()->GetSession(kForeignSessionTag3)->device_type =
         sync_pb::SyncEnums::TYPE_PHONE;
 
-    EXPECT_EQ("title2,Hosted App,Packaged App 1,Packaged App 2,Settings,Camera",
+    EXPECT_EQ("title2,Hosted App,Packaged App 1,Packaged App 2,Settings",
               RunQueryNotSortingByRelevance(""));
   }
 
@@ -495,7 +491,7 @@ TEST_F(AppSearchProviderTest, FetchRecommendationsWithContinueReading) {
     session_tracker()->GetSession(kLocalSessionTag)->device_type =
         sync_pb::SyncEnums::TYPE_PHONE;
 
-    EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings,Camera",
+    EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings",
               RunQueryNotSortingByRelevance(""));
   }
 
@@ -520,7 +516,7 @@ TEST_F(AppSearchProviderTest, FetchRecommendationsWithContinueReading) {
     session_tracker()->GetSession(kForeignSessionTag1)->device_type =
         sync_pb::SyncEnums::TYPE_PHONE;
 
-    EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings,Camera",
+    EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings",
               RunQueryNotSortingByRelevance(""));
   }
 
@@ -545,7 +541,7 @@ TEST_F(AppSearchProviderTest, FetchRecommendationsWithContinueReading) {
     session_tracker()->GetSession(kForeignSessionTag1)->device_type =
         sync_pb::SyncEnums::TYPE_TABLET;
 
-    EXPECT_EQ("title1,Hosted App,Packaged App 1,Packaged App 2,Settings,Camera",
+    EXPECT_EQ("title1,Hosted App,Packaged App 1,Packaged App 2,Settings",
               RunQueryNotSortingByRelevance(""));
   }
 
@@ -570,7 +566,7 @@ TEST_F(AppSearchProviderTest, FetchRecommendationsWithContinueReading) {
     session_tracker()->GetSession(kForeignSessionTag1)->device_type =
         sync_pb::SyncEnums::TYPE_CROS;
 
-    EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings,Camera",
+    EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings",
               RunQueryNotSortingByRelevance(""));
   }
 
@@ -595,7 +591,7 @@ TEST_F(AppSearchProviderTest, FetchRecommendationsWithContinueReading) {
     session_tracker()->GetSession(kForeignSessionTag1)->device_type =
         sync_pb::SyncEnums::TYPE_CROS;
 
-    EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings,Camera",
+    EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings",
               RunQueryNotSortingByRelevance(""));
   }
 
@@ -633,8 +629,7 @@ TEST_F(AppSearchProviderTest, FetchUnlaunchedRecommendations) {
   prefs->SetLastLaunchTime(kHostedAppId, base::Time::Now());
   prefs->SetLastLaunchTime(kPackagedApp1Id, base::Time::FromInternalValue(0));
   prefs->SetLastLaunchTime(kPackagedApp2Id, base::Time::FromInternalValue(0));
-  EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings,Camera",
-            RunQuery(""));
+  EXPECT_EQ("Hosted App,Packaged App 1,Packaged App 2,Settings", RunQuery(""));
 }
 
 TEST_F(AppSearchProviderTest, FilterDuplicate) {
@@ -796,7 +791,7 @@ TEST_F(AppSearchProviderTest, FuzzyAppSearchTest) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(app_list_features::kEnableFuzzyAppSearch);
   CreateSearch();
-  EXPECT_EQ("Packaged App 1,Packaged App 2", RunQuery("pa1"));
+  EXPECT_EQ("Packaged App 1,Packaged App 2", RunQuery("pa"));
   std::string result = RunQuery("packahe");
   EXPECT_TRUE(result == "Packaged App 1,Packaged App 2" ||
               result == "Packaged App 2,Packaged App 1");
@@ -936,7 +931,7 @@ TEST_P(AppSearchProviderWithExtensionInstallType, OemResultsOnFirstBoot) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     AppSearchProviderWithExtensionInstallType,
     ::testing::ValuesIn({TestExtensionInstallType::CONTROLLED_BY_POLICY,
                          TestExtensionInstallType::CHROME_COMPONENT,
@@ -1027,7 +1022,7 @@ TEST_P(AppSearchProviderWithArcAppInstallType,
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     AppSearchProviderWithArcAppInstallType,
     ::testing::ValuesIn({TestArcAppInstallType::CONTROLLED_BY_POLICY,
                          TestArcAppInstallType::INSTALLED_BY_DEFAULT}));

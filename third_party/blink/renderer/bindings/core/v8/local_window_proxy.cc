@@ -175,12 +175,6 @@ void LocalWindowProxy::Initialize() {
   CHECK(!GetFrame()->IsProvisional());
 
   ScriptForbiddenScope::AllowUserAgentScript allow_script;
-  // Inspector may request V8 interruption to process DevTools protocol
-  // commands, processing can force JavaScript execution. Since JavaScript
-  // evaluation is forbiden during creating of snapshot, we should ignore any
-  // inspector interruption to avoid JavaScript execution.
-  InspectorTaskRunner::IgnoreInterruptsScope inspector_ignore_interrupts(
-      GetFrame()->GetInspectorTaskRunner());
   v8::HandleScope handle_scope(GetIsolate());
 
   CreateContext();
@@ -207,15 +201,7 @@ void LocalWindowProxy::Initialize() {
   if (evaluate_csp_for_eval) {
     ContentSecurityPolicy* csp =
         GetFrame()->GetDocument()->GetContentSecurityPolicyForWorld();
-    // CSP has two mechanisms for controlling eval, script-src and Trusted
-    // Types, and we need to check both.
-    // TODO(vogelheim): Provide a simple(e) API for this use case.
-    bool allow_code_generation =
-        csp->AllowEval(SecurityViolationReportingPolicy::kSuppressReporting,
-                       ContentSecurityPolicy::kWillNotThrowException,
-                       g_empty_string) &&
-        !csp->IsRequireTrustedTypes();
-    context->AllowCodeGenerationFromStrings(allow_code_generation);
+    context->AllowCodeGenerationFromStrings(!csp->ShouldCheckEval());
     context->SetErrorMessageForCodeGenerationFromStrings(
         V8String(GetIsolate(), csp->EvalDisabledErrorMessage()));
   }

@@ -25,6 +25,7 @@
 #include "chromeos/assistant/internal/internal_util.h"
 #include "chromeos/assistant/internal/proto/google3/assistant/api/client_input/warmer_welcome_input.pb.h"
 #include "chromeos/assistant/internal/proto/google3/assistant/api/client_op/device_args.pb.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/util/version_loader.h"
 #include "chromeos/services/assistant/assistant_manager_service_delegate.h"
 #include "chromeos/services/assistant/constants.h"
@@ -97,6 +98,8 @@ constexpr char kScreenContextQuery[] = "screen context";
 
 constexpr float kDefaultSliderStep = 0.1f;
 
+constexpr char kAndroidSettingsAppPackage[] = "com.android.settings";
+
 bool IsScreenContextAllowed(ash::AssistantStateBase* assistant_state) {
   return assistant_state->allowed_state() ==
              ash::mojom::AssistantAllowedState::ALLOWED &&
@@ -146,8 +149,9 @@ AssistantManagerServiceImpl::AssistantManagerServiceImpl(
     mojom::Client* client,
     ServiceContext* context,
     std::unique_ptr<AssistantManagerServiceDelegate> delegate,
-    std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-        url_loader_factory_info,
+    std::unique_ptr<network::PendingSharedURLLoaderFactory>
+        pending_url_loader_factory,
+    base::Optional<std::string> s3_server_uri_override,
     bool is_signed_out_mode)
     : client_(client),
       media_session_(std::make_unique<AssistantMediaSession>(client_, this)),
@@ -155,13 +159,14 @@ AssistantManagerServiceImpl::AssistantManagerServiceImpl(
           this,
           assistant::features::IsAppSupportEnabled(),
           assistant::features::IsRoutinesEnabled())),
-      chromium_api_delegate_(std::move(url_loader_factory_info)),
+      chromium_api_delegate_(std::move(pending_url_loader_factory)),
       assistant_settings_manager_(
           std::make_unique<AssistantSettingsManagerImpl>(context, this)),
       context_(context),
       delegate_(std::move(delegate)),
       background_thread_("background thread"),
       is_signed_out_mode_(is_signed_out_mode),
+      libassistant_config_(CreateLibAssistantConfig(s3_server_uri_override)),
       weak_factory_(this) {
   background_thread_.Start();
 
@@ -177,6 +182,10 @@ AssistantManagerServiceImpl::AssistantManagerServiceImpl(
 }
 
 AssistantManagerServiceImpl::~AssistantManagerServiceImpl() {
+  auto* ambient_state = ash::AmbientModeState::Get();
+  if (ambient_state)
+    ambient_state->RemoveObserver(this);
+
   background_thread_.Stop();
 }
 
@@ -193,6 +202,17 @@ void AssistantManagerServiceImpl::Start(
 
   EnableHotword(enable_hotword);
 
+  if (chromeos::features::IsAmbientModeEnabled()) {
+    auto* ambient_state = ash::AmbientModeState::Get();
+    DCHECK(ambient_state);
+
+    // Update the support action list in action module when system enters/exits
+    // the Ambient Mode. Some actions such as open URL in the browser will be
+    // disabled in this mode.
+    action_module_->SetAmbientModeEnabled(ambient_state->enabled());
+    ambient_state->AddObserver(this);
+  }
+
   // LibAssistant creation will make file IO and sync wait. Post the creation to
   // background thread to avoid DCHECK.
   background_thread_.task_runner()->PostTaskAndReply(
@@ -208,6 +228,12 @@ void AssistantManagerServiceImpl::Stop() {
   DCHECK_NE(GetState(), State::STARTING);
 
   SetStateAndInformObservers(State::STOPPED);
+
+  if (chromeos::features::IsAmbientModeEnabled()) {
+    auto* ambient_state = ash::AmbientModeState::Get();
+    DCHECK(ambient_state);
+    ambient_state->RemoveObserver(this);
+  }
 
   // When user disables the feature, we also deletes all data.
   if (!assistant_state()->settings_enabled().value() && assistant_manager_)
@@ -1158,7 +1184,7 @@ void AssistantManagerServiceImpl::StartAssistantInternal(
       assistant::features::IsMediaSessionIntegrationEnabled());
 
   new_assistant_manager_ = delegate_->CreateAssistantManager(
-      platform_api_.get(), CreateLibAssistantConfig());
+      platform_api_.get(), libassistant_config_);
   new_assistant_manager_internal_ =
       delegate_->UnwrapAssistantManagerInternal(new_assistant_manager_.get());
 
@@ -1308,11 +1334,19 @@ void AssistantManagerServiceImpl::OnAndroidAppListRefreshed(
     std::vector<mojom::AndroidAppInfoPtr> apps_info) {
   std::vector<action::AndroidAppInfo> android_apps_info;
   for (const auto& app_info : apps_info) {
+    // TODO(b/146355799): Remove the special handling for Android settings app.
+    if (app_info->package_name == kAndroidSettingsAppPackage)
+      continue;
+
     android_apps_info.push_back({app_info->package_name, app_info->version,
                                  app_info->localized_app_name,
                                  app_info->intent});
   }
   display_connection_->OnAndroidAppListRefreshed(android_apps_info);
+}
+
+void AssistantManagerServiceImpl::OnAmbientModeEnabled(bool enabled) {
+  action_module_->SetAmbientModeEnabled(enabled);
 }
 
 void AssistantManagerServiceImpl::UpdateInternalOptions(
@@ -1356,7 +1390,6 @@ void AssistantManagerServiceImpl::MediaSessionMetadataChanged(
   media_metadata_ = std::move(metadata);
   UpdateMediaState();
 }
-
 
 void AssistantManagerServiceImpl::OnPlaybackStateChange(
     const MediaStatus& status) {
@@ -1447,6 +1480,11 @@ void AssistantManagerServiceImpl::OnAccessibilityStatusChanged(
 }
 
 void AssistantManagerServiceImpl::OnDeviceAppsEnabled(bool enabled) {
+  // The device apps state sync should only be sent after service is running.
+  // Check state here to prevent timing issue when the service is restarting.
+  if (GetState() != State::RUNNING)
+    return;
+
   display_connection_->SetDeviceAppsEnabled(enabled);
   action_module_->SetAppSupportEnabled(
       assistant::features::IsAppSupportEnabled() && enabled);

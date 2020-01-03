@@ -9,9 +9,9 @@
 #include "base/bind.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
+#include "components/sync/base/model_type.h"
 #include "net/http/http_status_code.h"
 #include "net/url_request/url_fetcher.h"
 
@@ -59,13 +59,13 @@ void RecordRequestStatus(
     int response_code = 200) {
   switch (type) {
     case syncer::PerUserTopicRegistrationRequest::SUBSCRIBE: {
-      UMA_HISTOGRAM_ENUMERATION("FCMInvalidations.SubscriptionRequestStatus",
-                                status);
+      base::UmaHistogramEnumeration(
+          "FCMInvalidations.SubscriptionRequestStatus", status);
       break;
     }
     case syncer::PerUserTopicRegistrationRequest::UNSUBSCRIBE: {
-      UMA_HISTOGRAM_ENUMERATION("FCMInvalidations.UnsubscriptionRequestStatus",
-                                status);
+      base::UmaHistogramEnumeration(
+          "FCMInvalidations.UnsubscriptionRequestStatus", status);
       break;
     }
   }
@@ -83,8 +83,16 @@ void RecordRequestStatus(
     // Log a histogram to track response success vs. failure rates.
     base::UmaHistogramSparse("FCMInvalidations.SubscriptionResponseCode",
                              response_code);
+    // If the topic corresponds to a Sync ModelType, use that as the histogram
+    // suffix. Otherwise (e.g. Drive or Policy), just use "OTHER" for now.
+    // TODO(crbug.com/1029698): Depending on sync is a layering violation.
+    // Eventually the "whitelisted for metrics" bit should be part of a Topic.
+    syncer::ModelType model_type;  // Unused.
+    std::string suffix =
+        syncer::NotificationTypeToRealModelType(topic, &model_type) ? topic
+                                                                    : "OTHER";
     base::UmaHistogramSparse(
-        "FCMInvalidations.SubscriptionResponseCodeForTopic." + topic,
+        "FCMInvalidations.SubscriptionResponseCodeForTopic." + suffix,
         response_code);
   }
 }
@@ -360,8 +368,8 @@ PerUserTopicRegistrationRequest::Builder::BuildURLFetcher(
   }
   request->url = url;
   request->headers = headers;
-  // TODO(treib): Should we set request->credentials_mode to kOmit, to match
-  // "cookies_allowed: NO" above?
+  // TODO(crbug.com/1020117): Should we set request->credentials_mode to kOmit,
+  // to match "cookies_allowed: NO" above?
 
   std::unique_ptr<network::SimpleURLLoader> url_loader =
       network::SimpleURLLoader::Create(std::move(request), traffic_annotation);

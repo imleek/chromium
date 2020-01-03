@@ -94,7 +94,11 @@ FormControlState HTMLTextAreaElement::SaveFormControlState() const {
 
 void HTMLTextAreaElement::RestoreFormControlState(
     const FormControlState& state) {
+  // We don't add kDispatchInputAndChangeEvent to setValue(), and we
+  // post tasks to dispatch events instead. This function can be called
+  // while we should not dispatch any events.
   setValue(state[0]);
+  QueueInputAndChangeEvents();
 }
 
 void HTMLTextAreaElement::ChildrenChanged(const ChildrenChange& change) {
@@ -503,12 +507,11 @@ String HTMLTextAreaElement::validationMessage() const {
 
 bool HTMLTextAreaElement::ValueMissing() const {
   // We should not call value() for performance.
-  return willValidate() && ValueMissing(nullptr);
+  return ValueMissing(nullptr);
 }
 
 bool HTMLTextAreaElement::ValueMissing(const String* value) const {
-  return IsRequiredFormControl() && !IsDisabledOrReadOnly() &&
-         (value ? *value : this->value()).IsEmpty();
+  return IsRequiredFormControl() && (value ? *value : this->value()).IsEmpty();
 }
 
 bool HTMLTextAreaElement::TooLong() const {
@@ -618,7 +621,7 @@ bool HTMLTextAreaElement::IsInteractiveContent() const {
 void HTMLTextAreaElement::CloneNonAttributePropertiesFrom(
     const Element& source,
     CloneChildrenFlag flag) {
-  const HTMLTextAreaElement& source_element = ToHTMLTextAreaElement(source);
+  const auto& source_element = To<HTMLTextAreaElement>(source);
   SetValueCommon(source_element.value(),
                  TextFieldEventBehavior::kDispatchNoEvent,
                  TextControlSetValueSelection::kSetSelectionToEnd);

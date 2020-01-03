@@ -99,6 +99,12 @@ using base::UserMetricsAction;
       RecordAction(UserMetricsAction("MobileMenuHelp"));
       [self.dispatcher showHelpPage];
       break;
+    case PopupMenuActionOpenDownloads:
+      [self.dispatcher showDownloadsFolder];
+      break;
+    case PopupMenuActionTextZoom:
+      RecordAction(UserMetricsAction("MobileMenuTextZoom"));
+      break;
 #if !defined(NDEBUG)
     case PopupMenuActionViewSource:
       [self.dispatcher viewSource];

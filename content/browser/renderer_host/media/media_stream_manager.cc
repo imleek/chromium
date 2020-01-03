@@ -52,7 +52,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/browser/system_connector.h"
 #include "content/public/browser/web_contents_media_capture_id.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
@@ -486,6 +485,7 @@ class MediaStreamManager::DeviceRequest {
 
 // static
 void MediaStreamManager::SendMessageToNativeLog(const std::string& message) {
+  DVLOG(1) << message;
   if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
     base::PostTask(
         FROM_HERE, {BrowserThread::IO},
@@ -511,11 +511,10 @@ MediaStreamManager::MediaStreamManager(
     media::AudioSystem* audio_system,
     scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner,
     std::unique_ptr<VideoCaptureProvider> video_capture_provider)
-    : audio_system_(audio_system),
-      fake_ui_factory_() {
+    : audio_system_(audio_system) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kUseFakeUIForMediaStream)) {
-    fake_ui_factory_ = base::Bind([] {
+    fake_ui_factory_ = base::BindRepeating([] {
       return std::make_unique<FakeMediaStreamUIProxy>(
           /*tests_use_fake_render_frame_hosts=*/false);
     });
@@ -580,11 +579,7 @@ MediaStreamManager::MediaStreamManager(
   }
   InitializeMaybeAsync(std::move(video_capture_provider));
 
-  // May be null in tests.
-  if (GetSystemConnector()) {
-    audio_service_listener_ =
-        std::make_unique<AudioServiceListener>(GetSystemConnector()->Clone());
-  }
+  audio_service_listener_ = std::make_unique<AudioServiceListener>();
 
   base::PowerMonitor::AddObserver(this);
 }
@@ -1831,7 +1826,7 @@ void MediaStreamManager::OnResume() {
 }
 
 void MediaStreamManager::UseFakeUIFactoryForTests(
-    base::Callback<std::unique_ptr<FakeMediaStreamUIProxy>(void)>
+    base::RepeatingCallback<std::unique_ptr<FakeMediaStreamUIProxy>(void)>
         fake_ui_factory) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   fake_ui_factory_ = std::move(fake_ui_factory);
@@ -1840,7 +1835,7 @@ void MediaStreamManager::UseFakeUIFactoryForTests(
 // static
 void MediaStreamManager::RegisterNativeLogCallback(
     int renderer_host_id,
-    const base::Callback<void(const std::string&)>& callback) {
+    base::RepeatingCallback<void(const std::string&)> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   MediaStreamManager* msm = g_media_stream_manager_tls_ptr.Pointer()->Get();
   if (!msm) {
@@ -1848,7 +1843,7 @@ void MediaStreamManager::RegisterNativeLogCallback(
     return;
   }
 
-  msm->DoNativeLogCallbackRegistration(renderer_host_id, callback);
+  msm->DoNativeLogCallbackRegistration(renderer_host_id, std::move(callback));
 }
 
 // static
@@ -2146,10 +2141,10 @@ void MediaStreamManager::OnMediaStreamUIWindowId(
 
 void MediaStreamManager::DoNativeLogCallbackRegistration(
     int renderer_host_id,
-    const base::Callback<void(const std::string&)>& callback) {
+    base::RepeatingCallback<void(const std::string&)> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   // Re-registering (overwriting) is allowed and happens in some tests.
-  log_callbacks_[renderer_host_id] = callback;
+  log_callbacks_[renderer_host_id] = std::move(callback);
 }
 
 void MediaStreamManager::DoNativeLogCallbackUnregistration(

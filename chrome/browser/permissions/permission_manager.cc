@@ -15,15 +15,14 @@
 #include "chrome/browser/background_fetch/background_fetch_permission_context.h"
 #include "chrome/browser/background_sync/background_sync_permission_context.h"
 #include "chrome/browser/background_sync/periodic_background_sync_permission_context.h"
-#include "chrome/browser/clipboard/clipboard_read_permission_context.h"
-#include "chrome/browser/clipboard/clipboard_write_permission_context.h"
+#include "chrome/browser/clipboard/clipboard_read_write_permission_context.h"
+#include "chrome/browser/clipboard/clipboard_sanitized_write_permission_context.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/generic_sensor/sensor_permission_context.h"
 #include "chrome/browser/idle/idle_detection_permission_context.h"
 #include "chrome/browser/media/midi_permission_context.h"
 #include "chrome/browser/media/midi_sysex_permission_context.h"
 #include "chrome/browser/media/webrtc/media_stream_device_permission_context.h"
-#include "chrome/browser/nfc/nfc_permission_context.h"
 #include "chrome/browser/notifications/notification_permission_context.h"
 #include "chrome/browser/payments/payment_handler_permission_context.h"
 #include "chrome/browser/permissions/permission_context_base.h"
@@ -35,6 +34,7 @@
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/storage/durable_storage_permission_context.h"
 #include "chrome/browser/tab_contents/tab_util.h"
+#include "chrome/browser/vr/webxr_permission_context.h"
 #include "chrome/browser/wake_lock/wake_lock_permission_context.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
@@ -60,8 +60,10 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/geolocation/geolocation_permission_context_android.h"
+#include "chrome/browser/nfc/nfc_permission_context_android.h"
 #else
 #include "chrome/browser/geolocation/geolocation_permission_context.h"
+#include "chrome/browser/nfc/nfc_permission_context.h"
 #endif
 
 using blink::mojom::PermissionStatus;
@@ -138,10 +140,10 @@ ContentSettingsType PermissionTypeToContentSettingSafe(
       return ContentSettingsType::SENSORS;
     case PermissionType::ACCESSIBILITY_EVENTS:
       return ContentSettingsType::ACCESSIBILITY_EVENTS;
-    case PermissionType::CLIPBOARD_READ:
-      return ContentSettingsType::CLIPBOARD_READ;
-    case PermissionType::CLIPBOARD_WRITE:
-      return ContentSettingsType::CLIPBOARD_WRITE;
+    case PermissionType::CLIPBOARD_READ_WRITE:
+      return ContentSettingsType::CLIPBOARD_READ_WRITE;
+    case PermissionType::CLIPBOARD_SANITIZED_WRITE:
+      return ContentSettingsType::CLIPBOARD_SANITIZED_WRITE;
     case PermissionType::PAYMENT_HANDLER:
       return ContentSettingsType::PAYMENT_HANDLER;
     case PermissionType::BACKGROUND_FETCH:
@@ -155,11 +157,11 @@ ContentSettingsType PermissionTypeToContentSettingSafe(
     case PermissionType::WAKE_LOCK_SYSTEM:
       return ContentSettingsType::WAKE_LOCK_SYSTEM;
     case PermissionType::NFC:
-#if defined(OS_ANDROID)
       return ContentSettingsType::NFC;
-#else
-      break;
-#endif
+    case PermissionType::VR:
+      return ContentSettingsType::VR;
+    case PermissionType::AR:
+      return ContentSettingsType::AR;
     case PermissionType::NUM:
       break;
   }
@@ -344,10 +346,10 @@ PermissionManager::PermissionManager(Profile* profile) : profile_(profile) {
       std::make_unique<SensorPermissionContext>(profile);
   permission_contexts_[ContentSettingsType::ACCESSIBILITY_EVENTS] =
       std::make_unique<AccessibilityPermissionContext>(profile);
-  permission_contexts_[ContentSettingsType::CLIPBOARD_READ] =
-      std::make_unique<ClipboardReadPermissionContext>(profile);
-  permission_contexts_[ContentSettingsType::CLIPBOARD_WRITE] =
-      std::make_unique<ClipboardWritePermissionContext>(profile);
+  permission_contexts_[ContentSettingsType::CLIPBOARD_READ_WRITE] =
+      std::make_unique<ClipboardReadWritePermissionContext>(profile);
+  permission_contexts_[ContentSettingsType::CLIPBOARD_SANITIZED_WRITE] =
+      std::make_unique<ClipboardSanitizedWritePermissionContext>(profile);
   permission_contexts_[ContentSettingsType::PAYMENT_HANDLER] =
       std::make_unique<payments::PaymentHandlerPermissionContext>(profile);
   permission_contexts_[ContentSettingsType::BACKGROUND_FETCH] =
@@ -362,10 +364,19 @@ PermissionManager::PermissionManager(Profile* profile) : profile_(profile) {
   permission_contexts_[ContentSettingsType::WAKE_LOCK_SYSTEM] =
       std::make_unique<WakeLockPermissionContext>(
           profile, ContentSettingsType::WAKE_LOCK_SYSTEM);
-#if defined(OS_ANDROID)
+#if !defined(OS_ANDROID)
   permission_contexts_[ContentSettingsType::NFC] =
       std::make_unique<NfcPermissionContext>(profile);
+#else
+  permission_contexts_[ContentSettingsType::NFC] =
+      std::make_unique<NfcPermissionContextAndroid>(profile);
 #endif
+  permission_contexts_[ContentSettingsType::VR] =
+      std::make_unique<WebXrPermissionContext>(profile,
+                                               ContentSettingsType::VR);
+  permission_contexts_[ContentSettingsType::AR] =
+      std::make_unique<WebXrPermissionContext>(profile,
+                                               ContentSettingsType::AR);
 }
 
 PermissionManager::~PermissionManager() {

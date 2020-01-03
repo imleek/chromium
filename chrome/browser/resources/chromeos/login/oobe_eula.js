@@ -10,7 +10,7 @@
 Polymer({
   is: 'oobe-eula-md',
 
-  behaviors: [I18nBehavior, OobeDialogHostBehavior],
+  behaviors: [OobeI18nBehavior, OobeDialogHostBehavior],
 
   properties: {
     /**
@@ -18,7 +18,7 @@ Polymer({
      */
     eulaLoadingScreenShown: {
       type: Boolean,
-      value: false,
+      value: true,
     },
 
     /**
@@ -113,6 +113,7 @@ Polymer({
    */
   onFrameLoad_: function() {
     this.acceptButtonDisabled = false;
+    this.eulaLoadingScreenShown = false;
   },
 
   /**
@@ -151,7 +152,7 @@ Polymer({
     chrome.send('eulaOnInstallationSettingsPopupOpened');
     this.$.eulaDialog.hidden = true;
     this.$.installationSettingsDialog.hidden = false;
-    this.$['settings-close-button'].focus();
+    this.$.installationSettingsDialog.show();
   },
 
   /**
@@ -162,6 +163,7 @@ Polymer({
   onInstallationSettingsCloseClicked_: function() {
     this.$.installationSettingsDialog.hidden = true;
     this.$.eulaDialog.hidden = false;
+    this.$.eulaDialog.show();
   },
 
   /**

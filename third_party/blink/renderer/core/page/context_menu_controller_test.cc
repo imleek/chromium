@@ -6,15 +6,17 @@
 
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
+#include "third_party/blink/public/common/input/web_menu_source_type.h"
 #include "third_party/blink/public/platform/web_media_stream.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
-#include "third_party/blink/public/platform/web_menu_source_type.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/web/web_context_menu_data.h"
+#include "third_party/blink/renderer/core/dom/xml_document.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
 #include "third_party/blink/renderer/core/input/context_menu_allowed_scope.h"
 #include "third_party/blink/renderer/core/page/context_menu_controller.h"
@@ -22,6 +24,7 @@
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/testing/empty_web_media_player.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 using testing::Return;
 
@@ -532,8 +535,8 @@ TEST_F(ContextMenuControllerTest, EditingActionsEnabledInXMLDocument) {
   )XML");
 
   Document* document = GetDocument();
-  ASSERT_TRUE(document->IsXMLDocument());
-  ASSERT_FALSE(document->IsHTMLDocument());
+  ASSERT_TRUE(IsA<XMLDocument>(document));
+  ASSERT_FALSE(IsA<HTMLDocument>(document));
 
   Element* text_element = document->getElementById("t");
   document->UpdateStyleAndLayout();
@@ -562,7 +565,7 @@ TEST_F(ContextMenuControllerTest, ShowNonLocatedContextMenuEvent) {
   WebGestureEvent gesture_event(
       WebInputEvent::kGestureLongPress, WebInputEvent::kNoModifiers,
       base::TimeTicks::Now(), WebGestureDevice::kTouchscreen);
-  gesture_event.SetPositionInWidget(WebFloatPoint(rect->left(), rect->top()));
+  gesture_event.SetPositionInWidget(gfx::PointF(rect->left(), rect->top()));
   GetWebView()->MainFrameWidget()->HandleInputEvent(
       WebCoalescedInputEvent(gesture_event));
 
@@ -607,7 +610,7 @@ TEST_F(ContextMenuControllerTest, SelectionRectClipped) {
   WebGestureEvent gesture_event(
       WebInputEvent::kGestureLongPress, WebInputEvent::kNoModifiers,
       base::TimeTicks::Now(), WebGestureDevice::kTouchscreen);
-  gesture_event.SetPositionInWidget(WebFloatPoint(rect->left(), rect->top()));
+  gesture_event.SetPositionInWidget(gfx::PointF(rect->left(), rect->top()));
   GetWebView()->MainFrameWidget()->HandleInputEvent(
       WebCoalescedInputEvent(gesture_event));
 

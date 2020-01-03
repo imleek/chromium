@@ -65,8 +65,8 @@ class ContentSettingsAgentImpl
 #endif
 
   // Sets the content setting rules which back |allowImage()|, |allowScript()|,
-  // |allowScriptFromSource()| and |allowAutoplay()|. |content_setting_rules|
-  // must outlive this |ContentSettingsAgentImpl|.
+  // |allowScriptFromSource()|. |content_setting_rules| must outlive this
+  // |ContentSettingsAgentImpl|.
   void SetContentSettingRules(
       const RendererContentSettingRules* content_setting_rules);
   const RendererContentSettingRules* GetContentSettingRules();
@@ -96,7 +96,6 @@ class ContentSettingsAgentImpl
   void DidNotAllowScript() override;
   bool AllowRunningInsecureContent(bool allowed_per_settings,
                                    const blink::WebURL& url) override;
-  bool AllowAutoplay(bool default_value) override;
   bool AllowPopupsAndRedirects(bool default_value) override;
   void PassiveInsecureContentFound(const blink::WebURL&) override;
   void PersistClientHints(
@@ -106,6 +105,7 @@ class ContentSettingsAgentImpl
   void GetAllowedClientHintsFromSource(
       const blink::WebURL& url,
       blink::WebEnabledClientHints* client_hints) const override;
+  bool ShouldAutoupgradeMixedContent() override;
 
   bool allow_running_insecure_content() const {
     return allow_running_insecure_content_;
@@ -132,6 +132,7 @@ class ContentSettingsAgentImpl
   // chrome::mojom::ContentSettingsAgent:
   void SetAllowRunningInsecureContent() override;
   void SetAsInterstitial() override;
+  void SetDisabledMixedContentUpgrades() override;
 
   void OnContentSettingsAgentRequest(
       mojo::PendingAssociatedReceiver<chrome::mojom::ContentSettingsAgent>
@@ -198,6 +199,7 @@ class ContentSettingsAgentImpl
 
   base::flat_set<std::string> temporarily_allowed_plugins_;
   bool is_interstitial_page_ = false;
+  bool mixed_content_autoupgrades_disabled_ = false;
 
   // If true, IsWhitelistedForContentSettings will always return true.
   const bool should_whitelist_;

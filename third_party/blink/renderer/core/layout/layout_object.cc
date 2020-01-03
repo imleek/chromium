@@ -59,6 +59,7 @@
 #include "third_party/blink/renderer/core/html/html_html_element.h"
 #include "third_party/blink/renderer/core/html/html_table_cell_element.h"
 #include "third_party/blink/renderer/core/html/html_table_element.h"
+#include "third_party/blink/renderer/core/html/image_document.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/layout/geometry/transform_state.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
@@ -85,6 +86,7 @@
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/ng/custom/layout_ng_custom.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
+#include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_item.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_unpositioned_float.h"
@@ -223,6 +225,8 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
     }
     image->SetStyleInternal(nullptr);
     return image;
+  } else if (element->GetPseudoId() == kPseudoIdMarker) {
+    return LayoutObjectFactory::CreateListMarker(*element, style, legacy);
   }
 
   switch (style.Display()) {
@@ -234,9 +238,10 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
     case EDisplay::kBlock:
     case EDisplay::kFlowRoot:
     case EDisplay::kInlineBlock:
-      return LayoutObjectFactory::CreateBlockFlow(*element, style, legacy);
     case EDisplay::kListItem:
-      return LayoutObjectFactory::CreateListItem(*element, style, legacy);
+    case EDisplay::kMath:
+    case EDisplay::kInlineMath:
+      return LayoutObjectFactory::CreateBlockFlow(*element, style, legacy);
     case EDisplay::kTable:
     case EDisplay::kInlineTable:
       return new LayoutTable(element);
@@ -860,7 +865,13 @@ static inline bool ObjectIsRelayoutBoundary(const LayoutObject* object) {
   if (object->IsTablePart())
     return false;
 
+  // OOF-positioned objects which rely on their static-position for placement
+  // cannot be relayout boundaries (their final position would be incorrect).
   const ComputedStyle* style = object->Style();
+  if (object->IsOutOfFlowPositioned() &&
+      (style->HasAutoLeftAndRight() || style->HasAutoTopAndBottom()))
+    return false;
+
   if (object->ShouldApplyLayoutContainment() &&
       object->ShouldApplySizeContainment())
     return true;
@@ -1393,6 +1404,13 @@ void LayoutObject::RecalcVisualOverflow() {
   }
 }
 
+void LayoutObject::RecalcNormalFlowChildVisualOverflowIfNeeded() {
+  if (IsOutOfFlowPositioned() ||
+      (HasLayer() && ToLayoutBoxModelObject(this)->HasSelfPaintingLayer()))
+    return;
+  RecalcVisualOverflow();
+}
+
 const LayoutBoxModelObject* LayoutObject::EnclosingCompositedContainer() const {
   LayoutBoxModelObject* container = nullptr;
   // FIXME: CompositingState is not necessarily up to date for many callers of
@@ -1568,22 +1586,6 @@ DISABLE_CFI_PERF
 void LayoutObject::InvalidatePaint(
     const PaintInvalidatorContext& context) const {
   ObjectPaintInvalidatorWithContext(*this, context).InvalidatePaint();
-}
-
-void LayoutObject::AdjustVisualRectForCompositedScrolling(
-    LayoutRect& rect,
-    const LayoutBoxModelObject& paint_invalidation_container) const {
-  if (CompositedScrollsWithRespectTo(paint_invalidation_container)) {
-    rect.Move(
-        -ToLayoutBox(paint_invalidation_container).ScrolledContentOffset());
-  }
-}
-
-LayoutRect LayoutObject::VisualRectIncludingCompositedScrolling(
-    const LayoutBoxModelObject& paint_invalidation_container) const {
-  LayoutRect rect(VisualRect());
-  AdjustVisualRectForCompositedScrolling(rect, paint_invalidation_container);
-  return rect;
 }
 
 void LayoutObject::ClearPreviousVisualRects() {
@@ -2058,14 +2060,9 @@ void LayoutObject::SetStyle(scoped_refptr<const ComputedStyle> style,
       container->SetNeedsOverflowRecalc();
   }
 
-  if (diff.NeedsRecomputeOverflow() && !NeedsLayout()) {
-    // TODO(rhogan): Make inlines capable of recomputing overflow too.
-    if (IsLayoutBlock()) {
-      SetNeedsOverflowRecalc();
-    } else {
-      SetNeedsLayoutAndPrefWidthsRecalc(
-          layout_invalidation_reason::kStyleChange);
-    }
+  if (diff.NeedsRecomputeVisualOverflow()) {
+    PaintingLayer()->SetNeedsVisualOverflowRecalc();
+    SetShouldCheckForPaintInvalidation();
   }
 
   if (diff.NeedsPaintInvalidationSubtree() ||
@@ -2083,8 +2080,10 @@ void LayoutObject::SetStyle(scoped_refptr<const ComputedStyle> style,
 
   if ((diff.NeedsPaintInvalidationObject() ||
        diff.NeedsPaintInvalidationSubtree()) &&
-      old_style && !old_style->ClipPathDataEquivalent(*style_))
+      old_style && !old_style->ClipPathDataEquivalent(*style_)) {
     InvalidateClipPathCache();
+    PaintingLayer()->SetNeedsCompositingInputsUpdate();
+  }
 
   if (diff.NeedsVisualRectUpdate())
     SetShouldCheckForPaintInvalidation();
@@ -2276,7 +2275,7 @@ void LayoutObject::StyleWillChange(StyleDifference diff,
   // Elements may inherit touch action from parent frame, so we need to report
   // touchstart handler if the root layout object has non-auto effective touch
   // action.
-  TouchAction old_touch_action = TouchAction::kTouchActionAuto;
+  TouchAction old_touch_action = TouchAction::kAuto;
   bool is_document_element = GetNode() && IsDocumentElement();
   if (style_) {
     old_touch_action = is_document_element ? style_->GetEffectiveTouchAction()
@@ -2286,11 +2285,11 @@ void LayoutObject::StyleWillChange(StyleDifference diff,
                                      ? new_style.GetEffectiveTouchAction()
                                      : new_style.GetTouchAction();
   if (GetNode() && !GetNode()->IsTextNode() &&
-      (old_touch_action == TouchAction::kTouchActionAuto) !=
-          (new_touch_action == TouchAction::kTouchActionAuto)) {
+      (old_touch_action == TouchAction::kAuto) !=
+          (new_touch_action == TouchAction::kAuto)) {
     EventHandlerRegistry& registry =
         GetDocument().GetFrame()->GetEventHandlerRegistry();
-    if (new_touch_action != TouchAction::kTouchActionAuto) {
+    if (new_touch_action != TouchAction::kAuto) {
       registry.DidAddEventHandler(*GetNode(),
                                   EventHandlerRegistry::kTouchAction);
     } else {
@@ -2477,15 +2476,18 @@ void LayoutObject::PropagateStyleToAnonymousChildren() {
         child_block_flow->IsAnonymousBlockContinuation())
       new_style->SetPosition(child->StyleRef().GetPosition());
 
-    if (child->IsLayoutNGListMarker())
-      new_style->SetWhiteSpace(child->StyleRef().WhiteSpace());
-
     UpdateAnonymousChildStyle(child, *new_style);
 
     child->SetStyle(std::move(new_style));
   }
 
-  if (StyleRef().StyleType() == kPseudoIdNone)
+  PseudoId pseudo_id = StyleRef().StyleType();
+  if (pseudo_id == kPseudoIdNone)
+    return;
+
+  // Don't propagate style from markers with 'content: normal' because it's not
+  // needed and it would be slow.
+  if (pseudo_id == kPseudoIdMarker && !StyleRef().GetContentData())
     return;
 
   // Propagate style from pseudo elements to generated content. We skip children
@@ -2927,30 +2929,12 @@ bool LayoutObject::IsRooted() const {
 
 RespectImageOrientationEnum LayoutObject::ShouldRespectImageOrientation(
     const LayoutObject* layout_object) {
-  if (!layout_object)
-    return kDoNotRespectImageOrientation;
-
-  // Respect the image's orientation if it's being used as a full-page image or
-  // it's an <img> and the setting to respect it everywhere is set or the <img>
-  // has image-orientation: from-image style. FIXME: crbug.com/498233
-  if (layout_object->GetDocument().IsImageDocument())
-    return kRespectImageOrientation;
-
-  if (!IsHTMLImageElement(layout_object->GetNode()))
-    return kDoNotRespectImageOrientation;
-
-  if (layout_object->GetDocument().GetSettings() &&
-      layout_object->GetDocument()
-          .GetSettings()
-          ->GetShouldRespectImageOrientation())
-    return kRespectImageOrientation;
-
-  if (layout_object->Style() &&
-      layout_object->StyleRef().RespectImageOrientation() ==
+  if (layout_object && layout_object->Style() &&
+      layout_object->StyleRef().RespectImageOrientation() !=
           kRespectImageOrientation)
-    return kRespectImageOrientation;
+    return kDoNotRespectImageOrientation;
 
-  return kDoNotRespectImageOrientation;
+  return kRespectImageOrientation;
 }
 
 LayoutObject* LayoutObject::Container(AncestorSkipInfo* skip_info) const {
@@ -3040,7 +3024,7 @@ void LayoutObject::WillBeDestroyed() {
   // m_style is null in cases of partial construction. Any handler we added
   // previously may have already been removed by the Document independently.
   if (GetNode() && !GetNode()->IsTextNode() && style_ &&
-      style_->GetTouchAction() != TouchAction::kTouchActionAuto) {
+      style_->GetTouchAction() != TouchAction::kAuto) {
     EventHandlerRegistry& registry =
         GetDocument().GetFrame()->GetEventHandlerRegistry();
     if (registry.EventHandlerTargets(EventHandlerRegistry::kTouchAction)
@@ -3333,17 +3317,27 @@ bool LayoutObject::HitTestAllPhases(HitTestResult& result,
 }
 
 Node* LayoutObject::NodeForHitTest() const {
-  Node* node = GetNode();
+  if (Node* node = GetNode())
+    return node;
 
   // If we hit the anonymous layoutObjects inside generated content we should
   // actually hit the generated content so walk up to the PseudoElement.
-  if (!node && Parent() && Parent()->IsBeforeOrAfterContent()) {
-    for (LayoutObject* layout_object = Parent(); layout_object && !node;
-         layout_object = layout_object->Parent())
-      node = layout_object->GetNode();
+  if (const LayoutObject* parent = Parent()) {
+    if (parent->IsBeforeOrAfterContent() ||
+        parent->StyleRef().StyleType() == kPseudoIdFirstLetter) {
+      for (; parent; parent = parent->Parent()) {
+        if (Node* node = parent->GetNode())
+          return node;
+      }
+    } else if (const LayoutNGListItem* list_item =
+                   LayoutNGListItem::FromMarkerOrMarkerContent(*this)) {
+      // If this is a list marker, or is inside of a list marker, return the
+      // list item.
+      return list_item->GetNode();
+    }
   }
 
-  return node;
+  return nullptr;
 }
 
 void LayoutObject::UpdateHitTestResult(HitTestResult& result,
@@ -3385,6 +3379,11 @@ void LayoutObject::ForceLayout() {
 const ComputedStyle* LayoutObject::FirstLineStyleWithoutFallback() const {
   DCHECK(GetDocument().GetStyleEngine().UsesFirstLineRules());
 
+  // Normal markers don't use ::first-line styles in Chromium, so be consistent
+  // and return null for content markers. This may need to change depending on
+  // https://github.com/w3c/csswg-drafts/issues/4506
+  if (IsMarkerContent())
+    return nullptr;
   if (IsBeforeOrAfterContent() || IsText()) {
     if (!Parent())
       return nullptr;
@@ -3586,7 +3585,7 @@ Element* LayoutObject::OffsetParent(const Element* base) const {
       break;
 
     if (!IsPositioned() &&
-        (IsA<HTMLTableElement>(*node) || IsHTMLTableCellElement(*node)))
+        (IsA<HTMLTableElement>(*node) || IsA<HTMLTableCellElement>(*node)))
       break;
 
     // Webkit specific extension where offsetParent stops at zoom level changes.

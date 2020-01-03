@@ -18,11 +18,14 @@
 @protocol TabSwitcher;
 class AppUrlLoadingService;
 
+namespace ios {
+class ChromeBrowserState;
+}  // namespace ios
+
 // TODO(crbug.com/1012697): Remove this protocol when SceneController is
 // operational. Move the private internals back into MainController, and pass
 // ownership of Scene-related objects to SceneController.
-@protocol MainControllerGuts <SettingsNavigationControllerDelegate,
-                              UserFeedbackDataSource>
+@protocol MainControllerGuts
 
 // Coordinator for displaying history.
 @property(nonatomic, strong) HistoryCoordinator* historyCoordinator;
@@ -50,8 +53,13 @@ class AppUrlLoadingService;
 @property(nonatomic, strong)
     SigninInteractionCoordinator* signinInteractionCoordinator;
 
-- (BOOL)isTabSwitcherActive;
+// If YES, the tab switcher is currently active.
 
+@property(nonatomic, assign, getter=isTabSwitcherActive)
+    BOOL tabSwitcherIsActive;
+
+- (id<TabSwitcher>)tabSwitcher;
+- (TabModel*)currentTabModel;
 - (id<TabSwitcher>)tabSwitcher;
 - (ios::ChromeBrowserState*)mainBrowserState;
 - (ios::ChromeBrowserState*)currentBrowserState;

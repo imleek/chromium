@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBGPU_GPU_RENDER_PASS_ENCODER_H_
 
 #include "third_party/blink/renderer/modules/webgpu/dawn_object.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_programmable_pass_encoder.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 
 namespace blink {
@@ -16,13 +17,11 @@ class DoubleSequenceOrGPUColorDict;
 class GPURenderBundle;
 class GPURenderPipeline;
 
-class GPURenderPassEncoder : public DawnObject<WGPURenderPassEncoder> {
+class GPURenderPassEncoder : public DawnObject<WGPURenderPassEncoder>,
+                             public GPUProgrammablePassEncoder {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static GPURenderPassEncoder* Create(
-      GPUDevice* device,
-      WGPURenderPassEncoder render_pass_encoder);
   explicit GPURenderPassEncoder(GPUDevice* device,
                                 WGPURenderPassEncoder render_pass_encoder);
   ~GPURenderPassEncoder() override;
@@ -31,6 +30,12 @@ class GPURenderPassEncoder : public DawnObject<WGPURenderPassEncoder> {
   void setBindGroup(uint32_t index,
                     GPUBindGroup* bindGroup,
                     const Vector<uint32_t>& dynamicOffsets);
+  void setBindGroup(uint32_t index,
+                    GPUBindGroup* bind_group,
+                    const FlexibleUint32ArrayView& dynamic_offsets_data,
+                    uint64_t dynamic_offsets_data_start,
+                    uint32_t dynamic_offsets_data_length,
+                    ExceptionState& exception_state);
   void pushDebugGroup(String groupLabel);
   void popDebugGroup();
   void insertDebugMarker(String markerLabel);

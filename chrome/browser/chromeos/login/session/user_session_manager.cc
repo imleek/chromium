@@ -20,6 +20,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -81,6 +82,7 @@
 #include "chrome/browser/chromeos/policy/tpm_auto_update_mode_policy_handler.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/chromeos/sync/turn_sync_on_helper.h"
 #include "chrome/browser/chromeos/tether/tether_service.h"
 #include "chrome/browser/chromeos/tpm_firmware_update_notification.h"
 #include "chrome/browser/chromeos/u2f_notification.h"
@@ -99,6 +101,7 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service_factory.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
@@ -1433,7 +1436,7 @@ void UserSessionManager::InitProfilePreferences(
               gaia_id, user_context.GetAccountId().GetUserEmail());
     }
 
-    std::string account_id = identity_manager->GetPrimaryAccountId();
+    CoreAccountId account_id = identity_manager->GetPrimaryAccountId();
     VLOG(1) << "Seed IdentityManager with the authenticated account info, "
             << "success=" << !account_id.empty();
 
@@ -1767,6 +1770,11 @@ void UserSessionManager::InitializeBrowser(Profile* profile) {
   // If needed, create browser observer to display first run OOBE Goodies page.
   first_run::GoodiesDisplayer::Init();
 
+  if (chromeos::features::IsSplitSettingsSyncEnabled() &&
+      ProfileSyncServiceFactory::IsSyncAllowed(profile)) {
+    turn_sync_on_helper_ = std::make_unique<TurnSyncOnHelper>(profile);
+  }
+
   // Schedule a flush if profile is not ephemeral.
   if (!ProfileHelper::IsEphemeralUserProfile(profile))
     ProfileHelper::Get()->FlushProfile(profile);
@@ -2020,7 +2028,8 @@ void UserSessionManager::OnRestoreActiveSessions(
     LOG(ERROR) << "Could not get list of active user sessions after crash.";
     // If we could not get list of active user sessions it is safer to just
     // sign out so that we don't get in the inconsistent state.
-    SessionTerminationManager::Get()->StopSession();
+    SessionTerminationManager::Get()->StopSession(
+        login_manager::SessionStopReason::RESTORE_ACTIVE_SESSIONS);
     return;
   }
 
@@ -2433,6 +2442,7 @@ bool UserSessionManager::TokenHandlesEnabled() {
 }
 
 void UserSessionManager::Shutdown() {
+  turn_sync_on_helper_.reset();
   token_handle_fetcher_.reset();
   token_handle_util_.reset();
   first_run::GoodiesDisplayer::Delete();

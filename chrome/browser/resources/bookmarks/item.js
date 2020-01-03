@@ -2,21 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Polymer, html} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
 import 'chrome://resources/cr_elements/cr_icons_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import './shared_style.js';
+import './strings.m.js';
+
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {isMac} from 'chrome://resources/js/cr.m.js';
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
 import {getFaviconForPageURL} from 'chrome://resources/js/icon.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 import {selectItem} from './actions.js';
-import {Command, MenuSource} from './constants.js';
 import {CommandManager} from './command_manager.js';
-import './shared_style.js';
+import {Command, MenuSource} from './constants.js';
 import {StoreClient} from './store_client.js';
-import './strings.m.js';
 import {BookmarkNode} from './types.js';
 
 Polymer({
@@ -56,10 +58,6 @@ Polymer({
 
     /** @private */
     lastTouchPoints_: Number,
-  },
-
-  hostAttributes: {
-    'role': 'listitem',
   },
 
   observers: [
@@ -175,7 +173,7 @@ Polymer({
   onClick_: function(e) {
     // Ignore double clicks so that Ctrl double-clicking an item won't deselect
     // the item before opening.
-    if (e.detail != 2) {
+    if (e.detail !== 2) {
       const addKey = isMac ? e.metaKey : e.ctrlKey;
       this.dispatch(selectItem(this.itemId, this.getState(), {
         clear: !addKey,
@@ -192,9 +190,9 @@ Polymer({
    * @param {KeyboardEvent} e
    */
   onKeydown_: function(e) {
-    if (e.key == 'ArrowLeft') {
+    if (e.key === 'ArrowLeft') {
       this.focus();
-    } else if (e.key == 'ArrowRight') {
+    } else if (e.key === 'ArrowRight') {
       this.$.menuButton.focus();
     }
   },
@@ -220,7 +218,7 @@ Polymer({
    * @private
    */
   onMiddleClick_: function(e) {
-    if (e.button != 1) {
+    if (e.button !== 1) {
       return;
     }
 
@@ -252,7 +250,7 @@ Polymer({
    * @private
    */
   cancelMiddleMouseBehavior_: function(e) {
-    if (e.button == 1) {
+    if (e.button === 1) {
       e.preventDefault();
     }
   },

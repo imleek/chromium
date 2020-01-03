@@ -148,6 +148,7 @@ class WebAXObject {
   BLINK_EXPORT bool IsVisible() const;
   BLINK_EXPORT bool IsVisited() const;
 
+  BLINK_EXPORT bool HasAriaAttribute() const;
   BLINK_EXPORT WebString AccessKey() const;
   BLINK_EXPORT unsigned BackgroundColor() const;
   BLINK_EXPORT bool CanPress() const;
@@ -303,7 +304,9 @@ class WebAXObject {
       ax::mojom::ScrollAlignment horizontal_scroll_alignment =
           ax::mojom::ScrollAlignment::kScrollAlignmentCenter,
       ax::mojom::ScrollAlignment vertical_scroll_alignment =
-          ax::mojom::ScrollAlignment::kScrollAlignmentCenter) const;
+          ax::mojom::ScrollAlignment::kScrollAlignmentCenter,
+      ax::mojom::ScrollBehavior scroll_behavior =
+          ax::mojom::ScrollBehavior::kDoNotScrollIfVisible) const;
   // Scroll this object to a given point in global coordinates of the top-level
   // window.
   BLINK_EXPORT bool ScrollToGlobalPoint(const WebPoint&) const;
@@ -374,6 +377,9 @@ class WebAXObject {
                                       WebFloatRect& bounds_in_container,
                                       SkMatrix44& container_transform,
                                       bool* clips_children = nullptr) const;
+
+  // Blink-internal DOM Node ID. Currently used for PDF exporting.
+  BLINK_EXPORT int GetDOMNodeId() const;
 
   // Exchanges a WebAXObject with another.
   BLINK_EXPORT void Swap(WebAXObject& other);

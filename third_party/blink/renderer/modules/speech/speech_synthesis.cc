@@ -72,8 +72,10 @@ SpeechSynthesis::SpeechSynthesis(ExecutionContext* context)
 void SpeechSynthesis::OnSetVoiceList(
     Vector<mojom::blink::SpeechSynthesisVoicePtr> mojom_voices) {
   voice_list_.clear();
-  for (auto& mojom_voice : mojom_voices)
-    voice_list_.push_back(SpeechSynthesisVoice::Create(std::move(mojom_voice)));
+  for (auto& mojom_voice : mojom_voices) {
+    voice_list_.push_back(
+        MakeGarbageCollected<SpeechSynthesisVoice>(std::move(mojom_voice)));
+  }
   VoicesDidChange();
 }
 
@@ -190,6 +192,11 @@ void SpeechSynthesis::SentenceBoundaryEventOccurred(
   DEFINE_STATIC_LOCAL(const String, sentence_boundary_string, ("sentence"));
   FireEvent(event_type_names::kBoundary, utterance, char_index, char_length,
             sentence_boundary_string);
+}
+
+void SpeechSynthesis::Dispose() {
+  receiver_.reset();
+  mojom_synthesis_.reset();
 }
 
 void SpeechSynthesis::VoicesDidChange() {

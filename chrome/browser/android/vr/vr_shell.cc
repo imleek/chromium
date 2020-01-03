@@ -53,6 +53,7 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/device_service.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_process_host.h"
@@ -61,15 +62,12 @@
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/browser/system_connector.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/url_constants.h"
 #include "device/vr/android/gvr/gvr_device.h"
 #include "gpu/command_buffer/common/mailbox.h"
-#include "services/device/public/mojom/constants.mojom.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "ui/android/window_android.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/display/display.h"
@@ -190,8 +188,7 @@ VrShell::VrShell(JNIEnv* env,
 
   UpdateVrAssetsComponent(g_browser_process->component_updater());
 
-  content::GetSystemConnector()->Connect(
-      device::mojom::kServiceName,
+  content::GetDeviceService().BindGeolocationConfig(
       geolocation_config_.BindNewPipeAndPassReceiver());
 }
 
@@ -410,20 +407,6 @@ void VrShell::ToggleCardboardGamepad(bool enabled) {
       OnTriggerEvent(nullptr, JavaParamRef<jobject>(nullptr), true);
     }
     pending_cardboard_trigger_ = false;
-  }
-}
-
-void VrShell::ToggleGvrGamepad(bool enabled) {
-  // Enable/disable updating gamepad state.
-  if (enabled) {
-    DCHECK(!gvr_gamepad_source_active_);
-    device::GvrDevice* gvr_device = delegate_provider_->GetGvrDevice();
-    if (!gvr_device)
-      return;
-    gvr_gamepad_source_active_ = true;
-  } else {
-    DCHECK(gvr_gamepad_source_active_);
-    gvr_gamepad_source_active_ = false;
   }
 }
 
@@ -775,8 +758,7 @@ void VrShell::RecordVrStartAction(VrStartAction action) {
 void VrShell::RecordPresentationStartAction(
     PresentationStartAction action,
     const device::mojom::XRRuntimeSessionOptions& options) {
-  DCHECK(options.immersive);
-  DCHECK(!options.environment_integration);
+  DCHECK_EQ(options.mode, device::mojom::XRSessionMode::kImmersiveVr);
   SessionMetricsHelper* metrics_helper =
       SessionMetricsHelper::FromWebContents(web_contents_);
   if (metrics_helper)
@@ -1071,11 +1053,6 @@ void VrShell::ProcessDialogGesture(std::unique_ptr<InputEvent> event) {
     return;
 
   dialog_gesture_target_->DispatchInputEvent(std::move(event));
-}
-
-void VrShell::UpdateGamepadData(GvrGamepadData pad) {
-  if (gvr_gamepad_source_active_ != pad.connected)
-    ToggleGvrGamepad(pad.connected);
 }
 
 bool VrShell::HasDaydreamSupport(JNIEnv* env) {

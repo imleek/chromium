@@ -24,6 +24,11 @@ class Grid;
 class GridTrackSizingAlgorithmStrategy;
 class LayoutGrid;
 
+enum TrackSizeComputationVariant {
+  kNotCrossingIntrinsicFlexibleTracks,
+  kCrossingIntrinsicFlexibleTracks,
+};
+
 enum TrackSizeComputationPhase {
   kResolveIntrinsicMinimums,
   kResolveContentBasedMinimums,
@@ -31,6 +36,11 @@ enum TrackSizeComputationPhase {
   kResolveIntrinsicMaximums,
   kResolveMaxContentMaximums,
   kMaximizeTracks,
+};
+
+enum SpaceDistributionLimit {
+  kUpToGrowthLimit,
+  kBeyondGrowthLimit,
 };
 
 class GridTrack {
@@ -145,8 +155,8 @@ class GridTrackSizingAlgorithm final {
                                   GridTrackSizingDirection) const;
   GridTrackSize CalculateGridTrackSize(GridTrackSizingDirection,
                                        size_t translated_index) const;
-  GridTrackSize RawGridTrackSize(GridTrackSizingDirection,
-                                 size_t translated_index) const;
+  const GridTrackSize& RawGridTrackSize(GridTrackSizingDirection,
+                                        size_t translated_index) const;
 
   // Helper methods for step 1. initializeTrackSizes().
   LayoutUnit InitialBaseSize(const GridTrackSize&) const;
@@ -157,14 +167,19 @@ class GridTrackSizingAlgorithm final {
   void SizeTrackToFitNonSpanningItem(const GridSpan&,
                                      LayoutBox& grid_item,
                                      GridTrack&);
-  bool SpanningItemCrossesFlexibleSizedTracks(const GridSpan&) const;
+  bool SpanningItemCrossesIntrinsicFlexibleSizedTracks(const GridSpan&) const;
   typedef struct GridItemsSpanGroupRange GridItemsSpanGroupRange;
-  template <TrackSizeComputationPhase phase>
+  template <TrackSizeComputationVariant variant,
+            TrackSizeComputationPhase phase>
+  void IncreaseSizesToAccommodateSpanningItems(
+      const GridItemsSpanGroupRange& grid_items_with_span);
+  template <TrackSizeComputationVariant variant>
   void IncreaseSizesToAccommodateSpanningItems(
       const GridItemsSpanGroupRange& grid_items_with_span);
   LayoutUnit ItemSizeForTrackSizeComputationPhase(TrackSizeComputationPhase,
                                                   LayoutBox&) const;
-  template <TrackSizeComputationPhase phase>
+  template <TrackSizeComputationVariant variant,
+            TrackSizeComputationPhase phase>
   void DistributeSpaceToTracks(
       Vector<GridTrack*>& tracks,
       Vector<GridTrack*>* grow_beyond_growth_limits_tracks,
@@ -323,12 +338,6 @@ class GridTrackSizingAlgorithmStrategy {
   const LayoutGrid* GetLayoutGrid() const { return algorithm_.layout_grid_; }
   base::Optional<LayoutUnit> AvailableSpace() const {
     return algorithm_.AvailableSpace();
-  }
-
-  const GridTrackSize& GetCachedGridTrackSize(
-      GridTrackSizingDirection direction,
-      size_t translated_index) const {
-    return algorithm_.Tracks(direction)[translated_index].CachedTrackSize();
   }
 
   // Helper functions

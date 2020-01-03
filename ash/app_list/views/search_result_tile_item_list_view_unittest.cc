@@ -20,6 +20,8 @@
 #include "base/test/scoped_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/test/widget_test.h"
 
@@ -279,8 +281,10 @@ TEST_P(SearchResultTileItemListViewTest, Basic) {
     ui::AXNodeData node_data;
     view()->children()[first_child + i * child_step]->GetAccessibleNodeData(
         &node_data);
-    EXPECT_EQ(ax::mojom::Role::kButton, node_data.role);
-    EXPECT_EQ("InstalledApp " + base::NumberToString(i),
+    EXPECT_EQ(ax::mojom::Role::kListBoxOption, node_data.role);
+    EXPECT_EQ(l10n_util::GetStringFUTF8(
+                  IDS_APP_ACCESSIBILITY_INSTALLED_APP_ANNOUNCEMENT,
+                  base::UTF8ToUTF16("InstalledApp " + base::NumberToString(i))),
               node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
   }
 
@@ -293,11 +297,14 @@ TEST_P(SearchResultTileItemListViewTest, Basic) {
     view()
         ->children()[first_child + (i + kInstalledApps) * child_step]
         ->GetAccessibleNodeData(&node_data);
-    EXPECT_EQ(ax::mojom::Role::kButton, node_data.role);
-    EXPECT_EQ("PlayStoreApp " + base::NumberToString(i) + ", Star rating " +
-                  base::NumberToString(i + 1) + ".0, Price " +
-                  base::NumberToString(i),
-              node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
+    EXPECT_EQ(ax::mojom::Role::kListBoxOption, node_data.role);
+    EXPECT_EQ(
+        l10n_util::GetStringFUTF8(
+            IDS_APP_ACCESSIBILITY_ARC_APP_ANNOUNCEMENT,
+            base::UTF8ToUTF16("PlayStoreApp " + base::NumberToString(i))) +
+            ", Star rating " + base::NumberToString(i + 1) + ".0, Price " +
+            base::NumberToString(i),
+        node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
   }
 
   // Recommendations.
@@ -307,10 +314,13 @@ TEST_P(SearchResultTileItemListViewTest, Basic) {
     view()
         ->children()[first_child + (i + start_index) * child_step]
         ->GetAccessibleNodeData(&node_data);
-    EXPECT_EQ(ax::mojom::Role::kButton, node_data.role);
-    EXPECT_EQ("RecommendedApp " + base::NumberToString(i) + ", Star rating " +
-                  base::NumberToString(i + 1) + ".0, App recommendation",
-              node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
+    EXPECT_EQ(ax::mojom::Role::kListBoxOption, node_data.role);
+    EXPECT_EQ(
+        l10n_util::GetStringFUTF8(
+            IDS_APP_ACCESSIBILITY_APP_RECOMMENDATION_ARC,
+            base::UTF8ToUTF16("RecommendedApp " + base::NumberToString(i))) +
+            ", Star rating " + base::NumberToString(i + 1) + ".0",
+        node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
   }
 
   ResetOpenResultCount();
@@ -348,10 +358,13 @@ TEST_P(SearchResultTileItemListViewTest, TestRecommendations) {
     ui::AXNodeData node_data;
     view()->children()[first_index + i * child_step]->GetAccessibleNodeData(
         &node_data);
-    EXPECT_EQ(ax::mojom::Role::kButton, node_data.role);
-    EXPECT_EQ("RecommendedApp " + base::NumberToString(i) + ", Star rating " +
-                  base::NumberToString(i + 1) + ".0, App recommendation",
-              node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
+    EXPECT_EQ(ax::mojom::Role::kListBoxOption, node_data.role);
+    EXPECT_EQ(
+        l10n_util::GetStringFUTF8(
+            IDS_APP_ACCESSIBILITY_APP_RECOMMENDATION_ARC,
+            base::UTF8ToUTF16("RecommendedApp " + base::NumberToString(i))) +
+            ", Star rating " + base::NumberToString(i + 1) + ".0",
+        node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
   }
 }
 

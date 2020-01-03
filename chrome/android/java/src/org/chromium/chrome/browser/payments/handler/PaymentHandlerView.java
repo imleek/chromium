@@ -14,6 +14,7 @@ import android.widget.FrameLayout;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.thinwebview.ThinWebView;
+import org.chromium.chrome.browser.thinwebview.ThinWebViewConstraints;
 import org.chromium.chrome.browser.thinwebview.ThinWebViewFactory;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetContent;
 import org.chromium.components.embedder_support.view.ContentView;
@@ -38,14 +39,15 @@ import org.chromium.ui.base.ActivityWindowAndroid;
      */
     /* package */ PaymentHandlerView(ChromeActivity activity, WebContents webContents,
             ContentView webContentView, View toolbarView) {
-        mTabHeight = activity.getActivityTab().getHeight();
+        mTabHeight = activity.getActivityTab().getView().getHeight();
         mToolbarView = toolbarView;
         mToolbarHeightPx =
                 activity.getResources().getDimensionPixelSize(R.dimen.sheet_tab_toolbar_height);
         mContentView = (FrameLayout) LayoutInflater.from(activity).inflate(
                 R.layout.payment_handler_content, null);
 
-        mThinWebView = ThinWebViewFactory.create(activity, new ActivityWindowAndroid(activity));
+        mThinWebView = ThinWebViewFactory.create(
+                activity, new ActivityWindowAndroid(activity), new ThinWebViewConstraints());
         initContentView(activity, mThinWebView, webContents, webContentView);
     }
 
@@ -96,6 +98,11 @@ import org.chromium.ui.base.ActivityWindowAndroid;
     @Nullable
     public View getToolbarView() {
         return mToolbarView;
+    }
+
+    @Override
+    public boolean hasCustomScrimLifecycle() {
+        return true;
     }
 
     @Override

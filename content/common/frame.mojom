@@ -21,6 +21,7 @@ import "services/network/public/mojom/url_response_head.mojom";
 import "services/network/public/mojom/url_loader.mojom";
 import "services/network/public/mojom/url_loader_factory.mojom";
 import "services/service_manager/public/mojom/interface_provider.mojom";
+import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
 import "services/viz/public/mojom/compositing/surface_id.mojom";
 import "third_party/blink/public/mojom/blob/blob_url_store.mojom";
 import "third_party/blink/public/mojom/commit_result/commit_result.mojom";
@@ -49,7 +50,8 @@ const string kNavigation_FrameSpec = "navigation:frame";
 
 // Implemented by the frame provider (e.g. renderer processes).
 interface Frame {
-  GetInterfaceProvider(service_manager.mojom.InterfaceProvider& interfaces);
+  GetInterfaceProvider(
+      pending_receiver<service_manager.mojom.InterfaceProvider> interfaces);
   GetCanonicalUrlForSharing() => (url.mojom.Url? canonical_url);
 
   // Causes all new subresource requests to be blocked (not being started) until
@@ -180,8 +182,9 @@ interface FrameNavigationControl {
       mojo_base.mojom.String16 javascript,
       bool wants_result) => (mojo_base.mojom.Value result);
 
-  // ONLY FOR TESTS: Same as above but adds a fake UserGestureIndicator around
-  // execution. (crbug.com/408426)
+  // ONLY FOR TESTS: Same as above but this can optionally trigger a fake user
+  // activation notification to test functionalities that are gated by user
+  // activation.
   JavaScriptExecuteRequestForTests(
       mojo_base.mojom.String16 javascript,
       bool wants_result,
@@ -370,6 +373,7 @@ interface FrameHost {
   // that RFP, and the |devtools_frame_token|.
   [Sync] AdoptPortal(mojo_base.mojom.UnguessableToken portal_token)
       => (int32 proxy_routing_id,
+          viz.mojom.FrameSinkId frame_sink_id,
           FrameReplicationState replicated_state,
           mojo_base.mojom.UnguessableToken devtools_frame_token);
 

@@ -32,11 +32,23 @@ void StripUsageWithBreakdownCallback(
 
 }  // namespace
 
-UsageTracker::UsageTracker(const std::vector<QuotaClient*>& clients,
-                           blink::mojom::StorageType type,
-                           SpecialStoragePolicy* special_storage_policy)
+struct UsageTracker::AccumulateInfo {
+  AccumulateInfo() = default;
+  ~AccumulateInfo() = default;
+
+  size_t pending_clients = 0;
+  int64_t usage = 0;
+  int64_t unlimited_usage = 0;
+  blink::mojom::UsageBreakdownPtr usage_breakdown =
+      blink::mojom::UsageBreakdown::New();
+};
+
+UsageTracker::UsageTracker(
+    const std::vector<scoped_refptr<QuotaClient>>& clients,
+    blink::mojom::StorageType type,
+    SpecialStoragePolicy* special_storage_policy)
     : type_(type) {
-  for (auto* client : clients) {
+  for (const auto& client : clients) {
     if (client->DoesSupport(type)) {
       client_tracker_map_[client->id()] = std::make_unique<ClientUsageTracker>(
           this, client, type, special_storage_policy);
@@ -134,7 +146,7 @@ void UsageTracker::GetHostUsageWithBreakdown(
 
   AccumulateInfo* info = new AccumulateInfo;
   // We use BarrierClosure here instead of manually counting pending_clients.
-  base::Closure barrier = base::BarrierClosure(
+  base::RepeatingClosure barrier = base::BarrierClosure(
       client_tracker_map_.size(),
       base::BindOnce(&UsageTracker::FinallySendHostUsageWithBreakdown,
                      weak_factory_.GetWeakPtr(), base::Owned(info), host));
@@ -200,10 +212,6 @@ void UsageTracker::SetUsageCacheEnabled(QuotaClient::ID client_id,
   client_tracker->SetUsageCacheEnabled(origin, enabled);
 }
 
-UsageTracker::AccumulateInfo::AccumulateInfo() = default;
-
-UsageTracker::AccumulateInfo::~AccumulateInfo() = default;
-
 void UsageTracker::AccumulateClientGlobalLimitedUsage(AccumulateInfo* info,
                                                       int64_t limited_usage) {
   DCHECK_GT(info->pending_clients, 0U);
@@ -249,12 +257,11 @@ void UsageTracker::AccumulateClientGlobalUsage(AccumulateInfo* info,
     std::move(callback).Run(info->usage, info->unlimited_usage);
 }
 
-void UsageTracker::AccumulateClientHostUsage(
-    const base::RepeatingClosure& barrier,
-    AccumulateInfo* info,
-    const std::string& host,
-    QuotaClient::ID client,
-    int64_t usage) {
+void UsageTracker::AccumulateClientHostUsage(base::OnceClosure callback,
+                                             AccumulateInfo* info,
+                                             const std::string& host,
+                                             QuotaClient::ID client,
+                                             int64_t usage) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   info->usage += usage;
   // Defend against confusing inputs from clients.
@@ -262,8 +269,6 @@ void UsageTracker::AccumulateClientHostUsage(
     info->usage = 0;
 
   switch (client) {
-    case QuotaClient::kUnknown:
-      break;
     case QuotaClient::kFileSystem:
       info->usage_breakdown->fileSystem += usage;
       break;
@@ -290,7 +295,7 @@ void UsageTracker::AccumulateClientHostUsage(
       break;
   }
 
-  barrier.Run();
+  std::move(callback).Run();
 }
 
 void UsageTracker::FinallySendHostUsageWithBreakdown(AccumulateInfo* info,

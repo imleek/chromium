@@ -41,9 +41,6 @@ PermissionToSchedulingFeature(PermissionType permission_name) {
     case PermissionType::VIDEO_CAPTURE:
       return blink::scheduler::WebSchedulerTrackedFeature::
           kRequestedVideoCapturePermission;
-    case PermissionType::SENSORS:
-      return blink::scheduler::WebSchedulerTrackedFeature::
-          kRequestedSensorsPermission;
     case PermissionType::BACKGROUND_SYNC:
     case PermissionType::BACKGROUND_FETCH:
     case PermissionType::PERIODIC_BACKGROUND_SYNC:
@@ -53,14 +50,17 @@ PermissionToSchedulingFeature(PermissionType permission_name) {
     case PermissionType::DURABLE_STORAGE:
     case PermissionType::FLASH:
     case PermissionType::ACCESSIBILITY_EVENTS:
-    case PermissionType::CLIPBOARD_READ:
-    case PermissionType::CLIPBOARD_WRITE:
+    case PermissionType::CLIPBOARD_READ_WRITE:
+    case PermissionType::CLIPBOARD_SANITIZED_WRITE:
     case PermissionType::PAYMENT_HANDLER:
     case PermissionType::IDLE_DETECTION:
     case PermissionType::WAKE_LOCK_SCREEN:
     case PermissionType::WAKE_LOCK_SYSTEM:
     case PermissionType::NFC:
     case PermissionType::NUM:
+    case PermissionType::SENSORS:
+    case PermissionType::AR:
+    case PermissionType::VR:
       return base::nullopt;
   }
 }

@@ -8,11 +8,15 @@ import android.net.Uri;
 import android.text.TextUtils;
 import android.util.Pair;
 
+import androidx.browser.trusted.sharing.ShareData;
+import androidx.browser.trusted.sharing.ShareTarget;
+
+import org.chromium.base.Function;
 import org.chromium.base.Promise;
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityUmaRecorder;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityUmaRecorder.ShareRequestMethod;
 import org.chromium.chrome.browser.browserservices.trustedwebactivityui.controller.TwaVerifier;
-import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityNavigationController;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
@@ -24,9 +28,6 @@ import java.util.ArrayList;
 import java.util.Locale;
 
 import javax.inject.Inject;
-
-import androidx.browser.trusted.sharing.ShareData;
-import androidx.browser.trusted.sharing.ShareTarget;
 
 /**
  * Handles sharing intents coming to Trusted Web Activities.
@@ -53,36 +54,39 @@ public class TwaSharingController {
     }
 
     /**
-     * Checks whether the incoming intent (represented by a {@link CustomTabIntentDataProvider})
-     * is a sharing intent and attempts to perform the sharing.
+     * Checks whether the incoming intent (represented by a
+     * {@link BrowserServicesIntentDataProvider}) is a sharing intent and attempts to perform the
+     * sharing.
      *
      * Returns a {@link Promise<Boolean>} with a boolean telling whether sharing was successful.
      */
-    public Promise<Boolean> deliverToShareTarget(CustomTabIntentDataProvider intentDataProvider) {
+    public Promise<Boolean> deliverToShareTarget(
+            BrowserServicesIntentDataProvider intentDataProvider) {
         ShareData shareData = intentDataProvider.getShareData();
         ShareTarget shareTarget = intentDataProvider.getShareTarget();
         if (shareTarget == null || shareData == null) {
             return Promise.fulfilled(false);
         }
 
-        return mVerifierDelegate.verify(shareTarget.action).then(
-                (Promise.Function<Boolean, Boolean>) (verified) -> {
-            if (!verified) {
-                return false;
-            }
-            WebApkInfo.ShareTarget target = toShareTargetInternal(shareTarget);
-            if (target.isShareMethodPost()) {
-                boolean success = sendPost(shareData, target);
-                if (success) {
-                    mUmaRecorder.recordShareTargetRequest(ShareRequestMethod.POST);
-                }
-                return success;
-            }
+        return mVerifierDelegate.verify(shareTarget.action)
+                .then((Function<Boolean, Boolean>) (verified) -> {
+                    if (!verified) {
+                        return false;
+                    }
+                    WebApkInfo.ShareTarget target = toShareTargetInternal(shareTarget);
+                    if (target.isShareMethodPost()) {
+                        boolean success = sendPost(shareData, target);
+                        if (success) {
+                            mUmaRecorder.recordShareTargetRequest(ShareRequestMethod.POST);
+                        }
+                        return success;
+                    }
 
-            mNavigationController.navigate(computeStartUrlForGETShareTarget(shareData, target));
-            mUmaRecorder.recordShareTargetRequest(ShareRequestMethod.GET);
-            return true;
-        });
+                    mNavigationController.navigate(
+                            computeStartUrlForGETShareTarget(shareData, target));
+                    mUmaRecorder.recordShareTargetRequest(ShareRequestMethod.GET);
+                    return true;
+                });
     }
 
     /**

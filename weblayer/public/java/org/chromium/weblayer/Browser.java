@@ -17,6 +17,7 @@ import org.chromium.weblayer_private.interfaces.IBrowser;
 import org.chromium.weblayer_private.interfaces.IBrowserClient;
 import org.chromium.weblayer_private.interfaces.ITab;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
+import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 
 import java.util.List;
 
@@ -198,21 +199,17 @@ public final class Browser {
      * need to control z-order with other views or other BrowserFragmentImpls. Note embedder should
      * keep WebLayer in the default non-embedding mode when user is interacting with the web
      * content. Embedding mode does not support encrypted video.
-     * @return a ListenableResult of whether the request succeeded. A request might fail if it is
-     * subsumed by a subsequent request, or if this object is destroyed.
+     *
+     * @param enable Whether to support embedding
+     * @param callback {@link Callback} to be called with a boolean indicating whether request
+     * succeeded. A request might fail if it is subsumed by a subsequent request, or if this object
+     * is destroyed.
      */
-    @NonNull
-    public ListenableResult<Boolean> setSupportsEmbedding(boolean enable) {
+    public void setSupportsEmbedding(boolean enable, @NonNull Callback<Boolean> callback) {
         ThreadCheck.ensureOnUiThread();
         try {
-            final ListenableResult<Boolean> listenableResult = new ListenableResult<Boolean>();
-            mImpl.setSupportsEmbedding(enable, ObjectWrapper.wrap(new ValueCallback<Boolean>() {
-                @Override
-                public void onReceiveValue(Boolean result) {
-                    listenableResult.supplyResult(result);
-                }
-            }));
-            return listenableResult;
+            mImpl.setSupportsEmbedding(
+                    enable, ObjectWrapper.wrap((ValueCallback<Boolean>) callback::onResult));
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
@@ -235,6 +232,7 @@ public final class Browser {
     private final class BrowserClientImpl extends IBrowserClient.Stub {
         @Override
         public void onActiveTabChanged(int activeTabId) {
+            StrictModeWorkaround.apply();
             Tab tab = Tab.getTabById(activeTabId);
             for (TabListCallback callback : mTabListCallbacks) {
                 callback.onActiveTabChanged(tab);
@@ -243,6 +241,7 @@ public final class Browser {
 
         @Override
         public void onTabAdded(ITab iTab) {
+            StrictModeWorkaround.apply();
             int id = 0;
             try {
                 id = iTab.getId();
@@ -262,6 +261,7 @@ public final class Browser {
 
         @Override
         public void onTabRemoved(int tabId) {
+            StrictModeWorkaround.apply();
             Tab tab = Tab.getTabById(tabId);
             // This should only be called with a previously created tab.
             assert tab != null;

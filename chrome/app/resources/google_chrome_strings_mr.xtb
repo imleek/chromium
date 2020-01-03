@@ -3,13 +3,11 @@
 <translationbundle lang="mr">
 <translation id="1001534784610492198">इन्स्टॉलर संग्रहण भ्रष्ट किंवा चुकीचा आहे. कृपया Google Chrome पुन्हा डाउनलोड करा.</translation>
 <translation id="102763973188675173">Google Chrome कस्टमाइझ करा आणि नियंत्रित करा. अपडेट उपलब्ध आहे.</translation>
-<translation id="1035334672863811645">Chrome मध्ये साइन इन करा</translation>
 <translation id="1051826050538111504">तुमच्या काँप्युटरवर हानिकारक सॉफ्टवेअर आहे. Chrome ते काढून टाकून तुमचा ब्राउझर पुन्हा नीट चालावा यासाठी तुमच्या सेटिंग्ज रिस्टोअर आणि एक्स्टेंशन बंद करू शकते.</translation>
 <translation id="1065672644894730302">तुमची प्राधान्ये वाचता आली नाहीत.
 काही वैशिष्‍ट्ये अनुपलब्ध असू शकतात आणि प्राधान्यांमधील बदल सेव्ह केले जाणार नाहीत.</translation>
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> पूर्वी Chrome वापरत होते</translation>
 <translation id="1097330777386562916">तुम्ही Chrome बंद करता तेव्हा कुकी आणि साइट डेटा साफ करा</translation>
-<translation id="1104959162601287462">&amp;Chrome OS विषयी</translation>
 <translation id="110877069173485804">हा तुमचा Chrome आहे</translation>
 <translation id="1142745911746664600">Chrome अपडेट करू शकत नाही</translation>
 <translation id="1154147086299354128">Chrome मध्‍ये &amp;उघडा</translation>
@@ -53,6 +51,7 @@
 <translation id="2290014774651636340">Google API की गहाळ आहेत. Google Chrome ची काही कार्यक्षमता अक्षम केली जाईल.</translation>
 <translation id="2290095356545025170">तुमची खात्री आहे की तुम्ही Google Chrome अनइंस्टॉल करू इच्छिता?</translation>
 <translation id="2309047409763057870">ही Google Chrome ची दुय्यम स्थापना असून त्यास तुमचा डीफॉल्ट ब्राउझर बनवू शकत नाही.</translation>
+<translation id="2341767445688917208">Chrome OS तुमचे पासवर्ड सिंक करू शकले नाही. आता निराकरण करा.</translation>
 <translation id="2348335408836342058">या साइटसाठी Chrome ला तुमचा कॅमेरा आणि मायक्रोफोन ॲक्सेस करण्याची परवानगी हवी आहे</translation>
 <translation id="2429317896000329049">आपल्या डोमेनसाठी संकालन उपलब्ध नसल्यामुळे Google Chrome तुमचा डेटा संकालित करू शकले नाही.</translation>
 <translation id="2467438592969358367">Google Chrome ला तुमचे पासवर्ड निर्यात करायचे आहेत. हे करू देण्यासाठी तुमचा Windows पासवर्ड टाइप करा.</translation>
@@ -131,7 +130,6 @@
 <translation id="4953650215774548573">तुमचा डीफॉल्ट ब्राउझर म्हणून Google Chrome सेट करा</translation>
 <translation id="495931528404527476">Chrome मध्ये</translation>
 <translation id="4990567037958725628">Google Chrome कॅनरी</translation>
-<translation id="5028489144783860647">Google Chrome तुमचा डेटा सिंक करू शकले नाही. कृपया तुमची सिंक पासफ्रेज अपडेट करा.</translation>
 <translation id="5062123544085870375">Chrome OS रीस्टार्ट करा</translation>
 <translation id="5132929315877954718">Google Chrome साठी उत्कृष्ट ॲप, खेळ, विस्तार आणि थीम शोधा.</translation>
 <translation id="5170938038195470297">तुमचे प्रोफाइल वापरले जाणे शक्य नाही कारण ते Google Chrome च्या नवीनतम आवृत्तीमधील आहे.
@@ -214,6 +212,7 @@ Google Chrome तुमची सेटिंग्ज पुन्हा मि
 <translation id="7855730255114109580">Google Chrome अपडेट झाले आहे</translation>
 <translation id="7890208801193284374">तुम्ही कॉंप्युटर शेअर केल्यास, मित्र आणि कुटुंब स्वतंत्रपणे ब्राउझ करू शकतात आणि त्यांना पाहिजे तसे Chrome सेट अप करू शकतात.</translation>
 <translation id="7896673875602241923">कोणीतरी यापूर्वी <ph name="ACCOUNT_EMAIL_LAST" /> म्हणून या संंगणकावरील Chrome मध्ये साइन इन केले आहे. कृपया तुमची माहिती स्वतंत्र ठेवण्यासाठी एक नवीन Chrome वापरकर्ता तयार करा.</translation>
+<translation id="7916016681687251387">Chrome OS तुमचा डेटा सिंक करू शकले नाही. आता निराकरण करा.</translation>
 <translation id="7962410387636238736">Windows XP आणि Windows Vista ला आता सपोर्ट नसल्याने या कॉंप्युटरला यापुढे Google Chrome अपडेट मिळणार नाहीत</translation>
 <translation id="8008534537613507642">Chrome पुनर्स्थापित करा</translation>
 <translation id="8013993649590906847">इमेजचे उपयोगी वर्णन नसल्यास, Chrome तुमच्यासाठी ते देण्याचा प्रयत्न करेल. वर्णने तयार करण्यासाठी, इमेज Google ला पाठवल्या जातात.</translation>

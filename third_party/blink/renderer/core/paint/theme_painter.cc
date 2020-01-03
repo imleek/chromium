@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/platform/graphics/graphics_context_state_saver.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/native_theme/native_theme.h"
 
 // The methods in this file are shared by all themes on every platform.
@@ -81,7 +82,7 @@ bool IsTemporalInput(const AtomicString& type) {
 }
 
 bool IsMenulistInput(const Node* node) {
-  if (auto* input = ToHTMLInputElementOrNull(node)) {
+  if (auto* input = DynamicTo<HTMLInputElement>(node)) {
 #if defined(OS_ANDROID)
     if (IsTemporalInput(input->type()))
       return true;
@@ -118,7 +119,7 @@ void CountAppearanceTextFieldPart(const Node* node) {
                     WebFeature::kCSSValueAppearanceTextFieldRendered);
   WebFeature feature =
       WebFeature::kCSSValueAppearanceTextFieldForOthersRendered;
-  if (auto* input = ToHTMLInputElementOrNull(node)) {
+  if (auto* input = DynamicTo<HTMLInputElement>(node)) {
     const AtomicString& type = input->type();
     if (type == input_type_names::kSearch) {
       feature = WebFeature::kCSSValueAppearanceTextFieldForSearch;
@@ -156,8 +157,8 @@ bool ThemePainter::Paint(const LayoutObject& o,
       COUNT_APPEARANCE(doc, ButtonForNonButton);
     } else if (IsA<HTMLButtonElement>(node)) {
       UseCounter::Count(doc, WebFeature::kCSSValueAppearanceButtonForButton);
-    } else if (IsHTMLInputElement(node) &&
-               ToHTMLInputElement(node)->IsTextButton()) {
+    } else if (IsA<HTMLInputElement>(node) &&
+               To<HTMLInputElement>(node)->IsTextButton()) {
       // Text buttons (type=button, reset, submit) has
       // -webkit-appearance:push-button by default.
       UseCounter::Count(doc,
@@ -189,28 +190,36 @@ bool ThemePainter::Paint(const LayoutObject& o,
   switch (part) {
     case kCheckboxPart: {
       COUNT_APPEARANCE(doc, Checkbox);
-      auto* input = ToHTMLInputElementOrNull(node);
+      auto* input = DynamicTo<HTMLInputElement>(node);
       if (!input || input->type() != input_type_names::kCheckbox)
         DEPRECATE_APPEARANCE(doc, CheckboxForOthers);
+      // Count usage of non-rectangular checkbox and radio buttons.
+      if (r.Width() != r.Height()) {
+        UseCounter::Count(doc, WebFeature::kInputTypeCheckboxRenderedNonSquare);
+      }
       return PaintCheckbox(node, o.GetDocument(), style, paint_info, r);
     }
     case kRadioPart: {
       COUNT_APPEARANCE(doc, Radio);
-      auto* input = ToHTMLInputElementOrNull(node);
+      auto* input = DynamicTo<HTMLInputElement>(node);
       if (!input || input->type() != input_type_names::kRadio)
         DEPRECATE_APPEARANCE(doc, RadioForOthers);
+      // Count usage of non-rectangular checkbox and radio buttons.
+      if (r.Width() != r.Height()) {
+        UseCounter::Count(doc, WebFeature::kInputTypeRadioRenderedNonSquare);
+      }
       return PaintRadio(node, o.GetDocument(), style, paint_info, r);
     }
     case kPushButtonPart: {
       COUNT_APPEARANCE(doc, PushButton);
-      auto* input = ToHTMLInputElementOrNull(node);
+      auto* input = DynamicTo<HTMLInputElement>(node);
       if (!input || !input->IsTextButton())
         DEPRECATE_APPEARANCE(doc, PushButtonForOthers);
       return PaintButton(node, o.GetDocument(), style, paint_info, r);
     }
     case kSquareButtonPart: {
       COUNT_APPEARANCE(doc, SquareButton);
-      auto* input = ToHTMLInputElementOrNull(node);
+      auto* input = DynamicTo<HTMLInputElement>(node);
       if (!input || input->type() != input_type_names::kColor)
         DEPRECATE_APPEARANCE(doc, SquareButtonForOthers);
       return PaintButton(node, o.GetDocument(), style, paint_info, r);
@@ -242,14 +251,14 @@ bool ThemePainter::Paint(const LayoutObject& o,
       return PaintProgressBar(o, paint_info, r);
     case kSliderHorizontalPart: {
       COUNT_APPEARANCE(doc, SliderHorizontal);
-      auto* input = ToHTMLInputElementOrNull(node);
+      auto* input = DynamicTo<HTMLInputElement>(node);
       if (!input || input->type() != input_type_names::kRange)
         DEPRECATE_APPEARANCE(doc, SliderHorizontalForOthers);
       return PaintSliderTrack(o, paint_info, r);
     }
     case kSliderVerticalPart: {
       COUNT_APPEARANCE(doc, SliderVertical);
-      auto* input = ToHTMLInputElementOrNull(node);
+      auto* input = DynamicTo<HTMLInputElement>(node);
       if (!input || input->type() != input_type_names::kRange)
         DEPRECATE_APPEARANCE(doc, SliderVerticalForOthers);
       return PaintSliderTrack(o, paint_info, r);
@@ -257,7 +266,7 @@ bool ThemePainter::Paint(const LayoutObject& o,
     case kSliderThumbHorizontalPart: {
       COUNT_APPEARANCE(doc, SliderThumbHorizontal);
       auto* input =
-          ToHTMLInputElementOrNull(node ? node->OwnerShadowHost() : nullptr);
+          DynamicTo<HTMLInputElement>(node ? node->OwnerShadowHost() : nullptr);
       if (!input || input->type() != input_type_names::kRange)
         DEPRECATE_APPEARANCE(doc, SliderThumbHorizontalForOthers);
       return PaintSliderThumb(node, style, paint_info, r);
@@ -265,7 +274,7 @@ bool ThemePainter::Paint(const LayoutObject& o,
     case kSliderThumbVerticalPart: {
       COUNT_APPEARANCE(doc, SliderThumbVertical);
       auto* input =
-          ToHTMLInputElementOrNull(node ? node->OwnerShadowHost() : nullptr);
+          DynamicTo<HTMLInputElement>(node ? node->OwnerShadowHost() : nullptr);
       if (!input || input->type() != input_type_names::kRange)
         DEPRECATE_APPEARANCE(doc, SliderThumbVerticalForOthers);
       return PaintSliderThumb(node, style, paint_info, r);
@@ -278,25 +287,25 @@ bool ThemePainter::Paint(const LayoutObject& o,
     case kMenulistButtonPart:
       return true;
     case kTextFieldPart:
-      if (!RuntimeEnabledFeatures::FormControlsRefreshEnabled()) {
+      if (!features::IsFormControlsRefreshEnabled()) {
         return true;
       }
       CountAppearanceTextFieldPart(node);
       return PaintTextField(node, style, paint_info, r);
     case kTextAreaPart:
-      if (!RuntimeEnabledFeatures::FormControlsRefreshEnabled()) {
+      if (!features::IsFormControlsRefreshEnabled()) {
         return true;
       }
       if (node) {
         const auto& doc = node->GetDocument();
         COUNT_APPEARANCE(doc, TextArea);
-        if (!IsHTMLTextAreaElement(node))
+        if (!IsA<HTMLTextAreaElement>(node))
           DEPRECATE_APPEARANCE(doc, TextAreaForOthers);
       }
       return PaintTextArea(node, style, paint_info, r);
     case kSearchFieldPart: {
       COUNT_APPEARANCE(doc, SearchField);
-      auto* input = ToHTMLInputElementOrNull(node);
+      auto* input = DynamicTo<HTMLInputElement>(node);
       if (!input || input->type() != input_type_names::kSearch)
         DEPRECATE_APPEARANCE(doc, SearchFieldForOthers);
       return PaintSearchField(node, style, paint_info, r);
@@ -342,19 +351,19 @@ bool ThemePainter::PaintBorderOnly(const Node* node,
   // Call the appropriate paint method based off the appearance value.
   switch (style.EffectiveAppearance()) {
     case kTextFieldPart:
-      if (RuntimeEnabledFeatures::FormControlsRefreshEnabled()) {
+      if (features::IsFormControlsRefreshEnabled()) {
         return false;
       }
       CountAppearanceTextFieldPart(node);
       return PaintTextField(node, style, paint_info, r);
     case kTextAreaPart:
-      if (RuntimeEnabledFeatures::FormControlsRefreshEnabled()) {
+      if (features::IsFormControlsRefreshEnabled()) {
         return false;
       }
       if (node) {
         const auto& doc = node->GetDocument();
         COUNT_APPEARANCE(doc, TextArea);
-        if (!IsHTMLTextAreaElement(node))
+        if (!IsA<HTMLTextAreaElement>(node))
           DEPRECATE_APPEARANCE(doc, TextAreaForOthers);
       }
       return PaintTextArea(node, style, paint_info, r);
@@ -431,11 +440,10 @@ bool ThemePainter::PaintDecorations(const Node* node,
 void ThemePainter::PaintSliderTicks(const LayoutObject& o,
                                     const PaintInfo& paint_info,
                                     const IntRect& rect) {
-  Node* node = o.GetNode();
-  if (!IsHTMLInputElement(node))
+  auto* input = DynamicTo<HTMLInputElement>(o.GetNode());
+  if (!input)
     return;
 
-  HTMLInputElement* input = ToHTMLInputElement(node);
   if (input->type() != input_type_names::kRange ||
       !input->UserAgentShadowRoot()->HasChildren())
     return;

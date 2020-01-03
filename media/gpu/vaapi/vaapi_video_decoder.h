@@ -38,27 +38,26 @@ class VaapiWrapper;
 class VideoFrame;
 class VASurface;
 
-class VaapiVideoDecoder : public VideoDecoderPipeline::DecoderInterface,
+class VaapiVideoDecoder : public DecoderInterface,
                           public DecodeSurfaceHandler<VASurface> {
  public:
-  using GetFramePoolCB = base::RepeatingCallback<DmabufVideoFramePool*()>;
-
-  static std::unique_ptr<VideoDecoderPipeline::DecoderInterface> Create(
+  static std::unique_ptr<DecoderInterface> Create(
       scoped_refptr<base::SequencedTaskRunner> decoder_task_runner,
-      GetFramePoolCB get_pool);
+      base::WeakPtr<DecoderInterface::Client> client);
 
   static SupportedVideoDecoderConfigs GetSupportedConfigs();
 
-  // VideoDecoderPipeline::DecoderInterface implementation.
+  // DecoderInterface implementation.
   void Initialize(const VideoDecoderConfig& config,
                   InitCB init_cb,
                   const OutputCB& output_cb) override;
   void Decode(scoped_refptr<DecoderBuffer> buffer, DecodeCB decode_cb) override;
   void Reset(base::OnceClosure reset_cb) override;
+  void OnPipelineFlushed() override;
 
   // DecodeSurfaceHandler<VASurface> implementation.
   scoped_refptr<VASurface> CreateSurface() override;
-  void SurfaceReady(const scoped_refptr<VASurface>& va_surface,
+  void SurfaceReady(scoped_refptr<VASurface> va_surface,
                     int32_t buffer_id,
                     const gfx::Rect& visible_rect,
                     const VideoColorSpace& color_space) override;
@@ -79,17 +78,19 @@ class VaapiVideoDecoder : public VideoDecoderPipeline::DecoderInterface,
   };
 
   enum class State {
-    kUninitialized,     // not initialized yet or initialization failed.
-    kWaitingForInput,   // waiting for input buffers.
-    kWaitingForOutput,  // waiting for output buffers.
-    kDecoding,          // decoding buffers.
-    kResetting,         // resetting decoder.
-    kError,             // decoder encountered an error.
+    kUninitialized,       // not initialized yet or initialization failed.
+    kWaitingForInput,     // waiting for input buffers.
+    kWaitingForOutput,    // waiting for output buffers.
+    kDecoding,            // decoding buffers.
+    kChangingResolution,  // need to change resolution, waiting for pipeline to
+                          // be flushed.
+    kResetting,           // resetting decoder.
+    kError,               // decoder encountered an error.
   };
 
   VaapiVideoDecoder(
       scoped_refptr<base::SequencedTaskRunner> decoder_task_runner,
-      GetFramePoolCB get_pool);
+      base::WeakPtr<DecoderInterface::Client> client);
   ~VaapiVideoDecoder() override;
 
   // Schedule the next decode task in the queue to be executed.
@@ -104,10 +105,6 @@ class VaapiVideoDecoder : public VideoDecoderPipeline::DecoderInterface,
   void OutputFrameTask(scoped_refptr<VideoFrame> video_frame,
                        const gfx::Rect& visible_rect,
                        base::TimeDelta timestamp);
-  // Called when a different output frame resolution is requested on the decoder
-  // thread. This happens when either decoding just started or a resolution
-  // change occurred in the video stream.
-  void ChangeFrameResolutionTask();
   // Release the video frame associated with the specified |surface_id| on the
   // decoder thread. This is called when the last reference to the associated
   // VASurface has been released, which happens when the decoder outputted the
@@ -128,6 +125,9 @@ class VaapiVideoDecoder : public VideoDecoderPipeline::DecoderInterface,
   // Called when resetting the decoder is done, executes |reset_cb|.
   void ResetDoneTask(base::OnceClosure reset_cb);
 
+  // Create codec-specific AcceleratedVideoDecoder and reset related variables.
+  bool CreateAcceleratedVideoDecoder();
+
   // Change the current |state_| to the specified |state| on the decoder thread.
   void SetState(State state);
 
@@ -139,12 +139,16 @@ class VaapiVideoDecoder : public VideoDecoderPipeline::DecoderInterface,
 
   // The video stream's profile.
   VideoCodecProfile profile_ = VIDEO_CODEC_PROFILE_UNKNOWN;
+  // Color space of the video frame.
+  VideoColorSpace color_space_;
+
+  // The video coded size.
+  gfx::Size pic_size_;
 
   // Ratio of natural size to |visible_rect_| of the output frames.
   double pixel_aspect_ratio_ = 0.0;
 
   // Video frame pool used to allocate and recycle video frames.
-  GetFramePoolCB get_pool_cb_;
   DmabufVideoFramePool* frame_pool_ = nullptr;
 
   // The time at which each buffer decode operation started. Not each decode
@@ -166,8 +170,6 @@ class VaapiVideoDecoder : public VideoDecoderPipeline::DecoderInterface,
   // Platform and codec specific video decoder.
   std::unique_ptr<AcceleratedVideoDecoder> decoder_;
   scoped_refptr<VaapiWrapper> vaapi_wrapper_;
-
-  const scoped_refptr<base::SequencedTaskRunner> decoder_task_runner_;
 
   SEQUENCE_CHECKER(decoder_sequence_checker_);
 

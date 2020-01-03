@@ -177,7 +177,8 @@ HttpStreamFactory::Job::Job(Delegate* delegate,
   if (quic_version_ == quic::UnsupportedQuicVersion() &&
       ShouldForceQuic(session, destination, origin_url, proxy_info,
                       using_ssl_)) {
-    quic_version_ = session->params().quic_params.supported_versions[0];
+    quic_version_ =
+        session->context().quic_context->params()->supported_versions[0];
   }
 
   if (using_quic_)
@@ -340,6 +341,10 @@ const ProxyInfo& HttpStreamFactory::Job::proxy_info() const {
   return proxy_info_;
 }
 
+ResolveErrorInfo HttpStreamFactory::Job::resolve_error_info() const {
+  return resolve_error_info_;
+}
+
 void HttpStreamFactory::Job::GetSSLInfo(SSLInfo* ssl_info) {
   DCHECK(using_ssl_);
   DCHECK(!establishing_tunnel_);
@@ -360,10 +365,10 @@ bool HttpStreamFactory::Job::ShouldForceQuic(HttpNetworkSession* session,
   // handled by the socket pools, using an HttpProxyConnectJob.
   if (proxy_info.is_quic())
     return !using_ssl;
-  return (base::Contains(session->params().quic_params.origins_to_force_quic_on,
+  const QuicParams* quic_params = session->context().quic_context->params();
+  return (base::Contains(quic_params->origins_to_force_quic_on,
                          HostPortPair()) ||
-          base::Contains(session->params().quic_params.origins_to_force_quic_on,
-                         destination)) &&
+          base::Contains(quic_params->origins_to_force_quic_on, destination)) &&
          proxy_info.is_direct() && origin_url.SchemeIs(url::kHttpsScheme);
 }
 
@@ -918,6 +923,8 @@ int HttpStreamFactory::Job::DoInitConnectionComplete(int result) {
     DCHECK_EQ(OK, result);
     return OK;
   }
+
+  resolve_error_info_ = connection_->resolve_error_info();
 
   // |result| may be the result of any of the stacked pools. The following
   // logic is used when determining how to interpret an error.

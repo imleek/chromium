@@ -206,8 +206,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxApiTest, DISABLED_Basic) {
   }
   */
 }
-
-IN_PROC_BROWSER_TEST_F(OmniboxApiTest, OnInputEntered) {
+// Test is flaky: https://crbug.com/1029568
+IN_PROC_BROWSER_TEST_F(OmniboxApiTest, DISABLED_OnInputEntered) {
   ASSERT_TRUE(RunExtensionTest("omnibox")) << message_;
   Profile* profile = browser()->profile();
   search_test_utils::WaitForTemplateURLServiceToLoad(
@@ -437,7 +437,9 @@ IN_PROC_BROWSER_TEST_F(OmniboxApiTest, MAYBE_DeleteOmniboxSuggestionResult) {
 }
 
 // Tests typing something but not staying in keyword mode.
-IN_PROC_BROWSER_TEST_F(OmniboxApiTest, ExtensionSuggestionsOnlyInKeywordMode) {
+// Test is flaky. crbug.com/1030219
+IN_PROC_BROWSER_TEST_F(OmniboxApiTest,
+                       DISABLED_ExtensionSuggestionsOnlyInKeywordMode) {
   ASSERT_TRUE(RunExtensionTest("omnibox")) << message_;
 
   // The results depend on the TemplateURLService being loaded. Make sure it is

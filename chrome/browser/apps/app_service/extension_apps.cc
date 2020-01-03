@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ash/public/cpp/app_list/app_list_metrics.h"
+#include "ash/public/cpp/multi_user_window_manager.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -19,6 +20,8 @@
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
 #include "chrome/browser/apps/launch_service/launch_service.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/child_accounts/time_limits/web_time_limit_interface.h"
+#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/extensions/gfx_utils.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -27,13 +30,20 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/app_list/extension_app_utils.h"
 #include "chrome/browser/ui/app_list/extension_uninstaller.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
+#include "chrome/browser/ui/ash/session_controller_client_impl.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
@@ -41,6 +51,8 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/extension_metrics.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
+#include "chrome/common/pref_names.h"
+#include "chrome/services/app_service/public/cpp/instance.h"
 #include "chrome/services/app_service/public/cpp/intent_filter_util.h"
 #include "chrome/services/app_service/public/mojom/types.mojom.h"
 #include "components/arc/arc_service_manager.h"
@@ -60,9 +72,6 @@
 // be able to show download progress in the UI, a la ExtensionAppModelBuilder.
 // This might involve using an extensions::InstallTracker. It might also need
 // the equivalent of a LauncherExtensionAppUpdater.
-
-// TODO(crbug.com/826982): do we also need to watch prefs, the same as
-// ExtensionAppModelBuilder?
 
 // TODO(crbug.com/826982): consider that, per khmel@, "in some places Chrome
 // apps is not used and raw extension app without any effect is displayed...
@@ -138,9 +147,6 @@ apps::AppLaunchParams CreateAppLaunchParamsForIntent(
 // is empty, the session_id is used.
 std::string GetLaunchId(extensions::AppWindow* app_window) {
   std::string launch_id;
-  if (app_window->extension_id() == extension_misc::kChromeCameraAppId)
-    return launch_id;
-
   if (app_window->show_in_shelf()) {
     if (!app_window->window_key().empty()) {
       launch_id = app_window->window_key();
@@ -227,6 +233,7 @@ ExtensionApps::ExtensionApps(
       app_type_(app_type),
       instance_registry_(instance_registry),
       app_service_(nullptr) {
+  DCHECK(instance_registry_);
   Initialize(app_service);
 }
 
@@ -282,6 +289,17 @@ void ExtensionApps::Initialize(
   content_settings_observer_.Add(
       HostContentSettingsMapFactory::GetForProfile(profile_));
   app_service_ = app_service.get();
+
+  // Remaining initialization is only relevant to the kExtension app type.
+  if (app_type_ != apps::mojom::AppType::kExtension) {
+    return;
+  }
+
+  profile_pref_change_registrar_.Init(profile_->GetPrefs());
+  profile_pref_change_registrar_.Add(
+      prefs::kHideWebStoreIcon,
+      base::Bind(&ExtensionApps::OnHideWebStoreIconPrefChanged,
+                 weak_factory_.GetWeakPtr()));
 }
 
 bool ExtensionApps::Accepts(const extensions::Extension* extension) {
@@ -300,6 +318,12 @@ bool ExtensionApps::Accepts(const extensions::Extension* extension) {
     case apps::mojom::AppType::kExtension:
       return !extension->from_bookmark();
     case apps::mojom::AppType::kWeb:
+      // Crostini Terminal System App is handled by Crostini Apps.
+      // TODO(crbug.com/1028898): Register Terminal as a System App rather than
+      // a crostini app.
+      if (extension->id() == crostini::kCrostiniTerminalSystemAppId) {
+        return false;
+      }
       return extension->from_bookmark();
     default:
       NOTREACHED();
@@ -310,6 +334,8 @@ bool ExtensionApps::Accepts(const extensions::Extension* extension) {
 void ExtensionApps::Connect(
     mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote,
     apps::mojom::ConnectOptionsPtr opts) {
+  // TODO(crbug.com/1030126): Start publishing Extension Apps asynchronously on
+  // ExtensionSystem::Get(profile())->ready().
   std::vector<apps::mojom::AppPtr> apps;
   if (profile_) {
     extensions::ExtensionRegistry* registry =
@@ -323,7 +349,8 @@ void ExtensionApps::Connect(
     // blacklisted_extensions and blocked_extensions, corresponding to
     // kDisabledByBlacklist and kDisabledByPolicy, are deliberately ignored.
     //
-    // If making changes to which sets are consulted, also change ShouldShow.
+    // If making changes to which sets are consulted, also change ShouldShow,
+    // OnHideWebStoreIconPrefChanged.
   }
   mojo::Remote<apps::mojom::Subscriber> subscriber(
       std::move(subscriber_remote));
@@ -560,7 +587,30 @@ void ExtensionApps::PauseApp(const std::string& app_id) {
   paused_apps_.insert(app_id);
   SetIconEffect(app_id);
 
-  // TODO(crbug.com/1011235): If the app is running, Stop the app.
+  // For Web apps that are opened in app windows, close all tabs to close the
+  // opened window, otherwise, show pause information in browsers.
+  bool is_web_app = false;
+  for (auto* browser : *BrowserList::GetInstance()) {
+    if (!browser->is_type_app()) {
+      continue;
+    }
+    if (web_app::GetAppIdFromApplicationName(browser->app_name()) == app_id) {
+      TabStripModel* tab_strip = browser->tab_strip_model();
+      tab_strip->CloseAllTabs();
+      is_web_app = true;
+    }
+  }
+
+  // For web apps that are open in tabs, PauseApp() should be called with
+  // Chrome's app_id to show pause information in browsers.
+  if (is_web_app) {
+    return;
+  }
+
+  chromeos::app_time::WebTimeLimitInterface* web_limit =
+      chromeos::app_time::WebTimeLimitInterface::Get(profile_);
+  DCHECK(web_limit);
+  web_limit->PauseWebActivity(app_id);
 }
 
 void ExtensionApps::UnpauseApps(const std::string& app_id) {
@@ -570,6 +620,20 @@ void ExtensionApps::UnpauseApps(const std::string& app_id) {
 
   paused_apps_.erase(app_id);
   SetIconEffect(app_id);
+
+  for (auto* browser : *BrowserList::GetInstance()) {
+    if (!browser->is_type_app()) {
+      continue;
+    }
+    if (web_app::GetAppIdFromApplicationName(browser->app_name()) == app_id) {
+      return;
+    }
+  }
+
+  chromeos::app_time::WebTimeLimitInterface* web_limit =
+      chromeos::app_time::WebTimeLimitInterface::Get(profile_);
+  DCHECK(web_limit);
+  web_limit->ResumeWebActivity(app_id);
 }
 
 void ExtensionApps::OpenNativeSettings(const std::string& app_id) {
@@ -591,12 +655,11 @@ void ExtensionApps::OpenNativeSettings(const std::string& app_id) {
 
   } else if (extension->ShouldDisplayInExtensionSettings()) {
     Browser* browser = chrome::FindTabbedBrowser(profile_, false);
-    if (browser) {
-      chrome::ShowExtensions(browser, extension->id());
+    if (!browser) {
+      browser = new Browser(Browser::CreateParams(profile_, true));
     }
-    // TODO(crbug.com/826982): Either create new browser if one isn't found, or
-    // make a version of chrome::ShowExtensions which accepts a Profile
-    // instead of a Browser, similar to chrome::ShowSiteSettings.
+
+    chrome::ShowExtensions(browser, extension->id());
   }
 }
 
@@ -651,14 +714,57 @@ void ExtensionApps::OnContentSettingChanged(
 }
 
 void ExtensionApps::OnAppWindowAdded(extensions::AppWindow* app_window) {
+  if (!ShouldRecordAppWindowActivity(app_window)) {
+    return;
+  }
+
+  DCHECK(!instance_registry_->Exists(app_window->GetNativeWindow()));
+  app_window_to_aura_window_[app_window] = app_window->GetNativeWindow();
+
+  // Attach window to multi-user manager now to let it manage visibility state
+  // of the window correctly.
+  if (SessionControllerClientImpl::IsMultiProfileAvailable()) {
+    MultiUserWindowManagerHelper::GetWindowManager()->SetWindowOwner(
+        app_window->GetNativeWindow(),
+        multi_user_util::GetAccountIdFromProfile(profile_));
+  }
   RegisterInstance(app_window, InstanceState::kStarted);
 }
 
 void ExtensionApps::OnAppWindowShown(extensions::AppWindow* app_window,
                                      bool was_hidden) {
-  RegisterInstance(app_window,
-                   static_cast<InstanceState>(InstanceState::kStarted |
-                                              InstanceState::kRunning));
+  if (!ShouldRecordAppWindowActivity(app_window)) {
+    return;
+  }
+
+  InstanceState state =
+      instance_registry_->GetState(app_window->GetNativeWindow());
+
+  // If the window is shown, it should be started, running and not hidden.
+  state = static_cast<apps::InstanceState>(
+      state | apps::InstanceState::kStarted | apps::InstanceState::kRunning);
+  state =
+      static_cast<apps::InstanceState>(state & ~apps::InstanceState::kHidden);
+  RegisterInstance(app_window, state);
+}
+
+void ExtensionApps::OnAppWindowHidden(extensions::AppWindow* app_window) {
+  if (!ShouldRecordAppWindowActivity(app_window)) {
+    return;
+  }
+
+  // For hidden |app_window|, the other state bit, started, running, active, and
+  // visible should be cleared.
+  RegisterInstance(app_window, InstanceState::kHidden);
+}
+
+void ExtensionApps::OnAppWindowRemoved(extensions::AppWindow* app_window) {
+  if (!ShouldRecordAppWindowActivity(app_window)) {
+    return;
+  }
+
+  RegisterInstance(app_window, InstanceState::kDestroyed);
+  app_window_to_aura_window_.erase(app_window);
 }
 
 void ExtensionApps::OnExtensionLastLaunchTimeChanged(
@@ -884,6 +990,26 @@ bool ExtensionApps::ShouldShow(const extensions::Extension* extension,
          registry->terminated_extensions().Contains(app_id);
 }
 
+void ExtensionApps::OnHideWebStoreIconPrefChanged() {
+  UpdateShowInFields(extensions::kWebStoreAppId);
+  UpdateShowInFields(extension_misc::kEnterpriseWebStoreAppId);
+}
+
+void ExtensionApps::UpdateShowInFields(const std::string& app_id) {
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(profile_);
+  const extensions::Extension* extension =
+      registry->GetInstalledExtension(app_id);
+  if (!extension || !Accepts(extension)) {
+    return;
+  }
+  apps::mojom::AppPtr app = apps::mojom::App::New();
+  app->app_type = app_type_;
+  app->app_id = app_id;
+  SetShowInFields(app, extension, profile_);
+  Publish(std::move(app));
+}
+
 void ExtensionApps::PopulatePermissions(
     const extensions::Extension* extension,
     std::vector<mojom::PermissionPtr>* target) {
@@ -1101,39 +1227,53 @@ void ExtensionApps::SetIconEffect(const std::string& app_id) {
   Publish(std::move(app));
 }
 
-void ExtensionApps::RegisterInstance(extensions::AppWindow* app_window,
-                                     InstanceState new_state) {
+bool ExtensionApps::ShouldRecordAppWindowActivity(
+    extensions::AppWindow* app_window) {
   if (!base::FeatureList::IsEnabled(features::kAppServiceInstanceRegistry)) {
-    return;
+    return false;
   }
 
-  if (!instance_registry_ || !app_window) {
-    return;
-  }
+  DCHECK(app_window);
+
   const extensions::Extension* extension = app_window->GetExtension();
   if (!extension) {
-    return;
+    return false;
   }
+
+  // ARC Play Store is not published by this publisher, but the window for Play
+  // Store should be able to be added to InstanceRegistry.
+  if (extension->id() == arc::kPlayStoreAppId &&
+      app_type_ == apps::mojom::AppType::kExtension) {
+    return true;
+  }
+
   if (!Accepts(extension)) {
+    return false;
+  }
+
+  return true;
+}
+
+void ExtensionApps::RegisterInstance(extensions::AppWindow* app_window,
+                                     InstanceState new_state) {
+  aura::Window* window = app_window->GetNativeWindow();
+
+  // If the current state has been marked as |new_state|, we don't need to
+  // update.
+  if (instance_registry_->GetState(window) == new_state) {
     return;
   }
 
-  InstanceState state = InstanceState::kUnknown;
-  instance_registry_->ForOneInstance(
-      app_window->GetNativeWindow(),
-      [&state](const apps::InstanceUpdate& update) { state = update.State(); });
-
-  // If |state| has been marked as |new_state|, we don't need to update.
-  if ((state & new_state) == new_state) {
-    return;
+  if (new_state == InstanceState::kDestroyed) {
+    DCHECK(base::Contains(app_window_to_aura_window_, app_window));
+    window = app_window_to_aura_window_[app_window];
   }
-
   std::vector<std::unique_ptr<apps::Instance>> deltas;
-  auto instance = std::make_unique<apps::Instance>(
-      app_window->extension_id(), app_window->GetNativeWindow());
+  auto instance =
+      std::make_unique<apps::Instance>(app_window->extension_id(), window);
   instance->SetLaunchId(GetLaunchId(app_window));
-  instance->UpdateState(static_cast<InstanceState>(state | new_state),
-                        base::Time::Now());
+  instance->UpdateState(new_state, base::Time::Now());
+  instance->SetBrowserContext(app_window->browser_context());
   deltas.push_back(std::move(instance));
   instance_registry_->OnInstances(deltas);
 }

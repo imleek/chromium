@@ -58,8 +58,6 @@
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_dedicated_worker_host_factory_client.h"
-#include "third_party/blink/public/platform/web_gesture_device.h"
-#include "third_party/blink/public/platform/web_rtc_api_name.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url_error.h"
@@ -83,10 +81,6 @@ class MediaPermission;
 class GpuVideoAcceleratorFactories;
 }
 
-namespace service_manager {
-class InterfaceProvider;
-}
-
 namespace v8 {
 class Context;
 template <class T>
@@ -99,6 +93,7 @@ class ContextProvider;
 
 namespace blink {
 
+class BrowserInterfaceBrokerProxy;
 class ThreadSafeBrowserInterfaceBrokerProxy;
 class InterfaceProvider;
 class Thread;
@@ -110,7 +105,6 @@ class WebDedicatedWorker;
 class WebGraphicsContext3DProvider;
 class WebLocalFrame;
 class WebMediaCapabilitiesClient;
-class WebPrescientNetworking;
 class WebPublicSuffixList;
 class WebSandboxSupport;
 class WebSecurityOrigin;
@@ -235,8 +229,9 @@ class BLINK_PLATFORM_EXPORT Platform {
   // See comments on ImageDecoder::max_decoded_bytes_.
   virtual size_t MaxDecodedImageBytes() { return kNoDecodedImageByteLimit; }
 
-  // Returns true if this is a low-end device.
-  // This is the same as base::SysInfo::IsLowEndDevice.
+  // See: SysUtils::IsLowEndDevice for the full details of what "low-end" means.
+  // This returns true for devices that can use more extreme tradeoffs for
+  // performance. Many low memory devices (<=1GB) are not considered low-end.
   virtual bool IsLowEndDevice() { return false; }
 
   // Process -------------------------------------------------------------
@@ -289,9 +284,6 @@ class BLINK_PLATFORM_EXPORT Platform {
       scoped_refptr<network::SharedURLLoaderFactory> factory) {
     return nullptr;
   }
-
-  // May return null.
-  virtual WebPrescientNetworking* PrescientNetworking() { return nullptr; }
 
   // Returns the User-Agent string.
   virtual WebString UserAgent() { return WebString(); }
@@ -408,7 +400,7 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Disable/Enable sudden termination on a process level. When possible, it
   // is preferable to disable sudden termination on a per-frame level via
-  // WebLocalFrameClient::SuddenTerminationDisablerChanged.
+  // mojom::LocalFrameHost::SuddenTerminationDisablerChanged.
   // This method should only be called on the main thread.
   virtual void SuddenTerminationChanged(bool enabled) {}
 
@@ -625,7 +617,7 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   virtual std::unique_ptr<WebDedicatedWorkerHostFactoryClient>
   CreateDedicatedWorkerHostFactoryClient(WebDedicatedWorker*,
-                                         service_manager::InterfaceProvider*) {
+                                         const BrowserInterfaceBrokerProxy&) {
     return nullptr;
   }
   virtual void DidStartWorkerThread() {}

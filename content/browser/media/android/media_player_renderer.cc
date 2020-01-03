@@ -141,6 +141,9 @@ void MediaPlayerRenderer::SetCdm(media::CdmContext* cdm_context,
   NOTREACHED();
 }
 
+void MediaPlayerRenderer::SetLatencyHint(
+    base::Optional<base::TimeDelta> latency_hint) {}
+
 void MediaPlayerRenderer::Flush(base::OnceClosure flush_cb) {
   DVLOG(3) << __func__;
   std::move(flush_cb).Run();
@@ -200,8 +203,8 @@ void MediaPlayerRenderer::InitiateScopedSurfaceRequest(
 
   surface_request_token_ =
       ScopedSurfaceRequestManager::GetInstance()->RegisterScopedSurfaceRequest(
-          base::Bind(&MediaPlayerRenderer::OnScopedSurfaceRequestCompleted,
-                     weak_factory_.GetWeakPtr()));
+          base::BindOnce(&MediaPlayerRenderer::OnScopedSurfaceRequestCompleted,
+                         weak_factory_.GetWeakPtr()));
 
   std::move(callback).Run(surface_request_token_);
 }

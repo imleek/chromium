@@ -23,7 +23,6 @@
 #include "components/safe_browsing/db/v4_test_util.h"
 #include "components/safe_browsing/features.h"
 #include "content/public/test/browser_task_environment.h"
-#include "content/public/test/test_utils.h"
 #include "crypto/sha2.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
@@ -60,7 +59,7 @@ class FakeGetHashProtocolManager : public V4GetHashProtocolManager {
                      FullHashCallback callback) override {
     // Async, since the real manager might use a fetcher.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(callback, full_hash_infos_));
+        FROM_HERE, base::BindOnce(std::move(callback), full_hash_infos_));
   }
 
  private:
@@ -113,10 +112,11 @@ class FakeV4Database : public V4Database {
     const scoped_refptr<base::SingleThreadTaskRunner>& callback_task_runner =
         base::ThreadTaskRunnerHandle::Get();
     db_task_runner->PostTask(
-        FROM_HERE, base::BindOnce(&FakeV4Database::CreateOnTaskRunner,
-                                  db_task_runner, std::move(store_map),
-                                  store_and_hash_prefixes, callback_task_runner,
-                                  new_db_callback, stores_available));
+        FROM_HERE,
+        base::BindOnce(&FakeV4Database::CreateOnTaskRunner, db_task_runner,
+                       std::move(store_map), store_and_hash_prefixes,
+                       callback_task_runner, std::move(new_db_callback),
+                       stores_available));
   }
 
   // V4Database implementation
@@ -157,9 +157,9 @@ class FakeV4Database : public V4Database {
     std::unique_ptr<FakeV4Database> fake_v4_database(
         new FakeV4Database(db_task_runner, std::move(store_map),
                            store_and_hash_prefixes, stores_available));
-    callback_task_runner->PostTask(
-        FROM_HERE,
-        base::BindOnce(new_db_callback, std::move(fake_v4_database)));
+    callback_task_runner->PostTask(FROM_HERE,
+                                   base::BindOnce(std::move(new_db_callback),
+                                                  std::move(fake_v4_database)));
   }
 
   FakeV4Database(const scoped_refptr<base::SequencedTaskRunner>& db_task_runner,
@@ -331,9 +331,9 @@ class V4LocalDatabaseManagerTest : public PlatformTest {
     DVLOG(1) << "base_dir_: " << base_dir_.GetPath().value();
 
     extended_reporting_level_ = SBER_LEVEL_OFF;
-    erl_callback_ =
-        base::Bind(&V4LocalDatabaseManagerTest::GetExtendedReportingLevel,
-                   base::Unretained(this));
+    erl_callback_ = base::BindRepeating(
+        &V4LocalDatabaseManagerTest::GetExtendedReportingLevel,
+        base::Unretained(this));
 
     v4_local_database_manager_ =
         base::WrapRefCounted(new V4LocalDatabaseManager(
@@ -382,11 +382,11 @@ class V4LocalDatabaseManagerTest : public PlatformTest {
     ForceEnableLocalDatabaseManager();
 
     NewDatabaseReadyCallback db_ready_callback =
-        base::Bind(&V4LocalDatabaseManager::DatabaseReadyForChecks,
-                   base::Unretained(v4_local_database_manager_.get()));
+        base::BindOnce(&V4LocalDatabaseManager::DatabaseReadyForChecks,
+                       base::Unretained(v4_local_database_manager_.get()));
     FakeV4Database::Create(task_runner_, std::make_unique<StoreMap>(),
-                           store_and_hash_prefixes, db_ready_callback,
-                           stores_available);
+                           store_and_hash_prefixes,
+                           std::move(db_ready_callback), stores_available);
     WaitForTasksOnTaskRunner();
   }
 

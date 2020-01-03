@@ -37,9 +37,9 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/common/input/web_menu_source_type.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_focus_type.h"
-#include "third_party/blink/public/platform/web_menu_source_type.h"
 #include "third_party/blink/public/platform/web_screen_info.h"
 #include "third_party/blink/public/platform/web_spell_check_panel_host_client.h"
 #include "third_party/blink/public/platform/web_url_loader.h"
@@ -95,10 +95,10 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void FocusedElementChanged(Element*, Element*) override {}
   void Show(NavigationPolicy) override {}
 
-  void DidOverscroll(const FloatSize&,
-                     const FloatSize&,
-                     const FloatPoint&,
-                     const FloatSize&) override {}
+  void DidOverscroll(const gfx::Vector2dF&,
+                     const gfx::Vector2dF&,
+                     const gfx::PointF&,
+                     const gfx::Vector2dF&) override {}
   void SetOverscrollBehavior(LocalFrame& frame,
                              const cc::OverscrollBehavior&) override {}
 
@@ -107,8 +107,6 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
                              base::TimeDelta timeout) override {}
   void StopDeferringCommits(LocalFrame& main_frame,
                             cc::PaintHoldingCommitTrigger) override {}
-
-  bool HadFormInteraction() const override { return false; }
 
   void StartDragging(LocalFrame*,
                      const WebDragData&,
@@ -319,6 +317,7 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   DocumentLoader* CreateDocumentLoader(
       LocalFrame*,
       WebNavigationType,
+      base::Optional<ContentSecurityPolicy*>,
       std::unique_ptr<WebNavigationParams> navigation_params,
       std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) override;
   void UpdateDocumentLoader(

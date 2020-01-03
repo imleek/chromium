@@ -409,12 +409,6 @@ public class AwSettings {
      */
     public boolean getSafeBrowsingEnabled() {
         synchronized (mAwSettingsLock) {
-            Boolean userOptIn = AwSafeBrowsingConfigHelper.getSafeBrowsingUserOptIn();
-
-            // If we don't know yet what the user's preference is, we go through Safe Browsing logic
-            // anyway and correct the assumption before sending data to GMS.
-            if (userOptIn != null && !userOptIn) return false;
-
             if (mSafeBrowsingEnabled == null) {
                 return AwSafeBrowsingConfigHelper.getSafeBrowsingEnabledByManifest();
             }
@@ -1762,6 +1756,18 @@ public class AwSettings {
     private boolean getUseStricMixedContentCheckingLocked() {
         assert Thread.holdsLock(mAwSettingsLock);
         return mMixedContentMode == WebSettings.MIXED_CONTENT_NEVER_ALLOW;
+    }
+
+    @CalledByNative
+    private boolean getAllowMixedContentAutoupgradesLocked() {
+        assert Thread.holdsLock(mAwSettingsLock);
+        // We only allow mixed content autoupgrades (upgrading HTTP subresources to HTTPS in HTTPS
+        // sites) when the mixed content mode is set to MIXED_CONTENT_COMPATIBILITY, which keeps it
+        // in line with the behavior in Chrome. With MIXED_CONTENT_ALWAYS_ALLOW, we disable
+        // autoupgrades since the developer is explicitly allowing mixed content, whereas with
+        // MIXED_CONTENT_NEVER_ALLOW, there is no need to autoupgrade since the content will be
+        // blocked.
+        return mMixedContentMode == WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE;
     }
 
     public boolean getOffscreenPreRaster() {

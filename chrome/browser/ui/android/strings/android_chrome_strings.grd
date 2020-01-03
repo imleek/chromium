@@ -32,10 +32,15 @@ CHAR-LIMIT guidelines:
 
 <grit current_release="1" latest_public_release="0" output_all_resource_defines="false">
   <outputs>
+    <output filename="values-af/android_chrome_strings.xml" lang="af" type="android" />
     <output filename="values-am/android_chrome_strings.xml" lang="am" type="android" />
     <output filename="values-ar/android_chrome_strings.xml" lang="ar" type="android" />
+    <output filename="values-as/android_chrome_strings.xml" lang="as" type="android" />
+    <output filename="values-az/android_chrome_strings.xml" lang="az" type="android" />
+    <output filename="values-be/android_chrome_strings.xml" lang="be" type="android" />
     <output filename="values-bg/android_chrome_strings.xml" lang="bg" type="android" />
     <output filename="values-bn/android_chrome_strings.xml" lang="bn" type="android" />
+    <output filename="values-bs/android_chrome_strings.xml" lang="bs" type="android" />
     <output filename="values-ca/android_chrome_strings.xml" lang="ca" type="android" />
     <output filename="values-cs/android_chrome_strings.xml" lang="cs" type="android" />
     <output filename="values-da/android_chrome_strings.xml" lang="da" type="android" />
@@ -46,34 +51,52 @@ CHAR-LIMIT guidelines:
     <output filename="values-es/android_chrome_strings.xml" lang="es" type="android" />
     <output filename="values-es-rUS/android_chrome_strings.xml" lang="es-419" type="android" />
     <output filename="values-et/android_chrome_strings.xml" lang="et" type="android" />
+    <output filename="values-eu/android_chrome_strings.xml" lang="eu" type="android" />
     <output filename="values-fa/android_chrome_strings.xml" lang="fa" type="android" />
     <output filename="values-fi/android_chrome_strings.xml" lang="fi" type="android" />
     <output filename="values-tl/android_chrome_strings.xml" lang="fil" type="android" />
     <output filename="values-fr/android_chrome_strings.xml" lang="fr" type="android" />
+    <output filename="values-fr-rCA/android_chrome_strings.xml" lang="fr-CA" type="android" />
+    <output filename="values-gl/android_chrome_strings.xml" lang="gl" type="android" />
     <output filename="values-gu/android_chrome_strings.xml" lang="gu" type="android" />
     <output filename="values-hi/android_chrome_strings.xml" lang="hi" type="android" />
     <output filename="values-hr/android_chrome_strings.xml" lang="hr" type="android" />
     <output filename="values-hu/android_chrome_strings.xml" lang="hu" type="android" />
+    <output filename="values-hy/android_chrome_strings.xml" lang="hy" type="android" />
     <output filename="values-in/android_chrome_strings.xml" lang="id" type="android" />
+    <output filename="values-is/android_chrome_strings.xml" lang="is" type="android" />
     <output filename="values-it/android_chrome_strings.xml" lang="it" type="android" />
     <output filename="values-iw/android_chrome_strings.xml" lang="iw" type="android" />
     <output filename="values-ja/android_chrome_strings.xml" lang="ja" type="android" />
+    <output filename="values-ka/android_chrome_strings.xml" lang="ka" type="android" />
+    <output filename="values-kk/android_chrome_strings.xml" lang="kk" type="android" />
+    <output filename="values-km/android_chrome_strings.xml" lang="km" type="android" />
     <output filename="values-kn/android_chrome_strings.xml" lang="kn" type="android" />
     <output filename="values-ko/android_chrome_strings.xml" lang="ko" type="android" />
+    <output filename="values-ky/android_chrome_strings.xml" lang="ky" type="android" />
+    <output filename="values-lo/android_chrome_strings.xml" lang="lo" type="android" />
     <output filename="values-lt/android_chrome_strings.xml" lang="lt" type="android" />
     <output filename="values-lv/android_chrome_strings.xml" lang="lv" type="android" />
+    <output filename="values-mk/android_chrome_strings.xml" lang="mk" type="android" />
     <output filename="values-ml/android_chrome_strings.xml" lang="ml" type="android" />
+    <output filename="values-mn/android_chrome_strings.xml" lang="mn" type="android" />
     <output filename="values-mr/android_chrome_strings.xml" lang="mr" type="android" />
     <output filename="values-ms/android_chrome_strings.xml" lang="ms" type="android" />
+    <output filename="values-my/android_chrome_strings.xml" lang="my" type="android" />
+    <output filename="values-ne/android_chrome_strings.xml" lang="ne" type="android" />
     <output filename="values-nl/android_chrome_strings.xml" lang="nl" type="android" />
     <output filename="values-nb/android_chrome_strings.xml" lang="no" type="android" />
+    <output filename="values-or/android_chrome_strings.xml" lang="or" type="android" />
+    <output filename="values-pa/android_chrome_strings.xml" lang="pa" type="android" />
     <output filename="values-pl/android_chrome_strings.xml" lang="pl" type="android" />
     <output filename="values-pt-rBR/android_chrome_strings.xml" lang="pt-BR" type="android" />
     <output filename="values-pt-rPT/android_chrome_strings.xml" lang="pt-PT" type="android" />
     <output filename="values-ro/android_chrome_strings.xml" lang="ro" type="android" />
     <output filename="values-ru/android_chrome_strings.xml" lang="ru" type="android" />
+    <output filename="values-si/android_chrome_strings.xml" lang="si" type="android" />
     <output filename="values-sk/android_chrome_strings.xml" lang="sk" type="android" />
     <output filename="values-sl/android_chrome_strings.xml" lang="sl" type="android" />
+    <output filename="values-sq/android_chrome_strings.xml" lang="sq" type="android" />
     <output filename="values-sr/android_chrome_strings.xml" lang="sr" type="android" />
     <output filename="values-sv/android_chrome_strings.xml" lang="sv" type="android" />
     <output filename="values-sw/android_chrome_strings.xml" lang="sw" type="android" />
@@ -82,15 +105,23 @@ CHAR-LIMIT guidelines:
     <output filename="values-th/android_chrome_strings.xml" lang="th" type="android" />
     <output filename="values-tr/android_chrome_strings.xml" lang="tr" type="android" />
     <output filename="values-uk/android_chrome_strings.xml" lang="uk" type="android" />
+    <output filename="values-ur/android_chrome_strings.xml" lang="ur" type="android" />
+    <output filename="values-uz/android_chrome_strings.xml" lang="uz" type="android" />
     <output filename="values-vi/android_chrome_strings.xml" lang="vi" type="android" />
     <output filename="values-zh-rCN/android_chrome_strings.xml" lang="zh-CN" type="android" />
     <output filename="values-zh-rTW/android_chrome_strings.xml" lang="zh-TW" type="android" />
+    <output filename="values-zu/android_chrome_strings.xml" lang="zu" type="android" />
   </outputs>
   <translations>
+    <file lang="af" path="translations/android_chrome_strings_af.xtb" />
     <file lang="am" path="translations/android_chrome_strings_am.xtb" />
     <file lang="ar" path="translations/android_chrome_strings_ar.xtb" />
+    <file lang="as" path="translations/android_chrome_strings_as.xtb" />
+    <file lang="az" path="translations/android_chrome_strings_az.xtb" />
+    <file lang="be" path="translations/android_chrome_strings_be.xtb" />
     <file lang="bg" path="translations/android_chrome_strings_bg.xtb" />
     <file lang="bn" path="translations/android_chrome_strings_bn.xtb" />
+    <file lang="bs" path="translations/android_chrome_strings_bs.xtb" />
     <file lang="ca" path="translations/android_chrome_strings_ca.xtb" />
     <file lang="cs" path="translations/android_chrome_strings_cs.xtb" />
     <file lang="da" path="translations/android_chrome_strings_da.xtb" />
@@ -100,34 +131,52 @@ CHAR-LIMIT guidelines:
     <file lang="es" path="translations/android_chrome_strings_es.xtb" />
     <file lang="es-419" path="translations/android_chrome_strings_es-419.xtb" />
     <file lang="et" path="translations/android_chrome_strings_et.xtb" />
+    <file lang="eu" path="translations/android_chrome_strings_eu.xtb" />
     <file lang="fa" path="translations/android_chrome_strings_fa.xtb" />
     <file lang="fi" path="translations/android_chrome_strings_fi.xtb" />
     <file lang="fil" path="translations/android_chrome_strings_fil.xtb" />
     <file lang="fr" path="translations/android_chrome_strings_fr.xtb" />
+    <file lang="fr-CA" path="translations/android_chrome_strings_fr-CA.xtb" />
+    <file lang="gl" path="translations/android_chrome_strings_gl.xtb" />
     <file lang="gu" path="translations/android_chrome_strings_gu.xtb" />
     <file lang="hi" path="translations/android_chrome_strings_hi.xtb" />
     <file lang="hr" path="translations/android_chrome_strings_hr.xtb" />
     <file lang="hu" path="translations/android_chrome_strings_hu.xtb" />
+    <file lang="hy" path="translations/android_chrome_strings_hy.xtb" />
     <file lang="id" path="translations/android_chrome_strings_id.xtb" />
+    <file lang="is" path="translations/android_chrome_strings_is.xtb" />
     <file lang="it" path="translations/android_chrome_strings_it.xtb" />
     <file lang="iw" path="translations/android_chrome_strings_iw.xtb" />
     <file lang="ja" path="translations/android_chrome_strings_ja.xtb" />
-    <file lang="ko" path="translations/android_chrome_strings_ko.xtb" />
+    <file lang="ka" path="translations/android_chrome_strings_ka.xtb" />
+    <file lang="kk" path="translations/android_chrome_strings_kk.xtb" />
+    <file lang="km" path="translations/android_chrome_strings_km.xtb" />
     <file lang="kn" path="translations/android_chrome_strings_kn.xtb" />
+    <file lang="ko" path="translations/android_chrome_strings_ko.xtb" />
+    <file lang="ky" path="translations/android_chrome_strings_ky.xtb" />
+    <file lang="lo" path="translations/android_chrome_strings_lo.xtb" />
     <file lang="lt" path="translations/android_chrome_strings_lt.xtb" />
     <file lang="lv" path="translations/android_chrome_strings_lv.xtb" />
+    <file lang="mk" path="translations/android_chrome_strings_mk.xtb" />
     <file lang="ml" path="translations/android_chrome_strings_ml.xtb" />
+    <file lang="mn" path="translations/android_chrome_strings_mn.xtb" />
     <file lang="mr" path="translations/android_chrome_strings_mr.xtb" />
     <file lang="ms" path="translations/android_chrome_strings_ms.xtb" />
+    <file lang="my" path="translations/android_chrome_strings_my.xtb" />
+    <file lang="ne" path="translations/android_chrome_strings_ne.xtb" />
     <file lang="nl" path="translations/android_chrome_strings_nl.xtb" />
     <file lang="no" path="translations/android_chrome_strings_no.xtb" />
+    <file lang="or" path="translations/android_chrome_strings_or.xtb" />
+    <file lang="pa" path="translations/android_chrome_strings_pa.xtb" />
     <file lang="pl" path="translations/android_chrome_strings_pl.xtb" />
     <file lang="pt-BR" path="translations/android_chrome_strings_pt-BR.xtb" />
     <file lang="pt-PT" path="translations/android_chrome_strings_pt-PT.xtb" />
     <file lang="ro" path="translations/android_chrome_strings_ro.xtb" />
     <file lang="ru" path="translations/android_chrome_strings_ru.xtb" />
+    <file lang="si" path="translations/android_chrome_strings_si.xtb" />
     <file lang="sk" path="translations/android_chrome_strings_sk.xtb" />
     <file lang="sl" path="translations/android_chrome_strings_sl.xtb" />
+    <file lang="sq" path="translations/android_chrome_strings_sq.xtb" />
     <file lang="sr" path="translations/android_chrome_strings_sr.xtb" />
     <file lang="sv" path="translations/android_chrome_strings_sv.xtb" />
     <file lang="sw" path="translations/android_chrome_strings_sw.xtb" />
@@ -136,139 +185,20 @@ CHAR-LIMIT guidelines:
     <file lang="th" path="translations/android_chrome_strings_th.xtb" />
     <file lang="tr" path="translations/android_chrome_strings_tr.xtb" />
     <file lang="uk" path="translations/android_chrome_strings_uk.xtb" />
+    <file lang="ur" path="translations/android_chrome_strings_ur.xtb" />
+    <file lang="uz" path="translations/android_chrome_strings_uz.xtb" />
     <file lang="vi" path="translations/android_chrome_strings_vi.xtb" />
     <file lang="zh-CN" path="translations/android_chrome_strings_zh-CN.xtb" />
+    <file lang="zh-HK" path="translations/android_chrome_strings_zh-HK.xtb" />
     <file lang="zh-TW" path="translations/android_chrome_strings_zh-TW.xtb" />
+    <file lang="zu" path="translations/android_chrome_strings_zu.xtb" />
   </translations>
   <release allow_pseudo="false" seq="1">
     <messages fallback_to_english="true">
-      <!-- Generic strings -->
-      <message name="IDS_DELETED" desc='Text that announces to the user that something was deleted.'>
-        Deleted
-      </message>
-      <message name="IDS_OK" desc="Label for a confirm button. Used in multiple contexts. [CHAR-LIMIT=20]">
-        OK
-      </message>
-      <message name="IDS_OK_GOT_IT" desc="Label of a button by which the user confirms that they read and understood the information or instructions. Used in multiple contexts. [CHAR-LIMIT=20]">
-        OK, got it
-      </message>
-      <message name="IDS_CANCEL" desc="Label for a cancel button. Used in multiple contexts. [CHAR-LIMIT=20]">
-        Cancel
-      </message>
-      <message name="IDS_NOT_NOW" desc="Label for a not now button. Used in multiple contexts. [CHAR-LIMIT=20]">
-        Not now
-      </message>
-      <message name="IDS_SAVE" desc="Label for a button to save a change. Used in multiple contexts. [CHAR-LIMIT=20]">
-        Save
-      </message>
-      <message name="IDS_DETAILS_LINK" desc="In 1) Settings > Clean up computer (desktop), a link to open details of incompatible applications. In 2) Settings > Lite mode (mobile), static title for data usage breakdown." meaning="Short for 'view details'. Link; static title.">
-        Details
-      </message>
-      <message name="IDS_DONE" desc="Label for a button to save a change or finish editing data. Used in multiple contexts. [CHAR-LIMIT=20]">
-        Done
-      </message>
-      <message name="IDS_DELETE" desc="Label for a delete button. Used in multiple contexts. [CHAR-LIMIT=20]">
-        Delete
-      </message>
-      <message name="IDS_REMOVE" desc="Label for a button to remove an item (e.g. a bookmark) from a list. [CHAR-LIMIT=20]">
-        Remove
-      </message>
-      <message name="IDS_RESET" desc="Label for a button to reset information you are editing to a default.">
-        Reset
-      </message>
-      <message name="IDS_TITLE" desc="Text indicating the title of a button or a textfield. Ued in multiple contexts. [CHAR-LIMIT=32]">
-        Title
-      </message>
-      <message name="IDS_TEXT_ON" desc="Text indicating that an option is turned on. [CHAR-LIMIT=20]">
-        On
-      </message>
-      <message name="IDS_TEXT_OFF" desc="Text indicating that an option is turned off. [CHAR-LIMIT=20]">
-        Off
-      </message>
-      <message name="IDS_LEARN_MORE" desc="Generic label for menu item to learn more about a feature. [CHAR-LIMIT=32]">
-        Learn more
-      </message>
-      <message name="IDS_MORE" desc="Generic label for a button to show more items or options. [CHAR-LIMIT=20]">
-        More
-      </message>
-      <message name="IDS_CLOSE" desc="Content description for a button to close a dialog or popup" >
-        Close
-      </message>
-      <message name="IDS_NO_THANKS" desc="Generic label to say no thanks for a feature. [CHAR-LIMIT=32]">
-        No thanks
-      </message>
-      <message name="IDS_NEXT" desc="Generic label for a button to advance to the next item. [CHAR-LIMIT=20]">
-        Next
-      </message>
-      <message name="IDS_CONTINUE_BUTTON" desc="Generic label for a button to continue to the next screen. Used in multiple contexts. [CHAR-LIMIT=20]">
-        Continue
-      </message>
-      <message name="IDS_SUBMIT" desc="Generic label for a button to submit data. Used in multiple contexts. [CHAR-LIMIT=20]">
-        Submit
-      </message>
-      <message name="IDS_UNDO" desc="Generic label for a button to undo the previous action.">
-        Undo
-      </message>
-      <message name="IDS_HELP" desc="Generic label for a button that displays help for the current screen.">
-        Help
-      </message>
-      <message name="IDS_TODAY" desc="Generic Label saying the date is today.">
-        Today
-      </message>
-      <message name="IDS_YESTERDAY" desc="Generic Label saying the date is yesterday.">
-        Yesterday
-      </message>
-      <message name="IDS_SELECT" desc="Prompt for user to select something. [CHAR-LIMIT=20]">
-        Select
-      </message>
-      <message name="IDS_ADD" desc="Prompt for the user to add something, like a new address. [CHAR-LIMIT=20]">
-        Add
-      </message>
-      <message name="IDS_SHARE" desc="Content description for a button to share item(s). [CHAR-LIMIT=20]">
-        Share
-      </message>
-      <message name="IDS_SEARCH" desc="The label for a search button.">
-        Search
-      </message>
-      <message name="IDS_SHOW_INFO" desc="The label for a info button to show info.">
-        Show Info
-      </message>
-      <message name="IDS_HIDE_INFO" desc="The label for a info button to hide info.">
-        Hide Info
-      </message>
-      <message name="IDS_COPY_LINK" desc="The label for a menu item to copy a link. [CHAR-LIMIT=30]">
-        Copy link
-      </message>
-      <message name="IDS_COPIED" desc="Notification telling the user that something has been copied to the clipboard.">
-        Copied
-      </message>
-      <message name="IDS_TRY_AGAIN" desc="The label for a button allowing the user to try an action again. [CHAR-LIMIT=20]">
-        Try again
-      </message>
-      <message name="IDS_BACK" desc="Label for a back button to return to a previous UI state or screen. Used in multiple contexts. [CHAR-LIMIT=20]">
-        Back
-      </message>
-      <message name="IDS_CONFIRM" desc="Label for a confirm button. Used in multiple contexts. [CHAR-LIMIT=20]">
-        Confirm
-      </message>
-      <message name="IDS_SHOW" desc="Label for a show button. Used in multiple contexts. [CHAR-LIMIT=20]">
-        Show
-      </message>
-      <message name="IDS_USER" desc="Generic label for UI elements with information about user.">
-        User
-      </message>
-      <message name="IDS_MENU_ITEM_MOVE_UP" desc="Option in item menu. User can click the 'Move up' option to move the item up by one position in its list. [CHAR-LIMIT=24]">
-        Move up
-      </message>
-      <message name="IDS_MENU_ITEM_MOVE_DOWN" desc="Option in item menu. User can click the 'Move down' option to move the item down by one position in its list. [CHAR-LIMIT=24]">
-        Move down
-      </message>
-      <message name="IDS_MENU_ITEM_MOVE_TO_TOP" desc="Option in item menu. User can click the 'Move to top' option to move the item up to the top of its list. [CHAR-LIMIT=24]">
-        Move to top
-      </message>
+      <!-- NOTE: Generic strings used across multiple features belong in //components/browser_ui/strings/android. -->
 
       <!-- Main Preferences -->
-      <message name="IDS_PREFERENCES" desc="Title for Chrome's Settings.">
+      <message name="IDS_SETTINGS" desc="Title for Chrome's Settings.">
         Settings
       </message>
       <message name="IDS_MENU_HELP" desc="Menu item for opening the help page. [CHAR-LIMIT=27]">
@@ -434,8 +364,8 @@ CHAR-LIMIT guidelines:
         Cancel sync
       </message>
 
-      <!-- Search engine preferences -->
-      <message name="IDS_PREFS_SEARCH_ENGINE" desc="Title for Search Engine preferences. [CHAR-LIMIT=32]">
+      <!-- Search engine settings -->
+      <message name="IDS_SEARCH_ENGINE_SETTINGS" desc="Title for Search Engine settings. [CHAR-LIMIT=32]">
         Search engine
       </message>
       <message name="IDS_SEARCH_ENGINE_LOCATION_AND_NOTIFICATIONS_ALLOWED" desc="The text of a link displayed when location and notifications permissions for a particular search engine are allowed.">
@@ -555,7 +485,7 @@ CHAR-LIMIT guidelines:
         Automatically sign in to websites using stored credentials. When the feature is off, you’ll be asked for verification every time before signing in to a website.
       </message>
       <message name="IDS_PASSWORDS_LEAK_DETECTION_SWITCH_TITLE" desc="Title for the switch toggling whether Chrome should check that entered credentials have been part of a leak.">
-        Warn you if passwords are compromised
+        Warn you if passwords are exposed in a data breach
       </message>
       <message name="IDS_PASSWORDS_LEAK_DETECTION_SWITCH_SIGNED_OUT_ENABLE_DESCRIPTION" desc="Description for the switch toggling whether Chrome should check that entered credentials have been part of a leak. Displayed for users who are not signed in and syncing.">
         When you sign in to your Google Account, this feature is turned on
@@ -693,8 +623,8 @@ CHAR-LIMIT guidelines:
         Search and site suggestions disabled
       </message>
 
-      <!-- Themes preferences -->
-      <message name="IDS_PREFS_THEMES" desc="Title for the Themes preferences. [CHAR-LIMIT=32]">
+      <!-- Themes settings -->
+      <message name="IDS_THEME_SETTINGS" desc="Title for the Theme settings. [CHAR-LIMIT=32]">
         Themes
       </message>
       <message name="IDS_THEMES_SYSTEM_DEFAULT_TITLE" desc="Title for the System Default option. [CHAR-LIMIT=32]">
@@ -895,9 +825,6 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_ADS_PERMISSION_TITLE" desc="Title for the ads permission [CHAR-LIMIT=32]">
          Ads
       </message>
-      <message name="IDS_AUTOPLAY_TITLE" desc='Title for the Autoplay settings screen [CHAR-LIMIT=32]'>
-        Autoplay
-      </message>
       <message name="IDS_COOKIES_TITLE" desc="Title for the Cookies settings screen [CHAR-LIMIT=32]">
         Cookies
       </message>
@@ -909,9 +836,6 @@ Your Google account may have other forms of browsing history like searches and a
       </message>
       <message name="IDS_JAVASCRIPT_PERMISSION_TITLE" desc="Title of the permission to run javascript [CHAR-LIMIT=32]">
         JavaScript
-      </message>
-      <message name="IDS_MEDIA_PERMISSION_TITLE" desc="Title of the menu containing the media permissions [CHAR-LIMIT=32]">
-        Media
       </message>
       <message name="IDS_POPUP_PERMISSION_TITLE" desc="Title of the permission to display pop-up windows and redirects [CHAR-LIMIT=32]">
         Pop-ups and redirects
@@ -949,9 +873,6 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_AUTOMATIC_DOWNLOADS_PERMISSION_TITLE" desc="Title of the permission that allows websites to download multiple files automatically.">
         Automatic downloads
       </message>
-      <message name="IDS_LEGACY_COOKIE_ACCESS_PERMISSION_TITLE" desc="Title of the permission that allows websites to use less-secure legacy rules for accessing cookies in a third-party context.">
-        Legacy cookie access
-      </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE" desc="The label for the button to add a new website to the exception list.">
         Add site exception
       </message>
@@ -963,9 +884,6 @@ Your Google account may have other forms of browsing history like searches and a
       </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_TOAST" desc="The toast shown when a new site has been added to the whitelist.">
         Site <ph name="SITE_NAME">%1$s<ex>google.com</ex></ph> added
-      </message>
-      <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_AUTOPLAY" desc="The description for the allow autoplay of muted videos for website dialog.">
-        Allow autoplay of muted videos for a specific site.
       </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_JAVASCRIPT_ALLOW" desc="The description for the allow Javascript for website dialog.">
         Allow JavaScript for a specific site.
@@ -979,14 +897,14 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_AUTOMATIC_DOWNLOADS" desc="The description for the allow Automatic Downloads for website dialog.">
         Allow a site to download multiple files automatically.
       </message>
-      <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_LEGACY_COOKIE_ACCESS" desc="The description for the allow Legacy Cookie Access for website dialog.">
-        Allow a site to use less-secure legacy rules for accessing cookies in a third-party context.
-      </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_COOKIES_ALLOW" desc="The description for the allow Cookies for website dialog.">
         Allow cookies for a specific site.
       </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_COOKIES_BLOCK" desc="The description for the block Cookies for website dialog.">
        Block cookies for a specific site.
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_THIRD_PARTY_COOKIES_EXCEPTION_LABEL" desc="The label for site exceptions that affect third party cookies.">
+       All cookies, on this site only
       </message>
       <message name="IDS_WEBSITE_SETTINGS_ADD_SITE_DESCRIPTION_SOUND_ALLOW" desc="The description for the allow sound for website dialog.">
         Allow sound for a specific site.
@@ -1047,9 +965,6 @@ Your Google account may have other forms of browsing history like searches and a
       </message>
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_COOKIE_ALLOWED" desc="Summary text explaining that sites are allowed to use cookies and that it is the recommended setting.">
         Allow sites to save and read cookie data (recommended)
-      </message>
-      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_AUTOPLAY_ALLOWED" desc="Summary text explaining that sites are allowed to automatically play muted videos and that it is the recommended setting.">
-        Allow sites to automatically play muted videos (recommended)
       </message>
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_JAVASCRIPT_ALLOWED" desc="Summary text explaining that sites are allowed to run Javascript and that it is the recommended setting.">
         Allow sites to run JavaScript (recommended)
@@ -1127,19 +1042,16 @@ Your Google account may have other forms of browsing history like searches and a
         Ask before allowing sites to know your location (recommended)
       </message>
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_NOTIFICATIONS_ASK" desc="Summary text explaining that sites need to ask for permission before sending notifications.">
-        Ask before sending
+        Sites can ask to send notifications
+      </message>
+      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_NOTIFICATIONS_BLOCK" desc="Summary text explaining that sites will not be able to send notifications.">
+        Sites can't ask to send notifications
       </message>
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_NOTIFICATIONS_QUIET" desc="A setting that, if turned on will enable a quieter permission prompt for notifications.">
-        Show prompts quietly
+        Use quieter messaging (blocks notification prompts from interrupting you)
       </message>
-      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_NOTIFICATIONS_QUIET_SUMMARY_ENABLED" desc="A summary explaining how quiet notifications work, when the setting is enabled.">
-        Sites will be blocked from asking to show you notifications. If a site requests notifications, an infobar will appear at the bottom of the page.
-      </message>
-      <message name="IDS_WEBSITE_SETTINGS_CATEGORY_NOTIFICATIONS_QUIET_SUMMARY_DISABLED" desc="A summary explaining how quiet notifications work, when the setting is disabled.">
-        Enable to automatically block sites from asking to show you notifications. If a site requests notifications, an infobar will appear at the bottom of the page.
-      </message>
-      <message name="IDS_NOTIFICATIONS_IPH" desc="A message that explains to the users that notification permission requests will appear as an infobar from now on.">
-        Got it. By default new notification requests will appear here.
+      <message name="IDS_NOTIFICATIONS_IPH" desc="A message that explains to the users that notification permission requests will appear as an infobar from now on because the user repeatedly denied the notification permission in the past.">
+        You usually block notifications. To allow, tap Details.
       </message>
       <message name="IDS_WEBSITE_SETTINGS_CATEGORY_CAMERA_ASK" desc="Summary text explaining that sites need to ask for permission before accessing the camera and that it is the recommended setting.">
         Ask first before allowing sites to use your camera (recommended)
@@ -1186,8 +1098,8 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_WEBSITE_NOTIFICATION_SETTINGS" desc="Accessibility string for the notification settings">
         Open notification settings
       </message>
-      <message name="IDS_WEBSITE_SETTINGS_EMBEDDED_IN" desc="String used to indicate the embedder origin of a site">
-        Embedded in <ph name="WEBSITE_URL">%1$s<ex>google.com</ex></ph>
+      <message name="IDS_WEBSITE_SETTINGS_EMBEDDED_ON" desc="String used to indicate the embedder origin of a site">
+        Embedded on <ph name="WEBSITE_URL">%1$s<ex>google.com</ex></ph>
       </message>
 
       <!-- Single site settings -->
@@ -1195,14 +1107,14 @@ Your Google account may have other forms of browsing history like searches and a
         Files saved by websites appear here
       </message>
 
-      <!-- Languages preferences -->
-      <message name="IDS_PREFS_LANGUAGES" desc="Title for the Languages settings screen that allows users to manage their languages preferences. [CHAR-LIMIT=32]">
+      <!-- Language Settings -->
+      <message name="IDS_LANGUAGE_SETTINGS" desc="Title for the Languages settings screen that allows users to manage their languages preferences. [CHAR-LIMIT=32]">
         Languages
       </message>
-      <message name="IDS_PREFS_ADD_LANGUAGE" desc="Title for the screen that allows users to add languages to their preferred language list. [CHAR-LIMIT=32]">
+      <message name="IDS_ADD_LANGUAGE" desc="Title for the screen that allows users to add languages to their preferred language list. [CHAR-LIMIT=32]">
         Add language
       </message>
-      <message name="IDS_LANGUAGES_LIST_PREFS_DESCRIPTION" desc="Description on the Languages settings screen. Appears above a list of one or more languages that the user selects, to tell Chrome which languages they prefer to use to read website content.">
+      <message name="IDS_LANGUAGES_LIST_DESCRIPTION" desc="Description on the Languages settings screen. Appears above a list of one or more languages that the user selects, to tell Chrome which languages they prefer to use to read website content.">
         Websites will show text in your preferred language, when possible.
       </message>
       <message name="IDS_LANGUAGES_OFFER_TRANSLATE_SWITCH" desc="Appears next to the 'offer to translate' switch that controls whether or not Chrome will display the Google Translate UI on web pages that are not in the user's preferred language(s).">
@@ -1595,17 +1507,6 @@ Your Google account may have other forms of browsing history like searches and a
         https://families.google.com/intl/$LOCALE/familylink/privacy/child-policy/
       </message>
 
-      <!-- JavaScript dialogs -->
-      <message name="IDS_LEAVE" desc="Dialog button to leave the current page and navigate to a new page. [CHAR-LIMIT=20]">
-        Leave
-      </message>
-      <message name="IDS_RELOAD" desc="Dialog button to reload the current page. [CHAR-LIMIT=20]">
-        Reload
-      </message>
-      <message name="IDS_SUPPRESS_JS_MODAL_DIALOGS" desc="Checkbox allowing users to forgo additional prompts from a web page.">
-        Prevent this page from creating additional dialogs
-      </message>
-
       <!-- Certificate viewer -->
       <message name="IDS_CERTTITLE" desc="Dialog box title for viewing security certificates. [CHAR-LIMIT=32]">
         Certificate viewer
@@ -1822,6 +1723,9 @@ To change this setting, <ph name="BEGIN_LINK">&lt;resetlink&gt;</ph>reset sync<p
       <message name="IDS_SYNC_ERROR_CARD_TITLE" desc="Title of the Sync Error Card. [CHAR-LIMIT=32]">
         Sync isn't working
       </message>
+      <message name="IDS_SYNC_PASSWORDS_ERROR_CARD_TITLE" desc="Title of the Sync Error Card when it affects passwords only. [CHAR-LIMIT=32]">
+        Error syncing passwords
+      </message>
       <message name="IDS_SYNC_SETTINGS_NOT_CONFIRMED_TITLE" desc="Title of the error message shown when sync setup was not complete. [CHAR-LIMIT=60]">
         Initial sync setup not finished
       </message>
@@ -1830,6 +1734,9 @@ To change this setting, <ph name="BEGIN_LINK">&lt;resetlink&gt;</ph>reset sync<p
       </message>
       <message name="IDS_HINT_SYNC_AUTH_ERROR" desc="Hint message to resolve sync auth error.">
         Sign in again to start sync
+      </message>
+      <message name="IDS_HINT_SYNC_RETRIEVE_KEYS" desc="Hint message to resolve sync encryption error.">
+        Fix now
       </message>
       <message name="IDS_HINT_PASSPHRASE_REQUIRED" desc="Hint message to resolve passphrase required error.">
         Enter your passphrase to start sync
@@ -2307,10 +2214,6 @@ To change this setting, <ph name="BEGIN_LINK">&lt;resetlink&gt;</ph>reset sync<p
         Drag from top and touch the back button to exit full screen.
       </message>
 
-      <message name="IDS_FULLSCREEN_API_NOTIFICATION" desc="Notification message when a site has entered non-immsersive fullscreen and the directions of how to exit.">
-        Touch the back button to exit full screen.
-      </message>
-
       <!-- Download UI -->
       <message name="IDS_DOWNLOAD_NOTIFICATION_CANCEL_BUTTON" desc="Text on the button that cancels a download.">
         Cancel
@@ -2491,8 +2394,11 @@ To change this setting, <ph name="BEGIN_LINK">&lt;resetlink&gt;</ph>reset sync<p
       <message name="IDS_DOWNLOAD_MANAGER_UI_IMAGES" desc="Indicates that clicking on this button shows only downloaded images.">
         Images
       </message>
-      <message name="IDS_DOWNLOAD_MANAGER_UI_PAGINATION" desc="Indicates that clicking on this button will show more items in the list.">
-        Load more…
+      <message name="IDS_DOWNLOAD_MANAGER_UI_CARD_PAGINATION" desc="Indicates that clicking on this button will show more items in the card.">
+        See more
+      </message>
+      <message name="IDS_DOWNLOAD_MANAGER_UI_LIST_PAGINATION" desc="Indicates that clicking on this button will show more items in the list.">
+        More
       </message>
       <message name="IDS_DOWNLOAD_MANAGER_UI_DOCUMENTS" desc="Indicates that clicking on this button shows only documents.">
         Documents
@@ -2714,8 +2620,14 @@ To change this setting, <ph name="BEGIN_LINK">&lt;resetlink&gt;</ph>reset sync<p
       </message>
 
       <!-- New Tab Page strings -->
-      <message name="IDS_EXPLORE_OFFLINE_CARD_MESSAGE" desc="Text informing the user that they are currently offline and they can tap here to explore the offline feed. ">
-        You are currently offline.\n<ph name="BEGIN_LINK">&lt;link&gt;</ph>Explore your offline feed.<ph name="END_LINK">&lt;/link&gt;</ph>
+      <message name="IDS_EXPLORE_OFFLINE_CARD_TITLE" desc="Card title text informing the user that they can explore the offline feed. ">
+        Keep exploring offline
+      </message>
+      <message name="IDS_EXPLORE_OFFLINE_CARD_DESCRIPTION" desc="Card description text informing the user that they can consume the videos, articles and other content even though they are offline. ">
+        Get articles, videos, and other content from sites you like, even if you’re offline or your connection is poor.
+      </message>
+      <message name="IDS_EXPLORE_OFFLINE_CARD_EXPLORE" desc="Button text on the explore offline card on new tab page that shows up when the user is offline. Clicking on this button will take the user to downloads home where they can consume articles, audios and videos while being offline.">
+        Explore
       </message>
       <message name="IDS_RECENT_TABS" desc="Text for button to show 'Recent tabs', i.e. recently closed tabs and tabs that are open on other devices [CHAR-LIMIT=20]">
         Recent tabs
@@ -2919,7 +2831,7 @@ To change this setting, <ph name="BEGIN_LINK">&lt;resetlink&gt;</ph>reset sync<p
       <message name="IDS_MENU_READER_MODE_PREFS" desc="Menu item to show reader mode preferences pane, which allows users to change the appearance (font size, theme, etc.) of the page. [CHAR-LIMIT=27]">
         Appearance
       </message>
-      <message name="IDS_MENU_PREFERENCES" desc="Menu item for opening browser preferences. [CHAR-LIMIT=27]">
+      <message name="IDS_MENU_SETTINGS" desc="Menu item for opening browser settings. [CHAR-LIMIT=27]">
         Settings
       </message>
       <message name="IDS_MENU_CLOSE_ALL_TABS" desc="Menu item for closing all open tabs. [CHAR-LIMIT=27]">
@@ -3514,7 +3426,7 @@ To change this setting, <ph name="BEGIN_LINK">&lt;resetlink&gt;</ph>reset sync<p
         Phone numbers
       </message>
       <message name="IDS_TOP_VIEW_ICON_FILTER_LABEL" desc="The label shown for the icon filter toggle button (allowing the user to exclude icons).">
-        Icons
+        Profile photos
       </message>
       <message name="IDS_CONTACTS_PICKER_MORE_DETAILS" desc="Label describing that the user has one or more telephone/emails (used for either).">
         {DETAIL_COUNT, plural,
@@ -3912,11 +3824,23 @@ The site does NOT gain access to the camera. The camera images are only visible 
       </message>
 
       <!-- Chrome Duet -->
-      <message name="IDS_IPH_DUET_TITLE" desc="This string appears in an overlay that explains a new UI to users. 'Search' refers to searching the web, and 'explore' refers to Chrome's suggested content.">
+      <message name="IDS_IPH_DUET_HOME_BUTTON_TITLE" desc="This string appears in an overlay that explains a new UI to users. The title of the feature highlight bubble that explains what is home button in bottom toolbar for.">
+        Get back home easily
+      </message>
+      <message name="IDS_IPH_DUET_HOME_BUTTON_DESCRIPTION" desc="This string appears in an overlay that explains a new UI to users. The text in the feature highlight bubble that explains what is home button in bottom toolbar for.">
+        Tap here to quickly access your homepage from anywhere
+      </message>
+      <message name="IDS_IPH_DUET_SEARCH_TITLE" desc="This string appears in an overlay that explains a new UI to users. 'Search' refers to searching the web, and 'explore' refers to Chrome's suggested content.">
         Search &amp; explore
       </message>
-      <message name="IDS_IPH_DUET_DESCRIPTION" desc="This string appears in an overlay that explains a new UI to users. 'From here' is a generic directional cue: don't worry about the direction, as it is clarified by the way the overlay is shown.">
+      <message name="IDS_IPH_DUET_SEARCH_DESCRIPTION" desc="This string appears in an overlay that explains a new UI to users. 'From here' is a generic directional cue: don't worry about the direction, as it is clarified by the way the overlay is shown.">
         From here, you can search the web, share with friends, and see open pages
+      </message>
+      <message name="IDS_IPH_DUET_TAB_SWITCHER_TITLE" desc="This string appears in an overlay that explains a new UI to users. The title of the feature highlight bubble that explains what is tab switcher in bottom toolbar for.">
+        See all your open tabs
+      </message>
+      <message name="IDS_IPH_DUET_TAB_SWITCHER_DESCRIPTION" desc="This string appears in an overlay that explains a new UI to users. The text in the feature highlight bubble that explains what is tab switcher in bottom toolbar for.">
+        Tap here to create new tabs and go back to previous ones
       </message>
 
       <!-- Photo picker -->
@@ -4010,6 +3934,13 @@ The site does NOT gain access to the camera. The camera images are only visible 
         Test Dummy
       </message>
 
+      <message name="IDS_STACK_UNWINDER_MODULE_TITLE"
+        desc="Text shown when the stack unwinder module is referenced in install start, success,
+              failure UI (e.g. in IDS_MODULE_INSTALL_START_TEXT, which will expand to
+              'Installing Stack Unwinder for Chrome…').">
+        Stack Unwinder
+      </message>
+
       <message name="IDS_EXTRA_ICU_MODULE_TITLE"
         desc="Text shown when the extra ICU module is referenced in install start, success,
               failure UI (e.g. in IDS_MODULE_INSTALL_START_TEXT, which will expand to
@@ -4039,9 +3970,42 @@ The site does NOT gain access to the camera. The camera images are only visible 
         Download
       </message>
 
+      <!-- Sharing Hub -->
+      <message name="IDS_SHARING_MORE_ICON_LABEL" desc="Icon label for the More button in the sharing hub.">
+        More
+      </message>
+
+      <message name="IDS_SHARING_COPY_URL" desc="Label for the Copy URL button in the sharing hub.">
+        Copy link
+      </message>
+
+      <message name="IDS_SHARING_SCREENSHOT" desc="Label for Screenshot button in the sharing hub.">
+        Screenshot
+      </message>
+
+      <message name="IDS_LINK_COPIED" desc="Text shown in the toast notification when Copy Link is selected in the sharing hub.">
+        Link Copied
+      </message>
+
       <!-- Chime DFM module strings -->
       <message name="IDS_CHIME_MODULE_TITLE" desc="Text shown when the chime module is referenced in install start, success, failure UI (e.g. in IDS_MODULE_INSTALL_START_TEXT, which will expand to 'Installing Google Notifications Platform for Chrome…').">
         Google Notifications Platform
+      </message>
+
+      <!-- Image Editor DFM module strings -->
+      <message name="IDS_IMAGE_EDITOR_MODULE_TITLE" desc="Text shown when the image editor module is referenced in install start, success, failure UI (e.g. in IDS_MODULE_INSTALL_START_TEXT, which will expand to 'Installing Image Editor for Chrome…').">
+        Image Editor
+      </message>
+
+      <!-- NFC prompt -->
+      <message name="IDS_NFC_DISABLED_ON_DEVICE_MESSAGE" desc="Text shown in a prompt to turn on NFC after user granted NFC permission to a website.">
+        To continue, turn on NFC on your phone
+      </message>
+      <message name="IDS_NFC_PROMPT_TURN_ON" desc="Text on the positive button of the nfc prompt">
+        Turn on
+      </message>
+      <message name="IDS_ANDROID_NFC_OFF_GLOBALLY" desc="The message to show when NFC has been turned off globally in Android. Contains a link to the settings menu to enable NFC.">
+        NFC is off for this device. Turn it on NFC in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
     </messages>
   </release>

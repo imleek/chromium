@@ -21,17 +21,14 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.ActivityState;
-import org.chromium.base.ApplicationStatus;
-import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.preferences.ChromeSwitchPreference;
-import org.chromium.chrome.browser.preferences.Preferences;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.sync.SyncAndServicesPreferences;
+import org.chromium.chrome.browser.settings.ChromeSwitchPreference;
+import org.chromium.chrome.browser.settings.SettingsActivity;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.sync.SyncAndServicesPreferences;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
@@ -49,7 +46,7 @@ public class SyncAndServicesPreferencesTest {
     @Rule
     public SyncTestRule mSyncTestRule = new SyncTestRule();
 
-    private Preferences mPreferences;
+    private SettingsActivity mSettingsActivity;
 
     @After
     public void tearDown() {
@@ -244,6 +241,31 @@ public class SyncAndServicesPreferencesTest {
         Assert.assertNull("Sync error card should not be shown", getSyncErrorCard(fragment));
     }
 
+    @Test
+    @SmallTest
+    @Feature({"Sync"})
+    public void testTrustedVaultKeyRequiredShowsSyncErrorCard() throws Exception {
+        final FakeProfileSyncService pss = overrideProfileSyncService();
+        mSyncTestRule.setUpTestAccountAndSignIn();
+        SyncTestUtil.waitForSyncActive();
+        pss.setEngineInitialized(true);
+        pss.setTrustedVaultKeyRequiredForPreferredDataTypes(true);
+
+        SyncAndServicesPreferences fragment = startSyncAndServicesPreferences();
+
+        Assert.assertNotNull("Sync error card should be shown", getSyncErrorCard(fragment));
+    }
+
+    // TODO(crbug.com/1030725): SyncTestRule should support overriding ProfileSyncService.
+    private FakeProfileSyncService overrideProfileSyncService() {
+        return TestThreadUtils.runOnUiThreadBlockingNoException(() -> {
+            // PSS has to be constructed on the UI thread.
+            FakeProfileSyncService fakeProfileSyncService = new FakeProfileSyncService();
+            ProfileSyncService.overrideForTests(fakeProfileSyncService);
+            return fakeProfileSyncService;
+        });
+    }
+
     /**
      * Start SyncAndServicesPreferences signin screen and dissmiss it without pressing confirm or
      * cancel.
@@ -253,57 +275,31 @@ public class SyncAndServicesPreferencesTest {
         String fragmentName = SyncAndServicesPreferences.class.getName();
         final Bundle arguments = SyncAndServicesPreferences.createArguments(true);
         Intent intent =
-                PreferencesLauncher.createIntentForSettingsPage(context, fragmentName, arguments);
+                SettingsLauncher.createIntentForSettingsPage(context, fragmentName, arguments);
         Activity activity = InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
-        Assert.assertTrue(activity instanceof Preferences);
+        Assert.assertTrue(activity instanceof SettingsActivity);
         ApplicationTestUtils.finishActivity(activity);
     }
 
     private SyncAndServicesPreferences startSyncAndServicesPreferences() {
-        mPreferences = mSyncTestRule.startPreferences(SyncAndServicesPreferences.class.getName());
+        mSettingsActivity =
+                mSyncTestRule.startSettingsActivity(SyncAndServicesPreferences.class.getName());
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
-        return (SyncAndServicesPreferences) mPreferences.getMainFragment();
+        return (SyncAndServicesPreferences) mSettingsActivity.getMainFragment();
     }
 
     private void closeFragment(SyncAndServicesPreferences fragment) {
         FragmentTransaction transaction =
-                mPreferences.getSupportFragmentManager().beginTransaction();
+                mSettingsActivity.getSupportFragmentManager().beginTransaction();
         transaction.remove(fragment);
         transaction.commit();
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
     }
 
-    // TODO(https://crbug.com/1015449): Move this function to ApplicationTestUtils.
-    private void waitForActivityState(Activity activity, @ActivityState int state)
-            throws Exception {
-        final CallbackHelper callbackHelper = new CallbackHelper();
-        final ApplicationStatus.ActivityStateListener activityStateListener =
-                (activity1, newState) -> {
-            if (newState == state) {
-                callbackHelper.notifyCalled();
-            }
-        };
-        try {
-            boolean correctState = TestThreadUtils.runOnUiThreadBlocking(() -> {
-                if (ApplicationStatus.getStateForActivity(activity) == state) {
-                    return true;
-                }
-                ApplicationStatus.registerStateListenerForActivity(activityStateListener, activity);
-                activity.finish();
-                return false;
-            });
-            if (!correctState) {
-                callbackHelper.waitForCallback(0);
-            }
-        } finally {
-            ApplicationStatus.unregisterActivityStateListener(activityStateListener);
-        }
-    }
-
     private void pressBackAndDismissActivity(Activity activity) throws Exception {
         UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         device.pressBack();
-        waitForActivityState(activity, ActivityState.DESTROYED);
+        ApplicationTestUtils.finishActivity(activity);
     }
 
     private ChromeSwitchPreference getSyncSwitch(SyncAndServicesPreferences fragment) {

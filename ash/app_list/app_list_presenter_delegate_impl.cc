@@ -41,11 +41,11 @@ namespace {
 // Whether the shelf is oriented on the side, not on the bottom.
 bool IsSideShelf(Shelf* shelf) {
   switch (shelf->alignment()) {
-    case SHELF_ALIGNMENT_BOTTOM:
-    case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+    case ShelfAlignment::kBottom:
+    case ShelfAlignment::kBottomLocked:
       return false;
-    case SHELF_ALIGNMENT_LEFT:
-    case SHELF_ALIGNMENT_RIGHT:
+    case ShelfAlignment::kLeft:
+    case ShelfAlignment::kRight:
       return true;
   }
   return false;
@@ -55,16 +55,17 @@ bool IsSideShelf(Shelf* shelf) {
 bool IsShelfBackgroundTypeWithRoundedCorners(
     ShelfBackgroundType background_type) {
   switch (background_type) {
-    case SHELF_BACKGROUND_DEFAULT:
-    case SHELF_BACKGROUND_APP_LIST:
-    case SHELF_BACKGROUND_OVERVIEW:
+    case ShelfBackgroundType::kDefaultBg:
+    case ShelfBackgroundType::kAppList:
+    case ShelfBackgroundType::kOverview:
       return true;
-    case SHELF_BACKGROUND_MAXIMIZED:
-    case SHELF_BACKGROUND_MAXIMIZED_WITH_APP_LIST:
-    case SHELF_BACKGROUND_OOBE:
-    case SHELF_BACKGROUND_HOME_LAUNCHER:
-    case SHELF_BACKGROUND_LOGIN:
-    case SHELF_BACKGROUND_LOGIN_NONBLURRED_WALLPAPER:
+    case ShelfBackgroundType::kMaximized:
+    case ShelfBackgroundType::kMaximizedWithAppList:
+    case ShelfBackgroundType::kOobe:
+    case ShelfBackgroundType::kHomeLauncher:
+    case ShelfBackgroundType::kLogin:
+    case ShelfBackgroundType::kLoginNonBlurredWallpaper:
+    case ShelfBackgroundType::kInApp:
       return false;
   }
 }
@@ -164,7 +165,7 @@ aura::Window* AppListPresenterDelegateImpl::GetContainerForWindow(
 
 aura::Window* AppListPresenterDelegateImpl::GetRootWindowForDisplayId(
     int64_t display_id) {
-  return ash::Shell::Get()->GetRootWindowForDisplayId(display_id);
+  return Shell::Get()->GetRootWindowForDisplayId(display_id);
 }
 
 void AppListPresenterDelegateImpl::OnVisibilityChanged(bool visible,
@@ -261,20 +262,6 @@ void AppListPresenterDelegateImpl::ProcessLocatedEvent(
     if (!hotseat_window || !hotseat_window->Contains(target))
       presenter_->Dismiss(event->time_stamp());
   }
-
-  if (IsTabletMode() && presenter_->IsShowingEmbeddedAssistantUI()) {
-    auto* contents_view =
-        presenter_->GetView()->app_list_main_view()->contents_view();
-    if (contents_view->bounds().Contains(event->location())) {
-      // Keep Assistant open if event happen inside.
-      return;
-    }
-
-    // Touching anywhere else closes Assistant.
-    view_->Back();
-    view_->search_box_view()->ClearSearch();
-    view_->search_box_view()->SetSearchBoxActive(false, ui::ET_UNKNOWN);
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -310,6 +297,10 @@ void AppListPresenterDelegateImpl::OnKeyEvent(ui::KeyEvent* event) {
 
   // Don't absorb the first event for the search box while it is open
   if (view_->search_box_view()->is_search_box_active())
+    return;
+
+  // Don't absorb the first event when showing Assistant.
+  if (view_->IsShowingEmbeddedAssistantUI())
     return;
 
   // Arrow keys or Tab will engage the traversal mode.

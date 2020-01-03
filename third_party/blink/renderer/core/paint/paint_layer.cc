@@ -47,6 +47,7 @@
 #include <limits>
 
 #include "base/allocator/partition_allocator/partition_alloc.h"
+#include "base/containers/adapters.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/animation/scroll_timeline.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
@@ -91,6 +92,7 @@
 #include "third_party/blink/renderer/platform/graphics/compositor_filter_operations.h"
 #include "third_party/blink/renderer/platform/graphics/filters/filter.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/transforms/transformation_matrix.h"
@@ -343,6 +345,15 @@ void PaintLayer::UpdateLayerPositionRecursive() {
       SetNeedsCompositingInputsUpdate();
   }
 
+  // Display-locked elements always have a PaintLayer, meaning that the
+  // PaintLayer traversal won't skip locked elements. Thus, we don't have to do
+  // an ancestor check, and simply skip iterating children when this element is
+  // locked for child layout.
+  if (GetLayoutObject().LayoutBlockedByDisplayLock(
+          DisplayLockLifecycleTarget::kChildren)) {
+    return;
+  }
+
   for (PaintLayer* child = FirstChild(); child; child = child->NextSibling())
     child->UpdateLayerPositionRecursive();
 }
@@ -516,6 +527,13 @@ void PaintLayer::UpdatePaginationRecursive(bool needs_pagination_update) {
             GetLayoutObject().FlowThreadContainingBlock())
       EnsureRareData().enclosing_pagination_layer =
           containing_flow_thread->Layer();
+  }
+
+  // If this element prevents child painting, then we can skip updating
+  // pagination info, since it won't be used anyway.
+  if (GetLayoutObject().PaintBlockedByDisplayLock(
+          DisplayLockLifecycleTarget::kChildren)) {
+    return;
   }
 
   for (PaintLayer* child = FirstChild(); child; child = child->NextSibling())
@@ -923,8 +941,8 @@ PhysicalOffset PaintLayer::ComputeOffsetFromAncestor(
   PhysicalOffset result = GetLayoutObject().LocalToAncestorPoint(
       PhysicalOffset(), &ancestor_object, kIgnoreTransforms);
   if (ancestor_object.UsesCompositedScrolling()) {
-    result +=
-        PhysicalOffset(ToLayoutBox(ancestor_object).ScrolledContentOffset());
+    result += PhysicalOffset(
+        ToLayoutBox(ancestor_object).PixelSnappedScrolledContentOffset());
   }
   return result;
 }
@@ -1042,8 +1060,25 @@ void PaintLayer::SetNeedsCompositingInputsUpdateInternal() {
 
   needs_ancestor_dependent_compositing_inputs_update_ = true;
 
+  // We might call this function on a locked element. Now, locked elements might
+  // have a persistent dirty child bit, meaning that the below loop won't mark
+  // the breakcrumb bit further up the chain (since this element appears to
+  // already have a breadcrumb). However, since the element itself needs an
+  // ancestor dependent update, we need to force the propagation at least one
+  // level to the parent. This ensures that the real dirty bit
+  // (|needs_ancestor_dependent_compositing_inputs_update_|) can be discovered
+  // by the compositing update walk.
+  bool child_flag_may_persist_after_update =
+      GetLayoutObject().PrePaintBlockedByDisplayLock(
+          DisplayLockLifecycleTarget::kChildren);
+
+  PaintLayer* initial_layer = child_needs_compositing_inputs_update_ &&
+                                      child_flag_may_persist_after_update
+                                  ? Parent()
+                                  : this;
+
   PaintLayer* last_ancestor = nullptr;
-  for (PaintLayer* current = this;
+  for (PaintLayer* current = initial_layer;
        current && !current->child_needs_compositing_inputs_update_;
        current = current->Parent()) {
     last_ancestor = current;
@@ -1333,6 +1368,9 @@ void PaintLayer::RemoveChild(PaintLayer* old_child) {
     if (Compositor()) {
       if (!old_child_style.IsStacked())
         Compositor()->SetNeedsCompositingUpdate(kCompositingUpdateRebuildTree);
+
+      if (Compositor()->GetCompositingInputsRoot() == old_child)
+        Compositor()->ClearCompositingInputsRoot();
     }
     // Dirty the z-order list in which we are contained.
     old_child->DirtyStackingContextZOrderLists();
@@ -1510,7 +1548,8 @@ static inline const PaintLayer* AccumulateOffsetTowardsAncestor(
   } else if (layer->GetLayoutObject().IsInFlowPositioned()) {
     location += layer->GetLayoutObject().OffsetForInFlowPosition();
   }
-  location -= PhysicalOffset(containing_layer->ScrolledContentOffset());
+  location -=
+      PhysicalOffset(containing_layer->PixelSnappedScrolledContentOffset());
 
   return containing_layer;
 }
@@ -1604,7 +1643,7 @@ bool PaintLayer::RequiresScrollableArea() const {
 
 void PaintLayer::UpdateScrollableArea() {
   if (RequiresScrollableArea() && !scrollable_area_) {
-    scrollable_area_ = PaintLayerScrollableArea::Create(*this);
+    scrollable_area_ = MakeGarbageCollected<PaintLayerScrollableArea>(*this);
     if (Compositor()) {
       Compositor()->SetNeedsCompositingUpdate(kCompositingUpdateRebuildTree);
     }
@@ -1895,10 +1934,11 @@ HitTestingTransformState PaintLayer::CreateLocalTransformState(
   return transform_state;
 }
 
-static bool IsHitCandidate(const PaintLayer* hit_layer,
-                           bool can_depth_sort,
-                           double* z_offset,
-                           const HitTestingTransformState* transform_state) {
+static bool IsHitCandidateForDepthOrder(
+    const PaintLayer* hit_layer,
+    bool can_depth_sort,
+    double* z_offset,
+    const HitTestingTransformState* transform_state) {
   if (!hit_layer)
     return false;
 
@@ -1923,6 +1963,14 @@ static bool IsHitCandidate(const PaintLayer* hit_layer,
   return true;
 }
 
+// Calling IsDescendantOf is sad (slow), but it's the only way to tell
+// whether a hit test candidate is a descendant of the stop node.
+static bool IsHitCandidateForStopNode(const LayoutObject& candidate,
+                                      const LayoutObject* stop_node) {
+  return !stop_node || (&candidate == stop_node) ||
+         !candidate.IsDescendantOf(stop_node);
+}
+
 // hitTestLocation and hitTestRect are relative to rootLayer.
 // A 'flattening' layer is one preserves3D() == false.
 // transformState.m_accumulatedTransform holds the transform from the containing
@@ -1941,7 +1989,8 @@ PaintLayer* PaintLayer::HitTestLayer(PaintLayer* root_layer,
                                      const HitTestRecursionData& recursion_data,
                                      bool applied_transform,
                                      HitTestingTransformState* transform_state,
-                                     double* z_offset) {
+                                     double* z_offset,
+                                     bool check_resizer_only) {
   const LayoutObject& layout_object = GetLayoutObject();
   DCHECK_GE(layout_object.GetDocument().Lifecycle().GetState(),
             DocumentLifecycle::kCompositingClean);
@@ -1970,7 +2019,7 @@ PaintLayer* PaintLayer::HitTestLayer(PaintLayer* root_layer,
     if (EnclosingPaginationLayer()) {
       return HitTestTransformedLayerInFragments(
           root_layer, container_layer, result, recursion_data, transform_state,
-          z_offset, clip_behavior);
+          z_offset, check_resizer_only, clip_behavior);
     }
 
     // Make sure the parent's clip rects have been calculated.
@@ -1990,7 +2039,7 @@ PaintLayer* PaintLayer::HitTestLayer(PaintLayer* root_layer,
 
     return HitTestLayerByApplyingTransform(root_layer, container_layer, result,
                                            recursion_data, transform_state,
-                                           z_offset);
+                                           z_offset, check_resizer_only);
   }
 
   // Don't hit test the clip-path area when checking for occlusion. This is
@@ -2007,7 +2056,7 @@ PaintLayer* PaintLayer::HitTestLayer(PaintLayer* root_layer,
   // The natural thing would be to keep HitTestingTransformState on the stack,
   // but it's big, so we heap-allocate.
   HitTestingTransformState* local_transform_state = nullptr;
-  base::Optional<HitTestingTransformState> storage;
+  STACK_UNINITIALIZED base::Optional<HitTestingTransformState> storage;
 
   if (applied_transform) {
     // We computed the correct state in the caller (above code), so just
@@ -2026,7 +2075,7 @@ PaintLayer* PaintLayer::HitTestLayer(PaintLayer* root_layer,
   // Check for hit test on backface if backface-visibility is 'hidden'
   if (local_transform_state && layout_object.StyleRef().BackfaceVisibility() ==
                                    EBackfaceVisibility::kHidden) {
-    TransformationMatrix inverted_matrix =
+    STACK_UNINITIALIZED TransformationMatrix inverted_matrix =
         local_transform_state->accumulated_transform_.Inverse();
     // If the z-vector of the matrix is negative, the back is facing towards the
     // viewer.
@@ -2035,7 +2084,8 @@ PaintLayer* PaintLayer::HitTestLayer(PaintLayer* root_layer,
   }
 
   HitTestingTransformState* unflattened_transform_state = local_transform_state;
-  base::Optional<HitTestingTransformState> unflattened_storage;
+  STACK_UNINITIALIZED base::Optional<HitTestingTransformState>
+      unflattened_storage;
   if (local_transform_state && !Preserves3D()) {
     // Keep a copy of the pre-flattening state, for computing z-offsets for the
     // container
@@ -2064,6 +2114,51 @@ PaintLayer* PaintLayer::HitTestLayer(PaintLayer* root_layer,
     z_offset_for_contents_ptr = z_offset;
   }
 
+  // Collect the fragments. This will compute the clip rectangles for each
+  // layer fragment.
+  STACK_UNINITIALIZED base::Optional<PaintLayerFragments> layer_fragments;
+  if (recursion_data.intersects_location) {
+    layer_fragments.emplace();
+    if (applied_transform) {
+      DCHECK(root_layer == this);
+      PhysicalOffset ignored;
+      AppendSingleFragmentIgnoringPagination(
+          *layer_fragments, root_layer, nullptr,
+          kExcludeOverlayScrollbarSizeForHitTesting, clip_behavior, &ignored);
+    } else {
+      CollectFragments(*layer_fragments, root_layer, nullptr,
+                       kExcludeOverlayScrollbarSizeForHitTesting,
+                       clip_behavior);
+    }
+
+    // See if the hit test pos is inside the resizer of current layer. This
+    // should be done before walking child layers to avoid that the resizer
+    // clickable area is obscured by the positive child layers.
+    if (scrollable_area_ && scrollable_area_->HitTestResizerInFragments(
+                                *layer_fragments, recursion_data.location)) {
+      if (Node* node_for_resizer = layout_object.NodeForHitTest())
+        result.SetInnerNode(node_for_resizer);
+      return this;
+    }
+  }
+
+  if (check_resizer_only)
+    return nullptr;
+
+  // See if the hit test pos is inside the resizer of the child layers which
+  // has reordered the painting of the overlay overflow controls.
+  if (stacking_node_) {
+    for (auto* layer : base::Reversed(
+             stacking_node_->OverlayOverflowControlsReorderedList())) {
+      if (layer->HitTestLayer(
+              root_layer, nullptr, result, recursion_data,
+              false /*applied_transform*/, local_transform_state,
+              z_offset_for_descendants_ptr, true /*check_resizer_only*/)) {
+        return layer;
+      }
+    }
+  }
+
   // This variable tracks which layer the mouse ends up being inside.
   PaintLayer* candidate_layer = nullptr;
 
@@ -2090,47 +2185,26 @@ PaintLayer* PaintLayer::HitTestLayer(PaintLayer* root_layer,
     candidate_layer = hit_layer;
   }
 
-  // Collect the fragments. This will compute the clip rectangles for each
-  // layer fragment.
-  base::Optional<PaintLayerFragments> layer_fragments;
+  const LayoutObject* stop_node = result.GetHitTestRequest().GetStopNode();
   PhysicalOffset offset;
   if (recursion_data.intersects_location) {
-    layer_fragments.emplace();
-    if (applied_transform) {
-      DCHECK(root_layer == this);
-      PhysicalOffset ignored;
-      AppendSingleFragmentIgnoringPagination(
-          *layer_fragments, root_layer, nullptr,
-          kExcludeOverlayScrollbarSizeForHitTesting, clip_behavior, &ignored);
-    } else {
-      CollectFragments(*layer_fragments, root_layer, nullptr,
-                       kExcludeOverlayScrollbarSizeForHitTesting,
-                       clip_behavior);
-    }
-
-    if (scrollable_area_ && scrollable_area_->HitTestResizerInFragments(
-                                *layer_fragments, recursion_data.location)) {
-      layout_object.UpdateHitTestResult(result,
-                                        recursion_data.location.Point());
-      return this;
-    }
-
     // Next we want to see if the mouse pos is inside the child LayoutObjects of
     // the layer. Check every fragment in reverse order.
     if (IsSelfPaintingLayer() && !layout_object.PaintBlockedByDisplayLock(
                                      DisplayLockLifecycleTarget::kChildren)) {
       // Hit test with a temporary HitTestResult, because we only want to commit
       // to 'result' if we know we're frontmost.
-      HitTestResult temp_result(result.GetHitTestRequest(),
-                                recursion_data.original_location);
+      STACK_UNINITIALIZED HitTestResult temp_result(
+          result.GetHitTestRequest(), recursion_data.original_location);
       temp_result.SetInertNode(result.InertNode());
       bool inside_fragment_foreground_rect = false;
 
       if (HitTestContentsForFragments(
               *layer_fragments, offset, temp_result, recursion_data.location,
               kHitTestDescendants, inside_fragment_foreground_rect) &&
-          IsHitCandidate(this, false, z_offset_for_contents_ptr,
-                         unflattened_transform_state)) {
+          IsHitCandidateForDepthOrder(this, false, z_offset_for_contents_ptr,
+                                      unflattened_transform_state) &&
+          IsHitCandidateForStopNode(GetLayoutObject(), stop_node)) {
         if (result.GetHitTestRequest().ListBased())
           result.Append(temp_result);
         else
@@ -2141,9 +2215,11 @@ PaintLayer* PaintLayer::HitTestLayer(PaintLayer* root_layer,
         // candidate.
         candidate_layer = this;
       } else if (inside_fragment_foreground_rect &&
-                 result.GetHitTestRequest().ListBased()) {
+                 result.GetHitTestRequest().ListBased() &&
+                 IsHitCandidateForStopNode(GetLayoutObject(), stop_node)) {
         result.Append(temp_result);
-      } else if (result.GetHitTestRequest().RetargetForInert()) {
+      } else if (result.GetHitTestRequest().RetargetForInert() &&
+                 IsHitCandidateForStopNode(GetLayoutObject(), stop_node)) {
         result.SetInertNode(temp_result.InertNode());
       }
     }
@@ -2166,26 +2242,30 @@ PaintLayer* PaintLayer::HitTestLayer(PaintLayer* root_layer,
     return candidate_layer;
 
   if (recursion_data.intersects_location && IsSelfPaintingLayer()) {
-    HitTestResult temp_result(result.GetHitTestRequest(),
-                              recursion_data.original_location);
+    STACK_UNINITIALIZED HitTestResult temp_result(
+        result.GetHitTestRequest(), recursion_data.original_location);
     temp_result.SetInertNode(result.InertNode());
     bool inside_fragment_background_rect = false;
     if (HitTestContentsForFragments(*layer_fragments, offset, temp_result,
                                     recursion_data.location, kHitTestSelf,
                                     inside_fragment_background_rect) &&
-        IsHitCandidate(this, false, z_offset_for_contents_ptr,
-                       unflattened_transform_state)) {
+        IsHitCandidateForDepthOrder(this, false, z_offset_for_contents_ptr,
+                                    unflattened_transform_state) &&
+        IsHitCandidateForStopNode(GetLayoutObject(), stop_node)) {
       if (result.GetHitTestRequest().ListBased())
         result.Append(temp_result);
       else
         result = temp_result;
       return this;
-    } else if (result.GetHitTestRequest().RetargetForInert()) {
+    } else if (result.GetHitTestRequest().RetargetForInert() &&
+               IsHitCandidateForStopNode(GetLayoutObject(), stop_node)) {
       result.SetInertNode(temp_result.InertNode());
     }
     if (inside_fragment_background_rect &&
-        result.GetHitTestRequest().ListBased())
+        result.GetHitTestRequest().ListBased() &&
+        IsHitCandidateForStopNode(GetLayoutObject(), stop_node)) {
       result.Append(temp_result);
+    }
   }
 
   return nullptr;
@@ -2226,6 +2306,7 @@ PaintLayer* PaintLayer::HitTestTransformedLayerInFragments(
     const HitTestRecursionData& recursion_data,
     HitTestingTransformState* transform_state,
     double* z_offset,
+    bool check_resizer_only,
     ShouldRespectOverflowClipType clip_behavior) {
   PaintLayerFragments enclosing_pagination_fragments;
   // FIXME: We're missing a sub-pixel offset here crbug.com/348728
@@ -2244,7 +2325,8 @@ PaintLayer* PaintLayer::HitTestTransformedLayerInFragments(
 
     PaintLayer* hit_layer = HitTestLayerByApplyingTransform(
         root_layer, container_layer, result, recursion_data, transform_state,
-        z_offset, fragment.fragment_data->PaginationOffset());
+        z_offset, check_resizer_only,
+        fragment.fragment_data->PaginationOffset());
     if (hit_layer)
       return hit_layer;
   }
@@ -2259,6 +2341,7 @@ PaintLayer* PaintLayer::HitTestLayerByApplyingTransform(
     const HitTestRecursionData& recursion_data,
     HitTestingTransformState* transform_state,
     double* z_offset,
+    bool check_resizer_only,
     const PhysicalOffset& translation_offset) {
   // Create a transform state to accumulate this transform.
   HitTestingTransformState new_transform_state =
@@ -2288,7 +2371,7 @@ PaintLayer* PaintLayer::HitTestLayerByApplyingTransform(
 
   // Now do a hit test with the root layer shifted to be us.
   return HitTestLayer(this, container_layer, result, new_recursion_data, true,
-                      &new_transform_state, z_offset);
+                      &new_transform_state, z_offset, check_resizer_only);
 }
 
 bool PaintLayer::HitTestContents(HitTestResult& result,
@@ -2384,16 +2467,15 @@ PaintLayer* PaintLayer::HitTestChildren(
     if (child_layer->IsReplacedNormalFlowStacking())
       continue;
 
-    // Calling IsDescendantOf is sad (slow), but it's the only way to tell
-    // whether the child layer is a descendant of the stop node.
+    // Avoid the call to child_layer->HitTestLayer() if possible.
     if (stop_layer == this &&
-        child_layer->GetLayoutObject().IsDescendantOf(stop_node)) {
+        !IsHitCandidateForStopNode(child_layer->GetLayoutObject(), stop_node)) {
       continue;
     }
 
     PaintLayer* hit_layer = nullptr;
-    HitTestResult temp_result(result.GetHitTestRequest(),
-                              recursion_data.original_location);
+    STACK_UNINITIALIZED HitTestResult temp_result(
+        result.GetHitTestRequest(), recursion_data.original_location);
     temp_result.SetInertNode(result.InertNode());
     hit_layer = child_layer->HitTestLayer(
         root_layer, this, temp_result, recursion_data, false, transform_state,
@@ -2404,8 +2486,8 @@ PaintLayer* PaintLayer::HitTestChildren(
     if (result.GetHitTestRequest().ListBased())
       result.Append(temp_result);
 
-    if (IsHitCandidate(hit_layer, depth_sort_descendants, z_offset,
-                       unflattened_transform_state)) {
+    if (IsHitCandidateForDepthOrder(hit_layer, depth_sort_descendants, z_offset,
+                                    unflattened_transform_state)) {
       result_layer = hit_layer;
       if (!result.GetHitTestRequest().ListBased())
         result = temp_result;
@@ -3211,9 +3293,9 @@ void PaintLayer::StyleDidChange(StyleDifference diff,
   }
 }
 
-LayoutSize PaintLayer::ScrolledContentOffset() const {
+LayoutSize PaintLayer::PixelSnappedScrolledContentOffset() const {
   if (GetLayoutObject().HasOverflowClip())
-    return GetLayoutBox()->ScrolledContentOffset();
+    return GetLayoutBox()->PixelSnappedScrolledContentOffset();
   return LayoutSize();
 }
 

@@ -27,16 +27,6 @@ CrElementsBrowserTest.prototype = {
   get browsePreload() {
     throw 'this is abstract and should be overriden by subclasses';
   },
-
-  /** @override */
-  runAccessibilityChecks: true,
-
-  /** @override */
-  setUp: function() {
-    PolymerTest.prototype.setUp.call(this);
-    // We aren't loading the main document.
-    this.accessibilityAuditConfig.ignoreSelectors('humanLangMissing', 'html');
-  },
 };
 
 /**
@@ -296,7 +286,8 @@ CrPolicyNetworkBehaviorMojoTest.prototype = {
   __proto__: CrElementsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://settings/internet_page/internet_page.html',
+  browsePreload:
+      'chrome://os-settings/chromeos/internet_page/internet_page.html',
 
   /** @override */
   extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
@@ -319,7 +310,8 @@ CrElementsPolicyNetworkIndicatorMojoTest.prototype = {
   __proto__: CrElementsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://settings/internet_page/internet_page.html',
+  browsePreload:
+      'chrome://os-settings/chromeos/internet_page/internet_page.html',
 
   /** @override */
   extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([

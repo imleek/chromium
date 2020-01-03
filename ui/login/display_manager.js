@@ -20,6 +20,7 @@
 /** @const */ var SCREEN_OOBE_DEMO_PREFERENCES = 'demo-preferences';
 /** @const */ var SCREEN_OOBE_KIOSK_ENABLE = 'kiosk-enable';
 /** @const */ var SCREEN_OOBE_AUTO_ENROLLMENT_CHECK = 'auto-enrollment-check';
+/** @const */ var SCREEN_PACKAGED_LICENSE = 'packaged-license';
 /** @const */ var SCREEN_GAIA_SIGNIN = 'gaia-signin';
 /** @const */ var SCREEN_ACCOUNT_PICKER = 'account-picker';
 /** @const */ var SCREEN_ERROR_MESSAGE = 'error-message';
@@ -410,6 +411,7 @@ cr.define('cr.ui.login', function() {
       } else if (name == ACCELERATOR_ENROLLMENT) {
         if (attributes.startEnrollmentAllowed ||
             currentStepId == SCREEN_GAIA_SIGNIN ||
+            currentStepId == SCREEN_PACKAGED_LICENSE ||
             currentStepId == SCREEN_ACCOUNT_PICKER) {
           chrome.send('toggleEnrollmentScreen');
         } else if (attributes.postponeEnrollmentAllowed ||
@@ -811,6 +813,12 @@ cr.define('cr.ui.login', function() {
         this.appendButtons_(screen.buttons, screenId);
         if (screen.updateLocalizedContent)
           screen.updateLocalizedContent();
+      }
+      var dynamicElements = document.getElementsByClassName('i18n-dynamic');
+      for (var child of dynamicElements) {
+        if (typeof(child.i18nUpdateLocale) === 'function') {
+          child.i18nUpdateLocale();
+        }
       }
       var isInTabletMode = loadTimeData.getBoolean('isInTabletMode');
       this.setTabletModeState_(isInTabletMode);

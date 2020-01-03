@@ -32,12 +32,13 @@
 #include "url/third_party/mozilla/url_parse.h"
 
 #define REGISTER_RESPONSE_HANDLER(url, method) \
-  request_handlers_.insert(std::make_pair( \
-        url.path(), base::Bind(&FakeGaia::method, base::Unretained(this))))
+  request_handlers_.insert(std::make_pair(     \
+      url.path(),                              \
+      base::BindRepeating(&FakeGaia::method, base::Unretained(this))))
 
 #define REGISTER_PATH_RESPONSE_HANDLER(path, method) \
-  request_handlers_.insert(std::make_pair( \
-        path, base::Bind(&FakeGaia::method, base::Unretained(this))))
+  request_handlers_.insert(std::make_pair(           \
+      path, base::BindRepeating(&FakeGaia::method, base::Unretained(this))))
 
 using net::test_server::BasicHttpResponse;
 using net::test_server::HttpRequest;
@@ -59,9 +60,6 @@ const char kTestCookieAttributes[] =
     "; Path=/; HttpOnly; SameSite=None; Secure";
 
 const char kDefaultGaiaId[] = "12345";
-
-const base::FilePath::CharType kServiceLogin[] =
-    FILE_PATH_LITERAL("google_apis/test/service_login.html");
 
 const base::FilePath::CharType kEmbeddedSetupChromeos[] =
     FILE_PATH_LITERAL("google_apis/test/embedded_setup_chromeos.html");
@@ -142,9 +140,6 @@ FakeGaia::FakeGaia() : issue_oauth_code_cookie_(false) {
   base::FilePath source_root_dir;
   base::PathService::Get(base::DIR_SOURCE_ROOT, &source_root_dir);
   CHECK(base::ReadFileToString(
-      source_root_dir.Append(base::FilePath(kServiceLogin)),
-      &service_login_response_));
-  CHECK(base::ReadFileToString(
       source_root_dir.Append(base::FilePath(kEmbeddedSetupChromeos)),
       &embedded_setup_chromeos_response_));
 }
@@ -210,10 +205,6 @@ void FakeGaia::Initialize() {
   // Handles /MergeSession GAIA call.
   REGISTER_RESPONSE_HANDLER(
       gaia_urls->merge_session_url(), HandleMergeSession);
-
-  // Handles /ServiceLogin GAIA call.
-  REGISTER_RESPONSE_HANDLER(
-      gaia_urls->service_login_url(), HandleServiceLogin);
 
   // Handles /embedded/setup/v2/chromeos GAIA call.
   REGISTER_RESPONSE_HANDLER(gaia_urls->embedded_setup_chromeos_url(2),
@@ -442,13 +433,6 @@ const FakeGaia::AccessTokenInfo* FakeGaia::GetAccessTokenInfo(
   }
 
   return nullptr;
-}
-
-void FakeGaia::HandleServiceLogin(const HttpRequest& request,
-                                  BasicHttpResponse* http_response) {
-  http_response->set_code(net::HTTP_OK);
-  http_response->set_content(service_login_response_);
-  http_response->set_content_type("text/html");
 }
 
 void FakeGaia::HandleEmbeddedSetupChromeos(const HttpRequest& request,

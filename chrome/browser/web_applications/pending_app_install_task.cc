@@ -18,6 +18,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/web_applications/components/app_shortcut_manager.h"
+#include "chrome/browser/web_applications/components/file_handler_manager.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
@@ -50,12 +51,14 @@ PendingAppInstallTask::PendingAppInstallTask(
     Profile* profile,
     AppRegistrar* registrar,
     AppShortcutManager* shortcut_manger,
+    FileHandlerManager* file_handler_manager,
     WebAppUiManager* ui_manager,
     InstallFinalizer* install_finalizer,
     ExternalInstallOptions install_options)
     : profile_(profile),
       registrar_(registrar),
       shortcut_manager_(shortcut_manger),
+      file_handler_manager_(file_handler_manager),
       install_finalizer_(install_finalizer),
       ui_manager_(ui_manager),
       externally_installed_app_prefs_(profile_->GetPrefs()),
@@ -94,15 +97,28 @@ void PendingAppInstallTask::Install(content::WebContents* web_contents,
   if (load_url_result == WebAppUrlLoader::Result::kFailedWebContentsDestroyed)
     return;
 
+  InstallResultCode code = InstallResultCode::kInstallURLLoadFailed;
+
+  switch (load_url_result) {
+    case WebAppUrlLoader::Result::kUrlLoaded:
+    case WebAppUrlLoader::Result::kFailedWebContentsDestroyed:
+      // Handled above.
+      NOTREACHED();
+      break;
+    case WebAppUrlLoader::Result::kRedirectedUrlLoaded:
+      code = InstallResultCode::kInstallURLRedirected;
+      break;
+    case WebAppUrlLoader::Result::kFailedUnknownReason:
+      code = InstallResultCode::kInstallURLLoadFailed;
+      break;
+    case WebAppUrlLoader::Result::kFailedPageTookTooLong:
+      code = InstallResultCode::kInstallURLLoadTimeOut;
+      break;
+  }
+
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::BindOnce(
-          std::move(result_callback),
-          Result(
-              load_url_result == WebAppUrlLoader::Result::kRedirectedUrlLoaded
-                  ? InstallResultCode::kInstallURLRedirected
-                  : InstallResultCode::kInstallURLLoadFailed,
-              base::nullopt)));
+      base::BindOnce(std::move(result_callback), Result(code, base::nullopt)));
 }
 
 void PendingAppInstallTask::UninstallPlaceholderApp(
@@ -135,7 +151,8 @@ void PendingAppInstallTask::OnPlaceholderUninstalled(
     LOG(ERROR) << "Failed to uninstall placeholder for: "
                << install_options_.url;
     std::move(result_callback)
-        .Run(Result(InstallResultCode::kFailedUnknownReason, base::nullopt));
+        .Run(Result(InstallResultCode::kFailedPlaceholderUninstall,
+                    base::nullopt));
     return;
   }
   ContinueWebAppInstall(web_contents, std::move(result_callback));
@@ -242,13 +259,19 @@ void PendingAppInstallTask::OnWebAppInstalled(bool is_placeholder,
     shortcut_manager_->CreateShortcuts(
         app_id, install_options_.add_to_desktop,
         base::BindOnce(
-            [](base::ScopedClosureRunner scoped_closure,
+            [](base::WeakPtr<PendingAppInstallTask> task, const AppId& app_id,
+               base::ScopedClosureRunner scoped_closure,
                bool shortcuts_created) {
+              if (task) {
+                task->file_handler_manager_->EnableAndRegisterOsFileHandlers(
+                    app_id);
+              }
+
               // Even if the shortcuts failed to be created, we consider the
               // installation successful since an app was created.
               scoped_closure.RunAndReset();
             },
-            std::move(scoped_closure)));
+            weak_ptr_factory_.GetWeakPtr(), app_id, std::move(scoped_closure)));
     return;
   }
 }

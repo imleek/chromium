@@ -105,6 +105,7 @@ SVGAnimateElement::SVGAnimateElement(Document& document)
 SVGAnimateElement::SVGAnimateElement(const QualifiedName& tag_name,
                                      Document& document)
     : SVGAnimationElement(tag_name, document),
+      attribute_name_(AnyQName()),
       type_(kAnimatedUnknown),
       css_property_id_(CSSPropertyID::kInvalid),
       from_property_value_type_(kRegularPropertyValue),
@@ -187,7 +188,7 @@ void SVGAnimateElement::ResolveTargetProperty() {
   // also disallows the perfectly "valid" animation of 'className' on said
   // element. If SVGScriptElement.href is transitioned off of SVGAnimatedHref,
   // this can be removed.
-  if (IsSVGScriptElement(*targetElement())) {
+  if (IsA<SVGScriptElement>(*targetElement())) {
     type_ = kAnimatedUnknown;
     css_property_id_ = CSSPropertyID::kInvalid;
   }
@@ -213,9 +214,7 @@ AnimatedPropertyType SVGAnimateElement::GetAnimatedPropertyType() const {
   return !targetElement() ? kAnimatedUnknown : type_;
 }
 
-bool SVGAnimateElement::HasValidTarget() const {
-  if (!SVGAnimationElement::HasValidTarget())
-    return false;
+bool SVGAnimateElement::HasValidAnimation() const {
   if (AttributeName() == AnyQName())
     return false;
   if (type_ == kAnimatedUnknown)
@@ -352,7 +351,7 @@ void SVGAnimateElement::CalculateAnimatedValue(
   DCHECK_EQ(result_animation_element->GetAnimatedPropertyType(),
             GetAnimatedPropertyType());
 
-  if (IsSVGSetElement(*this))
+  if (IsA<SVGSetElement>(*this))
     percentage = 1;
 
   if (GetCalcMode() == kCalcModeDiscrete)
@@ -421,7 +420,7 @@ bool SVGAnimateElement::CalculateFromAndByValues(const String& from_string,
       !AnimatedPropertyTypeSupportsAddition())
     return false;
 
-  DCHECK(!IsSVGSetElement(*this));
+  DCHECK(!IsA<SVGSetElement>(*this));
 
   from_property_ = CreatePropertyForAnimation(from_string);
   from_property_value_type_ = PropertyValueType(AttributeName(), from_string);
@@ -537,28 +536,37 @@ float SVGAnimateElement::CalculateDistance(const String& from_string,
   return from_value->CalculateDistance(to_value, targetElement());
 }
 
-void SVGAnimateElement::WillChangeAnimationTarget() {
-  SVGAnimationElement::WillChangeAnimationTarget();
-  // Should be cleared by the above.
+void SVGAnimateElement::WillChangeAnimatedType() {
+  UnregisterAnimation(attribute_name_);
+  // Should've been cleared by the above if needed.
   DCHECK(!animated_value_);
   from_property_.Clear();
   to_property_.Clear();
   to_at_end_of_duration_property_.Clear();
 }
 
-void SVGAnimateElement::DidChangeAnimationTarget() {
-  // Call this before calling the super-class, because it will check
-  // HasValidTarget() which depends on the animation type being resolved.
+void SVGAnimateElement::DidChangeAnimatedType() {
   UpdateTargetProperty();
+  RegisterAnimation(attribute_name_);
+}
+
+void SVGAnimateElement::WillChangeAnimationTarget() {
+  SVGAnimationElement::WillChangeAnimationTarget();
+  WillChangeAnimatedType();
+}
+
+void SVGAnimateElement::DidChangeAnimationTarget() {
+  DidChangeAnimatedType();
   SVGAnimationElement::DidChangeAnimationTarget();
 }
 
 void SVGAnimateElement::SetAttributeName(const QualifiedName& attribute_name) {
   if (attribute_name == attribute_name_)
     return;
-  WillChangeAnimationTarget();
+  WillChangeAnimatedType();
   attribute_name_ = attribute_name;
-  DidChangeAnimationTarget();
+  DidChangeAnimatedType();
+  AnimationAttributeChanged();
 }
 
 void SVGAnimateElement::SetAttributeType(
@@ -570,9 +578,10 @@ void SVGAnimateElement::SetAttributeType(
     attribute_type = kAttributeTypeXML;
   if (attribute_type == attribute_type_)
     return;
-  WillChangeAnimationTarget();
+  WillChangeAnimatedType();
   attribute_type_ = attribute_type;
-  DidChangeAnimationTarget();
+  DidChangeAnimatedType();
+  AnimationAttributeChanged();
 }
 
 void SVGAnimateElement::Trace(blink::Visitor* visitor) {

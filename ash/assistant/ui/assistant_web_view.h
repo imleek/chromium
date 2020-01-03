@@ -24,13 +24,14 @@ namespace ash {
 enum class AssistantButtonId;
 class AssistantWebViewDelegate;
 
-// AssistantWebView is a child of AssistantBubbleView which allows Assistant UI
-// to render remotely hosted content within its bubble. It provides a CaptionBar
-// for window level controls and embeds web contents with help from the Content
-// Service.
+// TODO(b/146520500): Merge into AssistantWebContainerView after deprecating
+// standalone Assistant UI.
+// AssistantWebView is a child of AssistantContainerView which allows Assistant
+// UI to render remotely hosted content within its bubble. It provides a
+// CaptionBar for window level controls and embeds web contents with help from
+// the Content Service.
 class COMPONENT_EXPORT(ASSISTANT_UI) AssistantWebView
     : public views::View,
-      public AssistantViewDelegateObserver,
       public CaptionBarDelegate,
       public content::NavigableContentsObserver,
       public AssistantUiModelObserver {
@@ -50,11 +51,6 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AssistantWebView
   // CaptionBarDelegate:
   bool OnCaptionButtonPressed(AssistantButtonId id) override;
 
-  // AssistantViewDelegateObserver:
-  void OnDeepLinkReceived(
-      assistant::util::DeepLinkType type,
-      const std::map<std::string, std::string>& params) override;
-
   // content::NavigableContentsObserver:
   void DidStopLoading() override;
   void DidSuppressNavigation(const GURL& url,
@@ -69,6 +65,9 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AssistantWebView
       base::Optional<AssistantEntryPoint> entry_point,
       base::Optional<AssistantExitPoint> exit_point) override;
   void OnUsableWorkAreaChanged(const gfx::Rect& usable_work_area) override;
+
+  // Invoke to open the specified |url|.
+  void OpenUrl(const GURL& url);
 
   views::View* caption_bar_for_testing() { return caption_bar_; }
 

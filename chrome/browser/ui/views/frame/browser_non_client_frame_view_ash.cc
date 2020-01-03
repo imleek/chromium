@@ -17,7 +17,6 @@
 #include "ash/public/cpp/touch_uma.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/cpp/window_state_type.h"
-#include "ash/public/mojom/constants.mojom.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/metrics/user_metrics.h"
@@ -237,10 +236,7 @@ void BrowserNonClientFrameViewAsh::UpdateFrameColor() {
   } else if (!browser_view()->browser()->deprecated_is_app()) {
     // TODO(crbug.com/836128): Remove when System Web Apps flag is removed, as
     // the above web-app branch will render the theme color.
-    active_color =
-        base::FeatureList::IsEnabled(chromeos::features::kSplitSettings)
-            ? SK_ColorWHITE
-            : SkColorSetARGB(0xff, 0x25, 0x4f, 0xae);
+    active_color = SK_ColorWHITE;
   }
 
   if (active_color) {
@@ -253,6 +249,8 @@ void BrowserNonClientFrameViewAsh::UpdateFrameColor() {
   }
 
   frame_header_->UpdateFrameColors();
+
+  BrowserNonClientFrameView::UpdateFrameColor();
 }
 
 void BrowserNonClientFrameViewAsh::UpdateThrobber(bool running) {
@@ -387,8 +385,9 @@ void BrowserNonClientFrameViewAsh::Layout() {
   if (profile_indicator_icon_)
     LayoutProfileIndicator();
   if (web_app_frame_toolbar()) {
-    web_app_frame_toolbar()->LayoutInContainer(
-        0, caption_button_container_->x(), 0, painted_height);
+    web_app_frame_toolbar()->LayoutInContainer(GetToolbarLeftInset(),
+                                               caption_button_container_->x(),
+                                               0, painted_height);
   }
 
   BrowserNonClientFrameView::Layout();
@@ -642,7 +641,16 @@ bool BrowserNonClientFrameViewAsh::ShouldShowCaptionButtons() const {
   return !IsInOverviewMode();
 }
 
+int BrowserNonClientFrameViewAsh::GetToolbarLeftInset() const {
+  // Include padding on left and right of icon.
+  return profile_indicator_icon_
+             ? kProfileIndicatorPadding * 2 + profile_indicator_icon_->width()
+             : 0;
+}
+
 int BrowserNonClientFrameViewAsh::GetTabStripLeftInset() const {
+  // Include padding on left of icon.
+  // The tab strip has its own 'padding' to the right of the icon.
   return profile_indicator_icon_
              ? kProfileIndicatorPadding + profile_indicator_icon_->width()
              : 0;

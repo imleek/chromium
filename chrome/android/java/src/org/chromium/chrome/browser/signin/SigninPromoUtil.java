@@ -50,7 +50,7 @@ public class SigninPromoUtil {
             return false;
         }
 
-        SigninActivity.startIfAllowed(activity, SigninAccessPoint.SIGNIN_PROMO);
+        SigninUtils.startSigninActivityIfAllowed(activity, SigninAccessPoint.SIGNIN_PROMO);
         preferenceManager.setSigninPromoLastShownVersion(currentMajorVersion);
         preferenceManager.setSigninPromoLastAccountNames(
                 new ArraySet<>(AccountManagerFacade.get().tryGetGoogleAccountNames()));
@@ -127,7 +127,7 @@ public class SigninPromoUtil {
     private static void openSigninActivityForPromo(WindowAndroid window, int accessPoint) {
         Activity activity = window.getActivity().get();
         if (activity != null) {
-            SigninActivity.startIfAllowed(activity, accessPoint);
+            SigninUtils.startSigninActivityIfAllowed(activity, accessPoint);
         }
     }
 }

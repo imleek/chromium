@@ -18,7 +18,6 @@ import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.findinpage.FindMatchRectsDetails;
 import org.chromium.chrome.browser.findinpage.FindNotificationDetails;
-import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.media.MediaCaptureNotificationService;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
 import org.chromium.chrome.browser.policy.PolicyAuditorJni;
@@ -32,12 +31,12 @@ import org.chromium.content_public.browser.WebContents;
  * some calls to the registered {@link TabObserver}.
  */
 public abstract class TabWebContentsDelegateAndroid extends WebContentsDelegateAndroid {
-    protected final Tab mTab;
+    protected final TabImpl mTab;
     protected Handler mHandler;
     private final Runnable mCloseContentsRunnable;
 
     public TabWebContentsDelegateAndroid(Tab tab) {
-        mTab = tab;
+        mTab = (TabImpl) tab;
         mHandler = new Handler();
         mCloseContentsRunnable = () -> {
             RewindableIterator<TabObserver> observers = mTab.getTabObservers();
@@ -117,12 +116,12 @@ public abstract class TabWebContentsDelegateAndroid extends WebContentsDelegateA
 
     @Override
     public void enterFullscreenModeForTab(boolean prefersNavigationBar) {
-        mTab.enterFullscreenMode(new FullscreenOptions(prefersNavigationBar));
+        assert false : "Fullscreen mode switching is supported on ChromeActivity only.";
     }
 
     @Override
     public void exitFullscreenModeForTab() {
-        mTab.exitFullscreenMode();
+        assert false : "Fullscreen mode switching is supported on ChromeActivity only.";
     }
 
     @Override

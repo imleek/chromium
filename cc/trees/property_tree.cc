@@ -7,7 +7,6 @@
 #include <set>
 #include <vector>
 
-#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/checked_math.h"
@@ -25,8 +24,7 @@
 namespace cc {
 
 template <typename T>
-PropertyTree<T>::PropertyTree()
-    : needs_update_(false) {
+PropertyTree<T>::PropertyTree() : needs_update_(false) {
   nodes_.push_back(T());
   back()->id = kRootNodeId;
   back()->parent_id = kInvalidNodeId;
@@ -299,7 +297,7 @@ bool TransformTree::CombineInversesBetween(int source_id,
 }
 
 // This function should match the offset we set for sticky position layer in
-// CompositedLayerMapping::UpdateMainGraphicsLayerGeometry.
+// blink::LayoutBoxModelObject::StickyPositionOffset.
 gfx::Vector2dF TransformTree::StickyPositionOffset(TransformNode* node) {
   StickyPositionNodeData* sticky_data = MutableStickyPositionData(node->id);
   if (!sticky_data)
@@ -319,7 +317,7 @@ gfx::Vector2dF TransformTree::StickyPositionOffset(TransformNode* node) {
     scroll_position -= transform_node->snap_amount;
   }
 
-  gfx::Rect clip = constraint.constraint_box_rect;
+  gfx::RectF clip = constraint.constraint_box_rect;
   clip.Offset(scroll_position.x(), scroll_position.y());
 
   // The clip region may need to be offset by the outer viewport bounds, e.g. if
@@ -420,7 +418,8 @@ gfx::Vector2dF TransformTree::StickyPositionOffset(TransformNode* node) {
       ancestor_sticky_box_offset + ancestor_containing_block_offset +
       sticky_offset;
 
-  return sticky_offset;
+  // return
+  return gfx::Vector2dF(roundf(sticky_offset.x()), roundf(sticky_offset.y()));
 }
 
 void TransformTree::UpdateLocalTransform(TransformNode* node) {
@@ -1419,23 +1418,44 @@ gfx::ScrollOffset ScrollTree::PullDeltaForMainThread(
   return delta;
 }
 
-void ScrollTree::CollectScrollDeltas(ScrollAndScaleSet* scroll_info,
-                                     ElementId inner_viewport_scroll_element_id,
-                                     bool use_fractional_deltas) {
+void ScrollTree::CollectScrollDeltas(
+    ScrollAndScaleSet* scroll_info,
+    ElementId inner_viewport_scroll_element_id,
+    bool use_fractional_deltas,
+    const base::flat_set<ElementId>& snapped_elements) {
   DCHECK(!property_trees()->is_main_thread);
+  TRACE_EVENT0("cc", "ScrollTree::CollectScrollDeltas");
   for (auto map_entry : synced_scroll_offset_map_) {
     gfx::ScrollOffset scroll_delta =
         PullDeltaForMainThread(map_entry.second.get(), use_fractional_deltas);
 
     ElementId id = map_entry.first;
 
-    if (!scroll_delta.IsZero()) {
+    base::Optional<TargetSnapAreaElementIds> snap_target_ids;
+    if (snapped_elements.find(id) != snapped_elements.end()) {
+      ScrollNode* scroll_node = FindNodeFromElementId(id);
+      if (scroll_node && scroll_node->snap_container_data) {
+        snap_target_ids = scroll_node->snap_container_data.value()
+                              .GetTargetSnapAreaElementIds();
+      }
+    }
+
+    // Snap targets are set at the end of scroll offset animations (i.e when the
+    // animation state is updated to FINISHED). The state can be updated after
+    // the compositor's draw stage, which means the next attempt to push the
+    // snap targets is during the next frame. This makes it possible for the
+    // scroll delta to be zero.
+    if (!scroll_delta.IsZero() || snap_target_ids) {
+      TRACE_EVENT_INSTANT2("cc", "CollectScrollDeltas",
+                           TRACE_EVENT_SCOPE_THREAD, "x", scroll_delta.x(), "y",
+                           scroll_delta.y());
+      ScrollAndScaleSet::ScrollUpdateInfo update(id, scroll_delta,
+                                                 snap_target_ids);
       if (id == inner_viewport_scroll_element_id) {
         // Inner (visual) viewport is stored separately.
-        scroll_info->inner_viewport_scroll.element_id = id;
-        scroll_info->inner_viewport_scroll.scroll_delta = scroll_delta;
+        scroll_info->inner_viewport_scroll = std::move(update);
       } else {
-        scroll_info->scrolls.push_back({id, scroll_delta});
+        scroll_info->scrolls.push_back(std::move(update));
       }
     }
   }
@@ -1587,23 +1607,6 @@ const gfx::ScrollOffset ScrollTree::GetScrollOffsetDeltaForTesting(
     return gfx::ScrollOffset();
 }
 
-void ScrollTree::DistributeScroll(ScrollNode* scroll_node,
-                                  ScrollState* scroll_state) {
-  DCHECK(scroll_node && scroll_state);
-  if (scroll_state->FullyConsumed())
-    return;
-  scroll_state->DistributeToScrollChainDescendant();
-
-  // If we're currently scrolling a node other than this one, prevent the scroll
-  // from propagating to this node.
-  if (scroll_state->delta_consumed_for_scroll_sequence() &&
-      scroll_state->current_native_scrolling_node()->id != scroll_node->id) {
-    return;
-  }
-
-  scroll_state->layer_tree_impl()->ApplyScroll(scroll_node, scroll_state);
-}
-
 gfx::Vector2dF ScrollTree::ScrollBy(ScrollNode* scroll_node,
                                     const gfx::Vector2dF& scroll,
                                     LayerTreeImpl* layer_tree_impl) {
@@ -1637,11 +1640,13 @@ void ScrollTree::SetScrollCallbacks(base::WeakPtr<ScrollCallbacks> callbacks) {
   callbacks_ = std::move(callbacks);
 }
 
-void ScrollTree::NotifyDidScroll(ElementId scroll_element_id,
-                                 const gfx::ScrollOffset& scroll_offset) {
+void ScrollTree::NotifyDidScroll(
+    ElementId scroll_element_id,
+    const gfx::ScrollOffset& scroll_offset,
+    const base::Optional<TargetSnapAreaElementIds>& snap_target_ids) {
   DCHECK(property_trees()->is_main_thread);
   if (callbacks_)
-    callbacks_->DidScroll(scroll_element_id, scroll_offset);
+    callbacks_->DidScroll(scroll_element_id, scroll_offset, snap_target_ids);
 }
 
 void ScrollTree::NotifyDidChangeScrollbarsHidden(ElementId scroll_element_id,
@@ -1929,36 +1934,34 @@ void PropertyTrees::ResetAllChangeTracking() {
 std::unique_ptr<base::trace_event::TracedValue> PropertyTrees::AsTracedValue()
     const {
   auto value = base::WrapUnique(new base::trace_event::TracedValue);
-
-  value->SetInteger("sequence_number", sequence_number);
-
-  value->BeginDictionary("transform_tree");
-  transform_tree.AsValueInto(value.get());
-  value->EndDictionary();
-
-  value->BeginDictionary("effect_tree");
-  effect_tree.AsValueInto(value.get());
-  value->EndDictionary();
-
-  value->BeginDictionary("clip_tree");
-  clip_tree.AsValueInto(value.get());
-  value->EndDictionary();
-
-  value->BeginDictionary("scroll_tree");
-  scroll_tree.AsValueInto(value.get());
-  value->EndDictionary();
-
+  AsValueInto(value.get());
   return value;
 }
 
+void PropertyTrees::AsValueInto(base::trace_event::TracedValue* value) const {
+  value->SetInteger("sequence_number", sequence_number);
+
+  value->BeginDictionary("transform_tree");
+  transform_tree.AsValueInto(value);
+  value->EndDictionary();
+
+  value->BeginDictionary("effect_tree");
+  effect_tree.AsValueInto(value);
+  value->EndDictionary();
+
+  value->BeginDictionary("clip_tree");
+  clip_tree.AsValueInto(value);
+  value->EndDictionary();
+
+  value->BeginDictionary("scroll_tree");
+  scroll_tree.AsValueInto(value);
+  value->EndDictionary();
+}
+
 std::string PropertyTrees::ToString() const {
-  std::string str;
-  base::JSONWriter::WriteWithOptions(
-      *AsTracedValue()->ToBaseValue(),
-      base::JSONWriter::OPTIONS_OMIT_DOUBLE_TYPE_PRESERVATION |
-          base::JSONWriter::OPTIONS_PRETTY_PRINT,
-      &str);
-  return str;
+  base::trace_event::TracedValueJSON value;
+  AsValueInto(&value);
+  return value.ToFormattedJSON();
 }
 
 CombinedAnimationScale PropertyTrees::GetAnimationScales(

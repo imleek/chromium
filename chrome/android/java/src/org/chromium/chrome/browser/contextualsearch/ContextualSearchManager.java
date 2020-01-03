@@ -37,6 +37,8 @@ import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler.OverrideUrlLoadingResult;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationParams;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager.FullscreenListener;
+import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.gsa.GSAContextDisplaySelection;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.preferences.Pref;
@@ -44,12 +46,13 @@ import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabRedirectHandler;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
@@ -74,9 +77,9 @@ import java.util.regex.Pattern;
  * Manager for the Contextual Search feature. This class keeps track of the status of Contextual
  * Search and coordinates the control with the layout.
  */
-public class ContextualSearchManager
-        implements ContextualSearchManagementDelegate, ContextualSearchTranslateInterface,
-                   ContextualSearchNetworkCommunicator, ContextualSearchSelectionHandler {
+public class ContextualSearchManager implements ContextualSearchManagementDelegate,
+                                                ContextualSearchNetworkCommunicator,
+                                                ContextualSearchSelectionHandler {
     /** A delegate for reporting selected context to GSA for search quality. */
     public interface ContextReporterDelegate {
         /**
@@ -86,9 +89,9 @@ public class ContextualSearchManager
         void reportDisplaySelection(@Nullable GSAContextDisplaySelection displaySelection);
     }
 
-    // TODO(donnd): provide an inner class that implements some of these interfaces (like the
-    // ContextualSearchTranslateInterface) rather than having the manager itself implement the
-    // interface because that exposes all the public methods of that interface at the manager level.
+    // TODO(donnd): provide an inner class that implements some of these interfaces rather than
+    // having the manager itself implement the interface because that exposes all the public methods
+    // of that interface at the manager level.
 
     private static final String TAG = "ContextualSearch";
 
@@ -130,6 +133,7 @@ public class ContextualSearchManager
     private final ChromeActivity mActivity;
     private final ContextualSearchTabPromotionDelegate mTabPromotionDelegate;
     private final ViewTreeObserver.OnGlobalFocusChangeListener mOnFocusChangeListener;
+    private final FullscreenListener mFullscreenListener;
 
     /**
      * The {@link ContextualSearchInteractionRecorder} to use to record user interactions and apply
@@ -239,11 +243,23 @@ public class ContextualSearchManager
             }
         };
 
+        mFullscreenListener = new FullscreenListener() {
+            @Override
+            public void onEnterFullscreen(Tab tab, FullscreenOptions options) {
+                hideContextualSearch(StateChangeReason.UNKNOWN);
+            }
+
+            @Override
+            public void onExitFullscreen(Tab tab) {
+                hideContextualSearch(StateChangeReason.UNKNOWN);
+            }
+        };
+
+        mActivity.getFullscreenManager().addListener(mFullscreenListener);
         mSelectionController = new ContextualSearchSelectionController(activity, this);
         mNetworkCommunicator = this;
         mPolicy = new ContextualSearchPolicy(mSelectionController, mNetworkCommunicator);
-        mTranslateController =
-                ContextualSearchTranslateController.getContextualSearchTranslation(mPolicy, this);
+        mTranslateController = new ContextualSearchTranslationImpl();
         mInternalStateController = new ContextualSearchInternalStateController(
                 mPolicy, getContextualSearchInternalStateHandler());
         mInteractionRecorder = new ContextualSearchRankerLoggerImpl();
@@ -284,6 +300,7 @@ public class ContextualSearchManager
         if (!mIsInitialized) return;
 
         hideContextualSearch(StateChangeReason.UNKNOWN);
+        mActivity.getFullscreenManager().removeListener(mFullscreenListener);
         mParentView.getViewTreeObserver().removeOnGlobalFocusChangeListener(mOnFocusChangeListener);
         ContextualSearchManagerJni.get().destroy(mNativeContextualSearchManagerPtr, this);
         stopListeningForHideNotifications();
@@ -475,8 +492,8 @@ public class ContextualSearchManager
         assert mSelectionController.getSelectionType() != SelectionType.UNDETERMINED;
         mWasActivatedByTap = mSelectionController.getSelectionType() == SelectionType.TAP;
 
-        Tracker tracker =
-                TrackerFactory.getTrackerForProfile(mActivity.getActivityTab().getProfile());
+        Tab tab = mActivity.getActivityTab();
+        Tracker tracker = TrackerFactory.getTrackerForProfile(((TabImpl) tab).getProfile());
         tracker.notifyEvent(mWasActivatedByTap
                         ? EventConstants.CONTEXTUAL_SEARCH_TRIGGERED_BY_TAP
                         : EventConstants.CONTEXTUAL_SEARCH_TRIGGERED_BY_LONGPRESS);
@@ -946,22 +963,6 @@ public class ContextualSearchManager
         for (ContextualSearchObserver observer : mObservers) {
             observer.onHideContextualSearch();
         }
-    }
-
-    // ============================================================================================
-    // ContextualSearchTranslateInterface
-    // ============================================================================================
-
-    @Override
-    public String getAcceptLanguages() {
-        return ContextualSearchManagerJni.get().getAcceptLanguages(
-                mNativeContextualSearchManagerPtr, this);
-    }
-
-    @Override
-    public String getTranslateServiceTargetLanguage() {
-        return ContextualSearchManagerJni.get().getTargetLanguage(
-                mNativeContextualSearchManagerPtr, this);
     }
 
     // ============================================================================================
@@ -1857,7 +1858,6 @@ public class ContextualSearchManager
     @NativeMethods
     interface Natives {
         long init(ContextualSearchManager caller);
-
         void destroy(long nativeContextualSearchManager, ContextualSearchManager caller);
         void startSearchTermResolutionRequest(long nativeContextualSearchManager,
                 ContextualSearchManager caller, ContextualSearchContext contextualSearchContext,
@@ -1869,11 +1869,5 @@ public class ContextualSearchManager
                 long nativeContextualSearchManager, ContextualSearchManager caller, String url);
         void enableContextualSearchJsApiForWebContents(long nativeContextualSearchManager,
                 ContextualSearchManager caller, WebContents overlayWebContents);
-        // Don't call these directly, instead call the private methods that cache the results.
-        String getTargetLanguage(
-                long nativeContextualSearchManager, ContextualSearchManager caller);
-
-        String getAcceptLanguages(
-                long nativeContextualSearchManager, ContextualSearchManager caller);
     }
 }

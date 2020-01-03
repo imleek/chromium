@@ -165,9 +165,13 @@ interface CookieStore : EventTarget
     method delete
     method get
     method getAll
-    method getChangeSubscriptions
     method set
-    method subscribeToChanges
+interface CookieStoreManager
+    attribute @@toStringTag
+    method constructor
+    method getSubscriptions
+    method subscribe
+    method unsubscribe
 interface CountQueuingStrategy
     attribute @@toStringTag
     getter highWaterMark
@@ -550,6 +554,7 @@ interface FileSystemDirectoryHandle : FileSystemHandle
 interface FileSystemFileHandle : FileSystemHandle
     attribute @@toStringTag
     method constructor
+    method createWritable
     method createWriter
     method getFile
 interface FileSystemHandle
@@ -560,6 +565,13 @@ interface FileSystemHandle
     method constructor
     method queryPermission
     method requestPermission
+interface FileSystemWritableFileStream : WritableStream
+    attribute @@toStringTag
+    method close
+    method constructor
+    method seek
+    method truncate
+    method write
 interface FileSystemWriter
     attribute @@toStringTag
     method close
@@ -1284,10 +1296,6 @@ interface Response
     method formData
     method json
     method text
-interface ScreenManager
-    attribute @@toStringTag
-    method constructor
-    method getScreens
 interface SecurityPolicyViolationEvent : Event
     attribute @@toStringTag
     getter blockedURI
@@ -1320,6 +1328,7 @@ interface ServiceWorkerRegistration : EventTarget
     attribute @@toStringTag
     getter active
     getter backgroundFetch
+    getter cookies
     getter index
     getter installing
     getter navigationPreload
@@ -3744,7 +3753,6 @@ interface WorkerNavigator
     getter permissions
     getter platform
     getter product
-    getter screen
     getter serial
     getter storage
     getter usb
@@ -3785,6 +3793,7 @@ interface WritableStreamDefaultWriter
     getter onfetch
     getter oninstall
     getter onmessage
+    getter onmessageerror
     getter onnotificationclick
     getter onnotificationclose
     getter onpaymentrequest
@@ -3810,6 +3819,7 @@ interface WritableStreamDefaultWriter
     setter onfetch
     setter oninstall
     setter onmessage
+    setter onmessageerror
     setter onnotificationclick
     setter onnotificationclose
     setter onpaymentrequest

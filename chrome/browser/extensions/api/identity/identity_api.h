@@ -42,15 +42,12 @@ class Profile;
 
 namespace extensions {
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-// Enables all accounts in extensions.
-extern const base::Feature kExtensionsAllAccountsFeature;
-#endif
-
 class IdentityTokenCacheValue {
  public:
   IdentityTokenCacheValue();
   explicit IdentityTokenCacheValue(const IssueAdviceInfo& issue_advice);
+  explicit IdentityTokenCacheValue(
+      const RemoteConsentResolutionData& resolution_data);
   IdentityTokenCacheValue(const std::string& token,
                           base::TimeDelta time_to_live);
   IdentityTokenCacheValue(const IdentityTokenCacheValue& other);
@@ -61,11 +58,13 @@ class IdentityTokenCacheValue {
   enum CacheValueStatus {
     CACHE_STATUS_NOTFOUND,
     CACHE_STATUS_ADVICE,
+    CACHE_STATUS_REMOTE_CONSENT,
     CACHE_STATUS_TOKEN
   };
 
   CacheValueStatus status() const;
   const IssueAdviceInfo& issue_advice() const;
+  const RemoteConsentResolutionData& resolution_data() const;
   const std::string& token() const;
   const base::Time& expiration_time() const;
 
@@ -74,6 +73,7 @@ class IdentityTokenCacheValue {
 
   CacheValueStatus status_;
   IssueAdviceInfo issue_advice_;
+  RemoteConsentResolutionData resolution_data_;
   std::string token_;
   base::Time expiration_time_;
 };

@@ -54,7 +54,10 @@
       Update schedule
     </message>
     <message name="IDS_SETTINGS_ABOUT_PAGE_END_OF_LIFE_MESSAGE" desc="Message used for End of Life section on the About Page.">
-      This device will get automatic software and security updates until <ph name="MONTH_AND_YEAR">$1<ex>September 2020</ex></ph>.
+      This device will get automatic software and security updates until <ph name="MONTH_AND_YEAR">$1<ex>September 2020</ex></ph>. &lt;a target="_blank" href="<ph name="URL">$2<ex>https://google.com/</ex></ph>"&gt;Learn more&lt;/a&gt;
+    </message>
+    <message name="IDS_SETTINGS_ABOUT_PAGE_LAST_UPDATE_MESSAGE" desc="Message shown on the top level about page to inform the user that this device will no longer receive latest software updates.">
+      This is the last automatic software and security update for this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>. To get future updates, upgrade to a newer model. &lt;a target="_blank" href="<ph name="URL">$2<ex>https://google.com/</ex></ph>"&gt;Learn more&lt;/a&gt;
     </message>
     <message name="IDS_SETTINGS_ABOUT_PAGE_RELAUNCH" desc="The label for the relaunch button that relaunches the browser once update is complete">
       Restart
@@ -305,7 +308,7 @@
       Enable auto-scan
     </message>
     <message name="IDS_SETTINGS_SWITCH_ACCESS_AUTO_SCAN_SPEED_LABEL" desc="Label for slider which sets the time interval for Switch Access to automatically scan to the next element.">
-      Scanning speed: <ph name="SPEED_WITH_UNITS">$1<ex>1.5s</ex></ph>
+      Scanning speed
     </message>
     <message name="IDS_SETTINGS_SWITCH_ACCESS_AUTO_SCAN_KEYBOARD_SPEED_LABEL" desc="Label for slider which sets the time interval for Switch Access to automatically scan to the next element while navigating in the keyboard. Switch Access is an alternative input method designed for users with limited mobility, where the user has as little as one switch (for example, a button) to control the computer.">
       Keyboard scanning speed
@@ -443,7 +446,7 @@
       Play sound on startup
     </message>
     <message name="IDS_SETTINGS_ACCESSIBILITY_EXPLANATION" desc="Informational message at the top of the accessibility section of the settings page about enabling additional accessibility-related features.">
-      Enable accessibility features to make your device easier to use.
+      Enable accessibility features to make your device easier to use. <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
     </message>
     <message name="IDS_SETTINGS_ACCESSIBILITY_ADDITIONAL_FEATURES_TITLE" desc="In the settings tab, the title of a link that adds additional accessibility features not found in the built-in settings.">
       Add additional features
@@ -680,6 +683,15 @@
     <message name="IDS_SETTINGS_CROSTINI_ARC_ADB_RESTART_BUTTON" desc="Label for the button that initiates the ADB enabling flow by restarting the device.">
       Restart and continue
     </message>
+    <message name="IDS_SETTINGS_CROSTINI_CONTAINER_UPGRADE_BUTTON" desc="Label for the button that launches the upgrade to Debian 10 for Crostini.">
+      Upgrade
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_CONTAINER_UPGRADE_MESSAGE" desc="Message shown when an upgrade to Debian 10 (codenamed Buster) is available.">
+      An upgrade to Debian 10 (Buster) is available
+    </message>
+    <message name="IDS_SETTINGS_CROSTINI_CONTAINER_UPGRADE_SUBTEXT" desc="The current version the user has.">
+      Current version is Debian 9 (Stretch)
+    </message>
 
     <!-- Plugin VM Page -->
     <message name="IDS_SETTINGS_PLUGIN_VM_PAGE_TITLE" desc="The title of Plugin VM section.">
@@ -708,6 +720,12 @@
     </message>
     <message name="IDS_SETTINGS_PLUGIN_VM_SHARED_PATHS_REMOVE_SHARING" desc="Tooltip to show when hovering on the remove icon for a Plugin VM shared folder.">
       Remove sharing
+    </message>
+    <message name="IDS_SETTINGS_PLUGIN_VM_REMOVE_LABEL" desc="Label for the row to open a dialog confirming removal of Plugin VM.">
+      Remove Plugin VM
+    </message>
+    <message name="IDS_SETTINGS_PLUGIN_VM_REMOVE_BUTTON" desc="Label for the button to open a dialog confirming removal of Plugin VM.">
+      Remove
     </message>
 
     <!-- Android Apps Page -->
@@ -904,6 +922,9 @@
   <message name="IDS_SETTINGS_RETRY" desc="The label text of the retry button because there is an error.">
    Retry
   </message>
+  <message name="IDS_SETTINGS_SLIDER_MIN_MAX_ARIA_ROLE_DESCRIPTION" desc="A label to be read aloud by screen readers when a user focuses on a slider. A settings slider generally has a minimum value, a maximum value, and a fixed range of values in between. This label gives the user context for what the minimum and maximum values represent for that particular slider.">
+    Slider: <ph name="MIN_LABEL">$1<ex>Slowest</ex></ph> to <ph name="MAX_LABEL">$2<ex>Fastest</ex></ph>
+  </message>
 
   <!-- Autofill Page -->
   <message name="IDS_SETTINGS_AUTOFILL" desc="Name of the settings page which allows managing passwords, payment methods and addresses settings.">
@@ -994,7 +1015,7 @@
     Automatically sign in to websites using stored credentials. If disabled, you will be asked for confirmation every time before signing in to a website.
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_LEAK_DETECTION_LABEL" desc="Label for a checkbox that allows users to choose whether chrome should check that credentials have been part of a leak.">
-    Warn you if passwords are compromised
+    Warn you if passwords are exposed in a data breach
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_LEAK_DETECTION_SIGNED_OUT_ENABLED_DESC" desc="Text that describes the 'Password Leak Detection' functionality to signed-out users who have not disabled the feature.">
     When you sign in to your Google Account, this feature is turned on
@@ -1119,7 +1140,7 @@
       Pair
     </message>
     <message name="IDS_SETTINGS_BLUETOOTH_PAIR_DEVICE_TITLE" desc="Title of the settings dialog for adding or pairing Bluetooth a device.">
-      Pair Bluetooth device
+      Connect to Bluetooth device
     </message>
     <message name="IDS_SETTINGS_BLUETOOTH_NO_DEVICES" desc="Message displayed when there are no paired Bluetooth devices scan.">
       No paired devices
@@ -1481,6 +1502,12 @@
   <message name="IDS_SETTINGS_CLEAR_PERIOD_EVERYTHING" desc="The option to delete browsing data from the beginning of time.">
     All time
   </message>
+  <message name="IDS_SETTINGS_CLEAR_INSTALLED_APPS_DATA_TITLE" desc="Text for title of the important sites dialog.">
+    Also clear data from these apps?
+  </message>
+  <message name="IDS_SETTINGS_CLEAR_INSTALLED_APPS_DATA_CONFIRM" desc="Text for confirmation button of the important sites dialog.">
+    Clear
+  </message>
   <message name="IDS_SETTINGS_NOTIFICATION_WARNING" desc="A warning that notifications will be disabled by deleting cookies for this site.">
     Notifications will be disabled
   </message>
@@ -1503,16 +1530,25 @@
       Printers
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_LEARN_MORE_LABEL" desc="Label for the link that teaches users how to use CUPS printing.">
-      Set up or manage CUPS printers.
+      Set up or manage CUPS printers. <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_ADD_PRINTER" desc="In CUPS printing settings subpage, text for the link adding a new CUPS printer.">
       Add Printer
     </message>
      <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_ADD_DETECTED_OR_NEW_PRINTER" desc="In CUPS printing settings subpage, explanatory text for the nearby printers list.">
-      Save detected printers to your profile, or add a new printer.
+      Save detected printers to your profile, or add a new printer. <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_AVAILABLE_PRINTERS" desc="In CUPS printing settings subpage, title for the nearby printers list.">
       Add printers to your profile
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_AVAILABLE_PRINTERS_COUNT_MANY" desc="In CUPS printing settings subpage, this message will be read aloud to the user to inform them on the number of printers showing on the screen that are available to save.">
+      There are <ph name="PRINTER_COUNT">$1<ex>3</ex></ph> printers available to save.
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_AVAILABLE_PRINTER_COUNT_ONE" desc="In CUPS printing settings subpage, this message will be read aloud to the user to inform them there is only 1 printer available to save.">
+      There is 1 printer available to save.
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_AVAILABLE_PRINTER_COUNT_NONE" desc="In CUPS printing settings subpage, this message will be read aloud to the user to inform them there are no printers available to save.">
+      There are no printers available to save.
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_EDIT" desc="Text for the drop down menu which allows the user to edit the printer details.">
       Edit
@@ -1537,6 +1573,15 @@
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_SAVED_PRINTERS_TITLE" desc="Text for the title of the user's saved printers list.">
       Your saved printers
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_SAVED_PRINTERS_COUNT_MANY" desc="In CUPS printing settings subpage, this message will be read aloud to the user to inform them on the number of printers previously saved by the user.">
+      You have <ph name="PRINTER_COUNT">$1<ex>3</ex></ph> saved printers.
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_SAVED_PRINTERS_COUNT_ONE" desc="In CUPS printing settings subpage, this message will be read aloud to the user to inform them there is only 1 printer previously saved.">
+      You have 1 saved printer.
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_SAVED_PRINTERS_COUNT_NONE" desc="In CUPS printing settings subpage, this message will be read aloud to the user to inform them they have no printers previously saved.">
+      You have no saved printers.
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_SHOW_MORE" desc="Text for the button to show more printers when there are more printers than currently displayed to the user.">
       Show more
@@ -1617,7 +1662,7 @@
       Manufacturer
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_SELECT_DRIVER" desc="Label for the file selector to manually select a PPD file from the user's file system.">
-      Or specify your printer PPD
+      Or specify your printer PPD <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_BUTTON_SELECT_DRIVER_ARIA_LABEL" desc="ARIA label for the file selector button to manually select a PPD file from the user's file system. This text will not be visual on any page. It will only be spoken by screen readers.">
       Browse to specify your printer PPD
@@ -1692,7 +1737,7 @@
       Current PPD file in use: <ph name="PPD_NAME">$1<ex>example.ppd.gz</ex></ph>
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_MANUFACTURER_MODEL_ADDITIONAL_INFORMATION" desc="Informational text displayed to the user when the the user is doing advanced manual printer setup.">
-      <ph name="PRINTER_NAME">$1<ex>Printer</ex></ph> could not be configured automatically. Please specify advanced printer details.
+      <ph name="PRINTER_NAME">$1<ex>Printer</ex></ph> could not be configured automatically. Please specify advanced printer details. <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_EULA_NOTICE" desc="The message shown to users if a printer has a EULA agreement attached to it.">
       End User License Agreement
@@ -1741,7 +1786,7 @@
       Network file shares
     </message>
     <message name="IDS_SETTINGS_DOWNLOADS_SMB_SHARES_LEARN_MORE_LABEL" desc="Label for the link that teaches users how to setup SMB shares.">
-      Set up or manage network file shares.
+      Set up or manage network file shares. <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
     </message>
     <message name="IDS_SETTINGS_DOWNLOADS_SMB_SHARES_ADD_SHARE" desc="In SMB shares settings subpage, text for the link to add a new SMB share.">
       Add file share
@@ -2678,7 +2723,7 @@
       Weak
     </message>
     <message name="IDS_ONC_TETHER_SIGNAL_STRENGTH_OKAY" desc="Settings > Internet > Label used to describe the signal strength of a device's cellular connection when the signal is okay. The strength value is 2 on a scale from 1 (min) to 5 (max).">
-      Weak
+      Okay
     </message>
     <message name="IDS_ONC_TETHER_SIGNAL_STRENGTH_GOOD" desc="Settings > Internet > Label used to describe the signal strength of a device's cellular connection when the signal is good. The strength value is 3 on a scale from 1 (min) to 5 (max).">
       Fine
@@ -2818,9 +2863,8 @@
     Show language options
   </message>
   <if expr="chromeos">
-    <!-- Ends with "." because a "Learn more" link appears next to it. -->
     <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_ORDERING_INSTRUCTIONS" desc="Explanatory message about ordering the list of languages.">
-      Add languages or reorder list.
+      Add languages or reorder list. <ph name="BEGIN_LINK">&lt;a&gt;</ph>Learn more<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
     </message>
     <!-- The non-Chrome OS string is in settings_google_chrome_strings.grdp -->
     <message name="IDS_SETTINGS_LANGUAGES_IS_DISPLAYED_IN_THIS_LANGUAGE" desc="The label for a language that is currently used as the UI display language.">
@@ -2828,6 +2872,9 @@
     </message>
     <message name="IDS_SETTINGS_LANGUAGES_DISPLAY_IN_THIS_LANGUAGE" desc="The label used for a button that changes the UI language.">
       Show system text in this language
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_RESTART_TO_DISPLAY_LANGUAGE" desc="The aria label to be read aloud to describe a button for restarting the device to change the device's UI language.">
+      Restart device to show system text in <ph name="LANGUAGE">$1<ex>English</ex></ph>
     </message>
   </if>
   <if expr="not chromeos">
@@ -2952,6 +2999,9 @@
   <message name="IDS_SETTINGS_PRIVACY" desc="Name of the settings page which allows users to modify privacy and security settings.">
     Privacy and security
   </message>
+  <message name="IDS_SETTINGS_PRIVACY_MORE" desc="Label on the expansion button to show more privacy settings.">
+    More
+  </message>
   <message name="IDS_SETTINGS_LINKDOCTOR_PREF" desc="The documentation string of the 'Use Link Doctor' preference to help with navigation errors.">
     Show suggestions for similar pages when a page can't be found
   </message>
@@ -2978,6 +3028,9 @@
   </message>
   <message name="IDS_SETTINGS_SAFEBROWSING_ENABLE_REPORTING" desc="The section title of the extended safe browsing checkbox to help improve safe browsing">
     Help improve Chrome security
+  </message>
+  <message name="IDS_SETTINGS_SAFEBROWSING_SECTION_LABEL" desc="The section label of the safe browsing section grouping safe browsing settings">
+    Safe Browsing
   </message>
   <message name="IDS_SETTINGS_SAFEBROWSING_ENABLE_REPORTING_DESC" desc="Description for extended safe browsing">
     To detect dangerous apps and sites, Chrome sends URLs of some pages you visit, limited system information, and some page content to Google
@@ -3011,6 +3064,22 @@
   </message>
   <message name="IDS_SETTINGS_WAKE_ON_WIFI_DESCRIPTION" desc="In the settings tab, the text next to the checkbox for enabling quickly reconnecting to known Wi-Fi SSIDs.">
     Keep Wi-Fi on during sleep
+  </message>
+  <message name="IDS_SETTINGS_SECURITY" desc="Name of the settings page which allows
+  users to manage security settings">
+    Security
+  </message>
+  <message name="IDS_SETTINGS_SECURITY_ADVANCED_SECTION_LABEL" desc="Name of the section in the
+    security settings page which groups advanced security settings">
+    Advanced security
+  </message>
+  <message name="IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM" desc="Name of the link which takes users
+    to the Google Advanced Protection Program external webpage">
+    Google Advanced Protection Program
+  </message>
+  <message name="IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM_DESC" desc="Description of the Google
+    Advanced Protection Program">
+    Safeguards the personal Google Accounts of anyone at risk of targeted attacks
   </message>
   <message name="IDS_SETTINGS_MANAGE_CERTIFICATES" desc="Text for manage certificates button in Privacy options">
     Manage certificates
@@ -3082,10 +3151,13 @@
       Remove all user accounts and reset your <ph name="IDS_SHORT_PRODUCT_NAME">$1<ex>Chrome</ex></ph> device to be just like new.
     </message>
     <message name="IDS_SETTINGS_FACTORY_RESET_WARNING" desc="Warning text in the 'Factory Reset' window">
-      A restart is required before your device can be reset with Powerwash.
+      A restart is required before your device can be reset with Powerwash. <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
     </message>
     <message name="IDS_SETTINGS_FACTORY_RESET_BUTTON_LABEL" desc="Label for the factory reset button.">
       Reset
+    </message>
+    <message name="IDS_SETTINGS_FACTORY_RESET_BUTTON_ROLE" desc="A label to be read aloud by screen readers when the Reset button is focused. This button initiates the device factory reset flow.">
+      Reset Button
     </message>
   </if>
 
@@ -3303,15 +3375,6 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_FLASH" desc="Label for the Flash site settings.">
     Flash
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_LEGACY_COOKIE_ACCESS" desc="Label for the legacy cookie access site settings.">
-    Legacy cookie access
-  </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_LEGACY_COOKIE_ACCESS_ALLOW" desc="The allow label for legacy cookie access in site settings.">
-    Allow sites to use less-secure legacy rules for accessing cookies in a third-party context
-  </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_LEGACY_COOKIE_ACCESS_BLOCK" desc="The block label for legacy cookie access in site settings.">
-    Do not allow sites to use less-secure legacy rules for accessing cookies in a third-party context
-  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_PAYMENT_HANDLER" desc="Label for the payment handler site settings.">
     Payment Handlers
   </message>
@@ -3443,11 +3506,17 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_SHOW_BLOCKED_NOTIFICATIONS_INDICATOR" desc="The label in notifications site settings -- a setting that enables showing a blocked indicator in the address bar when notifications are blocked for all sites. It can be set by the user or automatically set by Chrome when a user has denied notifications several times.">
     Show an indicator in the address bar when notification are blocked
   </message>
-    <message name="IDS_SETTINGS_SITE_SETTINGS_ENABLE_QUIET_NOTIFICATION_PROMPTS" desc="The label in notifications site settings -- a setting that enables showing a blocked indicator in the address bar instead of the prompt, when a site requests to send notifications. It can be set by the user or automatically set by Chrome when a user has denied notifications several times.">
-    Show prompts quietly
+    <message name="IDS_SETTINGS_SITE_SETTINGS_ENABLE_QUIET_NOTIFICATION_PROMPTS" desc="The label of a checkbox in the Settings page for Web Notifications, controlling how prominent UI should be used to inform the user when a site asks whether it can send notifications to the user. When the checkbox is checked, the user will see a `quieter message` (a blocked indicator in the address bar) instead of the pop-up bubble. The setting can be set by the user or automatically set by Chrome when a user has denied notifications several times.">
+    Use quieter messaging (blocks notification prompts from interrupting you)
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_ENABLE_QUIET_NOTIFICATION_PROMPTS_DESCRIPTION" desc="The label description for 'quiet notifications' option in notifications site settings -- if a site requests to send notifications, the request will be blocked and a blocked indicator icon will appear in the address bar.">
     Sites will be blocked from asking to show you notifications. If a site requests notifications, a blocked indicator will appear in the address bar.
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_NOTIFICATIONS_BLOCK" desc="Label text shown in the Settings page when the default setting for Web Notifications is that new sites are blocked from asking the user if they can send notifications.">
+    Sites can't ask to send notifications
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_NOTIFICATIONS_ASK" desc="Label text shown in the Settings page when the default setting for Web Notifications is that new sites can prompt the user to ask if they want to receive notifications.">
+    Sites can ask to send notifications
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_DONT_SHOW_IMAGES" desc="Label for the global 'Do not show any images' toggle (category default) in site settings.">
     Do not show any images
@@ -3678,6 +3747,18 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_CLEAR_STORAGE_CONFIRMATION" desc="Text for the dialog that warns about clearing storage used by a site.">
     All data stored by <ph name="SITE">$1<ex>www.example.com</ex></ph> will be deleted.
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_CLEAR_STORAGE_CONFIRMATION_NEW" desc="Text for the dialog that warns about clearing storage used by a site.">
+    All data and cookies stored by <ph name="SITE">$1<ex>www.example.com</ex></ph> will be cleared.
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_CLEAR_STORAGE_SIGN_OUT" desc="Text for the dialog that warns about being signed out of site when clearing storage used by a site.">
+    You’ll be signed out of this site, including in open tabs
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_CLEAR_STORAGE_OFFLINE_DATA" desc="Text for the dialog that warns about loss of offline data when clearing all storage data.">
+    Any offline data will be cleared
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_CLEAR_STORAGE_APPS" desc="Text for the dialog that warns about loss of offline data for installed app when clearing all storage data for site.">
+    Offline data in installed app will also be cleared
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_GROUP_RESET_DIALOG_TITLE" desc="Title of the dialog that warns about resetting all permissions for a group of sites.">
     Reset site permissions?
   </message>
@@ -3689,6 +3770,18 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_GROUP_DELETE_CONFIRMATION" desc="Text for the dialog that warns about clearing all storage data for a group of sites.">
     All data stored by <ph name="SITE_GROUP_NAME">$1<ex>google.co.uk</ex></ph> and any sites under it will be deleted. This includes cookies. You'll be signed out of these sites, including in open tabs.
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_GROUP_DELETE_CONFIRMATION_NEW" desc="Text for the dialog that warns about clearing all storage data for a group of sites.">
+    All data and cookies stored by <ph name="SITE_GROUP_NAME">$1<ex>google.co.uk</ex></ph> and any sites under it will be cleared.
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_GROUP_DELETE_SIGN_OUT" desc="Text for the dialog that warns about being signed out when clearing all storage data.">
+    You’ll be signed out of these sites, including in open tabs
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_GROUP_DELETE_OFFLINE_DATA" desc="Text for the dialog that warns about loss of offline data when clearing all storage data.">
+    Any offline data will be cleared
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_GROUP_DELETE_APPS" desc="Text for the dialog that warns about installed apps losing offline data when clearing all storage data for the site group.">
+    Offline data in installed apps will also be cleared
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE_MULTIPLE" desc="Text for the dialog that warns about deleting all site data.">
     This will delete any data stored on your device for all the sites shown. Do you want to continue?
@@ -3868,8 +3961,8 @@
   </message>
 
   <!-- Sync / People Page -->
-  <message name="IDS_SETTINGS_PEOPLE" desc="Name of the settings page which manages Chrome's signed-in Google profile.">
-    People
+  <message name="IDS_SETTINGS_PEOPLE" desc="Name of the settings page which manages the user's relationship to Google.">
+    You and Google
   </message>
   <message name="IDS_SETTINGS_PEOPLE_MANAGE_OTHER_PEOPLE" desc="Label for the button that opens the multi-profile user manager.">
     Manage other people
@@ -3964,7 +4057,7 @@
       Add account
     </message>
     <message name="IDS_SETTINGS_ACCOUNT_MANAGER_DESCRIPTION" desc="Description of the Account Manager Settings page. Shown just below the title of the page.">
-      Manage your signed-in accounts. Websites, apps, and extensions in Chrome and Google Play may use these accounts to customize your experience, depending on permissions.
+      Manage your signed-in accounts. Websites, apps, and extensions in Chrome and Google Play may use these accounts to customize your experience, depending on permissions. &lt;a&gt;Learn more&lt;/a&gt;
     </message>
     <message name="IDS_SETTINGS_ACCOUNT_MANAGER_LIST_HEADER" desc="List header for Account List in Account Manager Settings page.">
       Accounts
@@ -4068,9 +4161,6 @@
     <message name="IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_INVALID_PASSWORD" desc="Text on a password field that tells the user the password is incorrect.">
       Invalid password
     </message>
-    <message name="IDS_SETTINGS_CHANGE_PICTURE_DIALOG_TITLE" desc="Title of the subpage shown when user wants to change their picture.">
-      Change picture
-    </message>
     <message name="IDS_SETTINGS_CHANGE_PICTURE_DIALOG_TEXT" desc="Text with description of what to do on Change picture subpage.">
       Choose a picture to display for your account on the sign-in screen
     </message>
@@ -4113,58 +4203,62 @@
     <message name="IDS_SETTINGS_CHANGE_PICTURE_OLD_PHOTO" desc="The text on the existing photo, which was either taken by the webcam or read from a file.">
       Existing photo from camera or file
     </message>
+    <message name="IDS_SETTINGS_CHANGE_PICTURE_OLD_VIDEO" desc="The text on the existing video, which was either taken by the webcam or read from a file.">
+      Existing video from camera or file
+    </message>
   </if>
 
+  <message name="IDS_SETTINGS_PEOPLE_SIGN_IN" desc="The label of the button that lets user sign-in to chrome.">
+    Sign in
+  </message>
+  <message name="IDS_SETTINGS_PEOPLE_SIGN_IN_PROMPT" desc="The text displayed to prompt users to sign in to chrome.">
+    Get Google smarts in Chrome
+  </message>
+  <message name="IDS_SETTINGS_PEOPLE_SYNC_ANOTHER_ACCOUNT" desc="The label for the button that lets the user choose another account to sync with.">
+    Use another account
+  </message>
+  <message name="IDS_SETTINGS_PEOPLE_SYNCING_TO_ACCOUNT" desc="The text displayed to the user that the profile is currently syncing to a specific account.">
+    Syncing to <ph name="EMAIL">$1<ex>abcd@google.com</ex></ph>
+  </message>
+  <message name="IDS_SETTINGS_PEOPLE_SYNC_TURN_OFF" desc="The label for the button that lets the user turn off profile syncing with their gaia account.">
+    Turn off
+  </message>
+  <message name="IDS_SETTINGS_PEOPLE_SYNC_NOT_WORKING" desc="The label informing the user that sync is currently not working.">
+    Sync isn't working
+  </message>
+  <message name="IDS_SETTINGS_PEOPLE_SYNC_PASSWORDS_NOT_WORKING" desc="The label informing the user that password sync is currently not working.">
+    Error syncing passwords
+  </message>
+  <message name="IDS_SETTINGS_PEOPLE_SYNC_PAUSED" desc="The label informing the user that sync is currently paused.">
+    Sync is paused
+  </message>
+  <message name="IDS_SETTINGS_SYNC_DISCONNECT_MANAGED_PROFILE_EXPLANATION" desc="The text to display in the 'Sign out of Chrome' dialog to stop syncing for managed profiles.">
+    Because this account is managed by <ph name="DOMAIN">$1<ex>example.com</ex></ph>, your bookmarks, history, passwords, and other settings will be cleared from this device. However, your data will remain stored in your Google Account and can be managed on <ph name="BEGIN_LINK">&lt;a href="$2" target=&quot;_blank&quot;&gt;<ex>&lt;a href="$2" target=&quot;_blank&quot;&gt;</ex></ph>Google Dashboard<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
+  </message>
+  <message name="IDS_SETTINGS_EDIT_PERSON" desc="Title of the edit person subpage. This is a subpage to edit the name and icon of a Chrome Profile.">
+    Edit person
+  </message>
+  <message name="IDS_SETTINGS_TURN_OFF_SYNC_AND_SIGN_OUT_DIALOG_TITLE" desc="The text to display on the title of the dialog to turn off sync and sign out.">
+    Turn off sync and personalization?
+  </message>
+  <message name="IDS_SETTINGS_TURN_OFF_SYNC_DIALOG_MANAGED_CONFIRM" desc="The text to display on the confirm button of the dialog to turn off sync, when the profile is managed by admin.">
+    Clear and continue
+  </message>
+  <message name="IDS_SETTINGS_TURN_OFF_SYNC_DIALOG_CHECKBOX" desc="The text to display next to the checkbox of the dialog to turn off sync, asking users if they want to clear these data from the device.">
+    Clear bookmarks, history, passwords, and more from this device
+  </message>
+  <message name="IDS_SETTINGS_SYNC_SETTINGS_SAVED_TOAST_LABEL" desc="The notification shown to user after they saved sync settings, and sync is now started.">
+    Settings saved. Sync started.
+  </message>
+
   <if expr="not chromeos">
-    <message name="IDS_SETTINGS_PEOPLE_DOMAIN_MANAGED_PROFILE" desc="Provides the domain information for domain-managed accounts.">
-      Managed by <ph name="DOMAIN">$1<ex>example.com</ex></ph>
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_SIGN_IN" desc="The label of the button that lets user sign-in to chrome.">
-      Sign in
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_SIGN_IN_PROMPT" desc="The text displayed to prompt users to sign in to chrome.">
-      Get Google smarts in Chrome
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_SYNC_ANOTHER_ACCOUNT" desc="The label for the button that lets the user choose another account to sync with.">
-      Use another account
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_SYNCING_TO_ACCOUNT" desc="The text displayed to the user that the profile is currently syncing to a specific account.">
-      Syncing to <ph name="EMAIL">$1<ex>abcd@google.com</ex></ph>
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_SYNC_TURN_OFF" desc="The label for the button that lets the user turn off profile syncing with their gaia account.">
-      Turn off
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_SYNC_NOT_WORKING" desc="The label informing the user that sync is currently not working.">
-      Sync isn't working
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_SYNC_PAUSED" desc="The label informing the user that sync is currently paused.">
-      Sync is paused
-    </message>
-    <message name="IDS_SETTINGS_SYNC_DISCONNECT_MANAGED_PROFILE_EXPLANATION" desc="The text to display in the 'Sign out of Chrome' dialog to stop syncing for managed profiles.">
-      Because this account is managed by <ph name="DOMAIN">$1<ex>example.com</ex></ph>, your bookmarks, history, passwords, and other settings will be cleared from this device. However, your data will remain stored in your Google Account and can be managed on <ph name="BEGIN_LINK">&lt;a href="$2" target=&quot;_blank&quot;&gt;<ex>&lt;a href="$2" target=&quot;_blank&quot;&gt;</ex></ph>Google Dashboard<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
-    </message>
-    <message name="IDS_SETTINGS_EDIT_PERSON" desc="Title of the edit person subpage. This is a subpage to edit the name and icon of a Chrome Profile.">
-      Edit person
-    </message>
     <message name="IDS_SETTINGS_PROFILE_SHORTCUT_TOGGLE_LABEL" desc="Label of the toggle that creates or removes a desktop shortcut for the profile.">
       Show desktop shortcut
-    </message>
-    <message name="IDS_SETTINGS_TURN_OFF_SYNC_AND_SIGN_OUT_DIALOG_TITLE" desc="The text to display on the title of the dialog to turn off sync and sign out.">
-      Turn off sync and personalization?
-    </message>
-    <message name="IDS_SETTINGS_TURN_OFF_SYNC_DIALOG_MANAGED_CONFIRM" desc="The text to display on the confirm button of the dialog to turn off sync, when the profile is managed by admin.">
-      Clear and continue
-    </message>
-    <message name="IDS_SETTINGS_TURN_OFF_SYNC_DIALOG_CHECKBOX" desc="The text to display next to the checkbox of the dialog to turn off sync, asking users if they want to clear these data from the device.">
-      Clear bookmarks, history, passwords, and more from this device
-    </message>
-    <message name="IDS_SETTINGS_SYNC_SETTINGS_SAVED_TOAST_LABEL" desc="The notification shown to user after they saved sync settings, and sync is now started.">
-      Settings saved. Sync started.
     </message>
   </if>
 
   <message name="IDS_SETTINGS_SYNC_OVERVIEW" desc="The message that appears in the options dialog when sync has not been set up by the user.">
-    Sign in to get your bookmarks, history, passwords, and other settings on all your devices. You'll also automatically be signed in to your Google services.
+    Sign in to get your bookmarks, history, passwords, and other settings on all your devices. You'll also automatically be signed in to your Google services. <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
   </message>
   <message name="IDS_SETTINGS_SYNC_DISCONNECT_EXPLANATION" desc="The text to display in the Sign out of Chrome dialog to stop syncing for non-managed profiles.">
     Changes to your bookmarks, history, passwords, and other settings will no longer be synced to your Google Account. However, your existing data will remain stored in your Google Account and can be managed on <ph name="BEGIN_LINK">&lt;a href="$1" target=&quot;_blank&quot;&gt;<ex>&lt;a href="$1" target=&quot;_blank&quot;&gt;</ex></ph>Google Dashboard<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
@@ -4197,20 +4291,18 @@
   <message name="IDS_SETTINGS_SYNC_LOADING" desc="The message shown when waiting for the sync backend to start up.">
     Please wait...
   </message>
-  <if expr="not chromeos">
-    <message name="IDS_SETTINGS_SYNC_WILL_START" desc="The message to tell users that sync will start once they leave the sync setup page.">
-      Sync will start once you leave sync settings
-    </message>
-    <message name="IDS_SETTINGS_SYNC_SETTINGS_CANCEL_SYNC" desc="The label of button that allows user to cancel sync.">
-      Cancel sync
-    </message>
-    <message name="IDS_SETTINGS_SYNC_SETUP_CANCEL_DIALOG_TITLE" desc="The title of the dialog to confirm the sync cancellation.">
-      Cancel sync?
-    </message>
-    <message name="IDS_SETTINGS_SYNC_SETUP_CANCEL_DIALOG_BODY" desc="The body text of the dialog to confirm the sync cancellation.">
-      You can turn on sync anytime in settings
-    </message>
-  </if>
+  <message name="IDS_SETTINGS_SYNC_WILL_START" desc="The message to tell users that sync will start once they leave the sync setup page.">
+    Sync will start once you leave sync settings
+  </message>
+  <message name="IDS_SETTINGS_SYNC_SETTINGS_CANCEL_SYNC" desc="The label of button that allows user to cancel sync.">
+    Cancel sync
+  </message>
+  <message name="IDS_SETTINGS_SYNC_SETUP_CANCEL_DIALOG_TITLE" desc="The title of the dialog to confirm the sync cancellation.">
+    Cancel sync?
+  </message>
+  <message name="IDS_SETTINGS_SYNC_SETUP_CANCEL_DIALOG_BODY" desc="The body text of the dialog to confirm the sync cancellation.">
+    You can turn on sync anytime in settings
+  </message>
   <message name="IDS_SETTINGS_SYNC_TIMEOUT" desc="Text explaining what to do if sync times out.">
     Check your internet connection. If the problem continues, try signing out and signing in again.
   </message>
@@ -4417,6 +4509,9 @@
     <message name="IDS_SETTINGS_PARENTAL_CONTROLS_SET_UP_BUTTON_LABEL" desc="Label/description of the button which launches page which enables ChromeOS's parental controls.">
       Set up
     </message>
+    <message name="IDS_SETTINGS_PARENTAL_CONTROLS_SET_UP_BUTTON_ROLE" desc="Role description of the button which launches page which enables ChromeOS's parental controls. Spoken aloud by screen readers when the Set Up button is focused">
+      Set up button
+    </message>
   </if>
 
   <!-- Add Supervision Dialog Strings -->
@@ -4540,7 +4635,7 @@
       Scrolling
     </message>
     <message name="IDS_SETTINGS_NATURAL_SCROLL_LABEL" desc="In Device Settings, the text next to the radio button that enables natural scrolling.">
-      Australian
+      Australian <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
     </message>
     <message name="IDS_SETTINGS_TRADITIONAL_SCROLL_LABEL" desc="In Device Settings, the text next to the radio button that enables traditional scrolling.">
       Traditional
@@ -4841,8 +4936,8 @@
     <message name="IDS_SETTINGS_STORAGE_ITEM_AVAILABLE" desc="In Device Settings > Storage, label for the available storage size of Chrome OS internal storage.">
       Available
     </message>
-    <message name="IDS_SETTINGS_STORAGE_ITEM_DOWNLOADS" desc="In Device Settings > Storage, label for the size of Downloads directory.">
-      Downloads
+    <message name="IDS_SETTINGS_STORAGE_ITEM_MY_FILES" desc="In Device Settings > Storage, label for the size of My files root.">
+      My files
     </message>
     <message name="IDS_SETTINGS_STORAGE_ITEM_BROWSING_DATA" desc="In Device Settings > Storage, label for the size of browsing data.">
       Browsing data
@@ -4913,7 +5008,7 @@
       Low-power charger
     </message>
     <message name="IDS_SETTINGS_POWER_SOURCE_CALCULATING" desc="In Device Settings > Power, the power source description when the power status is being determined.">
-      Checking...
+      Checking power sources...
     </message>
     <message name="IDS_SETTINGS_POWER_IDLE_LABEL" desc="In Device Settings > Power, label for behavior when device is idle.">
       When idle

@@ -403,16 +403,14 @@ bool AXPlatformNodeBase::IsDocument() const {
 }
 
 bool AXPlatformNodeBase::IsTextOnlyObject() const {
-  return GetData().role == ax::mojom::Role::kStaticText ||
-         GetData().role == ax::mojom::Role::kLineBreak ||
-         GetData().role == ax::mojom::Role::kInlineTextBox;
+  return ui::IsText(GetData().role);
 }
 
 bool AXPlatformNodeBase::IsPlainTextField() const {
   // We need to check both the role and editable state, because some ARIA text
   // fields may in fact not be editable, whilst some editable fields might not
   // have the role.
-  return ui::IsPlainTextField(GetData());
+  return GetData().IsPlainTextField();
 }
 
 bool AXPlatformNodeBase::IsRichTextField() const {
@@ -425,7 +423,11 @@ base::string16 AXPlatformNodeBase::GetHypertext() const {
 }
 
 base::string16 AXPlatformNodeBase::GetInnerText() const {
-  if (IsTextOnlyObject())
+  // TODO(https://crbug.com/1030703): The check for IsInvisibleOrIgnored()
+  // should not be needed. ChildAtIndex() and GetChildCount() are already
+  // supposed to skip over nodes that are invisible or ignored, but
+  // ViewAXPlatformNodeDelegate does not currently implement this behavior.
+  if (IsTextOnlyObject() && !IsInvisibleOrIgnored())
     return GetString16Attribute(ax::mojom::StringAttribute::kName);
 
   base::string16 text;
@@ -743,7 +745,7 @@ bool AXPlatformNodeBase::IsChildOfLeaf() const {
 
 bool AXPlatformNodeBase::IsInvisibleOrIgnored() const {
   const AXNodeData& data = GetData();
-  return data.HasState(ax::mojom::State::kInvisible) || ui::IsIgnored(data);
+  return data.HasState(ax::mojom::State::kInvisible) || data.IsIgnored();
 }
 
 bool AXPlatformNodeBase::IsScrollable() const {
@@ -777,7 +779,7 @@ bool AXPlatformNodeBase::IsVerticallyScrollable() const {
 
 base::string16 AXPlatformNodeBase::GetValue() const {
   // Expose slider value.
-  if (IsRangeValueSupported(GetData()))
+  if (GetData().IsRangeValueSupported())
     return GetRangeValueText();
 
   // On Windows, the value of a document should be its URL.
@@ -1021,7 +1023,7 @@ void AXPlatformNodeBase::ComputeAttributes(PlatformAttributeList* attributes) {
   }
 
   // Expose slider value.
-  if (IsRangeValueSupported(GetData())) {
+  if (GetData().IsRangeValueSupported()) {
     std::string value = base::UTF16ToUTF8(GetRangeValueText());
     if (!value.empty())
       AddAttributeToList("valuetext", value, attributes);
@@ -1222,6 +1224,8 @@ bool AXPlatformNodeBase::ScrollToNode(ScrollType scroll_type) {
       ax::mojom::ScrollAlignment::kScrollAlignmentCenter;
   action_data.vertical_scroll_alignment =
       ax::mojom::ScrollAlignment::kScrollAlignmentCenter;
+  action_data.scroll_behavior =
+      ax::mojom::ScrollBehavior::kDoNotScrollIfVisible;
   action_data.target_rect = r;
   GetDelegate()->AccessibilityPerformAction(action_data);
   return true;

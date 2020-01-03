@@ -14,6 +14,8 @@
 #include "base/test/test_reg_util_win.h"
 #include "base/win/scoped_handle.h"
 #include "chrome/credential_provider/gaiacp/associated_user_validator.h"
+#include "chrome/credential_provider/gaiacp/chrome_availability_checker.h"
+#include "chrome/credential_provider/gaiacp/gem_device_details_manager.h"
 #include "chrome/credential_provider/gaiacp/internet_availability_checker.h"
 #include "chrome/credential_provider/gaiacp/os_process_manager.h"
 #include "chrome/credential_provider/gaiacp/os_user_manager.h"
@@ -353,6 +355,28 @@ class FakeAssociatedUserValidator : public AssociatedUserValidator {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+class FakeChromeAvailabilityChecker : public ChromeAvailabilityChecker {
+ public:
+  enum HasSupportedChromeCheckType { kChromeForceYes, kChromeForceNo };
+
+  FakeChromeAvailabilityChecker(
+      HasSupportedChromeCheckType has_supported_chrome = kChromeForceYes);
+  ~FakeChromeAvailabilityChecker() override;
+
+  bool HasSupportedChromeVersion() override;
+  void SetHasSupportedChrome(HasSupportedChromeCheckType has_supported_chrome);
+
+ private:
+  ChromeAvailabilityChecker* original_checker_ = nullptr;
+
+  // Used during tests to force the credential provider to believe if a
+  // supported Chrome version is installed or not. In production a real
+  // check is performed at runtime.
+  HasSupportedChromeCheckType has_supported_chrome_ = kChromeForceYes;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 class FakeInternetAvailabilityChecker : public InternetAvailabilityChecker {
  public:
   enum HasInternetConnectionCheckType { kHicForceYes, kHicForceNo };
@@ -390,6 +414,21 @@ class FakePasswordRecoveryManager : public PasswordRecoveryManager {
 
  private:
   PasswordRecoveryManager* original_validator_ = nullptr;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class FakeGemDeviceDetailsManager : public GemDeviceDetailsManager {
+ public:
+  FakeGemDeviceDetailsManager();
+  explicit FakeGemDeviceDetailsManager(
+      base::TimeDelta upload_device_details_request_timeout);
+  ~FakeGemDeviceDetailsManager() override;
+
+  using GemDeviceDetailsManager::SetRequestTimeoutForTesting;
+
+ private:
+  GemDeviceDetailsManager* original_manager_ = nullptr;
 };
 
 }  // namespace credential_provider

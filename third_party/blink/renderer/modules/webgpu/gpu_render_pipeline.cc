@@ -6,12 +6,16 @@
 
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_vertex_buffer_layout_descriptor.h"
 #include "third_party/blink/renderer/modules/webgpu/dawn_conversions.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_bind_group_layout.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_blend_descriptor.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_color_state_descriptor.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_depth_stencil_state_descriptor.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_device.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_pipeline_layout.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_rasterization_state_descriptor.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_render_pipeline_descriptor.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_stencil_state_face_descriptor.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_vertex_attribute_descriptor.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_vertex_buffer_layout_descriptor.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_vertex_state_descriptor.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -212,7 +216,9 @@ GPURenderPipeline* GPURenderPipeline::Create(
 
   WGPURenderPipelineDescriptor dawn_desc = {};
   dawn_desc.nextInChain = nullptr;
-  dawn_desc.layout = AsDawnType(webgpu_desc->layout());
+  if (webgpu_desc->hasLayout()) {
+    dawn_desc.layout = AsDawnType(webgpu_desc->layout());
+  }
   if (webgpu_desc->hasLabel()) {
     dawn_desc.label = webgpu_desc->label().Utf8().data();
   }
@@ -280,6 +286,11 @@ GPURenderPipeline::~GPURenderPipeline() {
     return;
   }
   GetProcs().renderPipelineRelease(GetHandle());
+}
+
+GPUBindGroupLayout* GPURenderPipeline::getBindGroupLayout(uint32_t index) {
+  return MakeGarbageCollected<GPUBindGroupLayout>(
+      device_, GetProcs().renderPipelineGetBindGroupLayout(GetHandle(), index));
 }
 
 }  // namespace blink

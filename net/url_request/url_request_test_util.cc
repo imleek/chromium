@@ -175,7 +175,7 @@ std::unique_ptr<URLRequest> TestURLRequestContext::CreateFirstPartyRequest(
     URLRequest::Delegate* delegate,
     NetworkTrafficAnnotationTag traffic_annotation) const {
   auto req = CreateRequest(url, priority, delegate, traffic_annotation);
-  req->set_site_for_cookies(url);
+  req->set_site_for_cookies(SiteForCookies::FromUrl(url));
   return req;
 }
 
@@ -284,6 +284,7 @@ void TestDelegate::OnSSLCertificateError(URLRequest* request,
   // cancel the request.
   have_certificate_errors_ = true;
   certificate_errors_are_fatal_ = fatal;
+  certificate_net_error_ = net_error;
   if (allow_certificate_errors_)
     request->ContinueDespiteLastError();
   else

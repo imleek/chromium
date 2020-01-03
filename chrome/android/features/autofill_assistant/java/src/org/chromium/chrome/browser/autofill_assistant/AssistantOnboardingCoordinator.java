@@ -17,12 +17,14 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.chrome.autofill_assistant.R;
+import org.chromium.chrome.browser.autofill_assistant.metrics.DropOutReason;
 import org.chromium.chrome.browser.autofill_assistant.metrics.OnBoarding;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayModel;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayState;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
@@ -76,7 +78,8 @@ class AssistantOnboardingCoordinator {
         if (mTab != null) {
             // If there's a tab, cover it with an overlay.
             AssistantOverlayModel overlayModel = new AssistantOverlayModel();
-            mOverlayCoordinator = new AssistantOverlayCoordinator(mTab.getActivity(), overlayModel);
+            mOverlayCoordinator =
+                    new AssistantOverlayCoordinator(((TabImpl) mTab).getActivity(), overlayModel);
             overlayModel.set(AssistantOverlayModel.STATE, AssistantOverlayState.FULL);
         }
         mContent = new AssistantBottomSheetContent(mContext);
@@ -169,7 +172,6 @@ class AssistantOnboardingCoordinator {
 
         // Hide views that should not be displayed when showing the small onboarding.
         if (Arrays.asList(mExperimentIds.split(",")).contains(SMALL_ONBOARDING_EXPERIMENT_ID)) {
-            hide(initView, R.id.onboarding_image);
             hide(initView, R.id.onboarding_subtitle);
             hide(initView, R.id.onboarding_separator);
         }
@@ -185,6 +187,10 @@ class AssistantOnboardingCoordinator {
         AutofillAssistantPreferencesUtil.setInitialPreferences(accept);
         AutofillAssistantMetrics.recordOnBoarding(
                 accept ? OnBoarding.OB_ACCEPTED : OnBoarding.OB_CANCELLED);
+        if (!accept) {
+            AutofillAssistantMetrics.recordDropOut(DropOutReason.DECLINED);
+        }
+
         callback.onResult(accept);
         hide();
     }

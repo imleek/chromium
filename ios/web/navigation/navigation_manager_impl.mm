@@ -94,10 +94,12 @@ void NavigationManagerImpl::UpdatePendingItemUserAgentType(
 
   switch (user_agent_override_option) {
     case UserAgentOverrideOption::DESKTOP:
-      pending_item->SetUserAgentType(UserAgentType::DESKTOP);
+      pending_item->SetUserAgentType(UserAgentType::DESKTOP,
+                                     /*update_inherited_user_agent =*/true);
       break;
     case UserAgentOverrideOption::MOBILE:
-      pending_item->SetUserAgentType(UserAgentType::MOBILE);
+      pending_item->SetUserAgentType(UserAgentType::MOBILE,
+                                     /*update_inherited_user_agent =*/true);
       break;
     case UserAgentOverrideOption::INHERIT: {
       // Propagate the last committed non-native item's UserAgentType if there
@@ -105,7 +107,9 @@ void NavigationManagerImpl::UpdatePendingItemUserAgentType(
       DCHECK(!inherit_from_item ||
              inherit_from_item->GetUserAgentType() != UserAgentType::NONE);
       if (inherit_from_item) {
-        pending_item->SetUserAgentType(inherit_from_item->GetUserAgentType());
+        pending_item->SetUserAgentType(
+            inherit_from_item->GetUserAgentForInheritance(),
+            /*update_inherited_user_agent =*/true);
       }
       break;
     }
@@ -138,20 +142,6 @@ void NavigationManagerImpl::SetWKWebViewNextPendingUrlNotSerializable(
 
 void NavigationManagerImpl::RemoveTransientURLRewriters() {
   transient_url_rewriters_.clear();
-}
-
-std::unique_ptr<NavigationItemImpl> NavigationManagerImpl::CreateNavigationItem(
-    const GURL& url,
-    const Referrer& referrer,
-    ui::PageTransition transition,
-    NavigationInitiationType initiation_type) {
-  NavigationItem* last_committed_item = GetLastCommittedItem();
-  auto item = CreateNavigationItemWithRewriters(
-      url, referrer, transition, initiation_type,
-      last_committed_item ? last_committed_item->GetURL() : GURL::EmptyGURL(),
-      &transient_url_rewriters_);
-  RemoveTransientURLRewriters();
-  return item;
 }
 
 void NavigationManagerImpl::UpdatePendingItemUrl(const GURL& url) const {
@@ -228,20 +218,6 @@ void NavigationManagerImpl::GoToIndex(int index,
   delegate_->ClearTransientContent();
   delegate_->ClearDialogs();
 
-  // Notify delegate if the new navigation will use a different user agent.
-  UserAgentType to_item_user_agent_type =
-      GetItemAtIndex(index)->GetUserAgentType();
-  NavigationItem* pending_item = GetPendingItem();
-  NavigationItem* previous_item =
-      pending_item ? pending_item : GetLastCommittedItem();
-  UserAgentType previous_item_user_agent_type =
-      previous_item ? previous_item->GetUserAgentType() : UserAgentType::NONE;
-
-  if (to_item_user_agent_type != UserAgentType::NONE &&
-      to_item_user_agent_type != previous_item_user_agent_type) {
-    delegate_->WillChangeUserAgentType();
-  }
-
   FinishGoToIndex(index, initiation_type, has_user_gesture);
 }
 
@@ -249,11 +225,9 @@ void NavigationManagerImpl::GoToIndex(int index) {
   // Silently return if still on a restore URL.  This state should only last a
   // few moments, but may be triggered when a user mashes the back or forward
   // button quickly.
-  if (web::GetWebClient()->IsSlimNavigationManagerEnabled()) {
-    NavigationItemImpl* item = GetLastCommittedItemInCurrentOrRestoredSession();
-    if (item && wk_navigation_util::IsRestoreSessionUrl(item->GetURL())) {
-      return;
-    }
+  NavigationItemImpl* item = GetLastCommittedItemInCurrentOrRestoredSession();
+  if (item && wk_navigation_util::IsRestoreSessionUrl(item->GetURL())) {
+    return;
   }
   GoToIndex(index, NavigationInitiationType::BROWSER_INITIATED,
             /*has_user_gesture=*/true);
@@ -395,9 +369,6 @@ void NavigationManagerImpl::ReloadWithUserAgentType(
     UserAgentType user_agent_type) {
   DCHECK_NE(user_agent_type, UserAgentType::NONE);
 
-  // This removes the web view, which will be recreated at the end of this.
-  delegate_->WillChangeUserAgentType();
-
   NavigationItem* last_non_redirect_item = GetTransientItem();
   if (!last_non_redirect_item ||
       ui::PageTransitionIsRedirect(last_non_redirect_item->GetTransitionType()))
@@ -418,18 +389,16 @@ void NavigationManagerImpl::ReloadWithUserAgentType(
   // Reload using a client-side redirect URL to create a new entry in
   // WKBackForwardList for the new user agent type. This hack is not needed for
   // LegacyNavigationManagerImpl which manages its own history entries.
-  if (web::GetWebClient()->IsSlimNavigationManagerEnabled()) {
-    GURL target_url;
-    // If current entry is a redirect URL, reload the original target URL. This
-    // can happen on a slow connection when user taps on Request Desktop Site
-    // before the previous redirect has finished (https://crbug.com/833958).
-    if (wk_navigation_util::IsRestoreSessionUrl(reload_url) &&
-        wk_navigation_util::ExtractTargetURL(reload_url, &target_url)) {
-      reload_url = target_url;
-    }
+  GURL target_url;
+  // If current entry is a redirect URL, reload the original target URL. This
+  // can happen on a slow connection when user taps on Request Desktop Site
+  // before the previous redirect has finished (https://crbug.com/833958).
+  if (wk_navigation_util::IsRestoreSessionUrl(reload_url) &&
+      wk_navigation_util::ExtractTargetURL(reload_url, &target_url)) {
+    reload_url = target_url;
+  }
     DCHECK(!wk_navigation_util::IsRestoreSessionUrl(reload_url));
     reload_url = wk_navigation_util::CreateRedirectUrl(reload_url);
-  }
 
   WebLoadParams params(reload_url);
   if (last_non_redirect_item->GetVirtualURL() != reload_url)
@@ -444,6 +413,7 @@ void NavigationManagerImpl::ReloadWithUserAgentType(
     case UserAgentType::MOBILE:
       params.user_agent_override_option = UserAgentOverrideOption::MOBILE;
       break;
+    case UserAgentType::AUTOMATIC:
     case UserAgentType::NONE:
       NOTREACHED();
   }

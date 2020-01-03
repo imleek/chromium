@@ -15,9 +15,8 @@ template <>
 class BLINK_COMMON_EXPORT
     StructTraits<blink::mojom::FramePolicyDataView, blink::FramePolicy> {
  public:
-  static bool allowed_to_download_without_user_activation(
-      const blink::FramePolicy& frame_policy) {
-    return frame_policy.allowed_to_download_without_user_activation;
+  static bool allowed_to_download(const blink::FramePolicy& frame_policy) {
+    return frame_policy.allowed_to_download;
   }
 
   static const std::vector<blink::ParsedFeaturePolicyDeclaration>&
@@ -28,6 +27,11 @@ class BLINK_COMMON_EXPORT
   static blink::WebSandboxFlags sandbox_flags(
       const blink::FramePolicy& frame_policy) {
     return frame_policy.sandbox_flags;
+  }
+
+  static const blink::DocumentPolicy::FeatureState& required_document_policy(
+      const blink::FramePolicy& frame_policy) {
+    return frame_policy.required_document_policy;
   }
 
   static bool Read(blink::mojom::FramePolicyDataView in,

@@ -533,6 +533,12 @@ input::-internal-input-suggested {
 input::-internal-input-suggested,
 textarea::-internal-input-suggested {
     font: -webkit-small-control !important;
+    /* Prevent that overflow affects the scrollable area. Without this,
+       LayoutBox::*Scroll{Height,Width}() may determine the scroll width/height
+       from the scrollable area instead of from the overrides in
+       LayoutTextControl{Single,Multi}Line::Scroll{Height,Width}(). */
+    overflow: hidden !important;
+    overflow-anchor: none;
 }
 
 input[type="password" i] {
@@ -566,6 +572,7 @@ input[type="image" i] {
 input:-internal-autofill-previewed,
 textarea:-internal-autofill-previewed,
 select:-internal-autofill-previewed {
+  -webkit-appearance:menulist-button;
   background-color: #E8F0FE !important;
   background-image:none !important;
   color: -internal-light-dark-color(black, white) !important;
@@ -574,6 +581,7 @@ select:-internal-autofill-previewed {
 input:-internal-autofill-selected,
 textarea:-internal-autofill-selected,
 select:-internal-autofill-selected {
+  -webkit-appearance:menulist-button;
   background-color: #E8F0FE !important;
   background-image:none !important;
   color: -internal-light-dark-color(black, white) !important;

@@ -220,13 +220,13 @@ class InteractiveRenderWidget : public RenderWidget {
   bool WillHandleGestureEvent(const blink::WebGestureEvent& event) override {
     if (always_overscroll_ &&
         event.GetType() == blink::WebInputEvent::kGestureScrollUpdate) {
-      DidOverscroll(blink::WebFloatSize(event.data.scroll_update.delta_x,
-                                        event.data.scroll_update.delta_y),
-                    blink::WebFloatSize(event.data.scroll_update.delta_x,
-                                        event.data.scroll_update.delta_y),
+      DidOverscroll(gfx::Vector2dF(event.data.scroll_update.delta_x,
+                                   event.data.scroll_update.delta_y),
+                    gfx::Vector2dF(event.data.scroll_update.delta_x,
+                                   event.data.scroll_update.delta_y),
                     event.PositionInWidget(),
-                    blink::WebFloatSize(event.data.scroll_update.velocity_x,
-                                        event.data.scroll_update.velocity_y));
+                    gfx::Vector2dF(event.data.scroll_update.velocity_x,
+                                   event.data.scroll_update.velocity_y));
       return true;
     }
 
@@ -454,11 +454,8 @@ class StubRenderWidgetDelegate : public RenderWidgetDelegate {
   void DidReceiveSetFocusEventForWidget() override {}
   void DidCommitCompositorFrameForWidget() override {}
   void DidCompletePageScaleAnimationForWidget() override {}
-  void ResizeWebWidgetForWidget(
-      const gfx::Size& size,
-      float top_controls_height,
-      float bottom_controls_height,
-      bool browser_controls_shrink_blink_size) override {}
+  void ResizeWebWidgetForWidget(const gfx::Size& size,
+                                cc::BrowserControlsParams) override {}
   void SetScreenMetricsEmulationParametersForWidget(
       bool enabled,
       const blink::WebDeviceEmulationParams& params) override {}

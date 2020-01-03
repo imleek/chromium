@@ -35,11 +35,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "aura_unittests"
+        "test": "aura_unittests",
+        "test_target": "//ui/aura:aura_unittests"
       },
       {
         "merge": {
@@ -52,11 +53,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "base_unittests"
+        "test": "base_unittests",
+        "test_target": "//base:base_unittests"
       },
       {
         "merge": {
@@ -69,11 +71,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "cacheinvalidation_unittests"
+        "test": "cacheinvalidation_unittests",
+        "test_target": "//third_party/cacheinvalidation:cacheinvalidation_unittests"
       },
       {
         "args": [
@@ -90,11 +93,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "capture_unittests"
+        "test": "capture_unittests",
+        "test_target": "//media/capture:capture_unittests"
       },
       {
         "merge": {
@@ -107,11 +111,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "cc_unittests"
+        "test": "cc_unittests",
+        "test_target": "//cc:cc_unittests"
       },
       {
         "merge": {
@@ -124,12 +129,13 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ],
           "idempotent": false
         },
-        "test": "chrome_all_tast_tests"
+        "test": "chrome_all_tast_tests",
+        "test_target": "//chromeos:chrome_all_tast_tests"
       },
       {
         "merge": {
@@ -142,11 +148,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "cros_browser_sanity_test"
+        "test": "cros_browser_sanity_test",
+        "test_target": "//chromeos:cros_browser_sanity_test"
       },
       {
         "merge": {
@@ -159,11 +166,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "crypto_unittests"
+        "test": "crypto_unittests",
+        "test_target": "//crypto:crypto_unittests"
       },
       {
         "merge": {
@@ -176,11 +184,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "display_unittests"
+        "test": "display_unittests",
+        "test_target": "//ui/display:display_unittests"
       },
       {
         "merge": {
@@ -193,11 +202,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "google_apis_unittests"
+        "test": "google_apis_unittests",
+        "test_target": "//google_apis:google_apis_unittests"
       },
       {
         "args": [
@@ -215,11 +225,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "interactive_ui_tests"
+        "test": "interactive_ui_tests",
+        "test_target": "//chrome/test:interactive_ui_tests"
       },
       {
         "merge": {
@@ -232,11 +243,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "ipc_tests"
+        "test": "ipc_tests",
+        "test_target": "//ipc:ipc_tests"
       },
       {
         "merge": {
@@ -249,11 +261,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "jingle_unittests"
+        "test": "jingle_unittests",
+        "test_target": "//jingle:jingle_unittests"
       },
       {
         "merge": {
@@ -266,11 +279,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "latency_unittests"
+        "test": "latency_unittests",
+        "test_target": "//ui/latency:latency_unittests"
       },
       {
         "experiment_percentage": 100,
@@ -284,11 +298,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "libcups_unittests"
+        "test": "libcups_unittests",
+        "test_target": "//chrome/services/cups_proxy:libcups_unittests"
       },
       {
         "args": [
@@ -304,11 +319,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "media_unittests"
+        "test": "media_unittests",
+        "test_target": "//media:media_unittests"
       },
       {
         "merge": {
@@ -321,11 +337,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "midi_unittests"
+        "test": "midi_unittests",
+        "test_target": "//media/midi:midi_unittests"
       },
       {
         "merge": {
@@ -338,11 +355,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "mojo_unittests"
+        "test": "mojo_unittests",
+        "test_target": "//mojo:mojo_unittests"
       },
       {
         "args": [
@@ -365,12 +383,13 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ],
           "shards": 3
         },
-        "test": "net_unittests"
+        "test": "net_unittests",
+        "test_target": "//net:net_unittests"
       },
       {
         "args": [
@@ -386,11 +405,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "ozone_gl_unittests"
+        "test": "ozone_gl_unittests",
+        "test_target": "//ui/ozone/gl:ozone_gl_unittests"
       },
       {
         "merge": {
@@ -403,11 +423,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "ozone_unittests"
+        "test": "ozone_unittests",
+        "test_target": "//ui/ozone:ozone_unittests"
       },
       {
         "merge": {
@@ -420,11 +441,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "pdf_unittests"
+        "test": "pdf_unittests",
+        "test_target": "//pdf:pdf_unittests"
       },
       {
         "merge": {
@@ -437,11 +459,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "printing_unittests"
+        "test": "printing_unittests",
+        "test_target": "//printing:printing_unittests"
       },
       {
         "merge": {
@@ -454,11 +477,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "profile_provider_unittest"
+        "test": "profile_provider_unittest",
+        "test_target": "//chrome/browser/metrics/perf:profile_provider_unittest"
       },
       {
         "merge": {
@@ -471,11 +495,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "sandbox_linux_unittests"
+        "test": "sandbox_linux_unittests",
+        "test_target": "//sandbox/linux:sandbox_linux_unittests"
       },
       {
         "merge": {
@@ -488,11 +513,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "sql_unittests"
+        "test": "sql_unittests",
+        "test_target": "//sql:sql_unittests"
       },
       {
         "merge": {
@@ -505,11 +531,12 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ]
         },
-        "test": "url_unittests"
+        "test": "url_unittests",
+        "test_target": "//url:url_unittests"
       }
     ],
     "isolated_scripts": [
@@ -532,12 +559,13 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ],
           "idempotent": false,
           "shards": 6
-        }
+        },
+        "test_target": "//chrome/test:telemetry_perf_unittests"
       },
       {
         "args": [
@@ -558,12 +586,13 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ],
           "idempotent": false,
           "shards": 24
-        }
+        },
+        "test_target": "//chrome/test:telemetry_unittests"
       },
       {
         "args": [
@@ -572,7 +601,8 @@
           "--browser=cros-chrome",
           "--passthrough",
           "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --force_high_performance_gpu --use-cmd-decoder=validating",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --force_high_performance_gpu",
+          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl_conformance_tests_output.json",
           "--remote=127.0.0.1",
           "--remote-ssh-port=9222"
         ],
@@ -589,11 +619,11 @@
             {
               "kvm": "1",
               "os": "Ubuntu-16.04",
-              "pool": "Chrome-CrOS-VM"
+              "pool": "chromium.tests.cros.vm"
             }
           ],
           "idempotent": false,
-          "shards": 6
+          "shards": 12
         }
       }
     ]
@@ -632,6 +662,7 @@
           ]
         },
         "test": "base_unittests",
+        "test_target": "//base:base_unittests",
         "trigger_script": {
           "script": "//testing/trigger_scripts/chromeos_device_trigger.py"
         }
@@ -653,6 +684,7 @@
           "idempotent": false
         },
         "test": "chrome_all_tast_tests",
+        "test_target": "//chromeos:chrome_all_tast_tests",
         "trigger_script": {
           "script": "//testing/trigger_scripts/chromeos_device_trigger.py"
         }
@@ -673,6 +705,7 @@
           ]
         },
         "test": "cros_browser_sanity_test",
+        "test_target": "//chromeos:cros_browser_sanity_test",
         "trigger_script": {
           "script": "//testing/trigger_scripts/chromeos_device_trigger.py"
         }
@@ -702,6 +735,7 @@
           ],
           "idempotent": false
         },
+        "test_target": "//chrome/test:telemetry_perf_unittests",
         "trigger_script": {
           "script": "//testing/trigger_scripts/chromeos_device_trigger.py"
         }
@@ -730,6 +764,7 @@
           "idempotent": false,
           "shards": 10
         },
+        "test_target": "//chrome/test:telemetry_unittests",
         "trigger_script": {
           "script": "//testing/trigger_scripts/chromeos_device_trigger.py"
         }
@@ -751,7 +786,8 @@
             }
           ]
         },
-        "test": "accessibility_unittests"
+        "test": "accessibility_unittests",
+        "test_target": "//ui/accessibility:accessibility_unittests"
       },
       {
         "merge": {
@@ -766,7 +802,8 @@
             }
           ]
         },
-        "test": "angle_unittests"
+        "test": "angle_unittests",
+        "test_target": "//third_party/angle/src/tests:angle_unittests"
       },
       {
         "merge": {
@@ -781,7 +818,8 @@
             }
           ]
         },
-        "test": "app_list_unittests"
+        "test": "app_list_unittests",
+        "test_target": "//ash/app_list:app_list_unittests"
       },
       {
         "merge": {
@@ -796,7 +834,8 @@
             }
           ]
         },
-        "test": "app_shell_unittests"
+        "test": "app_shell_unittests",
+        "test_target": "//extensions/shell:app_shell_unittests"
       },
       {
         "merge": {
@@ -811,7 +850,8 @@
             }
           ]
         },
-        "test": "ash_unittests"
+        "test": "ash_unittests",
+        "test_target": "//ash:ash_unittests"
       },
       {
         "merge": {
@@ -826,7 +866,8 @@
             }
           ]
         },
-        "test": "aura_unittests"
+        "test": "aura_unittests",
+        "test_target": "//ui/aura:aura_unittests"
       },
       {
         "merge": {
@@ -841,7 +882,8 @@
             }
           ]
         },
-        "test": "base_unittests"
+        "test": "base_unittests",
+        "test_target": "//base:base_unittests"
       },
       {
         "merge": {
@@ -856,7 +898,8 @@
             }
           ]
         },
-        "test": "base_util_unittests"
+        "test": "base_util_unittests",
+        "test_target": "//base/util:base_util_unittests"
       },
       {
         "merge": {
@@ -871,7 +914,8 @@
             }
           ]
         },
-        "test": "blink_common_unittests"
+        "test": "blink_common_unittests",
+        "test_target": "//third_party/blink/common:blink_common_unittests"
       },
       {
         "merge": {
@@ -886,7 +930,8 @@
             }
           ]
         },
-        "test": "blink_fuzzer_unittests"
+        "test": "blink_fuzzer_unittests",
+        "test_target": "//third_party/blink/renderer/platform:blink_fuzzer_unittests"
       },
       {
         "merge": {
@@ -901,7 +946,8 @@
             }
           ]
         },
-        "test": "blink_heap_unittests"
+        "test": "blink_heap_unittests",
+        "test_target": "//third_party/blink/renderer/platform/heap:blink_heap_unittests"
       },
       {
         "merge": {
@@ -916,7 +962,8 @@
             }
           ]
         },
-        "test": "blink_platform_unittests"
+        "test": "blink_platform_unittests",
+        "test_target": "//third_party/blink/renderer/platform:blink_platform_unittests"
       },
       {
         "merge": {
@@ -932,7 +979,8 @@
             }
           ]
         },
-        "test": "blink_unittests"
+        "test": "blink_unittests",
+        "test_target": "//third_party/blink/renderer/controller:blink_unittests"
       },
       {
         "merge": {
@@ -947,7 +995,8 @@
             }
           ]
         },
-        "test": "boringssl_crypto_tests"
+        "test": "boringssl_crypto_tests",
+        "test_target": "//third_party/boringssl:boringssl_crypto_tests"
       },
       {
         "merge": {
@@ -962,7 +1011,8 @@
             }
           ]
         },
-        "test": "boringssl_ssl_tests"
+        "test": "boringssl_ssl_tests",
+        "test_target": "//third_party/boringssl:boringssl_ssl_tests"
       },
       {
         "merge": {
@@ -978,27 +1028,8 @@
           ],
           "shards": 30
         },
-        "test": "browser_tests"
-      },
-      {
-        "args": [
-          "--disable-features=VizDisplayCompositor"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "non_viz_browser_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "shards": 30
-        },
-        "test": "browser_tests"
+        "test": "browser_tests",
+        "test_target": "//chrome/test:browser_tests"
       },
       {
         "merge": {
@@ -1013,7 +1044,8 @@
             }
           ]
         },
-        "test": "cacheinvalidation_unittests"
+        "test": "cacheinvalidation_unittests",
+        "test_target": "//third_party/cacheinvalidation:cacheinvalidation_unittests"
       },
       {
         "args": [
@@ -1031,7 +1063,8 @@
             }
           ]
         },
-        "test": "capture_unittests"
+        "test": "capture_unittests",
+        "test_target": "//media/capture:capture_unittests"
       },
       {
         "merge": {
@@ -1046,7 +1079,8 @@
             }
           ]
         },
-        "test": "cast_unittests"
+        "test": "cast_unittests",
+        "test_target": "//media/cast:cast_unittests"
       },
       {
         "merge": {
@@ -1061,7 +1095,8 @@
             }
           ]
         },
-        "test": "cc_unittests"
+        "test": "cc_unittests",
+        "test_target": "//cc:cc_unittests"
       },
       {
         "merge": {
@@ -1076,7 +1111,8 @@
             }
           ]
         },
-        "test": "chrome_app_unittests"
+        "test": "chrome_app_unittests",
+        "test_target": "//chrome/test:chrome_app_unittests"
       },
       {
         "merge": {
@@ -1091,7 +1127,8 @@
             }
           ]
         },
-        "test": "chromedriver_unittests"
+        "test": "chromedriver_unittests",
+        "test_target": "//chrome/test/chromedriver:chromedriver_unittests"
       },
       {
         "merge": {
@@ -1106,7 +1143,8 @@
             }
           ]
         },
-        "test": "chromeos_components_unittests"
+        "test": "chromeos_components_unittests",
+        "test_target": "//chromeos/components:chromeos_components_unittests"
       },
       {
         "merge": {
@@ -1121,7 +1159,8 @@
             }
           ]
         },
-        "test": "chromeos_unittests"
+        "test": "chromeos_unittests",
+        "test_target": "//chromeos:chromeos_unittests"
       },
       {
         "merge": {
@@ -1136,7 +1175,8 @@
             }
           ]
         },
-        "test": "color_unittests"
+        "test": "components_browsertests",
+        "test_target": "//components:components_browsertests"
       },
       {
         "merge": {
@@ -1151,7 +1191,8 @@
             }
           ]
         },
-        "test": "components_browsertests"
+        "test": "components_unittests",
+        "test_target": "//components:components_unittests"
       },
       {
         "merge": {
@@ -1166,22 +1207,8 @@
             }
           ]
         },
-        "test": "components_unittests"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "compositor_unittests"
+        "test": "compositor_unittests",
+        "test_target": "//ui/compositor:compositor_unittests"
       },
       {
         "merge": {
@@ -1197,27 +1224,8 @@
           ],
           "shards": 6
         },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--disable-features=VizDisplayCompositor"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "non_viz_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "shards": 4
-        },
-        "test": "content_browsertests"
+        "test": "content_browsertests",
+        "test_target": "//content/test:content_browsertests"
       },
       {
         "merge": {
@@ -1232,26 +1240,8 @@
             }
           ]
         },
-        "test": "content_unittests"
-      },
-      {
-        "args": [
-          "--disable-features=VizDisplayCompositor"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "non_viz_content_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "content_unittests"
+        "test": "content_unittests",
+        "test_target": "//content/test:content_unittests"
       },
       {
         "merge": {
@@ -1266,7 +1256,8 @@
             }
           ]
         },
-        "test": "crypto_unittests"
+        "test": "crypto_unittests",
+        "test_target": "//crypto:crypto_unittests"
       },
       {
         "merge": {
@@ -1281,7 +1272,8 @@
             }
           ]
         },
-        "test": "dbus_unittests"
+        "test": "dbus_unittests",
+        "test_target": "//dbus:dbus_unittests"
       },
       {
         "merge": {
@@ -1296,7 +1288,8 @@
             }
           ]
         },
-        "test": "device_unittests"
+        "test": "device_unittests",
+        "test_target": "//device:device_unittests"
       },
       {
         "merge": {
@@ -1311,7 +1304,8 @@
             }
           ]
         },
-        "test": "display_unittests"
+        "test": "display_unittests",
+        "test_target": "//ui/display:display_unittests"
       },
       {
         "merge": {
@@ -1326,7 +1320,8 @@
             }
           ]
         },
-        "test": "events_unittests"
+        "test": "events_unittests",
+        "test_target": "//ui/events:events_unittests"
       },
       {
         "merge": {
@@ -1341,7 +1336,8 @@
             }
           ]
         },
-        "test": "exo_unittests"
+        "test": "exo_unittests",
+        "test_target": "//components/exo:exo_unittests"
       },
       {
         "merge": {
@@ -1356,7 +1352,8 @@
             }
           ]
         },
-        "test": "extensions_browsertests"
+        "test": "extensions_browsertests",
+        "test_target": "//extensions:extensions_browsertests"
       },
       {
         "merge": {
@@ -1371,7 +1368,8 @@
             }
           ]
         },
-        "test": "extensions_unittests"
+        "test": "extensions_unittests",
+        "test_target": "//extensions:extensions_unittests"
       },
       {
         "merge": {
@@ -1386,7 +1384,8 @@
             }
           ]
         },
-        "test": "filesystem_service_unittests"
+        "test": "filesystem_service_unittests",
+        "test_target": "//components/services/filesystem:filesystem_service_unittests"
       },
       {
         "merge": {
@@ -1401,7 +1400,8 @@
             }
           ]
         },
-        "test": "gcm_unit_tests"
+        "test": "gcm_unit_tests",
+        "test_target": "//google_apis/gcm:gcm_unit_tests"
       },
       {
         "merge": {
@@ -1416,7 +1416,8 @@
             }
           ]
         },
-        "test": "gfx_unittests"
+        "test": "gfx_unittests",
+        "test_target": "//ui/gfx:gfx_unittests"
       },
       {
         "merge": {
@@ -1431,7 +1432,8 @@
             }
           ]
         },
-        "test": "gin_unittests"
+        "test": "gin_unittests",
+        "test_target": "//gin:gin_unittests"
       },
       {
         "merge": {
@@ -1446,7 +1448,8 @@
             }
           ]
         },
-        "test": "gl_unittests_ozone"
+        "test": "gl_unittests_ozone",
+        "test_target": "//ui/gl:gl_unittests_ozone"
       },
       {
         "merge": {
@@ -1461,7 +1464,8 @@
             }
           ]
         },
-        "test": "google_apis_unittests"
+        "test": "google_apis_unittests",
+        "test_target": "//google_apis:google_apis_unittests"
       },
       {
         "merge": {
@@ -1476,7 +1480,8 @@
             }
           ]
         },
-        "test": "gpu_unittests"
+        "test": "gpu_unittests",
+        "test_target": "//gpu:gpu_unittests"
       },
       {
         "merge": {
@@ -1491,7 +1496,8 @@
             }
           ]
         },
-        "test": "gwp_asan_unittests"
+        "test": "gwp_asan_unittests",
+        "test_target": "//components/gwp_asan:gwp_asan_unittests"
       },
       {
         "merge": {
@@ -1507,7 +1513,8 @@
           ],
           "shards": 3
         },
-        "test": "interactive_ui_tests"
+        "test": "interactive_ui_tests",
+        "test_target": "//chrome/test:interactive_ui_tests"
       },
       {
         "merge": {
@@ -1522,7 +1529,8 @@
             }
           ]
         },
-        "test": "ipc_tests"
+        "test": "ipc_tests",
+        "test_target": "//ipc:ipc_tests"
       },
       {
         "merge": {
@@ -1537,7 +1545,8 @@
             }
           ]
         },
-        "test": "jingle_unittests"
+        "test": "jingle_unittests",
+        "test_target": "//jingle:jingle_unittests"
       },
       {
         "merge": {
@@ -1552,7 +1561,8 @@
             }
           ]
         },
-        "test": "keyboard_unittests"
+        "test": "keyboard_unittests",
+        "test_target": "//ash/keyboard/ui:keyboard_unittests"
       },
       {
         "merge": {
@@ -1567,7 +1577,8 @@
             }
           ]
         },
-        "test": "latency_unittests"
+        "test": "latency_unittests",
+        "test_target": "//ui/latency:latency_unittests"
       },
       {
         "merge": {
@@ -1582,7 +1593,8 @@
             }
           ]
         },
-        "test": "libjingle_xmpp_unittests"
+        "test": "libjingle_xmpp_unittests",
+        "test_target": "//third_party/libjingle_xmpp:libjingle_xmpp_unittests"
       },
       {
         "merge": {
@@ -1597,7 +1609,8 @@
             }
           ]
         },
-        "test": "media_blink_unittests"
+        "test": "media_blink_unittests",
+        "test_target": "//media/blink:media_blink_unittests"
       },
       {
         "merge": {
@@ -1612,7 +1625,8 @@
             }
           ]
         },
-        "test": "media_service_unittests"
+        "test": "media_service_unittests",
+        "test_target": "//media/mojo/services:media_service_unittests"
       },
       {
         "merge": {
@@ -1627,7 +1641,8 @@
             }
           ]
         },
-        "test": "media_unittests"
+        "test": "media_unittests",
+        "test_target": "//media:media_unittests"
       },
       {
         "merge": {
@@ -1642,7 +1657,8 @@
             }
           ]
         },
-        "test": "message_center_unittests"
+        "test": "message_center_unittests",
+        "test_target": "//ui/message_center:message_center_unittests"
       },
       {
         "merge": {
@@ -1657,7 +1673,8 @@
             }
           ]
         },
-        "test": "midi_unittests"
+        "test": "midi_unittests",
+        "test_target": "//media/midi:midi_unittests"
       },
       {
         "merge": {
@@ -1672,7 +1689,8 @@
             }
           ]
         },
-        "test": "mojo_core_unittests"
+        "test": "mojo_core_unittests",
+        "test_target": "//mojo/core:mojo_core_unittests"
       },
       {
         "merge": {
@@ -1687,7 +1705,8 @@
             }
           ]
         },
-        "test": "mojo_unittests"
+        "test": "mojo_unittests",
+        "test_target": "//mojo:mojo_unittests"
       },
       {
         "merge": {
@@ -1702,7 +1721,8 @@
             }
           ]
         },
-        "test": "nacl_helper_nonsfi_unittests"
+        "test": "nacl_helper_nonsfi_unittests",
+        "test_target": "//components/nacl/loader:nacl_helper_nonsfi_unittests"
       },
       {
         "merge": {
@@ -1717,7 +1737,8 @@
             }
           ]
         },
-        "test": "nacl_loader_unittests"
+        "test": "nacl_loader_unittests",
+        "test_target": "//components/nacl/loader:nacl_loader_unittests"
       },
       {
         "merge": {
@@ -1732,7 +1753,8 @@
             }
           ]
         },
-        "test": "native_theme_unittests"
+        "test": "native_theme_unittests",
+        "test_target": "//ui/native_theme:native_theme_unittests"
       },
       {
         "merge": {
@@ -1748,7 +1770,8 @@
           ],
           "shards": 2
         },
-        "test": "net_unittests"
+        "test": "net_unittests",
+        "test_target": "//net:net_unittests"
       },
       {
         "args": [
@@ -1766,7 +1789,8 @@
             }
           ]
         },
-        "test": "ozone_gl_unittests"
+        "test": "ozone_gl_unittests",
+        "test_target": "//ui/ozone/gl:ozone_gl_unittests"
       },
       {
         "merge": {
@@ -1781,7 +1805,8 @@
             }
           ]
         },
-        "test": "ozone_unittests"
+        "test": "ozone_unittests",
+        "test_target": "//ui/ozone:ozone_unittests"
       },
       {
         "merge": {
@@ -1796,7 +1821,8 @@
             }
           ]
         },
-        "test": "ozone_x11_unittests"
+        "test": "ozone_x11_unittests",
+        "test_target": "//ui/ozone:ozone_x11_unittests"
       },
       {
         "merge": {
@@ -1811,7 +1837,8 @@
             }
           ]
         },
-        "test": "pdf_unittests"
+        "test": "pdf_unittests",
+        "test_target": "//pdf:pdf_unittests"
       },
       {
         "merge": {
@@ -1826,7 +1853,8 @@
             }
           ]
         },
-        "test": "perfetto_unittests"
+        "test": "perfetto_unittests",
+        "test_target": "//third_party/perfetto:perfetto_unittests"
       },
       {
         "merge": {
@@ -1841,7 +1869,8 @@
             }
           ]
         },
-        "test": "ppapi_unittests"
+        "test": "ppapi_unittests",
+        "test_target": "//ppapi:ppapi_unittests"
       },
       {
         "merge": {
@@ -1856,7 +1885,8 @@
             }
           ]
         },
-        "test": "printing_unittests"
+        "test": "printing_unittests",
+        "test_target": "//printing:printing_unittests"
       },
       {
         "merge": {
@@ -1871,7 +1901,8 @@
             }
           ]
         },
-        "test": "remoting_unittests"
+        "test": "remoting_unittests",
+        "test_target": "//remoting:remoting_unittests"
       },
       {
         "merge": {
@@ -1886,7 +1917,8 @@
             }
           ]
         },
-        "test": "sandbox_linux_unittests"
+        "test": "sandbox_linux_unittests",
+        "test_target": "//sandbox/linux:sandbox_linux_unittests"
       },
       {
         "merge": {
@@ -1901,7 +1933,8 @@
             }
           ]
         },
-        "test": "service_manager_unittests"
+        "test": "service_manager_unittests",
+        "test_target": "//services/service_manager/tests:service_manager_unittests"
       },
       {
         "merge": {
@@ -1916,7 +1949,8 @@
             }
           ]
         },
-        "test": "services_unittests"
+        "test": "services_unittests",
+        "test_target": "//services:services_unittests"
       },
       {
         "merge": {
@@ -1931,7 +1965,8 @@
             }
           ]
         },
-        "test": "shell_dialogs_unittests"
+        "test": "shell_dialogs_unittests",
+        "test_target": "//ui/shell_dialogs:shell_dialogs_unittests"
       },
       {
         "merge": {
@@ -1946,7 +1981,8 @@
             }
           ]
         },
-        "test": "skia_unittests"
+        "test": "skia_unittests",
+        "test_target": "//skia:skia_unittests"
       },
       {
         "merge": {
@@ -1961,7 +1997,8 @@
             }
           ]
         },
-        "test": "snapshot_unittests"
+        "test": "snapshot_unittests",
+        "test_target": "//ui/snapshot:snapshot_unittests"
       },
       {
         "merge": {
@@ -1976,7 +2013,8 @@
             }
           ]
         },
-        "test": "sql_unittests"
+        "test": "sql_unittests",
+        "test_target": "//sql:sql_unittests"
       },
       {
         "merge": {
@@ -1991,7 +2029,8 @@
             }
           ]
         },
-        "test": "storage_unittests"
+        "test": "storage_unittests",
+        "test_target": "//storage:storage_unittests"
       },
       {
         "merge": {
@@ -2006,7 +2045,8 @@
             }
           ]
         },
-        "test": "sync_integration_tests"
+        "test": "sync_integration_tests",
+        "test_target": "//chrome/test:sync_integration_tests"
       },
       {
         "merge": {
@@ -2021,7 +2061,8 @@
             }
           ]
         },
-        "test": "traffic_annotation_auditor_unittests"
+        "test": "traffic_annotation_auditor_unittests",
+        "test_target": "//tools/traffic_annotation/auditor:traffic_annotation_auditor_unittests"
       },
       {
         "merge": {
@@ -2036,7 +2077,8 @@
             }
           ]
         },
-        "test": "ui_base_unittests"
+        "test": "ui_base_unittests",
+        "test_target": "//ui/base:ui_base_unittests"
       },
       {
         "merge": {
@@ -2051,7 +2093,8 @@
             }
           ]
         },
-        "test": "ui_chromeos_unittests"
+        "test": "ui_chromeos_unittests",
+        "test_target": "//ui/chromeos:ui_chromeos_unittests"
       },
       {
         "merge": {
@@ -2066,7 +2109,8 @@
             }
           ]
         },
-        "test": "ui_touch_selection_unittests"
+        "test": "ui_touch_selection_unittests",
+        "test_target": "//ui/touch_selection:ui_touch_selection_unittests"
       },
       {
         "merge": {
@@ -2082,7 +2126,8 @@
           ],
           "shards": 2
         },
-        "test": "unit_tests"
+        "test": "unit_tests",
+        "test_target": "//chrome/test:unit_tests"
       },
       {
         "merge": {
@@ -2097,7 +2142,8 @@
             }
           ]
         },
-        "test": "url_unittests"
+        "test": "url_unittests",
+        "test_target": "//url:url_unittests"
       },
       {
         "experiment_percentage": 100,
@@ -2113,7 +2159,8 @@
             }
           ]
         },
-        "test": "usage_time_limit_unittests"
+        "test": "usage_time_limit_unittests",
+        "test_target": "//chrome/test:usage_time_limit_unittests"
       },
       {
         "merge": {
@@ -2128,7 +2175,8 @@
             }
           ]
         },
-        "test": "views_unittests"
+        "test": "views_unittests",
+        "test_target": "//ui/views:views_unittests"
       },
       {
         "merge": {
@@ -2143,7 +2191,8 @@
             }
           ]
         },
-        "test": "viz_unittests"
+        "test": "viz_unittests",
+        "test_target": "//components/viz:viz_unittests"
       },
       {
         "merge": {
@@ -2158,7 +2207,8 @@
             }
           ]
         },
-        "test": "wm_unittests"
+        "test": "wm_unittests",
+        "test_target": "//ui/wm:wm_unittests"
       },
       {
         "merge": {
@@ -2173,7 +2223,8 @@
             }
           ]
         },
-        "test": "wtf_unittests"
+        "test": "wtf_unittests",
+        "test_target": "//third_party/blink/renderer/platform/wtf:wtf_unittests"
       }
     ]
   },
@@ -2196,7 +2247,8 @@
             }
           ]
         },
-        "test": "accessibility_unittests"
+        "test": "accessibility_unittests",
+        "test_target": "//ui/accessibility:accessibility_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2212,7 +2264,8 @@
             }
           ]
         },
-        "test": "angle_unittests"
+        "test": "angle_unittests",
+        "test_target": "//third_party/angle/src/tests:angle_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2228,7 +2281,8 @@
             }
           ]
         },
-        "test": "app_list_unittests"
+        "test": "app_list_unittests",
+        "test_target": "//ash/app_list:app_list_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2244,7 +2298,8 @@
             }
           ]
         },
-        "test": "app_shell_unittests"
+        "test": "app_shell_unittests",
+        "test_target": "//extensions/shell:app_shell_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2260,7 +2315,8 @@
             }
           ]
         },
-        "test": "ash_unittests"
+        "test": "ash_unittests",
+        "test_target": "//ash:ash_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2276,7 +2332,8 @@
             }
           ]
         },
-        "test": "aura_unittests"
+        "test": "aura_unittests",
+        "test_target": "//ui/aura:aura_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2292,7 +2349,8 @@
             }
           ]
         },
-        "test": "base_unittests"
+        "test": "base_unittests",
+        "test_target": "//base:base_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2308,7 +2366,8 @@
             }
           ]
         },
-        "test": "base_util_unittests"
+        "test": "base_util_unittests",
+        "test_target": "//base/util:base_util_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2324,7 +2383,8 @@
             }
           ]
         },
-        "test": "blink_common_unittests"
+        "test": "blink_common_unittests",
+        "test_target": "//third_party/blink/common:blink_common_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2340,7 +2400,8 @@
             }
           ]
         },
-        "test": "blink_fuzzer_unittests"
+        "test": "blink_fuzzer_unittests",
+        "test_target": "//third_party/blink/renderer/platform:blink_fuzzer_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2356,7 +2417,8 @@
             }
           ]
         },
-        "test": "blink_heap_unittests"
+        "test": "blink_heap_unittests",
+        "test_target": "//third_party/blink/renderer/platform/heap:blink_heap_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2372,7 +2434,8 @@
             }
           ]
         },
-        "test": "blink_platform_unittests"
+        "test": "blink_platform_unittests",
+        "test_target": "//third_party/blink/renderer/platform:blink_platform_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2389,7 +2452,8 @@
             }
           ]
         },
-        "test": "blink_unittests"
+        "test": "blink_unittests",
+        "test_target": "//third_party/blink/renderer/controller:blink_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2405,7 +2469,8 @@
             }
           ]
         },
-        "test": "boringssl_crypto_tests"
+        "test": "boringssl_crypto_tests",
+        "test_target": "//third_party/boringssl:boringssl_crypto_tests"
       },
       {
         "isolate_coverage_data": true,
@@ -2421,7 +2486,8 @@
             }
           ]
         },
-        "test": "boringssl_ssl_tests"
+        "test": "boringssl_ssl_tests",
+        "test_target": "//third_party/boringssl:boringssl_ssl_tests"
       },
       {
         "isolate_coverage_data": true,
@@ -2438,28 +2504,8 @@
           ],
           "shards": 20
         },
-        "test": "browser_tests"
-      },
-      {
-        "args": [
-          "--disable-features=VizDisplayCompositor"
-        ],
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "non_viz_browser_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "shards": 20
-        },
-        "test": "browser_tests"
+        "test": "browser_tests",
+        "test_target": "//chrome/test:browser_tests"
       },
       {
         "isolate_coverage_data": true,
@@ -2475,7 +2521,8 @@
             }
           ]
         },
-        "test": "cacheinvalidation_unittests"
+        "test": "cacheinvalidation_unittests",
+        "test_target": "//third_party/cacheinvalidation:cacheinvalidation_unittests"
       },
       {
         "args": [
@@ -2494,7 +2541,8 @@
             }
           ]
         },
-        "test": "capture_unittests"
+        "test": "capture_unittests",
+        "test_target": "//media/capture:capture_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2510,7 +2558,8 @@
             }
           ]
         },
-        "test": "cast_unittests"
+        "test": "cast_unittests",
+        "test_target": "//media/cast:cast_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2526,7 +2575,8 @@
             }
           ]
         },
-        "test": "cc_unittests"
+        "test": "cc_unittests",
+        "test_target": "//cc:cc_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2542,7 +2592,8 @@
             }
           ]
         },
-        "test": "chrome_app_unittests"
+        "test": "chrome_app_unittests",
+        "test_target": "//chrome/test:chrome_app_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2558,7 +2609,8 @@
             }
           ]
         },
-        "test": "chromedriver_unittests"
+        "test": "chromedriver_unittests",
+        "test_target": "//chrome/test/chromedriver:chromedriver_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2574,7 +2626,8 @@
             }
           ]
         },
-        "test": "chromeos_components_unittests"
+        "test": "chromeos_components_unittests",
+        "test_target": "//chromeos/components:chromeos_components_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2590,7 +2643,8 @@
             }
           ]
         },
-        "test": "chromeos_unittests"
+        "test": "chromeos_unittests",
+        "test_target": "//chromeos:chromeos_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2606,7 +2660,8 @@
             }
           ]
         },
-        "test": "color_unittests"
+        "test": "components_browsertests",
+        "test_target": "//components:components_browsertests"
       },
       {
         "isolate_coverage_data": true,
@@ -2622,7 +2677,8 @@
             }
           ]
         },
-        "test": "components_browsertests"
+        "test": "components_unittests",
+        "test_target": "//components:components_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2638,23 +2694,8 @@
             }
           ]
         },
-        "test": "components_unittests"
-      },
-      {
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "compositor_unittests"
+        "test": "compositor_unittests",
+        "test_target": "//ui/compositor:compositor_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2671,28 +2712,8 @@
           ],
           "shards": 3
         },
-        "test": "content_browsertests"
-      },
-      {
-        "args": [
-          "--disable-features=VizDisplayCompositor"
-        ],
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "non_viz_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "shards": 4
-        },
-        "test": "content_browsertests"
+        "test": "content_browsertests",
+        "test_target": "//content/test:content_browsertests"
       },
       {
         "isolate_coverage_data": true,
@@ -2708,27 +2729,8 @@
             }
           ]
         },
-        "test": "content_unittests"
-      },
-      {
-        "args": [
-          "--disable-features=VizDisplayCompositor"
-        ],
-        "isolate_coverage_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "non_viz_content_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ]
-        },
-        "test": "content_unittests"
+        "test": "content_unittests",
+        "test_target": "//content/test:content_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2744,7 +2746,8 @@
             }
           ]
         },
-        "test": "crypto_unittests"
+        "test": "crypto_unittests",
+        "test_target": "//crypto:crypto_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2760,7 +2763,8 @@
             }
           ]
         },
-        "test": "dbus_unittests"
+        "test": "dbus_unittests",
+        "test_target": "//dbus:dbus_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2776,7 +2780,8 @@
             }
           ]
         },
-        "test": "device_unittests"
+        "test": "device_unittests",
+        "test_target": "//device:device_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2792,7 +2797,8 @@
             }
           ]
         },
-        "test": "display_unittests"
+        "test": "display_unittests",
+        "test_target": "//ui/display:display_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2808,7 +2814,8 @@
             }
           ]
         },
-        "test": "events_unittests"
+        "test": "events_unittests",
+        "test_target": "//ui/events:events_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2824,7 +2831,8 @@
             }
           ]
         },
-        "test": "exo_unittests"
+        "test": "exo_unittests",
+        "test_target": "//components/exo:exo_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2840,7 +2848,8 @@
             }
           ]
         },
-        "test": "extensions_browsertests"
+        "test": "extensions_browsertests",
+        "test_target": "//extensions:extensions_browsertests"
       },
       {
         "isolate_coverage_data": true,
@@ -2856,7 +2865,8 @@
             }
           ]
         },
-        "test": "extensions_unittests"
+        "test": "extensions_unittests",
+        "test_target": "//extensions:extensions_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2872,7 +2882,8 @@
             }
           ]
         },
-        "test": "filesystem_service_unittests"
+        "test": "filesystem_service_unittests",
+        "test_target": "//components/services/filesystem:filesystem_service_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2888,7 +2899,8 @@
             }
           ]
         },
-        "test": "gcm_unit_tests"
+        "test": "gcm_unit_tests",
+        "test_target": "//google_apis/gcm:gcm_unit_tests"
       },
       {
         "isolate_coverage_data": true,
@@ -2904,7 +2916,8 @@
             }
           ]
         },
-        "test": "gfx_unittests"
+        "test": "gfx_unittests",
+        "test_target": "//ui/gfx:gfx_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2920,7 +2933,8 @@
             }
           ]
         },
-        "test": "gin_unittests"
+        "test": "gin_unittests",
+        "test_target": "//gin:gin_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2936,7 +2950,8 @@
             }
           ]
         },
-        "test": "gl_unittests_ozone"
+        "test": "gl_unittests_ozone",
+        "test_target": "//ui/gl:gl_unittests_ozone"
       },
       {
         "isolate_coverage_data": true,
@@ -2952,7 +2967,8 @@
             }
           ]
         },
-        "test": "google_apis_unittests"
+        "test": "google_apis_unittests",
+        "test_target": "//google_apis:google_apis_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2968,7 +2984,8 @@
             }
           ]
         },
-        "test": "gpu_unittests"
+        "test": "gpu_unittests",
+        "test_target": "//gpu:gpu_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -2984,7 +3001,8 @@
             }
           ]
         },
-        "test": "gwp_asan_unittests"
+        "test": "gwp_asan_unittests",
+        "test_target": "//components/gwp_asan:gwp_asan_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3001,7 +3019,8 @@
           ],
           "shards": 3
         },
-        "test": "interactive_ui_tests"
+        "test": "interactive_ui_tests",
+        "test_target": "//chrome/test:interactive_ui_tests"
       },
       {
         "isolate_coverage_data": true,
@@ -3017,7 +3036,8 @@
             }
           ]
         },
-        "test": "ipc_tests"
+        "test": "ipc_tests",
+        "test_target": "//ipc:ipc_tests"
       },
       {
         "isolate_coverage_data": true,
@@ -3033,7 +3053,8 @@
             }
           ]
         },
-        "test": "jingle_unittests"
+        "test": "jingle_unittests",
+        "test_target": "//jingle:jingle_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3049,7 +3070,8 @@
             }
           ]
         },
-        "test": "keyboard_unittests"
+        "test": "keyboard_unittests",
+        "test_target": "//ash/keyboard/ui:keyboard_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3065,7 +3087,8 @@
             }
           ]
         },
-        "test": "latency_unittests"
+        "test": "latency_unittests",
+        "test_target": "//ui/latency:latency_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3081,7 +3104,8 @@
             }
           ]
         },
-        "test": "libjingle_xmpp_unittests"
+        "test": "libjingle_xmpp_unittests",
+        "test_target": "//third_party/libjingle_xmpp:libjingle_xmpp_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3097,7 +3121,8 @@
             }
           ]
         },
-        "test": "media_blink_unittests"
+        "test": "media_blink_unittests",
+        "test_target": "//media/blink:media_blink_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3113,7 +3138,8 @@
             }
           ]
         },
-        "test": "media_service_unittests"
+        "test": "media_service_unittests",
+        "test_target": "//media/mojo/services:media_service_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3129,7 +3155,8 @@
             }
           ]
         },
-        "test": "media_unittests"
+        "test": "media_unittests",
+        "test_target": "//media:media_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3145,7 +3172,8 @@
             }
           ]
         },
-        "test": "message_center_unittests"
+        "test": "message_center_unittests",
+        "test_target": "//ui/message_center:message_center_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3161,7 +3189,8 @@
             }
           ]
         },
-        "test": "midi_unittests"
+        "test": "midi_unittests",
+        "test_target": "//media/midi:midi_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3177,7 +3206,8 @@
             }
           ]
         },
-        "test": "mojo_core_unittests"
+        "test": "mojo_core_unittests",
+        "test_target": "//mojo/core:mojo_core_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3193,7 +3223,8 @@
             }
           ]
         },
-        "test": "mojo_unittests"
+        "test": "mojo_unittests",
+        "test_target": "//mojo:mojo_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3209,7 +3240,8 @@
             }
           ]
         },
-        "test": "nacl_helper_nonsfi_unittests"
+        "test": "nacl_helper_nonsfi_unittests",
+        "test_target": "//components/nacl/loader:nacl_helper_nonsfi_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3225,7 +3257,8 @@
             }
           ]
         },
-        "test": "nacl_loader_unittests"
+        "test": "nacl_loader_unittests",
+        "test_target": "//components/nacl/loader:nacl_loader_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3241,7 +3274,8 @@
             }
           ]
         },
-        "test": "native_theme_unittests"
+        "test": "native_theme_unittests",
+        "test_target": "//ui/native_theme:native_theme_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3257,7 +3291,8 @@
             }
           ]
         },
-        "test": "net_unittests"
+        "test": "net_unittests",
+        "test_target": "//net:net_unittests"
       },
       {
         "args": [
@@ -3276,7 +3311,8 @@
             }
           ]
         },
-        "test": "ozone_gl_unittests"
+        "test": "ozone_gl_unittests",
+        "test_target": "//ui/ozone/gl:ozone_gl_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3292,7 +3328,8 @@
             }
           ]
         },
-        "test": "ozone_unittests"
+        "test": "ozone_unittests",
+        "test_target": "//ui/ozone:ozone_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3308,7 +3345,8 @@
             }
           ]
         },
-        "test": "ozone_x11_unittests"
+        "test": "ozone_x11_unittests",
+        "test_target": "//ui/ozone:ozone_x11_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3324,7 +3362,8 @@
             }
           ]
         },
-        "test": "pdf_unittests"
+        "test": "pdf_unittests",
+        "test_target": "//pdf:pdf_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3340,7 +3379,8 @@
             }
           ]
         },
-        "test": "perfetto_unittests"
+        "test": "perfetto_unittests",
+        "test_target": "//third_party/perfetto:perfetto_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3356,7 +3396,8 @@
             }
           ]
         },
-        "test": "ppapi_unittests"
+        "test": "ppapi_unittests",
+        "test_target": "//ppapi:ppapi_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3372,7 +3413,8 @@
             }
           ]
         },
-        "test": "printing_unittests"
+        "test": "printing_unittests",
+        "test_target": "//printing:printing_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3388,7 +3430,8 @@
             }
           ]
         },
-        "test": "remoting_unittests"
+        "test": "remoting_unittests",
+        "test_target": "//remoting:remoting_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3404,7 +3447,8 @@
             }
           ]
         },
-        "test": "sandbox_linux_unittests"
+        "test": "sandbox_linux_unittests",
+        "test_target": "//sandbox/linux:sandbox_linux_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3420,7 +3464,8 @@
             }
           ]
         },
-        "test": "service_manager_unittests"
+        "test": "service_manager_unittests",
+        "test_target": "//services/service_manager/tests:service_manager_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3436,7 +3481,8 @@
             }
           ]
         },
-        "test": "services_unittests"
+        "test": "services_unittests",
+        "test_target": "//services:services_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3452,7 +3498,8 @@
             }
           ]
         },
-        "test": "shell_dialogs_unittests"
+        "test": "shell_dialogs_unittests",
+        "test_target": "//ui/shell_dialogs:shell_dialogs_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3468,7 +3515,8 @@
             }
           ]
         },
-        "test": "skia_unittests"
+        "test": "skia_unittests",
+        "test_target": "//skia:skia_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3484,7 +3532,8 @@
             }
           ]
         },
-        "test": "snapshot_unittests"
+        "test": "snapshot_unittests",
+        "test_target": "//ui/snapshot:snapshot_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3500,7 +3549,8 @@
             }
           ]
         },
-        "test": "sql_unittests"
+        "test": "sql_unittests",
+        "test_target": "//sql:sql_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3516,7 +3566,8 @@
             }
           ]
         },
-        "test": "storage_unittests"
+        "test": "storage_unittests",
+        "test_target": "//storage:storage_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3532,7 +3583,8 @@
             }
           ]
         },
-        "test": "sync_integration_tests"
+        "test": "sync_integration_tests",
+        "test_target": "//chrome/test:sync_integration_tests"
       },
       {
         "isolate_coverage_data": true,
@@ -3548,7 +3600,8 @@
             }
           ]
         },
-        "test": "traffic_annotation_auditor_unittests"
+        "test": "traffic_annotation_auditor_unittests",
+        "test_target": "//tools/traffic_annotation/auditor:traffic_annotation_auditor_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3564,7 +3617,8 @@
             }
           ]
         },
-        "test": "ui_base_unittests"
+        "test": "ui_base_unittests",
+        "test_target": "//ui/base:ui_base_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3580,7 +3634,8 @@
             }
           ]
         },
-        "test": "ui_chromeos_unittests"
+        "test": "ui_chromeos_unittests",
+        "test_target": "//ui/chromeos:ui_chromeos_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3596,7 +3651,8 @@
             }
           ]
         },
-        "test": "ui_touch_selection_unittests"
+        "test": "ui_touch_selection_unittests",
+        "test_target": "//ui/touch_selection:ui_touch_selection_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3613,7 +3669,8 @@
           ],
           "shards": 2
         },
-        "test": "unit_tests"
+        "test": "unit_tests",
+        "test_target": "//chrome/test:unit_tests"
       },
       {
         "isolate_coverage_data": true,
@@ -3629,7 +3686,8 @@
             }
           ]
         },
-        "test": "url_unittests"
+        "test": "url_unittests",
+        "test_target": "//url:url_unittests"
       },
       {
         "experiment_percentage": 100,
@@ -3646,7 +3704,8 @@
             }
           ]
         },
-        "test": "usage_time_limit_unittests"
+        "test": "usage_time_limit_unittests",
+        "test_target": "//chrome/test:usage_time_limit_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3662,7 +3721,8 @@
             }
           ]
         },
-        "test": "views_unittests"
+        "test": "views_unittests",
+        "test_target": "//ui/views:views_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3678,7 +3738,8 @@
             }
           ]
         },
-        "test": "viz_unittests"
+        "test": "viz_unittests",
+        "test_target": "//components/viz:viz_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3694,7 +3755,8 @@
             }
           ]
         },
-        "test": "wayland_client_perftests"
+        "test": "wayland_client_perftests",
+        "test_target": "//components/exo/wayland:wayland_client_perftests"
       },
       {
         "isolate_coverage_data": true,
@@ -3710,7 +3772,8 @@
             }
           ]
         },
-        "test": "wm_unittests"
+        "test": "wm_unittests",
+        "test_target": "//ui/wm:wm_unittests"
       },
       {
         "isolate_coverage_data": true,
@@ -3726,7 +3789,8 @@
             }
           ]
         },
-        "test": "wtf_unittests"
+        "test": "wtf_unittests",
+        "test_target": "//third_party/blink/renderer/platform/wtf:wtf_unittests"
       }
     ]
   }

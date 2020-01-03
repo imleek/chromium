@@ -31,6 +31,11 @@
       #manualProxy {
         padding-inline-start: var(--cr-section-padding);
       }
+
+      #proxyType  {
+        width: 320px;
+      }
+
     </style>
 
     <!-- Proxy type dropdown -->
@@ -103,13 +108,6 @@
                 managedProperties, editable, useSharedProxies)]]"
             value="{{proxy_.manual.secureHttpProxy}}"
             label="[[i18n('networkProxyShttp')]]">
-        </network-proxy-input>
-        <network-proxy-input
-            on-proxy-input-change="onProxyInputChange_"
-            editable="[[isEditable_('manual.ftpProxy.host', managedProperties,
-                editable, useSharedProxies)]]"
-            value="{{proxy_.manual.ftpProxy}}"
-            label="[[i18n('networkProxyFtp')]]">
         </network-proxy-input>
         <network-proxy-input
             on-proxy-input-change="onProxyInputChange_"

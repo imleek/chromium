@@ -3,7 +3,7 @@ document
 ++++description Name='This is a header element.'
 ++complementary
 ++++description Name='This is an aside element.'
-++group
+++group IsControlElement=false
 ++++description Name='This is an address element.'
 ++contentinfo
 ++++description Name='This is a footer element.'
@@ -47,13 +47,15 @@ document
 ++group
 ++++button Name='Details' ExpandCollapse.ExpandCollapseState='LeafNode'
 ++++++description Name='Details'
-++group
+++group IsControlElement=false
 ++++group
+++++++description Name='This should NOT have banner role.' IsControlElement=false
 ++group
 ++++group
 ++++++description Name='This should NOT have banner role.'
 ++group
 ++++group
+++++++description Name='This should NOT have banner role.' IsControlElement=false
 ++main
 ++++group
 ++++++description Name='This should NOT have banner role.'
@@ -75,8 +77,9 @@ document
 ++group
 ++++button Name='Details' ExpandCollapse.ExpandCollapseState='LeafNode'
 ++++++description Name='Details'
-++group
+++group IsControlElement=false
 ++++group
+++++++description Name='This should NOT have banner role.' IsControlElement=false
 ++group
 ++++group
 ++++++description Name='This should NOT have banner role.'
@@ -103,8 +106,9 @@ document
 ++group
 ++++button Name='Details' ExpandCollapse.ExpandCollapseState='LeafNode'
 ++++++description Name='Details'
-++group
+++group IsControlElement=false
 ++++group
+++++++description Name='This should NOT have footer role.' IsControlElement=false
 ++group
 ++++group
 ++++++description Name='This should NOT have footer role.'
@@ -131,13 +135,15 @@ document
 ++group
 ++++button Name='Details' ExpandCollapse.ExpandCollapseState='LeafNode'
 ++++++description Name='Details'
-++group
+++group IsControlElement=false
 ++++group
+++++++description Name='This should NOT have footer role.' IsControlElement=false
 ++group
 ++++group
 ++++++description Name='This should NOT have footer role.'
 ++group
 ++++group
+++++++description Name='This should NOT have footer role.' IsControlElement=false
 ++main
 ++++group
 ++++++description Name='This should NOT have footer role.'

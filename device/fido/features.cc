@@ -10,8 +10,6 @@
 namespace device {
 
 #if defined(OS_WIN)
-// Controls whether on Windows, U2F/CTAP2 requests are forwarded to the
-// native WebAuthentication API, where available.
 const base::Feature kWebAuthUseNativeWinApi{"WebAuthenticationUseNativeWinApi",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_WIN)
@@ -21,5 +19,13 @@ extern const base::Feature kWebAuthBiometricEnrollment{
 
 extern const base::Feature kWebAuthPhoneSupport{
     "WebAuthenticationPhoneSupport", base::FEATURE_DISABLED_BY_DEFAULT};
+
+extern const base::Feature kWebAuthFeaturePolicy{
+    "WebAuthenticationFeaturePolicy", base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
+const base::Feature kWebAuthCableLowLatency{"WebAuthenticationCableLowLatency",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
+#endif  // defined(OS_CHROMEOS) || defined(OS_LINUX)
 
 }  // namespace device

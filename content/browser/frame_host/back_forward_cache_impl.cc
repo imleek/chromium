@@ -21,6 +21,9 @@
 #include "net/http/http_request_headers.h"
 #include "net/http/http_status_code.h"
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
+#if defined(OS_ANDROID)
+#include "content/public/browser/android/child_process_importance.h"
+#endif
 
 namespace content {
 
@@ -39,51 +42,35 @@ static constexpr size_t kBackForwardCacheLimit = 1;
 // The default time to live in seconds for documents in BackForwardCache.
 static constexpr int kDefaultTimeToLiveInBackForwardCacheInSeconds = 15;
 
-// Invalid |navigation_start| value, for calls to SetPageFrozenImpl where we
-// don't need |navigation_start|.
-constexpr base::TimeTicks kInvalidNavigationStart = base::TimeTicks();
-
-void SetPageFrozenImpl(
-    RenderFrameHostImpl* render_frame_host,
-    bool frozen,
-    std::unordered_set<RenderViewHostImpl*>* render_view_hosts,
-    base::TimeTicks navigation_start) {
-  RenderViewHostImpl* render_view_host = render_frame_host->render_view_host();
-  // |navigation_start| should only be valid if we're restoring a page.
-  DCHECK_EQ(frozen, navigation_start == kInvalidNavigationStart);
-  // (Un)Freeze the frame's page if it is not (un)frozen yet.
-  if (render_view_hosts->find(render_view_host) == render_view_hosts->end()) {
-    // The state change for bfcache is:
-    // PageHidden -> PageFrozen -> PageResumed -> PageShown.
-    //
-    // See: https://developers.google.com/web/updates/2018/07/page-lifecycle-api
-    int rvh_routing_id = render_view_host->GetRoutingID();
-    // TODO(dcheng): Page messages should be used in conjunction with
-    // SendPageMessage(). Having it used to directly route a message to a
-    // RenderView is somewhat unusual. Figure out why this is needed.
-    if (frozen) {
-      render_view_host->Send(
-          new PageMsg_PutPageIntoBackForwardCache(rvh_routing_id));
-    } else {
-      render_view_host->Send(new PageMsg_RestorePageFromBackForwardCache(
-          rvh_routing_id, navigation_start));
-    }
-    render_view_hosts->insert(render_view_host);
-  }
-  // Recurse on |render_frame_host|'s children.
-  for (size_t index = 0; index < render_frame_host->child_count(); ++index) {
-    RenderFrameHostImpl* child_frame_host =
-        render_frame_host->child_at(index)->current_frame_host();
-    SetPageFrozenImpl(child_frame_host, frozen, render_view_hosts,
-                      navigation_start);
-  }
+#if defined(OS_ANDROID)
+bool IsProcessBindingEnabled() {
+  const std::string process_binding_param =
+      base::GetFieldTrialParamValueByFeature(features::kBackForwardCache,
+                                             "process_binding_strength");
+  return process_binding_param.empty() || process_binding_param == "DISABLE";
 }
+
+// Association of ChildProcessImportance to corresponding string names.
+const base::FeatureParam<ChildProcessImportance>::Option
+    child_process_importance_options[] = {
+        {ChildProcessImportance::IMPORTANT, "IMPORTANT"},
+        {ChildProcessImportance::MODERATE, "MODERATE"},
+        {ChildProcessImportance::NORMAL, "NORMAL"}};
+
+// Defines the binding strength for a processes holding cached pages. The value
+// is read from an experiment parameter value. Ideally this would be lower than
+// the one for processes holding the foreground page and similar to that of
+// background tabs so that the OS will hopefully kill the foreground tab last.
+// The default importance is set to MODERATE.
+const base::FeatureParam<ChildProcessImportance> kChildProcessImportanceParam{
+    &features::kBackForwardCache, "process_binding_strength",
+    ChildProcessImportance::MODERATE, &child_process_importance_options};
+#endif
 
 bool IsServiceWorkerSupported() {
   static constexpr base::FeatureParam<bool> service_worker_supported(
       &features::kBackForwardCache, "service_worker_supported", false);
-  return service_worker_supported.Get() &&
-         base::FeatureList::IsEnabled(features::kServiceWorkerOnUI);
+  return service_worker_supported.Get();
 }
 
 bool IsGeolocationSupported() {
@@ -113,6 +100,7 @@ uint64_t GetDisallowedFeatures(RenderFrameHostImpl* rfh) {
   // TODO(https://crbug.com/1015784): Finalize disallowed feature list, and test
   // for each disallowed feature.
   constexpr uint64_t kAlwaysDisallowedFeatures =
+      FeatureToBit(WebSchedulerTrackedFeature::kWebSocket) |
       FeatureToBit(WebSchedulerTrackedFeature::kWebRTC) |
       FeatureToBit(WebSchedulerTrackedFeature::kContainsPlugins) |
       FeatureToBit(WebSchedulerTrackedFeature::kDedicatedWorkerOrWorklet) |
@@ -128,7 +116,8 @@ uint64_t GetDisallowedFeatures(RenderFrameHostImpl* rfh) {
           WebSchedulerTrackedFeature::kRequestedAudioCapturePermission) |
       FeatureToBit(
           WebSchedulerTrackedFeature::kRequestedVideoCapturePermission) |
-      FeatureToBit(WebSchedulerTrackedFeature::kRequestedSensorsPermission) |
+      FeatureToBit(WebSchedulerTrackedFeature::
+                       kRequestedBackForwardCacheBlockedSensors) |
       FeatureToBit(
           WebSchedulerTrackedFeature::kRequestedBackgroundWorkPermission) |
       FeatureToBit(WebSchedulerTrackedFeature::kBroadcastChannel) |
@@ -180,6 +169,29 @@ std::map<std::string, std::vector<std::string>> SetAllowedURLs() {
 }
 
 BackForwardCacheTestDelegate* g_bfcache_disabled_test_observer = nullptr;
+
+void RestoreBrowserControlsState(RenderFrameHostImpl* cached_rfh) {
+  auto* current_rfh =
+      cached_rfh->frame_tree_node()->render_manager()->current_frame_host();
+
+  DCHECK_NE(current_rfh, cached_rfh);
+
+  float prev_top_controls_shown_ratio = current_rfh->GetRenderWidgetHost()
+                                            ->render_frame_metadata_provider()
+                                            ->LastRenderFrameMetadata()
+                                            .top_controls_shown_ratio;
+  if (prev_top_controls_shown_ratio < 1) {
+    // Make sure the state in the restored renderer matches the current one.
+    // If we currently aren't showing the controls let the cached renderer
+    // know, so that it then reacts correctly to the SHOW controls message
+    // that might follow during DidCommitNavigation.
+    cached_rfh->UpdateBrowserControlsState(
+        BrowserControlsState::BROWSER_CONTROLS_STATE_BOTH,
+        BrowserControlsState::BROWSER_CONTROLS_STATE_HIDDEN,
+        // Do not animate as we want this to happen "instantaneously"
+        false);
+  }
+}
 
 }  // namespace
 
@@ -246,8 +258,8 @@ BackForwardCacheCanStoreDocumentResult BackForwardCacheImpl::CanStoreDocument(
   // This check makes sure the old and new document aren't sharing the same
   // BrowsingInstance.
   if (rfh->GetSiteInstance()->GetRelatedActiveContentsCount() != 0) {
-    result.No(BackForwardCacheMetrics::NotRestoredReason::
-                  kRelatedActiveContentsExist);
+    result.NoDueToRelatedActiveContents(
+        rfh->browsing_instance_not_swapped_reason());
   }
 
   // Only store documents that have successful http status code.
@@ -272,6 +284,8 @@ BackForwardCacheCanStoreDocumentResult BackForwardCacheImpl::CanStoreDocument(
 
   CanStoreRenderFrameHost(&result, rfh);
 
+  DVLOG(1) << "CanStoreDocument: " << rfh->GetLastCommittedURL() << " : "
+           << result.ToString();
   return result;
 }
 
@@ -280,7 +294,7 @@ BackForwardCacheCanStoreDocumentResult BackForwardCacheImpl::CanStoreDocument(
 void BackForwardCacheImpl::CanStoreRenderFrameHost(
     BackForwardCacheCanStoreDocumentResult* result,
     RenderFrameHostImpl* rfh) {
-  if (!rfh->dom_content_loaded())
+  if (!rfh->IsDOMContentLoaded())
     result->No(BackForwardCacheMetrics::NotRestoredReason::kLoading);
 
   // If the rfh has ever granted media access, prevent it from entering cache.
@@ -291,9 +305,9 @@ void BackForwardCacheImpl::CanStoreRenderFrameHost(
         BackForwardCacheMetrics::NotRestoredReason::kWasGrantedMediaAccess);
   }
 
-  if (rfh->is_back_forward_cache_disabled() && !ShouldIgnoreBlocklists()) {
-    result->No(BackForwardCacheMetrics::NotRestoredReason::
-                   kDisableForRenderFrameHostCalled);
+  if (rfh->IsBackForwardCacheDisabled() && !ShouldIgnoreBlocklists()) {
+    result->NoDueToDisableForRenderFrameHostCalled(
+        rfh->back_forward_cache_disabled_reasons());
   }
 
   // Don't cache the page if it uses any disallowed features.
@@ -324,6 +338,21 @@ void BackForwardCacheImpl::StoreEntry(
   TRACE_EVENT0("navigation", "BackForwardCache::StoreEntry");
   DCHECK(CanStoreDocument(entry->render_frame_host.get()));
 
+#if defined(OS_ANDROID)
+  if (!IsProcessBindingEnabled()) {
+    // Set the priority of the main frame on entering the back-forward cache to
+    // make sure the page gets evicted instead of foreground tab. This might not
+    // become the effective priority of the process if it owns other higher
+    // priority RenderWidgetHost. We don't need to reset the priority in
+    // RestoreEntry as it is taken care by WebContentsImpl::NotifyFrameSwapped
+    // on restoration.
+    RenderWidgetHostImpl* rwh = entry->render_frame_host->GetRenderWidgetHost();
+    ChildProcessImportance current_importance = rwh->importance();
+    rwh->SetImportance(
+        std::min(current_importance, kChildProcessImportanceParam.Get()));
+  }
+#endif
+
   entry->render_frame_host->EnterBackForwardCache();
   entries_.push_front(std::move(entry));
 
@@ -341,27 +370,6 @@ void BackForwardCacheImpl::StoreEntry(
           BackForwardCacheMetrics::NotRestoredReason::kCacheLimit);
     }
   }
-}
-
-void BackForwardCacheImpl::Freeze(RenderFrameHostImpl* main_rfh) {
-  // Several RenderFrameHost can live under the same RenderViewHost.
-  // |frozen_render_view_hosts| keeps track of the ones that freezing has been
-  // applied to.
-  std::unordered_set<RenderViewHostImpl*> frozen_render_view_hosts;
-  // |navigation_start| is used only when resuming a page, hence an invalid
-  // value is passed here.
-
-  SetPageFrozenImpl(main_rfh, /*frozen = */ true, &frozen_render_view_hosts,
-                    kInvalidNavigationStart);
-}
-
-void BackForwardCacheImpl::Resume(RenderFrameHostImpl* main_rfh,
-                                  base::TimeTicks navigation_start) {
-  // |unfrozen_render_view_hosts| keeps track of the ones that resuming has
-  // been applied to.
-  std::unordered_set<RenderViewHostImpl*> unfrozen_render_view_hosts;
-  SetPageFrozenImpl(main_rfh, /*frozen = */ false, &unfrozen_render_view_hosts,
-                    navigation_start);
 }
 
 std::unique_ptr<BackForwardCacheImpl::Entry> BackForwardCacheImpl::RestoreEntry(
@@ -386,6 +394,9 @@ std::unique_ptr<BackForwardCacheImpl::Entry> BackForwardCacheImpl::RestoreEntry(
   std::unique_ptr<Entry> entry = std::move(*matching_entry);
   entries_.erase(matching_entry);
   entry->render_frame_host->LeaveBackForwardCache();
+
+  RestoreBrowserControlsState(entry->render_frame_host.get());
+
   return entry;
 }
 
@@ -434,16 +445,22 @@ void BackForwardCache::DisableForRenderFrameHost(GlobalFrameRoutingId id,
   if (g_bfcache_disabled_test_observer)
     g_bfcache_disabled_test_observer->OnDisabledForFrameWithReason(id, reason);
 
-  if (auto* rfh = RenderFrameHostImpl::FromID(id)) {
-    rfh->DisableBackForwardCache();
+  if (auto* rfh = RenderFrameHostImpl::FromID(id))
+    rfh->DisableBackForwardCache(reason);
+}
 
-    RenderFrameHostImpl* frame = rfh;
-    while (frame->GetParent())
-      frame = frame->GetParent();
-
-    if (BackForwardCacheMetrics* metrics = frame->GetBackForwardCacheMetrics())
-      metrics->MarkDisableForRenderFrameHost(reason);
+// static
+bool BackForwardCache::EvictIfCached(GlobalFrameRoutingId id,
+                                     base::StringPiece reason) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto* rfh = RenderFrameHostImpl::FromID(id);
+  if (rfh && rfh->is_in_back_forward_cache()) {
+    BackForwardCacheCanStoreDocumentResult can_store;
+    can_store.NoDueToDisableForRenderFrameHostCalled({reason.as_string()});
+    rfh->EvictFromBackForwardCacheWithReasons(can_store);
+    return true;
   }
+  return false;
 }
 
 void BackForwardCacheImpl::DisableForTesting(DisableForTestingReason reason) {

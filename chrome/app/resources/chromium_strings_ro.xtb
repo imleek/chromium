@@ -3,7 +3,6 @@
 <translationbundle lang="ro">
 <translation id="1065672644894730302">Preferințele dvs. nu pot fi citite. Este posibil ca unele funcții să nu fie disponibile, iar modificările aduse preferințelor nu vor fi salvate.</translation>
 <translation id="1104942323762546749">Chromium vrea să îți exporte parolele. Pentru a permite asta, introdu parola pentru Windows.</translation>
-<translation id="1115445892567829615">Chromium nu a putut sincroniza datele. Actualizați expresia de acces pentru sincronizare.</translation>
 <translation id="113122355610423240">Chromium este browserul prestabilit</translation>
 <translation id="1185134272377778587">Despre Chromium</translation>
 <translation id="1396446129537741364">Chromium încearcă să afișeze parolele.</translation>
@@ -20,7 +19,7 @@
 <translation id="1929939181775079593">Chromium nu mai răspunde. Îl reporniți acum?</translation>
 <translation id="1966382378801805537">Chromium nu poate determina sau seta browserul prestabilit</translation>
 <translation id="2008474315282236005">Astfel, se va șterge 1 element de pe acest dispozitiv. Pentru a recupera datele mai târziu, conectează-te la Chromium ca <ph name="USER_EMAIL" />.</translation>
-<translation id="2119636228670142020">Despre sistemul de operare &amp;Chromium</translation>
+<translation id="2147976119693222405">Sistemul de operare Chromium nu a putut sincroniza datele. Remediază acum.</translation>
 <translation id="2241627712206172106">Dacă permiteți accesul la un computer, familia și prietenii pot să navigheze separat și să configureze Chromium cum doresc.</translation>
 <translation id="2347108572062610441">Această extensie a modificat ce pagină se afișează când pornești Chromium.</translation>
 <translation id="2396765026452590966">Extensia „<ph name="EXTENSION_NAME" />” a modificat ce pagină se afișează când pornești Chromium.</translation>
@@ -36,6 +35,7 @@
 <translation id="2718390899429598676">Pentru un plus de securitate, Chromium îți va cripta datele.</translation>
 <translation id="2770231113462710648">Schimbă browserul prestabilit la:</translation>
 <translation id="2799223571221894425">Repornește</translation>
+<translation id="2805036593126168338">Sistemul de operare Chromium nu a putut sincroniza parolele. Remediază acum.</translation>
 <translation id="2838154144102149890">Pentru a se actualiza, Chromium trebuie să nu mai ruleze pe acest computer. Din acest motiv, alți utilizatori conectați la acest computer pot pierde modificări nesalvate.</translation>
 <translation id="2847479871509788944">Elimină din Chromium...</translation>
 <translation id="2886012850691518054">Opțional: contribuie la îmbunătățirea Chromium prin trimiterea automată de statistici privind utilizarea și rapoarte de blocare la Google.</translation>
@@ -107,7 +107,6 @@
 <translation id="5631814766731275228">Numele și imaginea profilului Chromium</translation>
 <translation id="5634636535844844681">Chromium necesită Windows 7 sau o versiune ulterioară.</translation>
 <translation id="5653831366781983928">Repornește Chromium acum</translation>
-<translation id="5680901439334282664">conectează-te la Chromium</translation>
 <translation id="5698481217667032250">Afișează Chromium în această limbă</translation>
 <translation id="5820394555380036790">Sistemul de operare Chromium</translation>
 <translation id="5862307444128926510">Bun venit la Chromium</translation>

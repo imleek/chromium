@@ -3,12 +3,10 @@
 <translationbundle lang="hr">
 <translation id="1001534784610492198">Arhiva programa za instalaciju je oštećena ili nevažeća. Ponovno preuzmite program Google Chrome.</translation>
 <translation id="102763973188675173">Prilagodite i kontrolirajte Google Chrome. Dostupno je ažuriranje.</translation>
-<translation id="1035334672863811645">prijavite se na Chrome</translation>
 <translation id="1051826050538111504">Na računalu imate štetni softver. Chrome ga može ukloniti, vratiti vaše postavke i onemogućiti proširenja kako bi vaš preglednik ponovo funkcionirao normalno.</translation>
 <translation id="1065672644894730302">Vaše postavke nije moguće čitati. Neke značajke možda nisu dostupne i promjene postavki neće biti spremljene.</translation>
 <translation id="1088300314857992706">E-adresa <ph name="USER_EMAIL_ADDRESS" /> prethodno je upotrebljavala Chrome</translation>
 <translation id="1097330777386562916">Izbrišite kolačiće i podatke web-lokacija prilikom zatvaranja Chromea</translation>
-<translation id="1104959162601287462">O OS-u &amp;Chrome</translation>
 <translation id="110877069173485804">Ovo je vaš Chrome</translation>
 <translation id="1142745911746664600">Nije moguće ažurirati Chrome</translation>
 <translation id="1154147086299354128">&amp;Otvori u Chromeu</translation>
@@ -50,6 +48,7 @@
 <translation id="2290014774651636340">Nedostaju ključevi Google API-ja. Neke funkcije Google Chromea bit će onemogućene.</translation>
 <translation id="2290095356545025170">Jeste li sigurni da želite deinstalirati Google Chrome?</translation>
 <translation id="2309047409763057870">Ovo je sekundarna instalacija Google Chromea, pa on ne može biti vaš zadani preglednik.</translation>
+<translation id="2341767445688917208">OS Chrome nije mogao sinkronizirati vaše zaporke. Ispravite to odmah.</translation>
 <translation id="2348335408836342058">Chrome treba dopuštenje za pristup kameri i mikrofonu za ovu web-lokaciju</translation>
 <translation id="2429317896000329049">Google Chrome nije mogao sinkronizirati vaše podatke jer sinkronizacija nije dostupna za vašu domenu.</translation>
 <translation id="2467438592969358367">Google Chrome želi izvesti vaše zaporke. Upišite svoju zaporku za Windows da biste to dopustili.</translation>
@@ -128,7 +127,6 @@
 <translation id="4953650215774548573">Postavite Google Chrome kao svoj zadani preglednik</translation>
 <translation id="495931528404527476">U Chromeu</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
-<translation id="5028489144783860647">Google Chrome nije mogao sinkronizirati vaše podatke. Ažurirajte zaporku za sinkronizaciju.</translation>
 <translation id="5062123544085870375">Ponovo pokrenite OS Chrome</translation>
 <translation id="5132929315877954718">Otkrijte sjajne aplikacije, igre, proširenja i teme za Google Chrome.</translation>
 <translation id="5170938038195470297">Vaš se profil ne može upotrijebiti jer pripada novijoj verziji proizvoda Google Chrome. Neke značajke možda nisu dostupne. Navedite drugi direktorij profila ili upotrijebite noviju verziju proizvoda Chrome.</translation>
@@ -208,6 +206,7 @@
 <translation id="7855730255114109580">Google Chrome ažuriran je</translation>
 <translation id="7890208801193284374">Ako dijelite računalo, prijatelji i članovi obitelji mogu zasebno pregledavati i postaviti Chrome prema svojim željama.</translation>
 <translation id="7896673875602241923">Netko se prethodno prijavio u Chrome na ovom računalu kao <ph name="ACCOUNT_EMAIL_LAST" />. Izradite novog korisnika Chromea kako bi vaši podaci bili odvojeni.</translation>
+<translation id="7916016681687251387">OS Chrome nije mogao sinkronizirati vaše podatke. Ispravite to odmah.</translation>
 <translation id="7962410387636238736">Ovo računalo više neće primati ažuriranja za Google Chrome jer sustavi Windows XP i Windows Vista više nisu podržani</translation>
 <translation id="8008534537613507642">Ponovo instaliraj Chrome</translation>
 <translation id="8013993649590906847">Ako slika nema koristan opis, Chrome će ga pokušati pružiti. Da bi se izradili opisi, slike se šalju Googleu.</translation>

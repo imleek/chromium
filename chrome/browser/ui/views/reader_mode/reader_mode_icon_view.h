@@ -26,7 +26,8 @@ class ReaderModeIconView : public PageActionIconView,
                            public content::WebContentsObserver {
  public:
   ReaderModeIconView(CommandUpdater* command_updater,
-                     PageActionIconView::Delegate* delegate);
+                     IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+                     PageActionIconView::Delegate* page_action_icon_delegate);
   ~ReaderModeIconView() override = default;
 
  protected:
@@ -35,9 +36,10 @@ class ReaderModeIconView : public PageActionIconView,
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
 
-  bool Update() override;
+  void UpdateImpl() override;
   const gfx::VectorIcon& GetVectorIcon() const override;
   base::string16 GetTextForTooltipAndAccessibleName() const override;
+  const char* GetClassName() const override;
 
   // GetBubble() is required by PageActionIconView; however, the icon
   // intentionally does not display a bubble when activated.

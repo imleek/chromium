@@ -46,7 +46,6 @@
 #include "third_party/blink/public/platform/web_resource_timing_info.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_local_frame.h"
-#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
@@ -341,7 +340,7 @@ void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
     web_frame_->UpdateUserActivationState(
         blink::UserActivationUpdateType::kNotifyActivation);
   }
-  web_frame_->SetHasReceivedUserGestureBeforeNavigation(
+  web_frame_->SetHadStickyUserActivationBeforeNavigation(
       state.has_received_user_gesture_before_nav);
 
   web_frame_->ResetReplicatedContentSecurityPolicy();
@@ -411,7 +410,6 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
                         OnForwardResourceTimingToParent)
     IPC_MESSAGE_HANDLER(FrameMsg_SetNeedsOcclusionTracking,
                         OnSetNeedsOcclusionTracking)
-    IPC_MESSAGE_HANDLER(FrameMsg_Collapse, OnCollapse)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateName, OnDidUpdateName)
     IPC_MESSAGE_HANDLER(FrameMsg_AddContentSecurityPolicies,
                         OnAddContentSecurityPolicies)
@@ -424,15 +422,12 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
                         OnDidUpdateVisualProperties)
     IPC_MESSAGE_HANDLER(FrameMsg_EnableAutoResize, OnEnableAutoResize)
     IPC_MESSAGE_HANDLER(FrameMsg_DisableAutoResize, OnDisableAutoResize)
-    IPC_MESSAGE_HANDLER(FrameMsg_SetFocusedFrame, OnSetFocusedFrame)
     IPC_MESSAGE_HANDLER(FrameMsg_UpdateUserActivationState,
                         OnUpdateUserActivationState)
     IPC_MESSAGE_HANDLER(FrameMsg_TransferUserActivationFrom,
                         OnTransferUserActivationFrom)
     IPC_MESSAGE_HANDLER(FrameMsg_ScrollRectToVisible, OnScrollRectToVisible)
     IPC_MESSAGE_HANDLER(FrameMsg_BubbleLogicalScroll, OnBubbleLogicalScroll)
-    IPC_MESSAGE_HANDLER(FrameMsg_SetHasReceivedUserGestureBeforeNavigation,
-                        OnSetHasReceivedUserGestureBeforeNavigation)
     IPC_MESSAGE_HANDLER(FrameMsg_RenderFallbackContent, OnRenderFallbackContent)
     IPC_MESSAGE_HANDLER(UnfreezableFrameMsg_DeleteProxy, OnDeleteProxy)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -479,18 +474,7 @@ void RenderFrameProxy::OnDidStartLoading() {
 
 void RenderFrameProxy::OnViewChanged(
     const FrameMsg_ViewChanged_Params& params) {
-  crashed_ = false;
-  // The same ParentLocalSurfaceIdAllocator cannot provide LocalSurfaceIds for
-  // two different frame sinks, so recreate it here.
-  if (frame_sink_id_ != params.frame_sink_id) {
-    parent_local_surface_id_allocator_ =
-        std::make_unique<viz::ParentLocalSurfaceIdAllocator>();
-  }
-  frame_sink_id_ = params.frame_sink_id;
-
-  // Resend the FrameRects and allocate a new viz::LocalSurfaceId when the view
-  // changes.
-  ResendVisualProperties();
+  FrameSinkIdChanged(params.frame_sink_id);
 }
 
 void RenderFrameProxy::OnDidStopLoading() {
@@ -505,10 +489,6 @@ void RenderFrameProxy::OnForwardResourceTimingToParent(
 
 void RenderFrameProxy::OnSetNeedsOcclusionTracking(bool needs_tracking) {
   web_frame_->SetNeedsOcclusionTracking(needs_tracking);
-}
-
-void RenderFrameProxy::OnCollapse(bool collapsed) {
-  web_frame_->Collapse(collapsed);
 }
 
 void RenderFrameProxy::OnDidUpdateName(const std::string& name,
@@ -539,12 +519,6 @@ void RenderFrameProxy::OnSetFrameOwnerProperties(
 
 void RenderFrameProxy::OnSetPageFocus(bool is_focused) {
   render_view_->SetFocus(is_focused);
-}
-
-void RenderFrameProxy::OnSetFocusedFrame() {
-  // This uses focusDocumentView rather than setFocusedFrame so that blur
-  // events are properly dispatched on any currently focused elements.
-  render_view_->webview()->FocusDocumentView(web_frame_);
 }
 
 void RenderFrameProxy::OnUpdateUserActivationState(
@@ -682,10 +656,6 @@ void RenderFrameProxy::SynchronizeVisualProperties() {
           .ToString());
 }
 
-void RenderFrameProxy::OnSetHasReceivedUserGestureBeforeNavigation(bool value) {
-  web_frame_->SetHasReceivedUserGestureBeforeNavigation(value);
-}
-
 void RenderFrameProxy::OnRenderFallbackContent() const {
   web_frame_->RenderFallbackContent();
 }
@@ -757,14 +727,13 @@ void RenderFrameProxy::ForwardPostMessage(
   Send(new FrameHostMsg_RouteMessageEvent(routing_id_, params));
 }
 
-void RenderFrameProxy::Navigate(
-    const blink::WebURLRequest& request,
-    bool should_replace_current_entry,
-    bool is_opener_navigation,
-    bool has_download_sandbox_flag,
-    bool blocking_downloads_in_sandbox_without_user_activation_enabled,
-    bool initiator_frame_is_ad,
-    mojo::ScopedMessagePipeHandle blob_url_token) {
+void RenderFrameProxy::Navigate(const blink::WebURLRequest& request,
+                                bool should_replace_current_entry,
+                                bool is_opener_navigation,
+                                bool has_download_sandbox_flag,
+                                bool blocking_downloads_in_sandbox_enabled,
+                                bool initiator_frame_is_ad,
+                                mojo::ScopedMessagePipeHandle blob_url_token) {
   // The request must always have a valid initiator origin.
   DCHECK(!request.RequestorOrigin().IsNull());
 
@@ -774,11 +743,8 @@ void RenderFrameProxy::Navigate(
   params.post_body = GetRequestBodyForWebURLRequest(request);
   DCHECK_EQ(!!params.post_body, request.HttpMethod().Utf8() == "POST");
   params.extra_headers = GetWebURLRequestHeadersAsString(request);
-  // TODO(domfarolino): Retrieve the referrer in the form of a referrer member
-  // instead of the header field. See https://crbug.com/850813.
-  params.referrer = Referrer(blink::WebStringToGURL(request.HttpHeaderField(
-                                 blink::WebString::FromUTF8("Referer"))),
-                             request.GetReferrerPolicy());
+  params.referrer.url = blink::WebStringToGURL(request.ReferrerString());
+  params.referrer.policy = request.GetReferrerPolicy();
   params.disposition = WindowOpenDisposition::CURRENT_TAB;
   params.should_replace_current_entry = should_replace_current_entry;
   params.user_gesture = request.HasUserGesture();
@@ -790,8 +756,7 @@ void RenderFrameProxy::Navigate(
   // augmented in RenderFrameProxyHost::OnOpenURL if the navigating frame is ad.
   RenderFrameImpl::MaybeSetDownloadFramePolicy(
       is_opener_navigation, request, web_frame_->GetSecurityOrigin(),
-      has_download_sandbox_flag,
-      blocking_downloads_in_sandbox_without_user_activation_enabled,
+      has_download_sandbox_flag, blocking_downloads_in_sandbox_enabled,
       initiator_frame_is_ad, &params.download_policy);
 
   Send(new FrameHostMsg_OpenURL(routing_id_, params));
@@ -945,6 +910,22 @@ RenderFrameProxy::GetRemoteAssociatedInterfaces() {
 void RenderFrameProxy::WasEvicted() {
   // On eviction, the last SurfaceId is invalidated. We need to allocate a new
   // id.
+  ResendVisualProperties();
+}
+
+void RenderFrameProxy::FrameSinkIdChanged(
+    const viz::FrameSinkId& frame_sink_id) {
+  crashed_ = false;
+  // The same ParentLocalSurfaceIdAllocator cannot provide LocalSurfaceIds for
+  // two different frame sinks, so recreate it here.
+  if (frame_sink_id_ != frame_sink_id) {
+    parent_local_surface_id_allocator_ =
+        std::make_unique<viz::ParentLocalSurfaceIdAllocator>();
+  }
+  frame_sink_id_ = frame_sink_id;
+
+  // Resend the FrameRects and allocate a new viz::LocalSurfaceId when the view
+  // changes.
   ResendVisualProperties();
 }
 

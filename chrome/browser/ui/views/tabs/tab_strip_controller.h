@@ -11,17 +11,21 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
+#include "components/tab_groups/tab_group_color.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ui_base_types.h"
 
 class Tab;
-class TabGroupVisualData;
-class TabGroupId;
 class TabStrip;
 
 namespace gfx {
 class Point;
 }
+
+namespace tab_groups {
+class TabGroupId;
+class TabGroupVisualData;
+}  // namespace tab_groups
 
 namespace ui {
 class Event;
@@ -79,10 +83,10 @@ class TabStripController {
   virtual void CloseTab(int index, CloseTabSource source) = 0;
 
   // Ungroups the tabs at the specified index in the model.
-  virtual void UngroupAllTabsInGroup(TabGroupId group) = 0;
+  virtual void UngroupAllTabsInGroup(tab_groups::TabGroupId group) = 0;
 
   // Adds a new tab to end of the tab group.
-  virtual void AddNewTabInGroup(TabGroupId group) = 0;
+  virtual void AddNewTabInGroup(tab_groups::TabGroupId group) = 0;
 
   // Moves the tab at |start_index| so that it is now at |final_index|, sliding
   // any tabs in between left or right as appropriate.
@@ -125,15 +129,21 @@ class TabStripController {
   // to |index|.
   virtual void OnKeyboardFocusedTabChanged(base::Optional<int> index) = 0;
 
-  // Returns the TabGroupVisualData instance for the given |group|.
-  virtual const TabGroupVisualData* GetVisualDataForGroup(
-      TabGroupId group) const = 0;
+  // Returns the displayed title of the given |group|.
+  virtual base::string16 GetGroupTitle(tab_groups::TabGroupId group) const = 0;
 
-  virtual void SetVisualDataForGroup(TabGroupId group,
-                                     TabGroupVisualData visual_data) = 0;
+  // Returns the color ID of the given |group|.
+  virtual tab_groups::TabGroupColorId GetGroupColorId(
+      tab_groups::TabGroupId group) const = 0;
+
+  // Sets the title and color ID of the given |group|.
+  virtual void SetVisualDataForGroup(
+      tab_groups::TabGroupId group,
+      tab_groups::TabGroupVisualData visual_data) = 0;
 
   // Returns the list of tabs in the given |group|.
-  virtual std::vector<int> ListTabsInGroup(TabGroupId group) const = 0;
+  virtual std::vector<int> ListTabsInGroup(
+      tab_groups::TabGroupId group) const = 0;
 
   // Determines whether the top frame is condensed vertically, as when the
   // window is maximized. If true, the top frame is just the height of a tab,

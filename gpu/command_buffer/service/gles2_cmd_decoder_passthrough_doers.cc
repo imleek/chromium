@@ -21,6 +21,7 @@
 #include "gpu/command_buffer/service/shared_image_representation.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gl/ca_renderer_layer_params.h"
+#include "ui/gl/color_space_utils.h"
 #include "ui/gl/dc_renderer_layer_params.h"
 #include "ui/gl/gl_version_info.h"
 
@@ -434,9 +435,13 @@ error::Error GLES2DecoderPassthroughImpl::DoBindFramebuffer(
     GLenum target,
     GLuint framebuffer) {
   CheckErrorCallbackState();
+  if (feature_info_->workarounds().do_extra_flush_around_bindframebuffer)
+    api()->glFlushFn();
   api()->glBindFramebufferEXTFn(
       target, GetFramebufferServiceID(api(), framebuffer, &framebuffer_id_map_,
                                       bind_generates_resource_));
+  if (feature_info_->workarounds().do_extra_flush_around_bindframebuffer)
+    api()->glFlushFn();
   if (CheckErrorCallbackState()) {
     return error::kNoError;
   }
@@ -3380,10 +3385,19 @@ error::Error GLES2DecoderPassthroughImpl::DoTexStorage2DImageCHROMIUM(
 error::Error GLES2DecoderPassthroughImpl::DoGenQueriesEXT(
     GLsizei n,
     volatile GLuint* queries) {
-  return GenHelper(n, queries, &query_id_map_,
-                   [this](GLsizei n, GLuint* queries) {
-                     api()->glGenQueriesFn(n, queries);
-                   });
+  return GenHelper(
+      n, queries, &query_id_map_, [this](GLsizei n, GLuint* queries) {
+        if (feature_info_->feature_flags().occlusion_query_boolean) {
+          // glGenQueries is not loaded unless GL_EXT_occlusion_query_boolean is
+          // present. All queries must be emulated so they don't need to be
+          // generated.
+          api()->glGenQueriesFn(n, queries);
+        } else {
+          for (GLsizei i = 0; i < n; i++) {
+            queries[i] = 0;
+          }
+        }
+      });
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoDeleteQueriesEXT(
@@ -3419,10 +3433,16 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteQueriesEXT(
 
     RemovePendingQuery(query_service_id);
   }
-  return DeleteHelper(queries_copy.size(), queries_copy.data(), &query_id_map_,
-                      [this](GLsizei n, GLuint* queries) {
-                        api()->glDeleteQueriesFn(n, queries);
-                      });
+  return DeleteHelper(
+      queries_copy.size(), queries_copy.data(), &query_id_map_,
+      [this](GLsizei n, GLuint* queries) {
+        if (feature_info_->feature_flags().occlusion_query_boolean) {
+          // glDeleteQueries is not loaded unless GL_EXT_occlusion_query_boolean
+          // is present. All queries must be emulated so they don't need to be
+          // deleted.
+          api()->glDeleteQueriesFn(n, queries);
+        }
+      });
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoQueryCounterEXT(
@@ -3441,14 +3461,25 @@ error::Error GLES2DecoderPassthroughImpl::DoQueryCounterEXT(
 
   GLuint service_id = GetQueryServiceID(id, &query_id_map_);
 
-  // Flush all previous errors
-  CheckErrorCallbackState();
+  if (IsEmulatedQueryTarget(target)) {
+    DCHECK_EQ(target,
+              static_cast<GLenum>(GL_COMMANDS_ISSUED_TIMESTAMP_CHROMIUM));
+  } else {
+    // glQueryCounter is not loaded unless GL_EXT_disjoint_timer_query is present
+    if (!feature_info_->feature_flags().ext_disjoint_timer_query) {
+      InsertError(GL_INVALID_ENUM, "Invalid query target.");
+      return error::kNoError;
+    }
 
-  api()->glQueryCounterFn(service_id, target);
+    // Flush all previous errors
+    CheckErrorCallbackState();
 
-  // Check if a new error was generated
-  if (CheckErrorCallbackState()) {
-    return error::kNoError;
+    api()->glQueryCounterFn(service_id, target);
+
+    // Check if a new error was generated
+    if (CheckErrorCallbackState()) {
+      return error::kNoError;
+    }
   }
 
   QueryInfo* query_info = &query_info_map_[service_id];
@@ -3507,6 +3538,13 @@ error::Error GLES2DecoderPassthroughImpl::DoBeginQueryEXT(
       return error::kNoError;
     }
   } else {
+    // glBeginQuery is not loaded unless GL_EXT_occlusion_query_boolean is
+    // present
+    if (!feature_info_->feature_flags().occlusion_query_boolean) {
+      InsertError(GL_INVALID_ENUM, "Invalid query target.");
+      return error::kNoError;
+    }
+
     // Flush all previous errors
     CheckErrorCallbackState();
 
@@ -3556,6 +3594,12 @@ error::Error GLES2DecoderPassthroughImpl::DoEndQueryEXT(GLenum target,
           query_service_id);
     }
   } else {
+    // glEndQuery is not loaded unless GL_EXT_occlusion_query_boolean is present
+    if (!feature_info_->feature_flags().occlusion_query_boolean) {
+      InsertError(GL_INVALID_ENUM, "Invalid query target.");
+      return error::kNoError;
+    }
+
     // Flush all previous errors
     CheckErrorCallbackState();
 
@@ -3871,30 +3915,8 @@ error::Error GLES2DecoderPassthroughImpl::DoResizeCHROMIUM(GLuint width,
       return error::kLostContext;
     }
   } else {
-    gl::GLSurface::ColorSpace surface_color_space =
-        gl::GLSurface::ColorSpace::UNSPECIFIED;
-    switch (color_space) {
-      case GL_COLOR_SPACE_UNSPECIFIED_CHROMIUM:
-        surface_color_space = gl::GLSurface::ColorSpace::UNSPECIFIED;
-        break;
-      case GL_COLOR_SPACE_SCRGB_LINEAR_CHROMIUM:
-        surface_color_space = gl::GLSurface::ColorSpace::SCRGB_LINEAR;
-        break;
-      case GL_COLOR_SPACE_HDR10_CHROMIUM:
-        surface_color_space = gl::GLSurface::ColorSpace::HDR10;
-        break;
-      case GL_COLOR_SPACE_SRGB_CHROMIUM:
-        surface_color_space = gl::GLSurface::ColorSpace::SRGB;
-        break;
-      case GL_COLOR_SPACE_DISPLAY_P3_CHROMIUM:
-        surface_color_space = gl::GLSurface::ColorSpace::DISPLAY_P3;
-        break;
-      default:
-        LOG(ERROR) << "GLES2DecoderPassthroughImpl: Context lost because "
-                      "specified color space was invalid.";
-        return error::kLostContext;
-    }
-    if (!surface_->Resize(safe_size, scale_factor, surface_color_space,
+    if (!surface_->Resize(safe_size, scale_factor,
+                          gl::ColorSpaceUtils::GetColorSpace(color_space),
                           !!alpha)) {
       LOG(ERROR)
           << "GLES2DecoderPassthroughImpl: Context lost because resize failed.";
@@ -5606,7 +5628,7 @@ GLES2DecoderPassthroughImpl::DoBeginSharedImageAccessDirectCHROMIUM(
     return error::kNoError;
   }
 
-  if (!found->second.BeginAccess(mode)) {
+  if (!found->second.BeginAccess(mode, api())) {
     InsertError(GL_INVALID_OPERATION, "unable to begin access");
     return error::kNoError;
   }

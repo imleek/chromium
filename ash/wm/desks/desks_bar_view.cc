@@ -139,7 +139,7 @@ DesksBarView::DesksBarView(OverviewGrid* overview_grid)
   background_view_->layer()->SetFillsBoundsOpaquely(false);
   background_view_->layer()->SetColor(
       AshColorProvider::Get()->GetBaseLayerColor(
-          AshColorProvider::BaseLayerType::kTransparentWithBlur,
+          AshColorProvider::BaseLayerType::kTransparent74,
           AshColorProvider::AshColorMode::kDark));
 
   AddChildView(background_view_);
@@ -176,7 +176,7 @@ std::unique_ptr<views::Widget> DesksBarView::CreateDesksWidget(
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
   params.accept_events = true;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   // Use the wallpaper container similar to all background widgets created in
   // overview mode.
   params.parent = root->GetChildById(kShellWindowId_WallpaperContainer);

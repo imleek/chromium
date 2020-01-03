@@ -10,11 +10,39 @@
 
 namespace views {
 
+namespace {
+
+base::Optional<int> OptionalValueBetween(double value,
+                                         base::Optional<int> start,
+                                         base::Optional<int> target) {
+  if (start.has_value() != target.has_value())
+    return target;
+  if (start)
+    return gfx::Tween::IntValueBetween(value, *start, *target);
+  return base::nullopt;
+}
+
+SizeBounds SizeBoundsBetween(double value,
+                             const SizeBounds& start,
+                             const SizeBounds& target) {
+  return {OptionalValueBetween(value, start.width(), target.width()),
+          OptionalValueBetween(value, start.height(), target.height())};
+}
+
+}  // anonymous namespace
+
 bool ChildLayout::operator==(const ChildLayout& other) const {
   // Note: if the view is not visible, the bounds do not matter as they will not
   // be set.
   return child_view == other.child_view && visible == other.visible &&
          (!visible || bounds == other.bounds);
+}
+
+std::string ChildLayout::ToString() const {
+  std::ostringstream oss;
+  oss << "{" << child_view << (visible ? " visible " : " not visible ")
+      << bounds.ToString() << " / " << available_size.ToString() << "}";
+  return oss.str();
 }
 
 ProposedLayout::ProposedLayout() = default;
@@ -31,6 +59,21 @@ ProposedLayout& ProposedLayout::operator=(ProposedLayout&& other) = default;
 
 bool ProposedLayout::operator==(const ProposedLayout& other) const {
   return host_size == other.host_size && child_layouts == other.child_layouts;
+}
+
+std::string ProposedLayout::ToString() const {
+  std::ostringstream oss;
+  oss << "{" << host_size.ToString() << " {";
+  bool first = true;
+  for (const auto& child_layout : child_layouts) {
+    if (first)
+      first = false;
+    else
+      oss << ", ";
+    oss << child_layout.ToString();
+  }
+  oss << "}}";
+  return oss.str();
 }
 
 ProposedLayout ProposedLayoutBetween(double value,
@@ -62,7 +105,9 @@ ProposedLayout ProposedLayoutBetween(double value,
       layout.child_layouts.push_back(
           {target_child.child_view, start_child.visible && target_child.visible,
            gfx::Tween::RectValueBetween(value, start_child.bounds,
-                                        target_child.bounds)});
+                                        target_child.bounds),
+           SizeBoundsBetween(value, start_child.available_size,
+                             target_child.available_size)});
     }
   }
   return layout;

@@ -43,7 +43,8 @@
 #include "chrome/browser/ui/apps/app_info_dialog.h"
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
-#include "chrome/browser/ui/ash/launcher/app_service_app_window_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/app_service/app_service_app_window_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/app_service/launcher_app_service_app_updater.h"
 #include "chrome/browser/ui/ash/launcher/app_shortcut_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_item_controller.h"
@@ -53,7 +54,6 @@
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
 #include "chrome/browser/ui/ash/launcher/crostini_app_window_shelf_controller.h"
 #include "chrome/browser/ui/ash/launcher/internal_app_window_shelf_controller.h"
-#include "chrome/browser/ui/ash/launcher/launcher_app_service_app_updater.h"
 #include "chrome/browser/ui/ash/launcher/launcher_arc_app_updater.h"
 #include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "chrome/browser/ui/ash/launcher/launcher_crostini_app_updater.h"
@@ -257,12 +257,24 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
         new ChromeLauncherControllerUserSwitchObserver(this));
   }
 
-  bool app_service_enabled =
-      base::FeatureList::IsEnabled(features::kAppServiceInstanceRegistry);
-
-  if (app_service_enabled) {
-    app_window_controllers_.push_back(
-        std::make_unique<AppServiceAppWindowLauncherController>(this));
+  if (base::FeatureList::IsEnabled(features::kAppServiceInstanceRegistry)) {
+    std::unique_ptr<AppServiceAppWindowLauncherController>
+        app_service_controller =
+            std::make_unique<AppServiceAppWindowLauncherController>(this);
+    app_service_app_window_controller_ = app_service_controller.get();
+    app_window_controllers_.emplace_back(std::move(app_service_controller));
+    if (SessionControllerClientImpl::IsMultiProfileAvailable()) {
+      // If running in separated destkop mode, we create the multi profile
+      // version of status monitor.
+      browser_status_monitor_ =
+          std::make_unique<MultiProfileBrowserStatusMonitor>(this);
+      browser_status_monitor_->Initialize();
+    } else {
+      // Create our v1/v2 application / browser monitors which will inform the
+      // launcher of status changes.
+      browser_status_monitor_ = std::make_unique<BrowserStatusMonitor>(this);
+      browser_status_monitor_->Initialize();
+    }
     return;
   }
 
@@ -857,14 +869,16 @@ AppIconLoader* ChromeLauncherController::GetAppIconLoaderForApp(
   return nullptr;
 }
 
-bool ChromeLauncherController::CanDoShowAppInfoFlow() {
-  return CanShowAppInfoDialog();
+bool ChromeLauncherController::CanDoShowAppInfoFlow(
+    Profile* profile,
+    const std::string& extension_id) {
+  return CanShowAppInfoDialog(profile, extension_id);
 }
 
 void ChromeLauncherController::DoShowAppInfoFlow(
     Profile* profile,
     const std::string& extension_id) {
-  DCHECK(CanDoShowAppInfoFlow());
+  DCHECK(CanPlatformShowAppInfoDialog());
 
   const extensions::Extension* extension = GetExtension(profile, extension_id);
   if (!extension)
@@ -876,11 +890,11 @@ void ChromeLauncherController::DoShowAppInfoFlow(
     if (extension->is_hosted_app() && extension->from_bookmark()) {
       base::UmaHistogramEnumeration(
           kAppManagementEntryPointsHistogramName,
-          AppManagementEntryPoint::kLauncherContextMenuAppInfoWebApp);
+          AppManagementEntryPoint::kShelfContextMenuAppInfoWebApp);
     } else {
       base::UmaHistogramEnumeration(
           kAppManagementEntryPointsHistogramName,
-          AppManagementEntryPoint::kLauncherContextMenuAppInfoChromeApp);
+          AppManagementEntryPoint::kShelfContextMenuAppInfoChromeApp);
     }
     return;
   }

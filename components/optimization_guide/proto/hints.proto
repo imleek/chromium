@@ -27,11 +27,20 @@ message HostInfo {
   optional MatchedHintInfo matched_hint = 2;
 }
 
+// Information about a URL to request hints for.
+message UrlInfo {
+  // The URL that the client is requesting information for.
+  optional string url = 1;
+}
+
 // Request to return a set of hints that guide what optimizations to perform
 // on those hosts.
 message GetHintsRequest {
   // Information about the set of hosts to retrieve hints for.
   repeated HostInfo hosts = 1;
+
+  // Information about the set of URLs to retrieve hints for.
+  repeated UrlInfo urls = 4;
 
   // The set of optimization types that the requesting client can support
   // and perform.
@@ -111,6 +120,12 @@ enum OptimizationType {
   // This optimization defers execution of parser-blocking script until after
   // parsing completes.
   DEFER_ALL_SCRIPT = 5;
+  // This optimization is used to provide aggregated performance information
+  // about the page and pages it links to.
+  PERFORMANCE_HINTS = 6;
+  // This optimization allows page loads going through the data reduction
+  // proxy to be transformed by the proxy.
+  LITE_PAGE = 7;
 }
 
 // Presents semantics for how page load URLs should be matched.
@@ -121,6 +136,11 @@ enum KeyRepresentation {
   // Example: A host suffix of example.com would match pages with host
   // sports.example.com, but not fooexample.com.
   HOST_SUFFIX = 1;
+  // The full URL to match.
+  //
+  // This will be an exact match of a page load URL, including query params and
+  // fragments.
+  FULL_URL = 2;
 }
 
 message Optimization {
@@ -203,6 +223,8 @@ message Hint {
   // It is expected that this version be sent along with subsequent requests
   // for hosts that match this hint.
   optional string version = 5;
+  // The maximum duration for which the hint should be used for.
+  optional Duration max_cache_duration = 6;
 }
 
 // Configuration and data for a Bloom filter.

@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
@@ -19,6 +20,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -36,7 +38,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
-#include "chrome/browser/ui/extensions/browser_action_test_util.h"
+#include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/common/extensions/api/downloads.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -1789,9 +1791,8 @@ class CustomResponse : public net::test_server::HttpResponse {
         first_request_(first_request) {}
   ~CustomResponse() override {}
 
-  void SendResponse(
-      const net::test_server::SendBytesCallback& send,
-      const net::test_server::SendCompleteCallback& done) override {
+  void SendResponse(const net::test_server::SendBytesCallback& send,
+                    net::test_server::SendCompleteCallback done) override {
     std::string response(
         "HTTP/1.1 200 OK\r\n"
         "Content-type: application/octet-stream\r\n"
@@ -1802,7 +1803,7 @@ class CustomResponse : public net::test_server::HttpResponse {
     if (first_request_) {
       *callback_ = std::move(done);
       *task_runner_ = base::ThreadTaskRunnerHandle::Get().get();
-      send.Run(response, base::BindRepeating([]() {}));
+      send.Run(response, base::DoNothing());
     } else {
       send.Run(response, std::move(done));
     }
@@ -1858,7 +1859,8 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 
   item->SimulateErrorForTesting(
       download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED);
-  embedded_test_server_io_runner->PostTask(FROM_HERE, complete_callback);
+  embedded_test_server_io_runner->PostTask(FROM_HERE,
+                                           std::move(complete_callback));
 
   ASSERT_TRUE(WaitFor(downloads::OnChanged::kEventName,
                       base::StringPrintf("[{\"id\":%d,"
@@ -2048,8 +2050,20 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
         DownloadExtensionTest_Download_InvalidURLs
 #endif
 
+class DownloadExtensionTestWithFtp : public DownloadExtensionTest {
+ public:
+  DownloadExtensionTestWithFtp() {
+    // DownloadExtensionTest_Download_InvalidURLs requires FTP support.
+    // TODO(https://crbug.com/333943): Remove FTP tests and FTP feature flags.
+    scoped_feature_list_.InitAndEnableFeature(features::kFtpProtocol);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
 // Test that downloading invalid URLs immediately returns kInvalidURLError.
-IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
+IN_PROC_BROWSER_TEST_F(DownloadExtensionTestWithFtp,
                        MAYBE_DownloadExtensionTest_Download_InvalidURLs) {
   LoadExtension("downloads_split");
   GoOnTheRecord();
@@ -4417,7 +4431,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       base::Bind(&OnDangerPromptCreated);
   DownloadsAcceptDangerFunction::OnPromptCreatedForTesting(
       &callback);
-  BrowserActionTestUtil::Create(current_browser())->Press(0);
+  ExtensionActionTestHelper::Create(current_browser())->Press(0);
   observer->WaitForFinished();
 }
 

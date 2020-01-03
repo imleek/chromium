@@ -13,7 +13,7 @@
 #include "base/macros.h"
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/feature_policy/policy_value.h"
-#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-forward.h"
 #include "third_party/blink/public/mojom/feature_policy/policy_value.mojom.h"
 
 namespace blink {
@@ -64,18 +64,9 @@ namespace blink {
 // Each defined feature has a default policy, which determines the threshold
 // value to use when no policy has been declared.
 
-struct BLINK_COMMON_EXPORT ParsedDocumentPolicyDeclaration {
-  mojom::FeaturePolicyFeature feature;
-  PolicyValue value;
-};
-
-using ParsedDocumentPolicy = std::vector<ParsedDocumentPolicyDeclaration>;
-
 class BLINK_COMMON_EXPORT DocumentPolicy {
  public:
   using FeatureState = std::map<mojom::FeaturePolicyFeature, PolicyValue>;
-
-  ~DocumentPolicy();
 
   static std::unique_ptr<DocumentPolicy> CreateWithRequiredPolicy(
       const FeatureState& required_policy);
@@ -97,25 +88,28 @@ class BLINK_COMMON_EXPORT DocumentPolicy {
   // Returns the value of the given feature on the given origin.
   PolicyValue GetFeatureValue(mojom::FeaturePolicyFeature feature) const;
 
-  // Sets the declared policy from the parsed Document-Policy HTTP header.
-  // Unrecognized features will be ignored.
-  void SetHeaderPolicy(const ParsedDocumentPolicy& parsed_header);
-
   // Returns the current threshold values assigned to all document policies.
   // the declared header policy as well as any unadvertised required policies
   // (such as sandbox policies).
   FeatureState GetFeatureState() const;
 
-  // Returns the required policy to advertise for an outgoing HTTP request.
-  ParsedDocumentPolicy RequiredPolicy() const;
-
-  // Returns true if this document policy is compatible with the given required
-  // policy.
-  bool IsPolicyCompatible(const ParsedDocumentPolicy& required_policy);
+  // Returns true if this document policy is compatible with the incoming
+  // document policy.
+  bool IsPolicyCompatible(const FeatureState& incoming_policy);
 
   // Returns the list of features which can be controlled by Document Policy,
   // and their default values.
   static const FeatureState& GetFeatureDefaults();
+
+  // Serialize document policy according to http_structured_header.
+  static base::Optional<std::string> Serialize(const FeatureState& policy);
+
+  // Parse document policy header to FeatureState
+  static base::Optional<FeatureState> Parse(const std::string& header);
+
+  // Merge two FeatureState map. Take stricter value when there is conflict.
+  static FeatureState MergeFeatureState(const FeatureState& policy1,
+                                        const FeatureState& policy2);
 
  private:
   friend class DocumentPolicyTest;
@@ -126,9 +120,6 @@ class BLINK_COMMON_EXPORT DocumentPolicy {
       const FeatureState& defaults);
 
   void UpdateFeatureState(const FeatureState& feature_state);
-
-  static FeatureState ParsedDocumentPolicyToFeatureState(
-      const ParsedDocumentPolicy& policies);
 
   // Threshold values for each defined feature.
   // TODO(iclelland): Generate these members; pack booleans in bitfields if

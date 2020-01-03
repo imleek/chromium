@@ -54,8 +54,6 @@ class MODULES_EXPORT MediaStreamTrack
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static MediaStreamTrack* Create(ExecutionContext*, MediaStreamComponent*);
-
   MediaStreamTrack(ExecutionContext*, MediaStreamComponent*);
   MediaStreamTrack(ExecutionContext*,
                    MediaStreamComponent*,
@@ -81,7 +79,7 @@ class MODULES_EXPORT MediaStreamTrack
 
   // This function is called when constrains have been successfully applied.
   // Called from UserMediaRequest when it succeeds. It is not IDL-exposed.
-  void SetConstraints(const WebMediaConstraints&);
+  void SetConstraints(const MediaConstraints&);
 
   MediaTrackCapabilities* getCapabilities() const;
   MediaTrackConstraints* getConstraints() const;

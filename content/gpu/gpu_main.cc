@@ -91,7 +91,10 @@
 
 #if defined(OS_MACOSX)
 #include "base/message_loop/message_pump_mac.h"
+#include "components/metal_util/device_removal.h"
 #include "components/metal_util/test_shader.h"
+#include "content/public/common/content_features.h"
+#include "media/gpu/mac/vt_video_decode_accelerator_mac.h"
 #include "sandbox/mac/seatbelt.h"
 #include "services/service_manager/sandbox/mac/sandbox_mac.h"
 #endif
@@ -157,6 +160,13 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
     media::MediaFoundationVideoEncodeAccelerator::PreSandboxInitialization();
 #endif
 
+#if defined(OS_MACOSX)
+    if (base::FeatureList::IsEnabled(features::kMacV2GPUSandbox)) {
+      TRACE_EVENT0("gpu", "Initialize VideoToolbox");
+      media::InitializeVideoToolbox();
+    }
+#endif
+
     // On Linux, reading system memory doesn't work through the GPU sandbox.
     // This value is cached, so access it here to populate the cache.
     base::SysInfo::AmountOfPhysicalMemory();
@@ -184,13 +194,9 @@ class ContentSandboxHelper : public gpu::GpuSandboxHelper {
 };
 
 #if defined(OS_MACOSX)
-// Allow up to 1 minute for shader compilation.
-constexpr base::TimeDelta kTestShaderCompileTimeout =
-    base::TimeDelta::FromMinutes(1);
-
-void TestShaderCallback(const base::TimeTicks& start_time,
-                        metal::TestShaderResult result) {
-  base::TimeDelta delta;
+void TestShaderCallback(metal::TestShaderResult result,
+                        const base::TimeDelta& method_time,
+                        const base::TimeDelta& compile_time) {
   switch (result) {
     case metal::TestShaderResult::kNotAttempted:
     case metal::TestShaderResult::kFailed:
@@ -198,16 +204,12 @@ void TestShaderCallback(const base::TimeTicks& start_time,
       // or macOS version reasons).
       return;
     case metal::TestShaderResult::kTimedOut:
-      // Use a single histogram for both "how long did compile take" and "did
-      // compile complete in 1 minute" by pushing timeouts into the maximum
-      // bucket of UMA_HISTOGRAM_MEDIUM_TIMES.
-      delta = base::TimeDelta::FromMinutes(3);
       break;
     case metal::TestShaderResult::kSucceeded:
-      delta = base::TimeTicks::Now() - start_time;
       break;
   }
-  UMA_HISTOGRAM_MEDIUM_TIMES("Gpu.Metal.TestShaderCompileTime", delta);
+  UMA_HISTOGRAM_MEDIUM_TIMES("Gpu.Metal.TestShaderMethodTime", method_time);
+  UMA_HISTOGRAM_MEDIUM_TIMES("Gpu.Metal.TestShaderCompileTime", compile_time);
 }
 #endif
 
@@ -384,12 +386,26 @@ int GpuMain(const MainFunctionParams& parameters) {
       tracing::TracingSamplerProfiler::CreateOnMainThread();
 
 #if defined(OS_MACOSX)
+  // A GPUEjectPolicy of 'wait' is set in the Info.plist of the browser
+  // process, meaning it is "responsible" for making sure it and its
+  // subordinate processes (i.e. the GPU process) drop references to the
+  // external GPU. Despite this, the system still sends the device removal
+  // notifications to the GPU process, so the GPU process handles its own
+  // graceful shutdown without help from the browser process.
+  //
+  // Using the "SafeEjectGPU" tool, we can see that when the browser process
+  // has a policy of 'wait', the GPU process gets the 'rwait' policy: "Eject
+  // actions apply to the responsible process, who in turn deals with
+  // subordinates to eliminate their ejecting eGPU references" [man 8
+  // SafeEjectGPU]. Empirically, the browser does not relaunch. Once the GPU
+  // process exits, it appears that the browser process is no longer considered
+  // to be using the GPU, so it "succeeds" the 'wait'.
+  metal::RegisterGracefulExitOnDeviceRemoval();
+
   // Launch a test metal shader compile to see how long it takes to complete (if
   // it ever completes).
   // https://crbug.com/974219
-  metal::TestShader(metal::kTestShaderSeedGpuTimer,
-                    base::BindOnce(TestShaderCallback, base::TimeTicks::Now()),
-                    kTestShaderCompileTimeout);
+  metal::TestShader(base::BindOnce(TestShaderCallback));
 #endif
 
 #if defined(OS_ANDROID)
@@ -427,6 +443,8 @@ bool StartSandboxLinux(gpu::GpuWatchdogThread* watchdog_thread,
   service_manager::SandboxLinux::Options sandbox_options;
   sandbox_options.use_amd_specific_policies =
       gpu_info && angle::IsAMD(gpu_info->active_gpu().vendor_id);
+  sandbox_options.use_intel_specific_policies =
+      gpu_info && angle::IsIntel(gpu_info->active_gpu().vendor_id);
   sandbox_options.accelerated_video_decode_enabled =
       !gpu_prefs.disable_accelerated_video_decode;
   sandbox_options.accelerated_video_encode_enabled =

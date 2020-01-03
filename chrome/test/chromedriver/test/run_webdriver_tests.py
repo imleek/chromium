@@ -115,7 +115,8 @@ def process_skip_list(skipped_tests, results, finder, port, test_path, shard):
 class SubtestResultRecorder(object):
   def __init__(self, path, port):
     self.result = []
-    self.test_path = path
+    self.filename, _ = port.split_webdriver_subtest_pytest_name(
+        path)
     self.port = port
 
   def pytest_runtest_logreport(self, report):
@@ -147,11 +148,13 @@ class SubtestResultRecorder(object):
                 "In-test skip decorators are disallowed.")
 
   def record(self, report, status, message=None):
-    # location is a (filesystempath, lineno, domaininfo) tuple
-    # https://docs.pytest.org/en/3.6.2/reference.html#_pytest.runner.TestReport.location
-    test_name = report.location[2]
+    # location is a (filesystempath, lineno, domaininfo) tuple,
+    # indicating the actual location of a test item; domaininfo is
+    # the subtest name.
+    subtest_name = report.location[2]
     output_name = self.port.add_webdriver_subtest_suffix(
-        self.test_path, test_name)
+        self.filename, subtest_name)
+
     self.result.append(WebDriverTestResult(
         output_name, status, message))
 
@@ -257,6 +260,7 @@ if __name__ == '__main__':
   port = host.port_factory.get()
   if options.output_dir:
     port.set_option_default('results_directory', options.output_dir)
+    output_dir = options.output_dir
   else:
     output_dir = tempfile.mkdtemp('webdriver_tests')
     _log.info('Using a temporary output dir %s', output_dir)
@@ -264,7 +268,7 @@ if __name__ == '__main__':
   path_finder = PathFinder(host.filesystem)
 
   # Starts WPT Serve to serve the WPT WebDriver test content.
-  port.start_wptserve()
+  port.start_wptserve(output_dir=output_dir)
 
   # WebDriverExpectations stores skipped and failed WebDriver tests.
   expectations = parse_webdriver_expectations(host, port)

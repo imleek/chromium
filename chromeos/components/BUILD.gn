@@ -24,6 +24,8 @@ test("chromeos_components_unittests") {
     "//chromeos/components/nearby:unit_tests",
     "//chromeos/components/power:unit_tests",
     "//chromeos/components/proximity_auth:unit_tests",
+    "//chromeos/components/quick_answers:unit_tests",
+    "//chromeos/components/smbfs:unit_tests",
     "//chromeos/components/sync_wifi:unit_tests",
     "//chromeos/components/tether:unit_tests",
     "//mojo/core/embedder",
@@ -36,4 +38,8 @@ group("closure_compile") {
     "//chromeos/components/media_app_ui:closure_compile",
     "//chromeos/components/multidevice/debug_webui/resources:closure_compile",
   ]
+
+  if (!is_official_build) {
+    deps += [ "//chromeos/components/sample_system_web_app_ui:closure_compile" ]
+  }
 }

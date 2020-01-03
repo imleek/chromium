@@ -53,11 +53,15 @@ extern const base::Feature kWebPaymentsRedactShippingAddress;
 // hasEnrolledInstrument() queries.
 extern const base::Feature kStrictHasEnrolledAutofillInstrument;
 
-// Used to enable skip-to-GPay experimental flow.
+// Enables skip-to-GPay experimental flow.
 extern const base::Feature kPaymentRequestSkipToGPay;
 
-// Controls whether the microtransaction features are enabled.
-extern const base::Feature kWebPaymentMicrotransaction;
+// Enables skip-to-GPay experimental flow, but only if user doesn't have an
+// eligible credit card.
+extern const base::Feature kPaymentRequestSkipToGPayIfNoCard;
+
+// Controls whether the minimal payment request ui features are enabled.
+extern const base::Feature kWebPaymentsMinimalUI;
 
 }  // namespace features
 }  // namespace payments

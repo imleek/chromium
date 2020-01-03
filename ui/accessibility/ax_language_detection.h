@@ -124,13 +124,16 @@ class AX_EXPORT AXLanguageInfoStats {
   // Cache of last calculated top language results.
   // A vector of pairs of (score, language) sorted by descending score.
   std::vector<std::pair<unsigned int, std::string>> top_results_;
+
   // Boolean recording that we have not mutated the statistics since last
   // calculating top results, setting this to false will cause recalculation
   // when the results are next fetched.
   bool top_results_valid_;
 
+  // Invalidate the top results cache.
   void InvalidateTopResults();
 
+  // Compute the top results and store them in cache.
   void GenerateTopResults();
 
   DISALLOW_COPY_AND_ASSIGN(AXLanguageInfoStats);
@@ -143,17 +146,17 @@ class AX_EXPORT AXLanguageDetectionManager {
   AXLanguageDetectionManager();
   ~AXLanguageDetectionManager();
 
-  // Detect language for each node in the subtree rooted at the given node.
+  // Detect languages for each node in the subtree rooted at the given node.
   // This is the first pass in detection and labelling.
   // This only detects the language, it does not label it, for that see
   //  LabelLanguageForSubtree.
-  void DetectLanguageForSubtree(AXNode* subtree_root);
+  void DetectLanguages(AXNode* subtree_root);
 
-  // Label language for each node in the subtree rooted at the given node.
+  // Label languages for each node in the subtree rooted at the given node.
   // This is the second pass in detection and labelling.
   // This will label the language, but relies on the earlier detection phase
   // having already completed.
-  void LabelLanguageForSubtree(AXNode* subtree_root);
+  void LabelLanguages(AXNode* subtree_root);
 
   // Sub-node language detection for a given string attribute.
   // For example, if a node has name: "My name is Fred", then calling
@@ -164,11 +167,16 @@ class AX_EXPORT AXLanguageDetectionManager {
       ax::mojom::StringAttribute attr);
 
  private:
-  // TODO(chrishall): should this be stored by pointer or value?
-  AXLanguageInfoStats lang_info_stats;
+  AXLanguageInfoStats lang_info_stats_;
 
-  void DetectLanguageForSubtreeInternal(AXNode* subtree_root);
-  void LabelLanguageForSubtreeInternal(AXNode* subtree_root);
+  // Perform detection for subtree rooted at subtree_root.
+  void DetectLanguagesForSubtree(AXNode* subtree_root);
+  // Perform detection for node. Will not descend into children.
+  void DetectLanguagesForNode(AXNode* node);
+  // Perform labelling for subtree rooted at subtree_root.
+  void LabelLanguagesForSubtree(AXNode* subtree_root);
+  // Perform labelling for node. Will not descend into children.
+  void LabelLanguagesForNode(AXNode* node);
 
   // This language identifier is constructed with a default minimum byte length
   // of chrome_lang_id::NNetLanguageIdentifier::kMinNumBytesToConsider and is

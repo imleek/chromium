@@ -649,6 +649,7 @@ void OwnerSettingsServiceChromeOS::UpdateDeviceSettings(
     //   kReportDeviceActivityTimes
     //   kReportDeviceBoardStatus
     //   kReportDeviceBootMode
+    //   kReportDeviceCpuInfo
     //   kReportDeviceHardwareStatus
     //   kReportDeviceLocation
     //   kReportDeviceNetworkInterfaces
@@ -735,8 +736,8 @@ void OwnerSettingsServiceChromeOS::StorePendingChanges() {
       base::CreateTaskRunner({base::ThreadPool(), base::MayBlock()});
   bool rv = AssembleAndSignPolicyAsync(
       task_runner.get(), std::move(policy),
-      base::Bind(&OwnerSettingsServiceChromeOS::OnPolicyAssembledAndSigned,
-                 store_settings_factory_.GetWeakPtr()));
+      base::BindOnce(&OwnerSettingsServiceChromeOS::OnPolicyAssembledAndSigned,
+                     store_settings_factory_.GetWeakPtr()));
   if (!rv)
     ReportStatusAndContinueStoring(false /* success */);
 }

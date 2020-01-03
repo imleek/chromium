@@ -215,10 +215,6 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
   // in DOM tree.
   PositionWithAffinity PositionForPoint(const PhysicalOffset&) const;
 
-  // The node to return when hit-testing on this fragment. This can be different
-  // from GetNode() when this fragment is content of a pseudo node.
-  Node* NodeForHitTest() const;
-
   // Returns true when associated fragment of |layout_object| has line box.
   static bool TryMarkFirstLineBoxDirtyFor(const LayoutObject& layout_object);
   static bool TryMarkLastLineBoxDirtyFor(const LayoutObject& layout_object);
@@ -278,7 +274,7 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
   static base::Optional<PhysicalRect> LocalVisualRectFor(const LayoutObject&);
 
  private:
-  bool IsAlive() const { return physical_fragment_->IsAlive(); }
+  bool IsAlive() const { return !is_layout_object_destroyed_; }
 
   // Returns the first "alive" fragment; i.e., fragment that doesn't have
   // destroyed LayoutObject.
@@ -362,6 +358,10 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
 
   // The ink overflow storage for when |InkOverflowOwnerBox()| is nullptr.
   std::unique_ptr<NGContainerInkOverflow> ink_overflow_;
+
+  // Set when the corresponding LayoutObject is destroyed.
+  // TODO(kojii): This should move to |NGPhysicalFragment|.
+  unsigned is_layout_object_destroyed_ : 1;
 
   // For a line box, this indicates it is dirty. This helps to determine if the
   // fragment is re-usable when part of an inline formatting context is changed.

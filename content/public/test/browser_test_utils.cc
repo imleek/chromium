@@ -36,7 +36,6 @@
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
-#include "content/browser/browser_plugin/browser_plugin_message_filter.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/file_system/file_system_manager_impl.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
@@ -44,7 +43,6 @@
 #include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/frame_host/render_widget_host_view_guest.h"
 #include "content/browser/renderer_host/input/synthetic_touchscreen_pinch_gesture.h"
 #include "content/browser/renderer_host/render_frame_metadata_provider_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -55,7 +53,6 @@
 #include "content/browser/service_manager/service_manager_context.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
-#include "content/common/browser_plugin/browser_plugin_messages.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_visual_properties.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
@@ -140,7 +137,6 @@
 
 #if defined(USE_AURA)
 #include "content/browser/renderer_host/delegated_frame_host.h"
-#include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "ui/aura/test/window_event_dispatcher_test_api.h"
 #include "ui/aura/window.h"
@@ -462,12 +458,15 @@ CrossSiteRedirectResponseHandler(const net::EmbeddedTestServer* test_server,
 // WillStartRequest callback. RegisterThrottleForTesting has this behavior.
 class TestNavigationManagerThrottle : public NavigationThrottle {
  public:
-  TestNavigationManagerThrottle(NavigationHandle* handle,
-                                base::Closure on_will_start_request_closure,
-                                base::Closure on_will_process_response_closure)
+  TestNavigationManagerThrottle(
+      NavigationHandle* handle,
+      base::OnceClosure on_will_start_request_closure,
+      base::OnceClosure on_will_process_response_closure)
       : NavigationThrottle(handle),
-        on_will_start_request_closure_(on_will_start_request_closure),
-        on_will_process_response_closure_(on_will_process_response_closure) {}
+        on_will_start_request_closure_(
+            std::move(on_will_start_request_closure)),
+        on_will_process_response_closure_(
+            std::move(on_will_process_response_closure)) {}
   ~TestNavigationManagerThrottle() override {}
 
   const char* GetNameForLogging() override {
@@ -477,19 +476,21 @@ class TestNavigationManagerThrottle : public NavigationThrottle {
  private:
   // NavigationThrottle:
   NavigationThrottle::ThrottleCheckResult WillStartRequest() override {
+    DCHECK(on_will_start_request_closure_);
     base::PostTask(FROM_HERE, {BrowserThread::UI},
-                   on_will_start_request_closure_);
+                   std::move(on_will_start_request_closure_));
     return NavigationThrottle::DEFER;
   }
 
   NavigationThrottle::ThrottleCheckResult WillProcessResponse() override {
+    DCHECK(on_will_process_response_closure_);
     base::PostTask(FROM_HERE, {BrowserThread::UI},
-                   on_will_process_response_closure_);
+                   std::move(on_will_process_response_closure_));
     return NavigationThrottle::DEFER;
   }
 
-  base::Closure on_will_start_request_closure_;
-  base::Closure on_will_process_response_closure_;
+  base::OnceClosure on_will_start_request_closure_;
+  base::OnceClosure on_will_process_response_closure_;
 };
 
 bool HasGzipHeader(const base::RefCountedMemory& maybe_gzipped) {
@@ -677,24 +678,6 @@ void ResetTouchAction(RenderWidgetHost* host) {
       ->ForceResetTouchActionForTest();
 }
 
-void ResendGestureScrollUpdateToEmbedder(WebContents* guest_web_contents,
-                                         const blink::WebInputEvent& event) {
-  auto* guest_web_contents_impl =
-      static_cast<WebContentsImpl*>(guest_web_contents);
-  DCHECK(guest_web_contents_impl->GetBrowserPluginGuest());
-  guest_web_contents_impl->GetBrowserPluginGuest()->ResendEventToEmbedder(
-      event);
-}
-
-void MaybeSendSyntheticTapGesture(WebContents* guest_web_contents) {
-  content::RenderWidgetHostViewGuest* rwhv =
-      static_cast<content::RenderWidgetHostViewGuest*>(
-          guest_web_contents->GetRenderWidgetHostView());
-  DCHECK(rwhv);
-  rwhv->MaybeSendSyntheticTapGestureForTest(blink::WebFloatPoint(1, 1),
-                                            blink::WebFloatPoint(1, 1));
-}
-
 void RunUntilInputProcessed(RenderWidgetHost* host) {
   base::RunLoop run_loop;
   RenderWidgetHostImpl::From(host)->WaitForInputProcessed(
@@ -750,11 +733,11 @@ bool WaitForLoadStop(WebContents* web_contents) {
   return IsLastCommittedEntryOfPageType(web_contents, PAGE_TYPE_NORMAL);
 }
 
-void PrepContentsForBeforeUnloadTest(WebContents* web_contents) {
+void PrepContentsForBeforeUnloadTest(WebContents* web_contents,
+                                     bool trigger_user_activation) {
   for (auto* frame : web_contents->GetAllFrames()) {
-    // JavaScript onbeforeunload dialogs are ignored unless the frame received a
-    // user gesture. Make sure the frames have user gestures.
-    frame->ExecuteJavaScriptWithUserGestureForTests(base::string16());
+    if (trigger_user_activation)
+      frame->ExecuteJavaScriptWithUserGestureForTests(base::string16());
 
     // Disable the hang monitor, otherwise there will be a race between the
     // beforeunload dialog and the beforeunload hang timer.
@@ -821,7 +804,7 @@ void WaitForResizeComplete(WebContents* web_contents) {
   if (!IsResizeComplete(&dispatcher_test, widget_host)) {
     WindowedNotificationObserver resize_observer(
         NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_VISUAL_PROPERTIES,
-        base::Bind(IsResizeComplete, &dispatcher_test, widget_host));
+        base::BindRepeating(IsResizeComplete, &dispatcher_test, widget_host));
     resize_observer.Wait();
   }
 }
@@ -836,7 +819,7 @@ void WaitForResizeComplete(WebContents* web_contents) {
   if (!IsResizeComplete(widget_host)) {
     WindowedNotificationObserver resize_observer(
         NOTIFICATION_RENDER_WIDGET_HOST_DID_UPDATE_VISUAL_PROPERTIES,
-        base::Bind(IsResizeComplete, widget_host));
+        base::BindRepeating(IsResizeComplete, widget_host));
     resize_observer.Wait();
   }
 }
@@ -1534,6 +1517,88 @@ std::string AnnotateAndAdjustJsStackTraces(const std::string& js_error,
   return annotated_error.str();
 }
 
+EvalJsResult EvalRunnerScript(const ToRenderFrameHost& execution_target,
+                              const std::string& script,
+                              int options,
+                              int32_t world_id,
+                              const std::string& token) {
+  const char* kSourceURL = "__const_std::string&_script__";
+  bool use_automatic_reply = !(options & EXECUTE_SCRIPT_USE_MANUAL_REPLY);
+  bool user_gesture = !(options & EXECUTE_SCRIPT_NO_USER_GESTURE);
+  std::ostringstream error_stream;
+  std::unique_ptr<base::Value> response;
+  if (!execution_target.render_frame_host()->IsRenderFrameLive()) {
+    error_stream << "Error: EvalJs won't work on an already-crashed frame.";
+  } else if (!ExecuteScriptHelper(execution_target.render_frame_host(), script,
+                                  user_gesture, world_id, &response)) {
+    error_stream << "Internal Error: ExecuteScriptHelper failed";
+  } else if (!response) {
+    error_stream << "Internal Error: no value";
+  } else {
+    bool is_reply_from_script = response->is_list() &&
+                                response->GetList().size() == 2 &&
+                                response->GetList()[0].is_string() &&
+                                response->GetList()[0].GetString() == token;
+
+    bool is_error = is_reply_from_script && response->GetList()[1].is_string();
+    bool is_automatic_success_reply =
+        is_reply_from_script && response->GetList()[1].is_list() &&
+        response->GetList()[1].GetList().size() == 1;
+
+    if (is_error) {
+      // This is a response generated by the error handler in our runner
+      // script. This occurs when the script throws an exception, or when
+      // eval throws a SyntaxError.
+      //
+      // Parse the stack trace here, and interleave lines of source code from
+      // |script| to aid debugging.
+      std::string error_text = response->GetList()[1].GetString();
+
+      if (base::StartsWith(error_text,
+                           "a JavaScript error:\nEvalError: Refused",
+                           base::CompareCase::SENSITIVE)) {
+        error_text =
+            "EvalJs encountered an EvalError, because eval() is blocked by the "
+            "document's CSP on this page. To test content that is protected by "
+            "CSP, consider using EvalJs with an isolated world. Details: " +
+            error_text;
+      }
+
+      CHECK(!error_text.empty());
+      error_stream << AnnotateAndAdjustJsStackTraces(error_text, kSourceURL,
+                                                     script, 0);
+    } else if (!use_automatic_reply) {
+      // When |script| itself calls domAutomationController.send() on success,
+      // |response| could be anything; so there's no more checking we can do:
+      // return |response| as success, with an empty error.
+      return EvalJsResult(std::move(*response), std::string());
+    } else if (is_automatic_success_reply) {
+      // Got a response from the runner script that indicates success (of the
+      // form [token, [completion_value]]. Return the completion value, with an
+      // empty error.
+      return EvalJsResult(std::move(response->GetList()[1].GetList()[0]),
+                          std::string());
+    } else {
+      // The response was not well-formed (it failed the token match), so it's
+      // not from our runner script. Fail with an explanation of the raw
+      // message. This allows us to reject other calls
+      // domAutomationController.send().
+      error_stream
+          << "Internal Error: expected a 2-element list of the form "
+          << "['" << token << "', [result]]; but got instead: " << *response
+          << " ... This is potentially because a script tried to call "
+             "domAutomationController.send itself -- that is only allowed "
+             "when using EvalJsWithManualReply().  When using EvalJs(), result "
+             "values are just the result of calling eval() on the script -- "
+             "the completion value is the value of the last executed "
+             "statement.  When using ExecJs(), there is no result value.";
+    }
+  }
+
+  // Something went wrong. Return an empty value and a non-empty error.
+  return EvalJsResult(base::Value(), error_stream.str());
+}
+
 }  // namespace
 
 testing::AssertionResult ExecJs(const ToRenderFrameHost& execution_target,
@@ -1620,81 +1685,8 @@ EvalJsResult EvalJs(const ToRenderFrameHost& execution_target,
       //# sourceURL=EvalJs-runner.js)",
       modified_script, resolve_promises, use_automatic_reply, token);
 
-  bool user_gesture = !(options & EXECUTE_SCRIPT_NO_USER_GESTURE);
-  std::ostringstream error_stream;
-  std::unique_ptr<base::Value> response;
-  if (!execution_target.render_frame_host()->IsRenderFrameLive()) {
-    error_stream << "Error: EvalJs won't work on an already-crashed frame.";
-  } else if (!ExecuteScriptHelper(execution_target.render_frame_host(),
-                                  runner_script, user_gesture, world_id,
-                                  &response)) {
-    error_stream << "Internal Error: ExecuteScriptHelper failed";
-  } else if (!response) {
-    error_stream << "Internal Error: no value";
-  } else {
-    bool is_reply_from_runner_script =
-        response->is_list() && response->GetList().size() == 2 &&
-        response->GetList()[0].is_string() &&
-        response->GetList()[0].GetString() == token;
-
-    bool is_error =
-        is_reply_from_runner_script && response->GetList()[1].is_string();
-    bool is_automatic_success_reply =
-        is_reply_from_runner_script && response->GetList()[1].is_list() &&
-        response->GetList()[1].GetList().size() == 1;
-
-    if (is_error) {
-      // This is a response generated by the error handler in our runner
-      // script. This occurs when the script throws an exception, or when
-      // eval throws a SyntaxError.
-      //
-      // Parse the stack trace here, and interleave lines of source code from
-      // |script| to aid debugging.
-      std::string error_text = response->GetList()[1].GetString();
-
-      if (base::StartsWith(error_text,
-                           "a JavaScript error:\nEvalError: Refused",
-                           base::CompareCase::SENSITIVE)) {
-        error_text =
-            "EvalJs encountered an EvalError, because eval() is blocked by the "
-            "document's CSP on this page. To test content that is protected by "
-            "CSP, consider using EvalJs with an isolated world. Details: " +
-            error_text;
-      }
-
-      CHECK(!error_text.empty());
-      error_stream << AnnotateAndAdjustJsStackTraces(error_text, kSourceURL,
-                                                     script, 0);
-    } else if (!use_automatic_reply) {
-      // When |script| itself calls domAutomationController.send() on success,
-      // |response| could be anything; so there's no more checking we can do:
-      // return |response| as success, with an empty error.
-      return EvalJsResult(std::move(*response), std::string());
-    } else if (is_automatic_success_reply) {
-      // Got a response from the runner script that indicates success (of the
-      // form [token, [completion_value]]. Return the completion value, with an
-      // empty error.
-      return EvalJsResult(std::move(response->GetList()[1].GetList()[0]),
-                          std::string());
-    } else {
-      // The response was not well-formed (it failed the token match), so it's
-      // not from our runner script. Fail with an explanation of the raw
-      // message. This allows us to reject other calls
-      // domAutomationController.send().
-      error_stream
-          << "Internal Error: expected a 2-element list of the form "
-          << "['" << token << "', [result]]; but got instead: " << *response
-          << " ... This is potentially because a script tried to call "
-             "domAutomationController.send itself -- that is only allowed "
-             "when using EvalJsWithManualReply().  When using EvalJs(), result "
-             "values are just the result of calling eval() on the script -- "
-             "the completion value is the value of the last executed "
-             "statement.  When using ExecJs(), there is no result value.";
-    }
-  }
-
-  // Something went wrong. Return an empty value and a non-empty error.
-  return EvalJsResult(base::Value(), error_stream.str());
+  return EvalRunnerScript(execution_target, runner_script, options, world_id,
+                          token);
 }
 
 EvalJsResult EvalJsWithManualReply(const ToRenderFrameHost& execution_target,
@@ -1705,19 +1697,62 @@ EvalJsResult EvalJsWithManualReply(const ToRenderFrameHost& execution_target,
                 options | EXECUTE_SCRIPT_USE_MANUAL_REPLY, world_id);
 }
 
+EvalJsResult EvalJsAfterLifecycleUpdate(
+    const ToRenderFrameHost& execution_target,
+    const std::string& raf_script,
+    const std::string& script,
+    int options,
+    int32_t world_id) {
+  bool use_automatic_reply = !(options & EXECUTE_SCRIPT_USE_MANUAL_REPLY);
+  bool resolve_promises = !(options & EXECUTE_SCRIPT_NO_RESOLVE_PROMISES);
+  std::string token = "EvalJs-" + base::GenerateGUID();
+  const char* kSourceURL = "__const_std::string&_script__";
+  std::string modified_raf_script;
+  if (raf_script.length()) {
+    modified_raf_script = base::StringPrintf("%s;\n//# sourceURL=%s",
+                                             raf_script.c_str(), kSourceURL);
+  }
+  std::string modified_script =
+      base::StringPrintf("%s;\n//# sourceURL=%s", script.c_str(), kSourceURL);
+
+  // This runner_script is very similar to that used by EvalJs, except that
+  // this one delays running the argument script until just before
+  // (|raf_script|) and after (|script|) a rendering update.
+  std::string runner_script = JsReplace(
+      R"(Promise.all([$1, $2])
+         .then(scripts => new Promise((resolve, reject) => {
+               requestAnimationFrame(() => {
+                 window.eval(scripts[0]);
+                 setTimeout(() => {
+                   resolve([window.eval(scripts[1])])
+                 }) }) }) )
+         .then((result) => $3 ? Promise.all(result) : result )
+         .then((result) => $4 ? result : Promise.reject(),
+               (error) => 'a JavaScript error:' +
+                          (error && error.stack ? '\n' + error.stack
+                                                : ' "' + error + '"'))
+         .then((reply) => window.domAutomationController.send([$5, reply]));
+      //# sourceURL=EvalJs-runner.js)",
+      modified_raf_script, modified_script, resolve_promises,
+      use_automatic_reply, token);
+
+  return EvalRunnerScript(execution_target, runner_script, options, world_id,
+                          token);
+}
+
 namespace {
 void AddToSetIfFrameMatchesPredicate(
     std::set<RenderFrameHost*>* frame_set,
-    const base::Callback<bool(RenderFrameHost*)>& predicate,
+    base::OnceCallback<bool(RenderFrameHost*)> predicate,
     RenderFrameHost* host) {
-  if (predicate.Run(host))
+  if (std::move(predicate).Run(host))
     frame_set->insert(host);
 }
 }
 
 RenderFrameHost* FrameMatchingPredicate(
     WebContents* web_contents,
-    const base::Callback<bool(RenderFrameHost*)>& predicate) {
+    base::RepeatingCallback<bool(RenderFrameHost*)> predicate) {
   std::set<RenderFrameHost*> frame_set;
   web_contents->ForEachFrame(base::BindRepeating(
       &AddToSetIfFrameMatchesPredicate, &frame_set, predicate));
@@ -1901,8 +1936,8 @@ void FetchHistogramsFromChildProcesses() {
 }
 
 void SetupCrossSiteRedirector(net::EmbeddedTestServer* embedded_test_server) {
-  embedded_test_server->RegisterRequestHandler(
-      base::Bind(&CrossSiteRedirectResponseHandler, embedded_test_server));
+  embedded_test_server->RegisterRequestHandler(base::BindRepeating(
+      &CrossSiteRedirectResponseHandler, embedded_test_server));
 }
 
 void WaitForInterstitialAttach(content::WebContents* web_contents) {
@@ -2026,7 +2061,8 @@ ui::AXTreeUpdate GetAccessibilityTreeSnapshot(WebContents* web_contents) {
   return manager->SnapshotAXTreeForTesting();
 }
 
-BrowserAccessibility* GetRootAccessibilityNode(WebContents* web_contents) {
+ui::AXPlatformNodeDelegate* GetRootAccessibilityNode(
+    WebContents* web_contents) {
   WebContentsImpl* web_contents_impl =
       static_cast<WebContentsImpl*>(web_contents);
   BrowserAccessibilityManager* manager =
@@ -2038,27 +2074,30 @@ FindAccessibilityNodeCriteria::FindAccessibilityNodeCriteria() = default;
 
 FindAccessibilityNodeCriteria::~FindAccessibilityNodeCriteria() = default;
 
-BrowserAccessibility* FindAccessibilityNode(
+ui::AXPlatformNodeDelegate* FindAccessibilityNode(
     WebContents* web_contents,
     const FindAccessibilityNodeCriteria& criteria) {
-  BrowserAccessibility* root = GetRootAccessibilityNode(web_contents);
+  ui::AXPlatformNodeDelegate* root = GetRootAccessibilityNode(web_contents);
   CHECK(root);
   return FindAccessibilityNodeInSubtree(root, criteria);
 }
 
-BrowserAccessibility* FindAccessibilityNodeInSubtree(
-    BrowserAccessibility* node,
+ui::AXPlatformNodeDelegate* FindAccessibilityNodeInSubtree(
+    ui::AXPlatformNodeDelegate* node,
     const FindAccessibilityNodeCriteria& criteria) {
+  auto* node_internal = BrowserAccessibility::FromAXPlatformNodeDelegate(node);
+  DCHECK(node_internal);
   if ((!criteria.name ||
-       node->GetStringAttribute(ax::mojom::StringAttribute::kName) ==
+       node_internal->GetStringAttribute(ax::mojom::StringAttribute::kName) ==
            criteria.name.value()) &&
-      (!criteria.role || node->GetRole() == criteria.role.value())) {
+      (!criteria.role || node_internal->GetRole() == criteria.role.value())) {
     return node;
   }
 
-  for (unsigned int i = 0; i < node->PlatformChildCount(); ++i) {
-    BrowserAccessibility* result =
-        FindAccessibilityNodeInSubtree(node->PlatformGetChild(i), criteria);
+  for (unsigned int i = 0; i < node_internal->PlatformChildCount(); ++i) {
+    BrowserAccessibility* child = node_internal->PlatformGetChild(i);
+    ui::AXPlatformNodeDelegate* result =
+        FindAccessibilityNodeInSubtree(child, criteria);
     if (result)
       return result;
   }
@@ -2068,24 +2107,22 @@ BrowserAccessibility* FindAccessibilityNodeInSubtree(
 #if defined(OS_WIN)
 template <typename T>
 Microsoft::WRL::ComPtr<T> QueryInterfaceFromNode(
-    BrowserAccessibility* browser_accessibility) {
+    ui::AXPlatformNodeDelegate* node) {
   Microsoft::WRL::ComPtr<T> result;
   EXPECT_HRESULT_SUCCEEDED(
-      browser_accessibility->GetNativeViewAccessible()->QueryInterface(
-          __uuidof(T), &result));
+      node->GetNativeViewAccessible()->QueryInterface(__uuidof(T), &result));
   return result;
 }
 
 void UiaGetPropertyValueVtArrayVtUnknownValidate(
     PROPERTYID property_id,
-    BrowserAccessibility* target_browser_accessibility,
+    ui::AXPlatformNodeDelegate* target_node,
     const std::vector<std::string>& expected_names) {
-  ASSERT_NE(nullptr, target_browser_accessibility);
+  ASSERT_TRUE(target_node);
 
   base::win::ScopedVariant result_variant;
   Microsoft::WRL::ComPtr<IRawElementProviderSimple> node_provider =
-      QueryInterfaceFromNode<IRawElementProviderSimple>(
-          target_browser_accessibility);
+      QueryInterfaceFromNode<IRawElementProviderSimple>(target_node);
 
   node_provider->GetPropertyValue(property_id, result_variant.Receive());
   ASSERT_EQ(VT_ARRAY | VT_UNKNOWN, result_variant.type());
@@ -2473,8 +2510,8 @@ class WebContentsAddedObserver::RenderViewCreatedObserver
 
 WebContentsAddedObserver::WebContentsAddedObserver()
     : web_contents_created_callback_(
-          base::Bind(&WebContentsAddedObserver::WebContentsCreated,
-                     base::Unretained(this))),
+          base::BindRepeating(&WebContentsAddedObserver::WebContentsCreated,
+                              base::Unretained(this))),
       web_contents_(nullptr) {
   WebContentsImpl::FriendWrapper::AddCreatedCallbackForTesting(
       web_contents_created_callback_);
@@ -2905,10 +2942,10 @@ void TestNavigationManager::DidStartNavigation(NavigationHandle* handle) {
   std::unique_ptr<NavigationThrottle> throttle(
       new TestNavigationManagerThrottle(
           request_,
-          base::Bind(&TestNavigationManager::OnWillStartRequest,
-                     weak_factory_.GetWeakPtr()),
-          base::Bind(&TestNavigationManager::OnWillProcessResponse,
-                     weak_factory_.GetWeakPtr())));
+          base::BindOnce(&TestNavigationManager::OnWillStartRequest,
+                         weak_factory_.GetWeakPtr()),
+          base::BindOnce(&TestNavigationManager::OnWillProcessResponse,
+                         weak_factory_.GetWeakPtr())));
   request_->RegisterThrottleForTesting(std::move(throttle));
 }
 
@@ -3000,6 +3037,42 @@ void NavigationHandleCommitObserver::DidFinishNavigation(
   has_committed_ = true;
   was_same_document_ = handle->IsSameDocument();
   was_renderer_initiated_ = handle->IsRendererInitiated();
+}
+
+WebContentsConsoleObserver::WebContentsConsoleObserver(
+    content::WebContents* web_contents)
+    : WebContentsObserver(web_contents) {}
+WebContentsConsoleObserver::~WebContentsConsoleObserver() = default;
+
+void WebContentsConsoleObserver::Wait() {
+  run_loop_.Run();
+}
+
+void WebContentsConsoleObserver::SetFilter(Filter filter) {
+  filter_ = std::move(filter);
+}
+
+void WebContentsConsoleObserver::SetPattern(std::string pattern) {
+  DCHECK(!pattern.empty()) << "An empty pattern will never match.";
+  pattern_ = std::move(pattern);
+}
+
+void WebContentsConsoleObserver::OnDidAddMessageToConsole(
+    blink::mojom::ConsoleMessageLevel log_level,
+    const base::string16& message_contents,
+    int32_t line_no,
+    const base::string16& source_id) {
+  Message message({log_level, message_contents, line_no, source_id});
+  if (filter_ && !filter_.Run(message))
+    return;
+
+  if (!pattern_.empty() &&
+      !base::MatchPattern(base::UTF16ToUTF8(message_contents), pattern_)) {
+    return;
+  }
+
+  messages_.push_back(std::move(message));
+  run_loop_.Quit();
 }
 
 ConsoleObserverDelegate::ConsoleObserverDelegate(WebContents* web_contents,
@@ -3099,66 +3172,12 @@ void PwnMessageHelper::LockMouse(RenderProcessHost* process,
 
 #if defined(USE_AURA)
 namespace {
-class MockOverscrollControllerImpl : public OverscrollController,
-                                     public MockOverscrollController {
- public:
-  MockOverscrollControllerImpl() : content_scrolling_(false) {}
-  ~MockOverscrollControllerImpl() override {}
-
-  // OverscrollController:
-  void ReceivedEventACK(const blink::WebInputEvent& event,
-                        bool processed) override {
-    // Since we're only mocking this one method of OverscrollController and its
-    // other methods are non-virtual, we'll delegate to it so that it doesn't
-    // get into an inconsistent state.
-    OverscrollController::ReceivedEventACK(event, processed);
-
-    if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate &&
-        processed) {
-      content_scrolling_ = true;
-      if (quit_closure_)
-        std::move(quit_closure_).Run();
-    }
-  }
-
-  // MockOverscrollController:
-  void WaitForConsumedScroll() override {
-    if (!content_scrolling_) {
-      base::RunLoop run_loop;
-      quit_closure_ = run_loop.QuitClosure();
-      run_loop.Run();
-    }
-  }
-
- private:
-  bool content_scrolling_;
-  base::OnceClosure quit_closure_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockOverscrollControllerImpl);
-};
-}  // namespace
-
-// static
-MockOverscrollController* MockOverscrollController::Create(
-    RenderWidgetHostView* rwhv) {
-  std::unique_ptr<MockOverscrollControllerImpl> mock =
-      std::make_unique<MockOverscrollControllerImpl>();
-  MockOverscrollController* raw_mock = mock.get();
-
-  RenderWidgetHostViewAura* rwhva =
-      static_cast<RenderWidgetHostViewAura*>(rwhv);
-  rwhva->SetOverscrollControllerForTesting(std::move(mock));
-
-  return raw_mock;
-}
-
-namespace {
 
 // This class interacts with the internals of the DelegatedFrameHost without
 // exposing them in the header.
 class EvictionStateWaiter : public DelegatedFrameHost::Observer {
  public:
-  EvictionStateWaiter(DelegatedFrameHost* delegated_frame_host)
+  explicit EvictionStateWaiter(DelegatedFrameHost* delegated_frame_host)
       : delegated_frame_host_(delegated_frame_host) {
     delegated_frame_host_->AddObserverForTesting(this);
   }
@@ -3259,6 +3278,26 @@ void ContextMenuFilter::OnContextMenu(
   std::move(quit_closure_).Run();
 }
 
+bool UpdateUserActivationStateMsgWaiter::OnMessageReceived(
+    const IPC::Message& message) {
+  IPC_BEGIN_MESSAGE_MAP(UpdateUserActivationStateMsgWaiter, message)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_UpdateUserActivationState,
+                        OnUpdateUserActivationState)
+  IPC_END_MESSAGE_MAP()
+  return false;
+}
+
+void UpdateUserActivationStateMsgWaiter::Wait() {
+  if (!received_)
+    run_loop_.Run();
+}
+
+void UpdateUserActivationStateMsgWaiter::OnUpdateUserActivationState(
+    blink::UserActivationUpdateType) {
+  received_ = true;
+  run_loop_.Quit();
+}
+
 WebContents* GetEmbedderForGuest(content::WebContents* guest) {
   CHECK(guest);
   return static_cast<content::WebContentsImpl*>(guest)->GetOuterWebContents();
@@ -3290,7 +3329,7 @@ int LoadBasicRequest(network::mojom::NetworkContext* network_context,
   request->render_frame_id = render_frame_id;
   request->load_flags = load_flags;
   // Allow access to SameSite cookies in tests.
-  request->site_for_cookies = url;
+  request->site_for_cookies = net::SiteForCookies::FromUrl(url);
 
   content::SimpleURLLoaderTestHelper simple_loader_helper;
   std::unique_ptr<network::SimpleURLLoader> simple_loader =
@@ -3319,9 +3358,8 @@ bool HasValidProcessForProcessGroup(const std::string& process_group_name) {
       process_group_name);
 }
 
-bool TestChildOrGuestAutoresize(bool is_guest,
-                                RenderProcessHost* embedder_rph,
-                                RenderWidgetHost* guest_rwh) {
+bool TestGuestAutoresize(RenderProcessHost* embedder_rph,
+                         RenderWidgetHost* guest_rwh) {
   RenderProcessHostImpl* embedder_rph_impl =
       static_cast<RenderProcessHostImpl*>(embedder_rph);
   RenderWidgetHostImpl* guest_rwh_impl =
@@ -3330,15 +3368,7 @@ bool TestChildOrGuestAutoresize(bool is_guest,
   auto filter =
       base::MakeRefCounted<SynchronizeVisualPropertiesMessageFilter>();
 
-  // Register the message filter for the guest or child. For guest, we must use
-  // a special hook, as there are already message filters installed which will
-  // supercede us.
-  if (is_guest) {
-    embedder_rph_impl->SetBrowserPluginMessageFilterSubFilterForTesting(
-        filter.get());
-  } else {
-    embedder_rph_impl->AddFilter(filter.get());
-  }
+  embedder_rph_impl->AddFilter(filter.get());
 
   viz::LocalSurfaceId current_id = guest_rwh_impl->GetView()
                                        ->GetLocalSurfaceIdAllocation()
@@ -3379,14 +3409,9 @@ bool TestChildOrGuestAutoresize(bool is_guest,
                              current_id.embed_token());
 }
 
-const uint32_t
-    SynchronizeVisualPropertiesMessageFilter::kMessageClassesToFilter[2] = {
-        FrameMsgStart, BrowserPluginMsgStart};
-
 SynchronizeVisualPropertiesMessageFilter::
     SynchronizeVisualPropertiesMessageFilter()
-    : content::BrowserMessageFilter(kMessageClassesToFilter,
-                                    base::size(kMessageClassesToFilter)),
+    : content::BrowserMessageFilter(FrameMsgStart),
       screen_space_rect_run_loop_(std::make_unique<base::RunLoop>()),
       screen_space_rect_received_(false),
       pinch_gesture_active_set_(false),
@@ -3424,13 +3449,6 @@ void SynchronizeVisualPropertiesMessageFilter::
         const viz::FrameSinkId& frame_sink_id,
         const FrameVisualProperties& visual_properties) {
   OnSynchronizeVisualProperties(frame_sink_id, visual_properties);
-}
-
-void SynchronizeVisualPropertiesMessageFilter::
-    OnSynchronizeBrowserPluginVisualProperties(
-        int browser_plugin_guest_instance_id,
-        FrameVisualProperties visual_properties) {
-  OnSynchronizeVisualProperties(viz::FrameSinkId(), visual_properties);
 }
 
 void SynchronizeVisualPropertiesMessageFilter::OnSynchronizeVisualProperties(
@@ -3522,8 +3540,6 @@ bool SynchronizeVisualPropertiesMessageFilter::OnMessageReceived(
   IPC_BEGIN_MESSAGE_MAP(SynchronizeVisualPropertiesMessageFilter, message)
     IPC_MESSAGE_HANDLER(FrameHostMsg_SynchronizeVisualProperties,
                         OnSynchronizeFrameHostVisualProperties)
-    IPC_MESSAGE_HANDLER(BrowserPluginHostMsg_SynchronizeVisualProperties,
-                        OnSynchronizeBrowserPluginVisualProperties)
   IPC_END_MESSAGE_MAP()
 
   // We do not consume the message, so that we can verify the effects of it

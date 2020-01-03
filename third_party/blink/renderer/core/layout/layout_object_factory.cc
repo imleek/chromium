@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/layout/layout_object_factory.h"
 
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_fieldset.h"
 #include "third_party/blink/renderer/core/layout/layout_flexible_box.h"
@@ -22,7 +23,9 @@
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_progress.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_table_caption.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_table_cell.h"
+#include "third_party/blink/renderer/core/layout/ng/list/layout_ng_inside_list_marker.h"
 #include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_item.h"
+#include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_marker.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
@@ -72,6 +75,13 @@ LayoutBlockFlow* LayoutObjectFactory::CreateBlockFlow(
     Node& node,
     const ComputedStyle& style,
     LegacyLayout legacy) {
+  if (style.Display() == EDisplay::kListItem) {
+    // Create a LayoutBlockFlow with a list marker
+    return CreateObject<LayoutBlockFlow, LayoutNGListItem, LayoutListItem>(
+        node, style, legacy);
+  }
+
+  // Create a plain LayoutBlockFlow
   return CreateObject<LayoutBlockFlow, LayoutNGBlockFlow>(node, style, legacy);
 }
 
@@ -83,10 +93,23 @@ LayoutBlock* LayoutObjectFactory::CreateFlexibleBox(Node& node,
       node, style, legacy, disable_ng_for_type);
 }
 
-LayoutBlockFlow* LayoutObjectFactory::CreateListItem(Node& node,
-                                                     const ComputedStyle& style,
-                                                     LegacyLayout legacy) {
-  return CreateObject<LayoutBlockFlow, LayoutNGListItem, LayoutListItem>(
+LayoutObject* LayoutObjectFactory::CreateListMarker(Node& node,
+                                                    const ComputedStyle& style,
+                                                    LegacyLayout legacy) {
+  // TODO(obrufau): allow ::marker pseudo-elements to generate legacy layout.
+  if (!RuntimeEnabledFeatures::LayoutNGEnabled() ||
+      legacy == LegacyLayout::kForce)
+    return nullptr;
+  const Node* parent = node.parentNode();
+  const ComputedStyle* parent_style = parent->GetComputedStyle();
+  bool is_inside =
+      parent_style->ListStylePosition() == EListStylePosition::kInside ||
+      (IsA<HTMLLIElement>(parent) && !parent_style->IsInsideListElement());
+  if (is_inside) {
+    return CreateObject<LayoutObject, LayoutNGInsideListMarker,
+                        LayoutNGInsideListMarker>(node, style, legacy);
+  }
+  return CreateObject<LayoutObject, LayoutNGListMarker, LayoutNGListMarker>(
       node, style, legacy);
 }
 

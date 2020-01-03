@@ -19,22 +19,19 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/input_event_ack_state.h"
 #include "content/public/renderer/render_frame.h"
-#include "content/renderer/browser_plugin/browser_plugin.h"
 #include "content/renderer/compositor/layer_tree_view.h"
 #include "content/renderer/ime_event_guard.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
 #include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_widget.h"
+#include "third_party/blink/public/common/input/web_gesture_device.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "third_party/blink/public/common/input/web_pointer_event.h"
+#include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
-#include "third_party/blink/public/platform/web_float_point.h"
-#include "third_party/blink/public/platform/web_float_size.h"
-#include "third_party/blink/public/platform/web_gesture_device.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_keyboard_event.h"
-#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
-#include "third_party/blink/public/platform/web_pointer_event.h"
-#include "third_party/blink/public/platform/web_touch_event.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_local_frame.h"
@@ -49,8 +46,6 @@
 #include <android/keycodes.h>
 #endif
 
-using blink::WebFloatPoint;
-using blink::WebFloatSize;
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
 using blink::WebInputEventResult;
@@ -119,15 +114,6 @@ void LogPassiveEventListenersUma(WebInputEventResult result,
 
   UMA_HISTOGRAM_ENUMERATION("Event.PassiveListeners", enum_value,
                             PASSIVE_LISTENER_UMA_ENUM_COUNT);
-
-  if (base::TimeTicks::IsHighResolution()) {
-    if (enum_value == PASSIVE_LISTENER_UMA_ENUM_CANCELABLE) {
-      base::TimeTicks now = base::TimeTicks::Now();
-      UMA_HISTOGRAM_CUSTOM_COUNTS("Event.PassiveListeners.Latency",
-                                  GetEventLatencyMicros(event_timestamp, now),
-                                  1, 10000000, 100);
-    }
-  }
 }
 
 void LogAllPassiveEventListenersUma(const WebInputEvent& input_event,
@@ -190,18 +176,14 @@ viz::FrameSinkId GetRemoteFrameSinkId(const blink::WebHitTestResult& result) {
   const blink::WebNode& node = result.GetNode();
   DCHECK(!node.IsNull());
   blink::WebFrame* result_frame = blink::WebFrame::FromFrameOwnerElement(node);
-  if (result_frame && result_frame->IsWebRemoteFrame()) {
-    blink::WebRemoteFrame* remote_frame = result_frame->ToWebRemoteFrame();
-    if (remote_frame->IsIgnoredForHitTest())
-      return viz::FrameSinkId();
+  if (!result_frame || !result_frame->IsWebRemoteFrame())
+    return viz::FrameSinkId();
 
-    if (!result.ContentBoxContainsPoint())
-      return viz::FrameSinkId();
+  blink::WebRemoteFrame* remote_frame = result_frame->ToWebRemoteFrame();
+  if (remote_frame->IsIgnoredForHitTest() || !result.ContentBoxContainsPoint())
+    return viz::FrameSinkId();
 
-    return RenderFrameProxy::FromWebFrame(remote_frame)->frame_sink_id();
-  }
-  auto* plugin = BrowserPlugin::GetFromNode(node);
-  return plugin ? plugin->frame_sink_id() : viz::FrameSinkId();
+  return RenderFrameProxy::FromWebFrame(remote_frame)->frame_sink_id();
 }
 
 }  // namespace
@@ -377,8 +359,8 @@ void RenderWidgetInputHandler::HandleInputEvent(
     const WebMouseEvent& mouse_event =
         static_cast<const WebMouseEvent&>(input_event);
     TRACE_EVENT2("renderer", "HandleMouseMove", "x",
-                 mouse_event.PositionInWidget().x, "y",
-                 mouse_event.PositionInWidget().y);
+                 mouse_event.PositionInWidget().x(), "y",
+                 mouse_event.PositionInWidget().y());
 
     prevent_default = delegate_->WillHandleMouseEvent(mouse_event);
 
@@ -526,19 +508,16 @@ void RenderWidgetInputHandler::HandleInputEvent(
 }
 
 void RenderWidgetInputHandler::DidOverscrollFromBlink(
-    const WebFloatSize& overscrollDelta,
-    const WebFloatSize& accumulatedOverscroll,
-    const WebFloatPoint& position,
-    const WebFloatSize& velocity,
+    const gfx::Vector2dF& overscrollDelta,
+    const gfx::Vector2dF& accumulatedOverscroll,
+    const gfx::PointF& position,
+    const gfx::Vector2dF& velocity,
     const cc::OverscrollBehavior& behavior) {
   std::unique_ptr<DidOverscrollParams> params(new DidOverscrollParams());
-  params->accumulated_overscroll = gfx::Vector2dF(
-      accumulatedOverscroll.width, accumulatedOverscroll.height);
-  params->latest_overscroll_delta =
-      gfx::Vector2dF(overscrollDelta.width, overscrollDelta.height);
-  params->current_fling_velocity =
-      gfx::Vector2dF(velocity.width, velocity.height);
-  params->causal_event_viewport_point = gfx::PointF(position.x, position.y);
+  params->accumulated_overscroll = accumulatedOverscroll;
+  params->latest_overscroll_delta = overscrollDelta;
+  params->current_fling_velocity = velocity;
+  params->causal_event_viewport_point = position;
   params->overscroll_behavior = behavior;
 
   // If we're currently handling an event, stash the overscroll data such that
@@ -553,7 +532,7 @@ void RenderWidgetInputHandler::DidOverscrollFromBlink(
 
 void RenderWidgetInputHandler::InjectGestureScrollEvent(
     blink::WebGestureDevice device,
-    const blink::WebFloatSize& delta,
+    const gfx::Vector2dF& delta,
     ui::input_types::ScrollGranularity granularity,
     cc::ElementId scrollable_area_element_id,
     WebInputEvent::Type injected_type) {
@@ -584,9 +563,8 @@ void RenderWidgetInputHandler::InjectGestureScrollEvent(
   } else {
     base::TimeTicks now = base::TimeTicks::Now();
     std::unique_ptr<WebGestureEvent> gesture_event =
-        ui::GenerateInjectedScrollGesture(injected_type, now, device,
-                                          WebFloatPoint(0, 0), delta,
-                                          granularity);
+        ui::GenerateInjectedScrollGesture(
+            injected_type, now, device, gfx::PointF(0, 0), delta, granularity);
     if (injected_type == WebInputEvent::Type::kGestureScrollBegin) {
       gesture_event->data.scroll_begin.scrollable_area_element_id =
           scrollable_area_element_id.GetStableId();
@@ -620,7 +598,7 @@ void RenderWidgetInputHandler::HandleInjectedScrollGestures(
       ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, &original_timestamp);
   DCHECK(found_original_component);
 
-  WebFloatPoint position = ui::PositionInWidgetFromInputEvent(input_event);
+  gfx::PointF position = ui::PositionInWidgetFromInputEvent(input_event);
   for (const InjectScrollGestureParams& params : injected_scroll_params) {
     // Set up a new LatencyInfo for the injected scroll - this is the original
     // LatencyInfo for the input event that was being handled when the scroll

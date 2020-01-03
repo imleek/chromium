@@ -20,8 +20,8 @@
 
 namespace {
 
-const char kTestGaiaId[] = "gaia-id-test_user@test.com";
-const char kTestGaiaId2[] = "gaia-id-test_user-2@test.com";
+const char kTestGaiaId[] = "gaia-id-test_user-test.com";
+const char kTestGaiaId2[] = "gaia-id-test_user-2-test.com";
 const char kTestEmail[] = "test_user@test.com";
 const char kTestEmail2[] = "test_user@test-2.com";
 const char kRefreshToken[] = "refresh_token";
@@ -196,7 +196,8 @@ TEST_F(AccountsMutatorTest, AddOrUpdateAccount_UpdateExistingAccount) {
   // The internals of IdentityService is migrating from email to gaia id
   // as the account id. Detect whether the current plaform has completed
   // the migration.
-  const bool use_gaia_as_account_id = account_id.id == account_info.gaia;
+  const bool use_gaia_as_account_id =
+      account_id.ToString() == account_info.gaia;
 
   // If the system uses gaia id as account_id, then change the email and
   // the |is_under_advanced_protection| field. Otherwise only change the

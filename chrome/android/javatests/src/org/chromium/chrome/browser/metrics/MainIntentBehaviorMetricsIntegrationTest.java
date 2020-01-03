@@ -35,8 +35,8 @@ import org.chromium.chrome.browser.bookmarks.BookmarkActivity;
 import org.chromium.chrome.browser.download.DownloadActivity;
 import org.chromium.chrome.browser.history.HistoryActivity;
 import org.chromium.chrome.browser.omnibox.UrlBar;
-import org.chromium.chrome.browser.preferences.Preferences;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
+import org.chromium.chrome.browser.settings.SettingsActivity;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -265,8 +265,8 @@ public class MainIntentBehaviorMetricsIntegrationTest {
 
             mActivityTestRule.startMainActivityFromLauncher();
 
-            Preferences preferences = mActivityTestRule.startPreferences(null);
-            preferences.finish();
+            SettingsActivity settingsActivity = mActivityTestRule.startSettingsActivity(null);
+            settingsActivity.finish();
             ChromeActivityTestRule.waitForActivityNativeInitializationComplete(
                     ChromeActivityTestRule.waitFor(ChromeTabbedActivity.class));
 

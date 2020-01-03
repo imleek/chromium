@@ -38,20 +38,20 @@ import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.native_page.NativePageFactory;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
-import org.chromium.chrome.browser.tab.TabBrowserControlsState;
+import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
+import org.chromium.chrome.browser.tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.chrome.browser.util.UrlConstants;
 import org.chromium.ui.base.LocalizationUtils;
@@ -513,7 +513,8 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
     @Override
     public void releaseOverlayPanelContent() {
         if (getTabModelSelector() == null) return;
-        TabBrowserControlsState.updateEnabledState(getTabModelSelector().getCurrentTab());
+        TabBrowserControlsConstraintsHelper.updateEnabledState(
+                getTabModelSelector().getCurrentTab());
     }
 
     /**
@@ -650,13 +651,11 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
         boolean canUseLiveTexture = tab.getWebContents() != null && !SadTab.isShowing(tab)
                 && !isNativePage && !tab.isHidden();
 
-        boolean needsUpdate = layoutTab.initFromHost(TabThemeColorHelper.getBackgroundColor(tab),
-                shouldStall(tab), canUseLiveTexture,
-                ToolbarColors.getToolbarSceneLayerBackground(tab),
+        layoutTab.initFromHost(TabThemeColorHelper.getBackgroundColor(tab), shouldStall(tab),
+                canUseLiveTexture, ToolbarColors.getToolbarSceneLayerBackground(tab),
                 ToolbarColors.getTextBoxColorForToolbarBackground(
                         mContext.getResources(), tab, themeColor),
                 ToolbarColors.getTextBoxAlphaForToolbarBackground(tab));
-        if (needsUpdate) requestUpdate();
 
         mHost.requestRender();
     }

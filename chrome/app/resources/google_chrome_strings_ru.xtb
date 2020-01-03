@@ -3,12 +3,10 @@
 <translationbundle lang="ru">
 <translation id="1001534784610492198">Архив программы установки поврежден или имеет неправильный формат. Скачайте Google Chrome снова.</translation>
 <translation id="102763973188675173">Новая версия Google Chrome уже вышла!</translation>
-<translation id="1035334672863811645">войдите в Chrome</translation>
 <translation id="1051826050538111504">На компьютере обнаружено вредоносное ПО. Chrome может удалить его, восстановить настройки и отключить расширения. Это вернет браузер в обычное состояние.</translation>
 <translation id="1065672644894730302">Не удается получить настройки. Некоторые функции могут быть недоступны, а изменения настроек не будут сохраняться.</translation>
 <translation id="1088300314857992706">Адрес <ph name="USER_EMAIL_ADDRESS" /> уже использовался в Chrome</translation>
 <translation id="1097330777386562916">Удалять файлы cookie и данные сайтов при выходе из Chrome</translation>
-<translation id="1104959162601287462">О &amp;Chrome OS</translation>
 <translation id="110877069173485804">Ваш персональный Chrome</translation>
 <translation id="1142745911746664600">Не удалось обновить Chrome</translation>
 <translation id="1154147086299354128">&amp;Открыть в Chrome</translation>
@@ -49,6 +47,7 @@
 <translation id="2290014774651636340">Отсутствуют ключи API Google. Некоторые функции Google Chrome могут не работать.</translation>
 <translation id="2290095356545025170">Вы действительно хотите удалить Google Chrome?</translation>
 <translation id="2309047409763057870">Это дополнительная установка Google Chrome. Его нельзя сделать браузером по умолчанию.</translation>
+<translation id="2341767445688917208">Не удалось синхронизировать пароли. Войдите, чтобы исправить эту ошибку.</translation>
 <translation id="2348335408836342058">Для этого сайта Chrome запрашивает доступ к камере и микрофону.</translation>
 <translation id="2429317896000329049">Google Chrome не удалось синхронизировать данные, поскольку служба Sync недоступна для вашего домена.</translation>
 <translation id="2467438592969358367">Чтобы экспортировать пароли из Google Chrome, введите пароль своего аккаунта Windows.</translation>
@@ -127,7 +126,6 @@
 <translation id="4953650215774548573">Сделать Google Chrome браузером по умолчанию</translation>
 <translation id="495931528404527476">В Chrome</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
-<translation id="5028489144783860647">Google Chrome не удалось синхронизировать данные. Обновите кодовую фразу в Sync.</translation>
 <translation id="5062123544085870375">Перезапуск Chrome OS</translation>
 <translation id="5132929315877954718">Широкий выбор приложений, игр, расширений и тем для Google Chrome.</translation>
 <translation id="5170938038195470297">Использовать этот профиль невозможно, так как он был создан в более новой версии Google Chrome. Некоторые функции могут быть недоступны. Укажите другой каталог профиля или установите более новую версию Chrome.</translation>
@@ -206,6 +204,7 @@
 <translation id="7855730255114109580">Последняя версия Google Chrome уже установлена</translation>
 <translation id="7890208801193284374">Если, кроме вас, компьютером пользуется кто-то ещё, например родные или друзья, они тоже смогут настроить Chrome на свой вкус.</translation>
 <translation id="7896673875602241923">Ранее вход в Chrome на этом компьютере выполнялся из аккаунта <ph name="ACCOUNT_EMAIL_LAST" />. Чтобы ваши данные хранились отдельно, создайте новый профиль Chrome.</translation>
+<translation id="7916016681687251387">Не удалось синхронизировать данные. Войдите, чтобы исправить эту ошибку.</translation>
 <translation id="7962410387636238736">Google Chrome больше не будет обновляться на этом компьютере, так как поддержка Windows XP и Windows Vista прекращена.</translation>
 <translation id="8008534537613507642">Переустановить Chrome</translation>
 <translation id="8013993649590906847">Если у изображения нет понятного описания, Chrome попытается его найти. Для создания описаний изображения отправляются в Google.</translation>

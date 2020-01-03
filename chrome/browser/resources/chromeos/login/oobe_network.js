@@ -9,7 +9,7 @@
 Polymer({
   is: 'oobe-network-md',
 
-  behaviors: [I18nBehavior, OobeDialogHostBehavior],
+  behaviors: [OobeI18nBehavior, OobeDialogHostBehavior],
 
   observers:
       ['onDemoModeSetupChanged_(isDemoModeSetup, offlineDemoModeEnabled)'],
@@ -81,7 +81,6 @@ Polymer({
 
   /** Updates localized elements of the UI. */
   updateLocalizedContent: function() {
-    this.$.networkSelectLogin.setOncStrings();
     this.i18nUpdateLocale();
   },
 
@@ -105,16 +104,8 @@ Polymer({
    * @return {?NetworkList.NetworkListItemType}
    */
   getNetworkListItemByNameForTest: function(name) {
-    let networkList =
-        this.$.networkSelectLogin.$$('#networkSelect').getNetworkListForTest();
-    assert(networkList);
-    for (const network of networkList.children) {
-      if (network.is === 'network-list-item' &&
-          network.$$('#divText').children[0].innerText === name) {
-        return network;
-      }
-    }
-    return null;
+    return this.$.networkSelectLogin.$$('#networkSelect')
+        .getNetworkListItemByNameForTest(name);
   },
 
   /**
@@ -124,8 +115,13 @@ Polymer({
   onShown_: function() {
     this.async(function() {
       this.$.networkSelectLogin.refresh();
-      this.$.networkSelectLogin.focus();
-    }.bind(this));
+      if (this.isConnected_)
+        this.$.nextButton.focus();
+      else
+        this.$.networkSelectLogin.focus();
+    }.bind(this), 300);
+    // Timeout is a workaround to correctly propagate focus to
+    // RendererFrameHostImpl see https://crbug.com/955129 for details.
   },
 
   /**

@@ -46,8 +46,8 @@ class InstanceID {
     // Other errors.
     UNKNOWN_ERROR = 7,
 
-    // Used for UMA. Keep LAST_RESULT up to date and sync with histograms.xml.
-    LAST_RESULT = UNKNOWN_ERROR
+    // Used for UMA. Keep kMaxValue up to date and sync with histograms.xml.
+    kMaxValue = UNKNOWN_ERROR
   };
 
   // Flags to be used to create a token. These might be platform specific.
@@ -64,14 +64,12 @@ class InstanceID {
 
   // Asynchronous callbacks. Must not synchronously delete |this| (using
   // InstanceIDDriver::RemoveInstanceID).
-  using TokenRefreshCallback =
-      base::Callback<void(const std::string& app_id, bool update_id)>;
   using GetIDCallback = base::Callback<void(const std::string& id)>;
   using GetCreationTimeCallback =
       base::Callback<void(const base::Time& creation_time)>;
   using GetTokenCallback =
       base::OnceCallback<void(const std::string& token, Result result)>;
-  using ValidateTokenCallback = base::Callback<void(bool is_valid)>;
+  using ValidateTokenCallback = base::OnceCallback<void(bool is_valid)>;
   using GetEncryptionInfoCallback =
       base::OnceCallback<void(std::string p256dh, std::string auth_secret)>;
   using DeleteTokenCallback = base::OnceCallback<void(Result result)>;
@@ -87,10 +85,6 @@ class InstanceID {
                                                     gcm::GCMDriver* gcm_driver);
 
   virtual ~InstanceID();
-
-  // Sets the callback that will be invoked when the token refresh event needs
-  // to be triggered.
-  void SetTokenRefreshCallback(const TokenRefreshCallback& callback);
 
   // Returns the Instance ID.
   virtual void GetID(const GetIDCallback& callback) = 0;
@@ -121,7 +115,7 @@ class InstanceID {
   virtual void ValidateToken(const std::string& authorized_entity,
                              const std::string& scope,
                              const std::string& token,
-                             const ValidateTokenCallback& callback) = 0;
+                             ValidateTokenCallback callback) = 0;
 
   // Get the public encryption key and authentication secret associated with a
   // GCM-scoped token. If encryption info is not yet associated, it will be
@@ -169,7 +163,6 @@ class InstanceID {
   gcm::GCMDriver* gcm_driver_;
 
   std::string app_id_;
-  TokenRefreshCallback token_refresh_callback_;
 
   base::WeakPtrFactory<InstanceID> weak_ptr_factory_{this};
 

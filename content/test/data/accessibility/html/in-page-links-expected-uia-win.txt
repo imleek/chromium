@@ -1,29 +1,35 @@
 document
 ++link Name='Empty anchor'
+++++description Name='Empty anchor' IsControlElement=false
 ++description Name=' '
 ++link Name='Anchor with content'
+++++description Name='Anchor with content' IsControlElement=false
 ++description Name=' '
 ++link Name='Anchor with ID'
+++++description Name='Anchor with ID' IsControlElement=false
 ++description Name=' '
 ++link Name='Empty span'
+++++description Name='Empty span' IsControlElement=false
 ++description Name=' '
 ++link Name='Span with content'
+++++description Name='Span with content' IsControlElement=false
 ++description Name=' '
 ++link Name='Paragraph with content'
-++group
+++++description Name='Paragraph with content' IsControlElement=false
+++group IsControlElement=false
 ++++link
 ++++description Name='After empty anchor'
-++group
+++group IsControlElement=false
 ++++link Name='Anchor with content'
 ++++++description Name='Anchor with content'
-++group
+++group IsControlElement=false
 ++++link Name='Anchor with ID'
 ++++++description Name='Anchor with ID'
-++group
-++++group
+++group IsControlElement=false
+++++group IsControlElement=false
 ++++description Name='After empty span'
-++group
-++++group
+++group IsControlElement=false
+++++group IsControlElement=false
 ++++++description Name='Span with content'
-++group
+++group IsControlElement=false
 ++++description Name='Paragraph with content'

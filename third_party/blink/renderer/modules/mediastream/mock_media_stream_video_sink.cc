@@ -24,6 +24,12 @@ MockMediaStreamVideoSink::GetDeliverFrameCB() {
                          weak_factory_.GetWeakPtr()));
 }
 
+EncodedVideoFrameCB MockMediaStreamVideoSink::GetDeliverEncodedVideoFrameCB() {
+  return media::BindToCurrentLoop(
+      WTF::BindRepeating(&MockMediaStreamVideoSink::DeliverEncodedVideoFrame,
+                         weak_factory_.GetWeakPtr()));
+}
+
 void MockMediaStreamVideoSink::DeliverVideoFrame(
     scoped_refptr<media::VideoFrame> frame,
     base::TimeTicks estimated_capture_time) {
@@ -34,6 +40,12 @@ void MockMediaStreamVideoSink::DeliverVideoFrame(
   OnVideoFrame();
 }
 
+void MockMediaStreamVideoSink::DeliverEncodedVideoFrame(
+    scoped_refptr<EncodedVideoFrame> frame,
+    base::TimeTicks estimated_capture_time) {
+  OnEncodedVideoFrame();
+}
+
 void MockMediaStreamVideoSink::OnReadyStateChanged(
     blink::WebMediaStreamSource::ReadyState state) {
   state_ = state;
@@ -41,6 +53,11 @@ void MockMediaStreamVideoSink::OnReadyStateChanged(
 
 void MockMediaStreamVideoSink::OnEnabledChanged(bool enabled) {
   enabled_ = enabled;
+}
+
+void MockMediaStreamVideoSink::OnContentHintChanged(
+    WebMediaStreamTrack::ContentHintType content_hint) {
+  content_hint_ = content_hint;
 }
 
 }  // namespace blink

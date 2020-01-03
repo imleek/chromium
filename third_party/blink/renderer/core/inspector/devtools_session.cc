@@ -32,8 +32,6 @@ namespace blink {
 namespace {
 const char kV8StateKey[] = "v8";
 bool ShouldInterruptForMethod(const String& method) {
-  // Keep in sync with DevToolsSession::ShouldSendOnIO.
-  // TODO(dgozman): find a way to share this.
   return method == "Debugger.pause" || method == "Debugger.setBreakpoint" ||
          method == "Debugger.setBreakpointByUrl" ||
          method == "Debugger.removeBreakpoint" ||
@@ -48,34 +46,6 @@ Vector<uint8_t> UnwrapMessage(const mojom::blink::DevToolsMessagePtr& message) {
   Vector<uint8_t> unwrap_message;
   unwrap_message.Append(message->data.data(), message->data.size());
   return unwrap_message;
-}
-
-// Platform allows us to inject the string<->double conversion
-// routines from Blink into the inspector_protocol JSON parser / serializer.
-class JsonPlatform : public crdtp::json::Platform {
- public:
-  bool StrToD(const char* str, double* result) const override {
-    bool ok;
-    *result = String(str).ToDouble(&ok);
-    return ok;
-  }
-
-  // Prints |value| in a format suitable for JSON.
-  std::unique_ptr<char[]> DToStr(double value) const override {
-    String str = String::NumberToStringECMAScript(value);
-    DCHECK(str.Is8Bit());
-    std::unique_ptr<char[]> result(new char[str.length() + 1]);
-    memcpy(result.get(), str.Characters8(), str.length());
-    result.get()[str.length()] = '\0';
-    return result;
-  }
-};
-
-crdtp::Status ConvertCBORToJSON(crdtp::span<uint8_t> cbor,
-                                std::vector<uint8_t>* json) {
-  DCHECK(crdtp::cbor::IsCBORMessage(cbor));
-  JsonPlatform platform;
-  return ConvertCBORToJSON(platform, cbor, json);
 }
 
 std::vector<uint8_t> Get8BitStringFrom(v8_inspector::StringBuffer* msg) {
@@ -116,13 +86,24 @@ class DevToolsSession::IOSession : public mojom::blink::DevToolsSession {
       int call_id,
       const String& method,
       mojom::blink::DevToolsMessagePtr message) override {
-    DCHECK(ShouldInterruptForMethod(method));
+    TRACE_EVENT_WITH_FLOW1("devtools", "IOSession::DispatchProtocolCommand",
+                           call_id,
+                           TRACE_EVENT_FLAG_FLOW_OUT | TRACE_EVENT_FLAG_FLOW_IN,
+                           "call_id", call_id);
     // Crash renderer.
     if (method == "Page.crash")
       CHECK(false);
-    inspector_task_runner_->AppendTask(CrossThreadBindOnce(
-        &::blink::DevToolsSession::DispatchProtocolCommandImpl, session_,
-        call_id, method, UnwrapMessage(message)));
+    // Post a task to the worker or main renderer thread that will interrupt V8
+    // and be run immediately. Only methods that do not run JS code are safe.
+    if (ShouldInterruptForMethod(method)) {
+      inspector_task_runner_->AppendTask(CrossThreadBindOnce(
+          &::blink::DevToolsSession::DispatchProtocolCommandImpl, session_,
+          call_id, method, UnwrapMessage(message)));
+    } else {
+      inspector_task_runner_->AppendTaskDontInterrupt(CrossThreadBindOnce(
+          &::blink::DevToolsSession::DispatchProtocolCommandImpl, session_,
+          call_id, method, UnwrapMessage(message)));
+    }
   }
 
  private:
@@ -217,6 +198,9 @@ void DevToolsSession::DispatchProtocolCommand(
     int call_id,
     const String& method,
     blink::mojom::blink::DevToolsMessagePtr message_ptr) {
+  TRACE_EVENT_WITH_FLOW1(
+      "devtools", "DevToolsSession::DispatchProtocolCommand", call_id,
+      TRACE_EVENT_FLAG_FLOW_OUT | TRACE_EVENT_FLAG_FLOW_IN, "call_id", call_id);
   return DispatchProtocolCommandImpl(call_id, method,
                                      UnwrapMessage(message_ptr));
 }
@@ -226,6 +210,10 @@ void DevToolsSession::DispatchProtocolCommandImpl(int call_id,
                                                   Vector<uint8_t> data) {
   DCHECK(crdtp::cbor::IsCBORMessage(
       crdtp::span<uint8_t>(data.data(), data.size())));
+
+  TRACE_EVENT_WITH_FLOW1(
+      "devtools", "DevToolsSession::DispatchProtocolCommandImpl", call_id,
+      TRACE_EVENT_FLAG_FLOW_OUT | TRACE_EVENT_FLAG_FLOW_IN, "call_id", call_id);
 
   // IOSession does not provide ordering guarantees relative to
   // Session, so a command may come to IOSession after Session is detached,
@@ -250,7 +238,7 @@ void DevToolsSession::DispatchProtocolCommandImpl(int call_id,
         protocol::Value::parseBinary(data.data(), data.size());
     // Don't pass protocol message further - there is no passthrough.
     inspector_backend_dispatcher_->dispatch(call_id, method, std::move(value),
-                                            protocol::ProtocolMessage());
+                                            crdtp::span<uint8_t>());
   }
   agent_->client_->DebuggerTaskFinished();
 }
@@ -282,7 +270,7 @@ void DevToolsSession::sendProtocolResponse(
 
 void DevToolsSession::fallThrough(int call_id,
                                   const String& method,
-                                  const protocol::ProtocolMessage& message) {
+                                  crdtp::span<uint8_t> message) {
   // There's no other layer to handle the command.
   NOTREACHED();
 }
@@ -295,6 +283,9 @@ void DevToolsSession::sendResponse(
 
 void DevToolsSession::SendProtocolResponse(int call_id,
                                            std::vector<uint8_t> message) {
+  TRACE_EVENT_WITH_FLOW1(
+      "devtools", "DevToolsSession::SendProtocolResponse", call_id,
+      TRACE_EVENT_FLAG_FLOW_OUT | TRACE_EVENT_FLAG_FLOW_IN, "call_id", call_id);
   if (IsDetached())
     return;
   flushProtocolNotifications();
@@ -359,7 +350,7 @@ blink::mojom::blink::DevToolsMessagePtr DevToolsSession::FinalizeMessage(
   if (!client_expects_binary_responses_) {
     std::vector<uint8_t> json;
     crdtp::Status status =
-        ConvertCBORToJSON(crdtp::SpanFrom(message_to_send), &json);
+        crdtp::json::ConvertCBORToJSON(crdtp::SpanFrom(message_to_send), &json);
     CHECK(status.ok()) << status.ToASCIIString();
     message_to_send = std::move(json);
   }

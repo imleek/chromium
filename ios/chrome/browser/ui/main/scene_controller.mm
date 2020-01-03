@@ -7,6 +7,9 @@
 #import "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/sys_string_conversions.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/url_formatter/url_formatter.h"
 #include "ios/chrome/app/application_delegate/tab_opening.h"
 #import "ios/chrome/app/chrome_overlay_window.h"
 #import "ios/chrome/app/deferred_initialization_runner.h"
@@ -16,6 +19,7 @@
 #include "ios/chrome/browser/browsing_data/browsing_data_remover.h"
 #include "ios/chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "ios/chrome/browser/main/browser.h"
+#include "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller.h"
@@ -29,9 +33,11 @@
 #import "ios/chrome/browser/ui/signin_interaction/signin_interaction_coordinator.h"
 #include "ios/chrome/browser/ui/tab_grid/tab_grid_coordinator.h"
 #import "ios/chrome/browser/ui/util/multi_window_support.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/url_loading/app_url_loading_service.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/public/provider/chrome/browser/user_feedback/user_feedback_provider.h"
 #import "ios/web/public/web_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -67,7 +73,8 @@ enum class EnterTabSwitcherSnapshotResult {
 
 }  // namespace
 
-@interface SceneController ()
+@interface SceneController () <UserFeedbackDataSource,
+                               SettingsNavigationControllerDelegate>
 
 // A flag that keeps track of the UI initialization for the controlled scene.
 @property(nonatomic, assign) BOOL hasInitializedUI;
@@ -91,6 +98,20 @@ enum class EnterTabSwitcherSnapshotResult {
     }
   }
   return self;
+}
+
+#pragma mark - Setters and getters
+
+- (id<BrowserInterface>)mainInterface {
+  return self.mainController.interfaceProvider.mainInterface;
+}
+
+- (id<BrowserInterface>)currentInterface {
+  return self.mainController.interfaceProvider.currentInterface;
+}
+
+- (id<BrowserInterface>)incognitoInterface {
+  return self.mainController.interfaceProvider.incognitoInterface;
 }
 
 #pragma mark - SceneStateObserver
@@ -188,12 +209,10 @@ enum class EnterTabSwitcherSnapshotResult {
   if (self.mainController.settingsNavigationController)
     return;
 
-  Browser* browser =
-      self.mainController.interfaceProvider.mainInterface.browser;
+  Browser* browser = self.mainInterface.browser;
   self.mainController.settingsNavigationController =
-      [SettingsNavigationController
-          autofillProfileControllerForBrowser:browser
-                                     delegate:self.mainController];
+      [SettingsNavigationController autofillProfileControllerForBrowser:browser
+                                                               delegate:self];
   [baseViewController
       presentViewController:self.mainController.settingsNavigationController
                    animated:YES
@@ -210,14 +229,12 @@ enum class EnterTabSwitcherSnapshotResult {
                 .isSettingsViewPresented);
     if (self.mainController.settingsNavigationController)
       return;
-    Browser* browser =
-        self.mainController.interfaceProvider.mainInterface.browser;
+    Browser* browser = self.mainInterface.browser;
     self.mainController.settingsNavigationController =
-        [SettingsNavigationController
-            userFeedbackControllerForBrowser:browser
-                                    delegate:self.mainController
-                          feedbackDataSource:self.mainController
-                                  dispatcher:self];
+        [SettingsNavigationController userFeedbackControllerForBrowser:browser
+                                                              delegate:self
+                                                    feedbackDataSource:self
+                                                            dispatcher:self];
     [baseViewController
         presentViewController:self.mainController.settingsNavigationController
                      animated:YES
@@ -243,8 +260,7 @@ enum class EnterTabSwitcherSnapshotResult {
 - (void)showSignin:(ShowSigninCommand*)command
     baseViewController:(UIViewController*)baseViewController {
   if (!self.mainController.signinInteractionCoordinator) {
-    Browser* mainBrowser =
-        self.mainController.interfaceProvider.mainInterface.browser;
+    Browser* mainBrowser = self.mainInterface.browser;
     self.mainController.signinInteractionCoordinator =
         [[SigninInteractionCoordinator alloc]
             initWithBrowser:mainBrowser
@@ -272,8 +288,7 @@ enum class EnterTabSwitcherSnapshotResult {
 
 - (void)showAdvancedSigninSettingsFromViewController:
     (UIViewController*)baseViewController {
-  Browser* mainBrowser =
-      self.mainController.interfaceProvider.mainInterface.browser;
+  Browser* mainBrowser = self.mainInterface.browser;
   self.mainController.signinInteractionCoordinator =
       [[SigninInteractionCoordinator alloc]
           initWithBrowser:mainBrowser
@@ -285,8 +300,7 @@ enum class EnterTabSwitcherSnapshotResult {
 
 // TODO(crbug.com/779791) : Remove settings commands from MainController.
 - (void)showAddAccountFromViewController:(UIViewController*)baseViewController {
-  Browser* mainBrowser =
-      self.mainController.interfaceProvider.mainInterface.browser;
+  Browser* mainBrowser = self.mainInterface.browser;
   if (!self.mainController.signinInteractionCoordinator) {
     self.mainController.signinInteractionCoordinator =
         [[SigninInteractionCoordinator alloc]
@@ -327,13 +341,11 @@ enum class EnterTabSwitcherSnapshotResult {
   [[DeferredInitializationRunner sharedInstance]
       runBlockIfNecessary:kPrefObserverInit];
 
-  Browser* browser =
-      self.mainController.interfaceProvider.mainInterface.browser;
+  Browser* browser = self.mainInterface.browser;
 
   self.mainController.settingsNavigationController =
-      [SettingsNavigationController
-          mainSettingsControllerForBrowser:browser
-                                  delegate:self.mainController];
+      [SettingsNavigationController mainSettingsControllerForBrowser:browser
+                                                            delegate:self];
   [baseViewController
       presentViewController:self.mainController.settingsNavigationController
                    animated:YES
@@ -363,12 +375,10 @@ enum class EnterTabSwitcherSnapshotResult {
     return;
   }
 
-  Browser* browser =
-      self.mainController.interfaceProvider.mainInterface.browser;
+  Browser* browser = self.mainInterface.browser;
   self.mainController.settingsNavigationController =
-      [SettingsNavigationController
-          accountsControllerForBrowser:browser
-                              delegate:self.mainController];
+      [SettingsNavigationController accountsControllerForBrowser:browser
+                                                        delegate:self];
   [baseViewController
       presentViewController:self.mainController.settingsNavigationController
                    animated:YES
@@ -394,12 +404,10 @@ enum class EnterTabSwitcherSnapshotResult {
     return;
   }
 
-  Browser* browser =
-      self.mainController.interfaceProvider.mainInterface.browser;
+  Browser* browser = self.mainInterface.browser;
   self.mainController.settingsNavigationController =
-      [SettingsNavigationController
-          googleServicesControllerForBrowser:browser
-                                    delegate:self.mainController];
+      [SettingsNavigationController googleServicesControllerForBrowser:browser
+                                                              delegate:self];
 
   [baseViewController
       presentViewController:self.mainController.settingsNavigationController
@@ -418,12 +426,10 @@ enum class EnterTabSwitcherSnapshotResult {
     return;
   }
 
-  Browser* browser =
-      self.mainController.interfaceProvider.mainInterface.browser;
+  Browser* browser = self.mainInterface.browser;
   self.mainController.settingsNavigationController =
-      [SettingsNavigationController
-          syncPassphraseControllerForBrowser:browser
-                                    delegate:self.mainController];
+      [SettingsNavigationController syncPassphraseControllerForBrowser:browser
+                                                              delegate:self];
   [baseViewController
       presentViewController:self.mainController.settingsNavigationController
                    animated:YES
@@ -440,12 +446,10 @@ enum class EnterTabSwitcherSnapshotResult {
         showSavedPasswordsSettingsFromViewController:baseViewController];
     return;
   }
-  Browser* browser =
-      self.mainController.interfaceProvider.mainInterface.browser;
+  Browser* browser = self.mainInterface.browser;
   self.mainController.settingsNavigationController =
-      [SettingsNavigationController
-          savePasswordsControllerForBrowser:browser
-                                   delegate:self.mainController];
+      [SettingsNavigationController savePasswordsControllerForBrowser:browser
+                                                             delegate:self];
   [baseViewController
       presentViewController:self.mainController.settingsNavigationController
                    animated:YES
@@ -462,13 +466,11 @@ enum class EnterTabSwitcherSnapshotResult {
         showProfileSettingsFromViewController:baseViewController];
     return;
   }
-  Browser* browser =
-      self.mainController.interfaceProvider.mainInterface.browser;
+  Browser* browser = self.mainInterface.browser;
 
   self.mainController.settingsNavigationController =
-      [SettingsNavigationController
-          autofillProfileControllerForBrowser:browser
-                                     delegate:self.mainController];
+      [SettingsNavigationController autofillProfileControllerForBrowser:browser
+                                                               delegate:self];
   [baseViewController
       presentViewController:self.mainController.settingsNavigationController
                    animated:YES
@@ -486,88 +488,18 @@ enum class EnterTabSwitcherSnapshotResult {
     return;
   }
 
-  Browser* browser =
-      self.mainController.interfaceProvider.mainInterface.browser;
+  Browser* browser = self.mainInterface.browser;
   self.mainController.settingsNavigationController =
       [SettingsNavigationController
           autofillCreditCardControllerForBrowser:browser
-                                        delegate:self.mainController];
+                                        delegate:self];
   [baseViewController
       presentViewController:self.mainController.settingsNavigationController
                    animated:YES
                  completion:nil];
 }
 
-#pragma mark - BrowsingDataCommands
-
-- (void)removeBrowsingDataForBrowserState:(ios::ChromeBrowserState*)browserState
-                               timePeriod:(browsing_data::TimePeriod)timePeriod
-                               removeMask:(BrowsingDataRemoveMask)removeMask
-                          completionBlock:(ProceduralBlock)completionBlock {
-  // TODO(crbug.com/632772): https://bugs.webkit.org/show_bug.cgi?id=149079
-  // makes it necessary to disable web usage while clearing browsing data.
-  // It is however unnecessary for off-the-record BrowserState (as the code
-  // is not invoked) and has undesired side-effect (cause all regular tabs
-  // to reload, see http://crbug.com/821753 for details).
-  BOOL disableWebUsageDuringRemoval =
-      !browserState->IsOffTheRecord() &&
-      IsRemoveDataMaskSet(removeMask, BrowsingDataRemoveMask::REMOVE_SITE_DATA);
-  BOOL showActivityIndicator = NO;
-
-  if (@available(iOS 13, *)) {
-    // TODO(crbug.com/632772): Visited links clearing doesn't require disabling
-    // web usage with iOS 13. Stop disabling web usage once iOS 12 is not
-    // supported.
-    showActivityIndicator = disableWebUsageDuringRemoval;
-    disableWebUsageDuringRemoval = NO;
-  }
-
-  if (disableWebUsageDuringRemoval) {
-    // Disables browsing and purges web views.
-    // Must be called only on the main thread.
-    DCHECK([NSThread isMainThread]);
-    self.mainController.interfaceProvider.mainInterface.userInteractionEnabled =
-        NO;
-    self.mainController.interfaceProvider.incognitoInterface
-        .userInteractionEnabled = NO;
-  } else if (showActivityIndicator) {
-    // Show activity overlay so users know that clear browsing data is in
-    // progress.
-    [self.mainController.mainBVC.dispatcher showActivityOverlay:YES];
-  }
-
-  BrowsingDataRemoverFactory::GetForBrowserState(browserState)
-      ->Remove(timePeriod, removeMask, base::BindOnce(^{
-                 // Activates browsing and enables web views.
-                 // Must be called only on the main thread.
-                 DCHECK([NSThread isMainThread]);
-                 if (showActivityIndicator) {
-                   // User interaction still needs to be disabled as a way to
-                   // force reload all the web states and to reset NTPs.
-                   self.mainController.interfaceProvider.mainInterface
-                       .userInteractionEnabled = NO;
-                   self.mainController.interfaceProvider.incognitoInterface
-                       .userInteractionEnabled = NO;
-
-                   [self.mainController.mainBVC.dispatcher
-                       showActivityOverlay:NO];
-                 }
-                 self.mainController.interfaceProvider.mainInterface
-                     .userInteractionEnabled = YES;
-                 self.mainController.interfaceProvider.incognitoInterface
-                     .userInteractionEnabled = YES;
-                 [self.mainController.currentBVC setPrimary:YES];
-
-                 if (completionBlock)
-                   completionBlock();
-               }));
-}
-
 #pragma mark - ApplicationCommandsHelpers
-
-- (BOOL)currentPageIsIncognito {
-  return self.mainController.currentBrowserState->IsOffTheRecord();
-}
 
 - (void)openUrlFromSettings:(OpenNewTabCommand*)command {
   DCHECK([command fromChrome]);
@@ -581,6 +513,64 @@ enum class EnterTabSwitcherSnapshotResult {
                                                     completion:nil];
   };
   [self.mainController closeSettingsAnimated:YES completion:completion];
+}
+
+#pragma mark - UserFeedbackDataSource
+
+- (NSString*)currentPageDisplayURL {
+  if (self.mainController.tabSwitcherIsActive)
+    return nil;
+  web::WebState* webState =
+      self.mainController.currentTabModel.webStateList->GetActiveWebState();
+  if (!webState)
+    return nil;
+  // Returns URL of browser tab that is currently showing.
+  GURL url = webState->GetVisibleURL();
+  base::string16 urlText = url_formatter::FormatUrl(url);
+  return base::SysUTF16ToNSString(urlText);
+}
+
+- (UIImage*)currentPageScreenshot {
+  UIView* lastView =
+      self.mainController.mainCoordinator.activeViewController.view;
+  DCHECK(lastView);
+  CGFloat scale = 0.0;
+  // For screenshots of the tab switcher we need to use a scale of 1.0 to avoid
+  // spending too much time since the tab switcher can have lots of subviews.
+  if (self.mainController.tabSwitcherIsActive)
+    scale = 1.0;
+  return CaptureView(lastView, scale);
+}
+
+- (NSString*)currentPageSyncedUserName {
+  ios::ChromeBrowserState* browserState =
+      self.mainController.currentBrowserState;
+  if (browserState->IsOffTheRecord())
+    return nil;
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForBrowserState(browserState);
+  std::string username = identity_manager->GetPrimaryAccountInfo().email;
+  return username.empty() ? nil : base::SysUTF8ToNSString(username);
+}
+
+- (BOOL)currentPageIsIncognito {
+  return self.mainController.currentBrowserState->IsOffTheRecord();
+}
+
+#pragma mark - SettingsNavigationControllerDelegate
+
+- (void)closeSettings {
+  [self closeSettingsUI];
+}
+
+- (void)settingsWasDismissed {
+  [self.mainController.settingsNavigationController cleanUpSettings];
+  self.mainController.settingsNavigationController = nil;
+}
+
+- (id<ApplicationCommands, BrowserCommands>)dispatcherForSettings {
+  // Assume that settings always wants the dispatcher from the main BVC.
+  return self.mainController.mainBVC.dispatcher;
 }
 
 @end

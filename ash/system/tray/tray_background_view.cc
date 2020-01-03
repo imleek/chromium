@@ -28,6 +28,7 @@
 #include "ash/system/tray/tray_event_filter.h"
 #include "ash/window_factory.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_element.h"
@@ -127,12 +128,15 @@ class TrayBackgroundView::HighlightPathGenerator
 
   // HighlightPathGenerator:
   SkPath GetHighlightPath(const views::View* view) override {
+    const int focus_ring_padding = 1;
     const int border_radius = ShelfConfig::Get()->control_border_radius();
     SkPath path;
-    path.addRoundRect(
-        gfx::RectToSkRect(static_cast<const TrayBackgroundView*>(view)
-                              ->GetBackgroundBounds()),
-        border_radius, border_radius);
+
+    gfx::Rect bounds =
+        static_cast<const TrayBackgroundView*>(view)->GetBackgroundBounds();
+    bounds.Inset(gfx::Insets(focus_ring_padding));
+
+    path.addRoundRect(gfx::RectToSkRect(bounds), border_radius, border_radius);
     return path;
   }
 
@@ -174,8 +178,6 @@ TrayBackgroundView::TrayBackgroundView(Shelf* shelf)
   SetPaintToLayer(ui::LAYER_SOLID_COLOR);
   layer()->SetFillsBoundsOpaquely(false);
 
-  UpdateBackground();
-
   // Start the tray items not visible, because visibility changes are animated.
   views::View::SetVisible(false);
 }
@@ -190,6 +192,8 @@ TrayBackgroundView::~TrayBackgroundView() {
 void TrayBackgroundView::Initialize() {
   GetWidget()->AddObserver(widget_observer_.get());
   Shell::Get()->system_tray_model()->virtual_keyboard()->AddObserver(this);
+
+  UpdateBackground();
 }
 
 // static
@@ -207,13 +211,14 @@ void TrayBackgroundView::SetVisiblePreferred(bool visible_preferred) {
   if (visible_preferred_ == visible_preferred)
     return;
   visible_preferred_ = visible_preferred;
-  SetVisible(GetEffectiveVisibility());
+  StartVisibilityAnimation(GetEffectiveVisibility());
 
   // We need to update which trays overflow after showing or hiding a tray.
-  shelf_->GetStatusAreaWidget()->UpdateCollapseState();
+  if (shelf_->GetStatusAreaWidget())
+    shelf_->GetStatusAreaWidget()->UpdateCollapseState();
 }
 
-void TrayBackgroundView::SetVisible(bool visible) {
+void TrayBackgroundView::StartVisibilityAnimation(bool visible) {
   if (visible == layer()->GetTargetVisibility())
     return;
 
@@ -305,6 +310,13 @@ std::unique_ptr<views::InkDropRipple> TrayBackgroundView::CreateInkDropRipple()
       ripple_attributes.base_color, ripple_attributes.inkdrop_opacity);
 }
 
+std::unique_ptr<views::InkDropMask> TrayBackgroundView::CreateInkDropMask()
+    const {
+  return std::make_unique<views::RoundRectInkDropMask>(
+      size(), GetBackgroundInsets(),
+      ShelfConfig::Get()->control_border_radius());
+}
+
 std::unique_ptr<views::InkDropHighlight>
 TrayBackgroundView::CreateInkDropHighlight() const {
   gfx::Rect bounds = GetBackgroundBounds();
@@ -341,8 +353,13 @@ void TrayBackgroundView::CloseBubble() {}
 
 void TrayBackgroundView::ShowBubble(bool show_by_click) {}
 
-void TrayBackgroundView::UpdateAfterShelfAlignmentChange() {
-  tray_container_->UpdateAfterShelfAlignmentChange();
+void TrayBackgroundView::UpdateAfterShelfChange() {
+  tray_container_->UpdateAfterShelfChange();
+}
+
+void TrayBackgroundView::UpdateAfterLoginStatusChange(
+    LoginStatus login_status) {
+  // Handled in subclasses.
 }
 
 void TrayBackgroundView::UpdateAfterRootWindowBoundsChange(
@@ -408,8 +425,8 @@ views::View* TrayBackgroundView::GetBubbleAnchor() const {
 gfx::Insets TrayBackgroundView::GetBubbleAnchorInsets() const {
   gfx::Insets anchor_insets = GetBubbleAnchor()->GetInsets();
   gfx::Insets tray_bg_insets = GetInsets();
-  if (shelf_->alignment() == SHELF_ALIGNMENT_BOTTOM ||
-      shelf_->alignment() == SHELF_ALIGNMENT_BOTTOM_LOCKED) {
+  if (shelf_->alignment() == ShelfAlignment::kBottom ||
+      shelf_->alignment() == ShelfAlignment::kBottomLocked) {
     return gfx::Insets(-tray_bg_insets.top(), anchor_insets.left(),
                        -tray_bg_insets.bottom(), anchor_insets.right());
   } else {
@@ -470,6 +487,13 @@ gfx::Insets TrayBackgroundView::GetBackgroundInsets() const {
   MirrorInsetsIfNecessary(&local_contents_insets);
   insets += local_contents_insets;
 
+  if (chromeos::switches::ShouldShowShelfHotseat() &&
+      Shell::Get()->tablet_mode_controller()->InTabletMode() &&
+      ShelfConfig::Get()->is_in_app()) {
+    insets += gfx::Insets(
+        ShelfConfig::Get()->in_app_control_button_height_inset(), 0);
+  }
+
   return insets;
 }
 
@@ -490,6 +514,9 @@ bool TrayBackgroundView::GetEffectiveVisibility() {
     return show_with_virtual_keyboard_;
 
   if (!visible_preferred_)
+    return false;
+
+  if (!GetWidget())
     return false;
 
   // When the status area is collapsed, the effective visibility of the view is

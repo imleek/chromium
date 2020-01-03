@@ -59,6 +59,7 @@ blink_modules_sources("peerconnection") {
     "media_stream_video_webrtc_sink.cc",
     "media_stream_video_webrtc_sink.h",
     "peer_connection_dependency_factory.cc",
+    "peer_connection_dependency_factory.h",
     "peer_connection_tracker.cc",
     "peer_connection_tracker.h",
     "rtc_certificate.cc",
@@ -170,10 +171,10 @@ jumbo_source_set("test_support") {
     "mock_peer_connection_dependency_factory.h",
     "mock_peer_connection_impl.cc",
     "mock_peer_connection_impl.h",
-    "mock_web_rtc_peer_connection_handler.cc",
-    "mock_web_rtc_peer_connection_handler.h",
-    "mock_web_rtc_peer_connection_handler_client.cc",
-    "mock_web_rtc_peer_connection_handler_client.h",
+    "mock_rtc_peer_connection_handler_client.cc",
+    "mock_rtc_peer_connection_handler_client.h",
+    "mock_rtc_peer_connection_handler_platform.cc",
+    "mock_rtc_peer_connection_handler_platform.h",
     "test_webrtc_stats_report_obtainer.cc",
     "test_webrtc_stats_report_obtainer.h",
   ]
@@ -183,6 +184,7 @@ jumbo_source_set("test_support") {
     "//base/test:test_support",
     "//testing/gmock",
     "//third_party/blink/public:test_headers",
+    "//third_party/blink/renderer/platform",
     "//third_party/webrtc_overrides:webrtc_component",
   ]
 }

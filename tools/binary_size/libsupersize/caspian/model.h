@@ -12,11 +12,13 @@
 #include <deque>
 #include <functional>
 #include <map>
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "third_party/jsoncpp/source/include/json/json.h"
+#include "tools/binary_size/libsupersize/caspian/grouped_path.h"
 
 // Copied from representation in tools/binary_size/libsupersize/models.py
 
@@ -52,6 +54,20 @@ enum class DiffStatus : uint8_t {
   kRemoved = 3,
 };
 
+class SymbolFlag {
+ public:
+  static const int32_t kAnonymous = 1;
+  static const int32_t kStartup = 2;
+  static const int32_t kUnlikely = 4;
+  static const int32_t kRel = 8;
+  static const int32_t kRelLocal = 16;
+  static const int32_t kGeneratedSource = 32;
+  static const int32_t kClone = 64;
+  static const int32_t kHot = 128;
+  static const int32_t kCovered = 256;
+  static const int32_t kUncompressed = 512;
+};
+
 class Symbol;
 
 class BaseSymbol {
@@ -79,6 +95,8 @@ class BaseSymbol {
   virtual float PssWithoutPadding() const = 0;
   virtual float PaddingPss() const = 0;
 
+  virtual DiffStatus GetDiffStatus() const = 0;
+
   int32_t SizeWithoutPadding() const { return Size() - Padding(); }
 
   int32_t EndAddress() const { return Address() + SizeWithoutPadding(); }
@@ -86,6 +104,12 @@ class BaseSymbol {
   int32_t NumAliases() const {
     const std::vector<Symbol*>* aliases = Aliases();
     return aliases ? aliases->size() : 1;
+  }
+
+  bool IsTemplate() const {
+    // Because of the way these are derived from |FullName|, they have the
+    // same contents if and only if they have the same length.
+    return Name().size() != TemplateName().size();
   }
 
   bool IsOverhead() const { return FullName().substr(0, 10) == "Overhead: "; }
@@ -115,6 +139,10 @@ class BaseSymbol {
   bool IsStringLiteral() const {
     std::string_view full_name = FullName();
     return !full_name.empty() && full_name[0] == '"';
+  }
+
+  bool IsGeneratedSource() const {
+    return Flags() & SymbolFlag::kGeneratedSource;
   }
 
   bool IsNameUnique() const {
@@ -155,6 +183,8 @@ class Symbol : public BaseSymbol {
   float PssWithoutPadding() const override;
 
   float PaddingPss() const override;
+
+  DiffStatus GetDiffStatus() const override;
 
   int32_t address_ = 0;
   int32_t size_ = 0;
@@ -206,18 +236,7 @@ class DeltaSymbol : public BaseSymbol {
   float PssWithoutPadding() const override;
   float PaddingPss() const override;
 
-  DiffStatus DiffStatus() const {
-    if (!before_) {
-      return DiffStatus::kAdded;
-    }
-    if (!after_) {
-      return DiffStatus::kRemoved;
-    }
-    if (Size() || Pss() != 0) {
-      return DiffStatus::kChanged;
-    }
-    return DiffStatus::kUnchanged;
-  }
+  DiffStatus GetDiffStatus() const override;
 
  private:
   const Symbol* before_ = nullptr;
@@ -230,6 +249,8 @@ struct BaseSizeInfo {
   BaseSizeInfo();
   BaseSizeInfo(const BaseSizeInfo&);
   virtual ~BaseSizeInfo();
+  virtual bool IsSparse() const = 0;
+
   Json::Value metadata;
   std::deque<std::string> owned_strings;
   SectionId ShortSectionName(const char* section_name);
@@ -240,6 +261,7 @@ struct SizeInfo : BaseSizeInfo {
   ~SizeInfo() override;
   SizeInfo(const SizeInfo& other) = delete;
   SizeInfo& operator=(const SizeInfo& other) = delete;
+  bool IsSparse() const override;
 
   // Entries in |raw_symbols| hold pointers to this data.
   std::vector<const char*> object_paths;
@@ -252,6 +274,8 @@ struct SizeInfo : BaseSizeInfo {
 
   // A container for each symbol group.
   std::deque<std::vector<Symbol*>> alias_groups;
+
+  bool is_sparse = false;
 };
 
 struct DeltaSizeInfo : BaseSizeInfo {
@@ -259,12 +283,13 @@ struct DeltaSizeInfo : BaseSizeInfo {
   ~DeltaSizeInfo() override;
   DeltaSizeInfo(const DeltaSizeInfo&);
   DeltaSizeInfo& operator=(const DeltaSizeInfo&);
+  bool IsSparse() const override;
 
   using Results = std::array<int32_t, 4>;
   Results CountsByDiffStatus() const {
     Results ret{0};
     for (const DeltaSymbol& sym : delta_symbols) {
-      ret[static_cast<uint8_t>(sym.DiffStatus())]++;
+      ret[static_cast<uint8_t>(sym.GetDiffStatus())]++;
     }
     return ret;
   }
@@ -278,22 +303,31 @@ struct DeltaSizeInfo : BaseSizeInfo {
 
 struct Stat {
   int32_t count = 0;
+  int32_t added = 0;
+  int32_t removed = 0;
+  int32_t changed = 0;
   float size = 0.0f;
 
   void operator+=(const Stat& other) {
     count += other.count;
     size += other.size;
+    added += other.added;
+    removed += other.removed;
+    changed += other.changed;
   }
 };
 
 struct NodeStats {
   NodeStats();
   ~NodeStats();
-  NodeStats(SectionId section, int32_t count, float size);
+  explicit NodeStats(const BaseSymbol& symbol);
   void WriteIntoJson(Json::Value* out) const;
   NodeStats& operator+=(const NodeStats& other);
   SectionId ComputeBiggestSection() const;
   int32_t SumCount() const;
+  int32_t SumAdded() const;
+  int32_t SumRemoved() const;
+  DiffStatus GetGlobalDiffStatus() const;
 
   std::map<SectionId, Stat> child_stats;
 };
@@ -304,10 +338,12 @@ struct TreeNode {
 
   using CompareFunc =
       std::function<bool(const TreeNode* const& l, const TreeNode* const& r)>;
+  void WriteIntoJson(int depth,
+                     CompareFunc compare_func,
+                     bool is_sparse,
+                     Json::Value* out);
 
-  void WriteIntoJson(Json::Value* out, int depth, CompareFunc compare_func);
-
-  std::string_view id_path;
+  GroupedPath id_path;
   const char* src_path = nullptr;
   const char* component = nullptr;
   float size = 0.0f;

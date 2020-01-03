@@ -71,7 +71,8 @@ class OverviewAnimationsTest
   DISALLOW_COPY_AND_ASSIGN(OverviewAnimationsTest);
 };
 
-IN_PROC_BROWSER_TEST_P(OverviewAnimationsTest, EnterExit) {
+// TODO(https://crbug.com/1033653) flaky test
+IN_PROC_BROWSER_TEST_P(OverviewAnimationsTest, DISABLED_EnterExit) {
   // Browser window is used just to identify display.
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
   gfx::NativeWindow browser_window =
@@ -93,7 +94,7 @@ IN_PROC_BROWSER_TEST_P(OverviewAnimationsTest, EnterExit) {
       ash::OverviewAnimationState::kExitAnimationComplete);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          OverviewAnimationsTest,
                          ::testing::Combine(::testing::Values(2, 8),
                                             /*blank=*/testing::Bool(),

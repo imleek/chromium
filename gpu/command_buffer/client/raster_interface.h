@@ -49,7 +49,9 @@ class RasterInterface : public InterfaceBase {
                               GLint x,
                               GLint y,
                               GLsizei width,
-                              GLsizei height) = 0;
+                              GLsizei height,
+                              GLboolean unpack_flip_y,
+                              GLboolean unpack_premultiply_alpha) = 0;
   // OOP-Raster
   virtual void BeginRasterCHROMIUM(GLuint sk_color,
                                    GLuint msaa_sample_count,
@@ -86,6 +88,9 @@ class RasterInterface : public InterfaceBase {
   virtual void DeleteGpuRasterTexture(GLuint texture) = 0;
   virtual void BeginGpuRaster() = 0;
   virtual void EndGpuRaster() = 0;
+  virtual void BeginSharedImageAccessDirectCHROMIUM(GLuint texture,
+                                                    GLenum mode) = 0;
+  virtual void EndSharedImageAccessDirectCHROMIUM(GLuint texture) = 0;
 
 // Include the auto-generated part of this class. We split this because
 // it means we can easily edit the non-auto generated parts right here in

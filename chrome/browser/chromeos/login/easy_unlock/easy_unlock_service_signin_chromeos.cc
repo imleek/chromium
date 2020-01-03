@@ -30,7 +30,6 @@
 #include "chromeos/components/multidevice/software_feature_state.h"
 #include "chromeos/components/proximity_auth/proximity_auth_local_state_pref_manager.h"
 #include "chromeos/components/proximity_auth/smart_lock_metrics_recorder.h"
-#include "chromeos/components/proximity_auth/switches.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/login/auth/user_context.h"
 #include "chromeos/login/login_state/login_state.h"
@@ -225,10 +224,6 @@ EasyUnlockService::Type EasyUnlockServiceSignin::GetType() const {
 
 AccountId EasyUnlockServiceSignin::GetAccountId() const {
   return account_id_;
-}
-
-void EasyUnlockServiceSignin::ClearPermitAccess() {
-  NOTREACHED();
 }
 
 const base::ListValue* EasyUnlockServiceSignin::GetRemoteDevices() const {
@@ -535,7 +530,7 @@ void EasyUnlockServiceSignin::OnUserDataLoaded(
 
     remote_devices.push_back(remote_device);
     PA_LOG(VERBOSE) << "Loaded Remote Device:\n"
-                    << "  user id: " << remote_device.user_id << "\n"
+                    << "  user email: " << remote_device.user_email << "\n"
                     << "  device id: "
                     << multidevice::RemoteDeviceRef::TruncateDeviceIdForLogs(
                            remote_device.GetDeviceId());

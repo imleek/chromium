@@ -109,6 +109,11 @@ TEST_F('CrExtensionsToolbarTest', 'DevModeToggle', function() {
   this.runMochaTest(extension_toolbar_tests.TestNames.DevModeToggle);
 });
 
+TEST_F('CrExtensionsToolbarTest', 'FailedUpdateFiresLoadError', function() {
+  this.runMochaTest(
+      extension_toolbar_tests.TestNames.FailedUpdateFiresLoadError);
+});
+
 // TODO(crbug.com/882342) Disabled on other platforms but MacOS due to timeouts.
 GEN('#if !defined(OS_MACOSX)');
 GEN('#define MAYBE_ClickHandlers DISABLED_ClickHandlers');
@@ -653,7 +658,7 @@ var CrExtensionsOptionsDialogTest = class extends CrExtensionsBrowserTest {
   }
 };
 
-TEST_F('CrExtensionsOptionsDialogTest', 'Layout', function() {
+TEST_F('CrExtensionsOptionsDialogTest', 'DISABLED_Layout', function() {
   this.runMochaTest(extension_options_dialog_tests.TestNames.Layout);
 });
 

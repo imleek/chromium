@@ -53,7 +53,7 @@ class URLRequestContextBuilderMojoTest : public PlatformTest {
  protected:
   URLRequestContextBuilderMojoTest()
       : task_environment_(base::test::TaskEnvironment::MainThreadType::IO) {
-    test_server_.RegisterRequestHandler(base::Bind(&HandlePacRequest));
+    test_server_.RegisterRequestHandler(base::BindRepeating(&HandlePacRequest));
     test_server_.AddDefaultHandlers(
         base::FilePath(FILE_PATH_LITERAL("net/data/url_request_unittest")));
   }
@@ -74,12 +74,11 @@ TEST_F(URLRequestContextBuilderMojoTest, MojoProxyResolver) {
                   test_server_.GetURL(kPacPath)),
               TRAFFIC_ANNOTATION_FOR_TESTS)));
   builder_.SetMojoProxyResolverFactory(
-      proxy_resolver::mojom::ProxyResolverFactoryPtr(
-          test_mojo_proxy_resolver_factory_.CreateFactoryRemote()));
+      test_mojo_proxy_resolver_factory_.CreateFactoryRemote());
 
 #if defined(OS_CHROMEOS)
-  builder_.SetDhcpWpadUrlClient(mojom::DhcpWpadUrlClientPtr(
-      MockMojoDhcpWpadUrlClient::CreateWithSelfOwnedReceiver(std::string())));
+  builder_.SetDhcpWpadUrlClient(
+      MockMojoDhcpWpadUrlClient::CreateWithSelfOwnedReceiver(std::string()));
 #endif  // defined(OS_CHROMEOS)
 
   std::unique_ptr<net::URLRequestContext> context(builder_.Build());
@@ -111,12 +110,11 @@ TEST_F(URLRequestContextBuilderMojoTest, ShutdownWithHungRequest) {
                   test_server_.GetURL("/hung")),
               TRAFFIC_ANNOTATION_FOR_TESTS)));
   builder_.SetMojoProxyResolverFactory(
-      proxy_resolver::mojom::ProxyResolverFactoryPtr(
-          test_mojo_proxy_resolver_factory_.CreateFactoryRemote()));
+      test_mojo_proxy_resolver_factory_.CreateFactoryRemote());
 
 #if defined(OS_CHROMEOS)
-  builder_.SetDhcpWpadUrlClient(mojom::DhcpWpadUrlClientPtr(
-      MockMojoDhcpWpadUrlClient::CreateWithSelfOwnedReceiver(std::string())));
+  builder_.SetDhcpWpadUrlClient(
+      MockMojoDhcpWpadUrlClient::CreateWithSelfOwnedReceiver(std::string()));
 #endif  // defined(OS_CHROMEOS)
 
   std::unique_ptr<net::URLRequestContext> context(builder_.Build());

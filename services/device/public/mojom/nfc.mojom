@@ -29,13 +29,36 @@ enum NDEFPushTarget {
   ANY
 };
 
+// https://w3c.github.io/web-nfc/#the-record-type-string
+enum NDEFRecordTypeCategory {
+  // Standardized well known types, including "empty", "text", "url",
+  // "smart-poster", "absolute-url", "mime", and "unknown", etc.
+  // https://w3c.github.io/web-nfc/#dfn-well-known-type-name
+  kStandardized,
+
+  // External types that follow the rule defined by
+  // https://w3c.github.io/web-nfc/#dfn-external-type-name.
+  kExternal,
+
+  // Local types that follow the rule defined by
+  // https://w3c.github.io/web-nfc/#dfn-local-type-name.
+  kLocal
+};
+
 struct NDEFError {
   NDEFErrorType error_type;
 };
 
 // https://w3c.github.io/web-nfc/#dom-ndefrecord
 struct NDEFRecord {
+  // The category |record_type| belongs to. This field is not exposed to JS, but
+  // is used to transfer information internally and make code more readable,
+  // given that there're some complex logic around external types and local
+  // types (will be supported in the future).
+  NDEFRecordTypeCategory category;
+
   // The type of NDEFRecord.
+  // https://w3c.github.io/web-nfc/#the-record-type-string
   string record_type;
 
   // Represents the IANA media type of the NDEFRecord data field.
@@ -65,11 +88,6 @@ struct NDEFMessage {
   // The body of the NDEFMessage is a collection of NDEFRecord objects.
   array<NDEFRecord> data;
 
-  // The |url| field is an ASCII serialized origin, optionally followed by a URL
-  // path. It represents Web NFC id, that can be used for matching Web NFC
-  // content with the filter specified by |url| field in NDEFScanOptions.
-  string? url;
-
   // Maximum size of NFC message that can be sent over IPC is 32KB.
   const uint32 kMaxSize = 32768;
 };
@@ -84,14 +102,15 @@ struct NDEFPushOptions {
 };
 
 struct NDEFScanOptions {
-  // Defines filtering constraint for NFC messages with specified |url|.
-  string? url;
+  // Defines record id filtering constraint. Null means don't filter, empty
+  // string means must match on empty.
+  string? id;
 
   // Defines record type filtering constraint.
   string? record_type;
 
-  // Defines media type filtering constraint.
-  string? media_type;
+  // Defines media type filtering constraint. Empty string means don't filter.
+  string media_type;
 };
 
 interface NFC {
@@ -132,4 +151,8 @@ interface NFCClient {
   // anti-collision and identification, or empty string in case none is
   // available.
   OnWatch(array<uint32> watch_ids, string? serial_number, NDEFMessage message);
+
+  // Sends |error| to all readers that are trying to read some data from the nfc
+  // tag coming nearby.
+  OnError(NDEFErrorType error);
 };

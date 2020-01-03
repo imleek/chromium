@@ -30,6 +30,7 @@
 #include "components/dom_distiller/core/url_utils.h"
 #include "components/dom_distiller/core/viewer.h"
 #include "components/strings/grit/components_strings.h"
+#include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -136,6 +137,13 @@ void DomDistillerViewerSource::RequestViewerHandle::DidFinishNavigation(
     return;
   }
 
+  // At the moment we destroy the handle and won't be able
+  // to restore the document later, so we prevent the page
+  // from being stored in back-forward cache.
+  content::BackForwardCache::DisableForRenderFrameHost(
+      navigation_handle->GetPreviousRenderFrameHostId(),
+      "DomDistillerViewerSource");
+
   Cancel();
 }
 
@@ -206,7 +214,7 @@ std::string DomDistillerViewerSource::GetSource() {
 void DomDistillerViewerSource::StartDataRequest(
     const GURL& url,
     const content::WebContents::Getter& wc_getter,
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
   // TODO(crbug/1009127): simplify path matching.
   const std::string path = URLDataSource::URLToRequestPath(url);
   content::WebContents* web_contents = wc_getter.Run();
@@ -214,12 +222,12 @@ void DomDistillerViewerSource::StartDataRequest(
     return;
   if (kViewerCssPath == path) {
     std::string css = viewer::GetCss();
-    callback.Run(base::RefCountedString::TakeString(&css));
+    std::move(callback).Run(base::RefCountedString::TakeString(&css));
     return;
   }
   if (kViewerLoadingImagePath == path) {
     std::string image = viewer::GetLoadingImage();
-    callback.Run(base::RefCountedString::TakeString(&image));
+    std::move(callback).Run(base::RefCountedString::TakeString(&image));
     return;
   }
   if (base::StartsWith(path, kViewerSaveFontScalingPath,
@@ -251,8 +259,7 @@ void DomDistillerViewerSource::StartDataRequest(
       web_contents->GetContainerBounds().size());
 
   GURL current_url(url_utils::GetOriginalUrlFromDistillerUrl(request_url));
-  std::string unsafe_page_html = viewer::GetUnsafeArticleTemplateHtml(
-      current_url.spec(),
+  std::string unsafe_page_html = viewer::GetArticleTemplateHtml(
       dom_distiller_service_->GetDistilledPagePrefs()->GetTheme(),
       dom_distiller_service_->GetDistilledPagePrefs()->GetFontFamily());
 
@@ -267,7 +274,8 @@ void DomDistillerViewerSource::StartDataRequest(
   }
 
   // Place template on the page.
-  callback.Run(base::RefCountedString::TakeString(&unsafe_page_html));
+  std::move(callback).Run(
+      base::RefCountedString::TakeString(&unsafe_page_html));
 }
 
 std::string DomDistillerViewerSource::GetMimeType(const std::string& path) {

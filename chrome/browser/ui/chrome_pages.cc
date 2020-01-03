@@ -21,6 +21,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/apps/launch_service/launch_service.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/extensions/default_web_app_ids.h"
 #include "chrome/browser/download/download_shelf.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -87,13 +88,20 @@ void FocusWebContents(Browser* browser) {
     contents->Focus();
 }
 
+// Shows |url| in a tab in |browser|. If a tab is already open to |url|,
+// ignoring the URL path, then that tab becomes selected. Overwrites the new tab
+// page if it is open.
+void ShowSingletonTabIgnorePathOverwriteNTP(Browser* browser, const GURL& url) {
+  NavigateParams params(GetSingletonTabNavigateParams(browser, url));
+  params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
+  ShowSingletonTabOverwritingNTP(browser, std::move(params));
+}
+
 void OpenBookmarkManagerForNode(Browser* browser, int64_t node_id) {
   GURL url = GURL(kChromeUIBookmarksURL)
                  .Resolve(base::StringPrintf(
                      "/?id=%s", base::NumberToString(node_id).c_str()));
-  NavigateParams params(GetSingletonTabNavigateParams(browser, url));
-  params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(browser, std::move(params));
+  ShowSingletonTabIgnorePathOverwriteNTP(browser, url);
 }
 
 #if defined(OS_CHROMEOS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -103,7 +111,7 @@ const std::string BuildQueryString(Profile* profile) {
   std::string region;
   chromeos::system::StatisticsProvider::GetInstance()->GetMachineStatistic(
       "region", &region);
-  const std::string language = l10n_util::GetApplicationLocale(std::string());
+  const std::string language = g_browser_process->GetApplicationLocale();
   const std::string version = version_info::GetVersionNumber();
   const std::string milestone = version_info::GetMajorVersionNumber();
   std::string channel_name =
@@ -201,10 +209,7 @@ void ShowHelpImpl(Browser* browser, Profile* profile, HelpSource source) {
       break;
 #if defined(OS_CHROMEOS)
     case HELP_SOURCE_WEBUI:
-      if (base::FeatureList::IsEnabled(chromeos::features::kSplitSettings))
-        url = GURL(kChromeHelpViaWebUIURL);
-      else
-        url = GURL(kChromeOsHelpViaWebUIURL);
+      url = GURL(kChromeHelpViaWebUIURL);
       break;
     case HELP_SOURCE_WEBUI_CHROME_OS:
       url = GURL(kChromeOsHelpViaWebUIURL);
@@ -283,10 +288,7 @@ void ShowSiteSettingsImpl(Browser* browser, Profile* profile, const GURL& url) {
 
 void ShowBookmarkManager(Browser* browser) {
   base::RecordAction(UserMetricsAction("ShowBookmarkManager"));
-  NavigateParams params(
-      GetSingletonTabNavigateParams(browser, GURL(kChromeUIBookmarksURL)));
-  params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(browser, std::move(params));
+  ShowSingletonTabIgnorePathOverwriteNTP(browser, GURL(kChromeUIBookmarksURL));
 }
 
 void ShowBookmarkManagerForNode(Browser* browser, int64_t node_id) {
@@ -296,10 +298,7 @@ void ShowBookmarkManagerForNode(Browser* browser, int64_t node_id) {
 
 void ShowHistory(Browser* browser) {
   base::RecordAction(UserMetricsAction("ShowHistory"));
-  NavigateParams params(
-      GetSingletonTabNavigateParams(browser, GURL(kChromeUIHistoryURL)));
-  params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(browser, std::move(params));
+  ShowSingletonTabIgnorePathOverwriteNTP(browser, GURL(kChromeUIHistoryURL));
 }
 
 void ShowDownloads(Browser* browser) {
@@ -315,17 +314,15 @@ void ShowDownloads(Browser* browser) {
 void ShowExtensions(Browser* browser,
                     const std::string& extension_to_highlight) {
   base::RecordAction(UserMetricsAction("ShowExtensions"));
-  NavigateParams params(
-      GetSingletonTabNavigateParams(browser, GURL(kChromeUIExtensionsURL)));
-  params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
+  GURL url(kChromeUIExtensionsURL);
   if (!extension_to_highlight.empty()) {
     GURL::Replacements replacements;
     std::string query("id=");
     query += extension_to_highlight;
     replacements.SetQueryStr(query);
-    params.url = params.url.ReplaceComponents(replacements);
+    url = url.ReplaceComponents(replacements);
   }
-  ShowSingletonTabOverwritingNTP(browser, std::move(params));
+  ShowSingletonTabIgnorePathOverwriteNTP(browser, url);
 }
 
 void ShowHelp(Browser* browser, HelpSource source) {
@@ -390,11 +387,6 @@ void ShowSettingsSubPageForProfile(Profile* profile,
                                    const std::string& sub_page) {
 #if defined(OS_CHROMEOS)
   SettingsWindowManager* settings = SettingsWindowManager::GetInstance();
-  if (!base::FeatureList::IsEnabled(chromeos::features::kSplitSettings)) {
-    base::RecordAction(base::UserMetricsAction("ShowOptions"));
-    settings->ShowChromePageForProfile(profile, GetSettingsUrl(sub_page));
-    return;
-  }
   // TODO(jamescook): When SplitSettings is close to shipping, change this to
   // a DCHECK that the |sub_page| is not an OS-specific setting.
   if (chrome::IsOSSettingsSubPage(sub_page)) {
@@ -417,10 +409,7 @@ void ShowSettingsSubPageInTabbedBrowser(Browser* browser,
   // a menu, ensure the web contents (and therefore the settings page that is
   // about to be shown) is focused. (See crbug/926492 for motivation.)
   FocusWebContents(browser);
-  GURL gurl = GetSettingsUrl(sub_page);
-  NavigateParams params(GetSingletonTabNavigateParams(browser, gurl));
-  params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(browser, std::move(params));
+  ShowSingletonTabIgnorePathOverwriteNTP(browser, GetSettingsUrl(sub_page));
 }
 
 void ShowContentSettingsExceptions(Browser* browser,
@@ -470,17 +459,7 @@ void ShowImportDialog(Browser* browser) {
 
 void ShowAboutChrome(Browser* browser) {
   base::RecordAction(UserMetricsAction("AboutChrome"));
-#if defined(OS_CHROMEOS)
-  if (!base::FeatureList::IsEnabled(chromeos::features::kSplitSettings)) {
-    SettingsWindowManager::GetInstance()->ShowChromePageForProfile(
-        browser->profile(), GURL(kChromeUIHelpURL));
-    return;
-  }
-#endif
-  NavigateParams params(
-      GetSingletonTabNavigateParams(browser, GURL(kChromeUIHelpURL)));
-  params.path_behavior = NavigateParams::IGNORE_AND_NAVIGATE;
-  ShowSingletonTabOverwritingNTP(browser, std::move(params));
+  ShowSingletonTabIgnorePathOverwriteNTP(browser, GURL(kChromeUIHelpURL));
 }
 
 void ShowSearchEngineSettings(Browser* browser) {
@@ -489,11 +468,10 @@ void ShowSearchEngineSettings(Browser* browser) {
 }
 
 #if defined(OS_CHROMEOS)
-void ShowManagementPageForProfile(Profile* profile) {
-  const std::string page_path = "chrome://management";
-  base::RecordAction(base::UserMetricsAction("ShowOptions"));
-  SettingsWindowManager::GetInstance()->ShowChromePageForProfile(
-      profile, GURL(page_path));
+void ShowEnterpriseManagementPageInTabbedBrowser(Browser* browser) {
+  // Management shows in a tab because it has a "back" arrow that takes the
+  // user to the Chrome browser about page, which is part of browser settings.
+  ShowSingletonTabIgnorePathOverwriteNTP(browser, GURL(kChromeUIManagementURL));
 }
 
 void ShowAppManagementPage(Profile* profile, const std::string& app_id) {
@@ -506,10 +484,7 @@ void ShowAppManagementPage(Profile* profile, const std::string& app_id) {
 
 GURL GetOSSettingsUrl(const std::string& sub_page) {
   DCHECK(sub_page.empty() || chrome::IsOSSettingsSubPage(sub_page)) << sub_page;
-  std::string url =
-      base::FeatureList::IsEnabled(chromeos::features::kSplitSettings)
-          ? kChromeUIOSSettingsURL
-          : kChromeUISettingsURL;
+  std::string url = kChromeUIOSSettingsURL;
   return GURL(url + sub_page);
 }
 #endif

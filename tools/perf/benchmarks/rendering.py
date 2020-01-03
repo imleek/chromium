@@ -24,6 +24,9 @@ RENDERING_BENCHMARK_UMA = [
     'Graphics.Smoothness.Checkerboarding.TouchScroll',
     'Graphics.Smoothness.Checkerboarding.Video',
     'Graphics.Smoothness.Checkerboarding.WheelScroll',
+    'Graphics.Smoothness.Throughput.AllAnimations',
+    'Graphics.Smoothness.Throughput.AllInteractions',
+    'Graphics.Smoothness.Throughput.AllSequences',
     'Graphics.Smoothness.Throughput.MainThread.MainThreadAnimation',
     'Graphics.Smoothness.Throughput.MainThread.PinchZoom',
     'Graphics.Smoothness.Throughput.MainThread.RAF',
@@ -34,6 +37,7 @@ RENDERING_BENCHMARK_UMA = [
     'Graphics.Smoothness.Throughput.CompositorThread.TouchScroll',
     'Graphics.Smoothness.Throughput.CompositorThread.WheelScroll',
     'Memory.GPU.PeakMemoryUsage.Scroll',
+    'Memory.GPU.PeakMemoryUsage.PageLoad',
 ]
 
 

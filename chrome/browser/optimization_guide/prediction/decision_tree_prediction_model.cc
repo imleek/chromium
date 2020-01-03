@@ -3,23 +3,21 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/optimization_guide/prediction/decision_tree_prediction_model.h"
-#include "chrome/browser/optimization_guide/prediction/prediction_model.h"
+
+#include <utility>
 
 namespace optimization_guide {
 
 DecisionTreePredictionModel::DecisionTreePredictionModel(
     std::unique_ptr<optimization_guide::proto::PredictionModel>
-        prediction_model,
-    const base::flat_set<std::string>& host_model_features)
-    : PredictionModel(std::move(prediction_model), host_model_features) {}
+        prediction_model)
+    : PredictionModel(std::move(prediction_model)) {}
 
 DecisionTreePredictionModel::~DecisionTreePredictionModel() = default;
 
 bool DecisionTreePredictionModel::ValidatePredictionModel() const {
   // Only the top-level ensemble or decision tree must have a threshold. Any
   // submodels of an ensemble will have model weights but no threshold.
-  // TODO(mcrouse): Add metrics to record if the validation is successful or
-  // not.
   if (!model_->has_threshold())
     return false;
   return ValidateModel(*model_.get());

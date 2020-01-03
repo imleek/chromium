@@ -8,8 +8,11 @@
 #include "ash/ash_export.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/shelf/hotseat_transition_animator.h"
 #include "ui/views/widget/widget.h"
+
+namespace aura {
+class ScopedWindowTargeter;
+}
 
 namespace ash {
 class FocusCycler;
@@ -19,7 +22,6 @@ class ShelfView;
 
 // The hotseat widget is part of the shelf and hosts app shortcuts.
 class ASH_EXPORT HotseatWidget : public views::Widget,
-                                 public HotseatTransitionAnimator::Observer,
                                  public ShelfConfig::Observer {
  public:
   HotseatWidget();
@@ -52,8 +54,16 @@ class ASH_EXPORT HotseatWidget : public views::Widget,
   // Notifies children of tablet mode state changes.
   void OnTabletModeChanged();
 
+  // Returns the target opacity (between 0 and 1) given current conditions.
+  float CalculateOpacity();
+
   // Updates the opaque background which functions as the hotseat background.
   void UpdateOpaqueBackground();
+
+  // Updates this widget's layout according to current conditions.
+  void UpdateLayout(bool animate);
+
+  gfx::Size GetOpaqueBackgroundSize() const;
 
   // Sets the focus cycler and adds the hotseat to the cycle.
   void SetFocusCycler(FocusCycler* focus_cycler);
@@ -62,18 +72,6 @@ class ASH_EXPORT HotseatWidget : public views::Widget,
 
   ShelfView* GetShelfView();
   const ShelfView* GetShelfView() const;
-
-  // HotseatTransitionAnimator::Observer:
-  void OnHotseatTransitionAnimationStarted(HotseatState from_state,
-                                           HotseatState to_start) override;
-  void OnHotseatTransitionAnimationEnded(HotseatState from_state,
-                                         HotseatState to_start) override;
-
-  // Returns the bounds of the hotseat background in ScrollableShelfView.
-  gfx::Rect GetHotseatBackgroundBounds() const;
-
-  // Gets the background which is used to draw the background of the hotseat.
-  ui::Layer* GetOpaqueBackground();
 
   void SetState(HotseatState state);
   HotseatState state() const { return state_; }
@@ -111,6 +109,11 @@ class ASH_EXPORT HotseatWidget : public views::Widget,
   // Whether the widget is currently extended because the user has manually
   // dragged it. This will be reset with any visible shelf configuration change.
   bool is_manually_extended_ = false;
+
+  // The window targeter installed on the hotseat. Filters out events which land
+  // on the non visible portion of the hotseat, or events that reach the hotseat
+  // during an animation.
+  std::unique_ptr<aura::ScopedWindowTargeter> hotseat_window_targeter_;
 
   DISALLOW_COPY_AND_ASSIGN(HotseatWidget);
 };

@@ -43,6 +43,7 @@
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "media/base/media_switches.h"
+#include "media/capture/capture_switches.h"
 #include "media/media_buildflags.h"
 #include "services/service_manager/sandbox/switches.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
@@ -121,7 +122,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableViewport,
     ::switches::kEnableZeroCopy,
     ::switches::kEnableHardwareOverlays,
-    ::switches::kExtraTouchNoiseFiltering,
     ::switches::kEdgeTouchFiltering,
     ::switches::kHostWindowBounds,
     ::switches::kMainFrameResizesAreOrientationChanges,
@@ -131,7 +131,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kGpuRasterizationMSAASampleCount,
     ::switches::kGpuStartupDialog,
     ::switches::kGpuSandboxStartEarly,
-    ::switches::kLowPressureTouchFiltering,
     ::switches::kNumRasterThreads,
     ::switches::kPpapiFlashArgs,
     ::switches::kPpapiFlashPath,
@@ -139,7 +138,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kPpapiInProcess,
     ::switches::kRemoteDebuggingPort,
     ::switches::kRendererStartupDialog,
-    ::switches::kTouchCalibration,
     ::switches::kTouchDevices,
     ::switches::kTouchEventFeatureDetection,
     ::switches::kTopChromeTouchUi,
@@ -193,6 +191,7 @@ void DeriveCommandLine(const GURL& start_url,
     cc::switches::kUIShowFPSCounter,
     chromeos::switches::kArcAvailability,
     chromeos::switches::kArcAvailable,
+    chromeos::switches::kArcScale,
     chromeos::switches::kDbusStub,
     chromeos::switches::kDisableArcDataWipe,
     chromeos::switches::kDisableArcOptInVerification,

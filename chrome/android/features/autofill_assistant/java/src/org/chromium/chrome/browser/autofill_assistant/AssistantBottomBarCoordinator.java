@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
+import android.support.annotation.Nullable;
+import android.support.annotation.VisibleForTesting;
 import android.transition.ChangeBounds;
 import android.transition.Fade;
 import android.transition.TransitionManager;
@@ -14,9 +16,6 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 
-import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
-
 import org.chromium.base.ObserverList;
 import org.chromium.chrome.autofill_assistant.R;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -26,6 +25,7 @@ import org.chromium.chrome.browser.autofill_assistant.carousel.AssistantChip;
 import org.chromium.chrome.browser.autofill_assistant.carousel.AssistantSuggestionsCarouselCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.details.AssistantDetailsCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.form.AssistantFormCoordinator;
+import org.chromium.chrome.browser.autofill_assistant.form.AssistantFormModel;
 import org.chromium.chrome.browser.autofill_assistant.header.AssistantHeaderCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.header.AssistantHeaderModel;
 import org.chromium.chrome.browser.autofill_assistant.infobox.AssistantInfoBoxCoordinator;
@@ -52,6 +52,7 @@ class AssistantBottomBarCoordinator
     private final BottomSheetController mBottomSheetController;
     private final AssistantBottomSheetContent mContent;
     private final ScrollView mScrollableContent;
+    private final AssistantRootViewContainer mRootViewContainer;
     @Nullable
     private WebContents mWebContents;
 
@@ -93,12 +94,12 @@ class AssistantBottomBarCoordinator
         }
 
         // Replace or set the content to the actual Autofill Assistant views.
-        ViewGroup bottomBarView = (ViewGroup) LayoutInflater.from(activity).inflate(
+        mRootViewContainer = (AssistantRootViewContainer) LayoutInflater.from(activity).inflate(
                 R.layout.autofill_assistant_bottom_sheet_content, /* root= */ null);
-        mScrollableContent = bottomBarView.findViewById(R.id.scrollable_content);
+        mScrollableContent = mRootViewContainer.findViewById(R.id.scrollable_content);
         ViewGroup scrollableContentContainer =
                 mScrollableContent.findViewById(R.id.scrollable_content_container);
-        mContent.setContent(bottomBarView, mScrollableContent);
+        mContent.setContent(mRootViewContainer, mScrollableContent);
 
         // Set up animations. We need to setup them before initializing the child coordinators as we
         // want our observers to be triggered before the coordinators/view binders observers.
@@ -140,13 +141,13 @@ class AssistantBottomBarCoordinator
 
         // Add child views to bottom bar container. We put all child views in the scrollable
         // container, except the actions and suggestions.
-        bottomBarView.addView(mHeaderCoordinator.getView(), 0);
+        mRootViewContainer.addView(mHeaderCoordinator.getView(), 0);
         scrollableContentContainer.addView(mInfoBoxCoordinator.getView());
         scrollableContentContainer.addView(mDetailsCoordinator.getView());
         scrollableContentContainer.addView(mPaymentRequestCoordinator.getView());
         scrollableContentContainer.addView(mFormCoordinator.getView());
-        bottomBarView.addView(mSuggestionsCoordinator.getView());
-        bottomBarView.addView(mActionsCoordinator.getView());
+        mRootViewContainer.addView(mSuggestionsCoordinator.getView());
+        mRootViewContainer.addView(mActionsCoordinator.getView());
 
         // Set children top margins to have a spacing between them.
         int childSpacing = activity.getResources().getDimensionPixelSize(
@@ -164,11 +165,10 @@ class AssistantBottomBarCoordinator
                 mSuggestionsCoordinator.getView(), model.getSuggestionsModel().getChipsModel());
         hideWhenEmpty(mActionsCoordinator.getView(), model.getActionsModel().getChipsModel());
 
-        // Set the horizontal margins of children. We don't set them on the payment request and the
-        // carousels to allow them to take the full width of the sheet.
+        // Set the horizontal margins of children. We don't set them on the payment request, the
+        // carousels or the form to allow them to take the full width of the sheet.
         setHorizontalMargins(mInfoBoxCoordinator.getView());
         setHorizontalMargins(mDetailsCoordinator.getView());
-        setHorizontalMargins(mFormCoordinator.getView());
 
         controller.addObserver(new EmptyBottomSheetObserver() {
             @Override
@@ -216,7 +216,7 @@ class AssistantBottomBarCoordinator
                     boolean canScroll =
                             scrollView.canScrollVertically(-1) || scrollView.canScrollVertically(1);
                     mScrollableContent.setClipChildren(canScroll);
-                    bottomBarView.setClipChildren(canScroll);
+                    mRootViewContainer.setClipChildren(canScroll);
                 });
     }
 
@@ -243,9 +243,8 @@ class AssistantBottomBarCoordinator
         });
 
         // Animate when form inputs change.
-        model.getFormModel().getInputsModel().addObserver(new AbstractListObserver<Void>() {
-            @Override
-            public void onDataSetChanged() {
+        model.getFormModel().addObserver((source, propertyKey) -> {
+            if (AssistantFormModel.INPUTS == propertyKey) {
                 animateChildren(rootView);
             }
         });
@@ -274,6 +273,7 @@ class AssistantBottomBarCoordinator
         mPaymentRequestCoordinator.destroy();
         mPaymentRequestCoordinator = null;
         mHeaderCoordinator.destroy();
+        mRootViewContainer.destroy();
     }
 
     /** Request showing the Assistant bottom bar view and expand the sheet. */

@@ -102,16 +102,15 @@ chrome.automation.RoleType = {
   CAPTION: 'caption',
   CARET: 'caret',
   CELL: 'cell',
-  CODE: 'code',
   CHECK_BOX: 'checkBox',
   CLIENT: 'client',
+  CODE: 'code',
   COLOR_WELL: 'colorWell',
   COLUMN: 'column',
   COLUMN_HEADER: 'columnHeader',
   COMBO_BOX_GROUPING: 'comboBoxGrouping',
   COMBO_BOX_MENU_BUTTON: 'comboBoxMenuButton',
   COMMENT: 'comment',
-  COMMENT_SECTION: 'commentSection',
   COMPLEMENTARY: 'complementary',
   CONTENT_DELETION: 'contentDeletion',
   CONTENT_INSERTION: 'contentInsertion',
@@ -231,9 +230,9 @@ chrome.automation.RoleType = {
   RADIO_BUTTON: 'radioButton',
   RADIO_GROUP: 'radioGroup',
   REGION: 'region',
-  REVISION: 'revision',
   ROOT_WEB_AREA: 'rootWebArea',
   ROW: 'row',
+  ROW_GROUP: 'rowGroup',
   ROW_HEADER: 'rowHeader',
   RUBY: 'ruby',
   RUBY_ANNOTATION: 'rubyAnnotation',
@@ -421,6 +420,18 @@ chrome.automation.DefaultActionVerb = {
 };
 
 /**
+ * @enum {string}
+ * @see https://developer.chrome.com/extensions/automation#type-MarkerType
+ */
+chrome.automation.MarkerType = {
+  SPELLING: 'spelling',
+  GRAMMAR: 'grammar',
+  TEXT_MATCH: 'textMatch',
+  ACTIVE_SUGGESTION: 'activeSuggestion',
+  SUGGESTION: 'suggestion',
+};
+
+/**
  * @typedef {{
  *   left: number,
  *   top: number,
@@ -541,6 +552,16 @@ chrome.automation.CustomAction;
 chrome.automation.LanguageSpan;
 
 /**
+ * @typedef {{
+ *   startOffset: number,
+ *   endOffset: number,
+ *   flags: Object
+ * }}
+ * @see https://developer.chrome.com/extensions/automation#type-Marker
+ */
+chrome.automation.Marker;
+
+/**
  * @constructor
  * @private
  * @see https://developer.chrome.com/extensions/automation#type-AutomationNode
@@ -623,7 +644,7 @@ chrome.automation.AutomationNode.prototype.placeholder;
 chrome.automation.AutomationNode.prototype.roleDescription;
 
 /**
- * The accessible name for this node, via the <a href="http://www.w3.org/TR/wai-aria/roles#namecalculation"> Accessible Name Calculation</a> process.
+ * The accessible name for this node, via the <a href="http://www.w3.org/TR/wai-aria/#namecalculation"> Accessible Name Calculation</a> process.
  * @type {(string|undefined)}
  * @see https://developer.chrome.com/extensions/automation#type-name
  */
@@ -699,7 +720,7 @@ chrome.automation.AutomationNode.prototype.nonInlineTextWordStarts;
 chrome.automation.AutomationNode.prototype.nonInlineTextWordEnds;
 
 /**
- * The nodes, if any, which this node is specified to control via <a href="http://www.w3.org/TR/wai-aria/states_and_properties#aria-controls"> <code>aria-controls</code></a>.
+ * The nodes, if any, which this node is specified to control via <a href="http://www.w3.org/TR/wai-aria/#aria-controls"> <code>aria-controls</code></a>.
  * @type {(!Array<!chrome.automation.AutomationNode>|undefined)}
  * @see https://developer.chrome.com/extensions/automation#type-controls
  */
@@ -713,7 +734,7 @@ chrome.automation.AutomationNode.prototype.controls;
 chrome.automation.AutomationNode.prototype.describedBy;
 
 /**
- * The nodes, if any, which may optionally be navigated to after this one. See <a href="http://www.w3.org/TR/wai-aria/states_and_properties#aria-flowto"> <code>aria-flowto</code></a>.
+ * The nodes, if any, which may optionally be navigated to after this one. See <a href="http://www.w3.org/TR/wai-aria/#aria-flowto"> <code>aria-flowto</code></a>.
  * @type {(!Array<!chrome.automation.AutomationNode>|undefined)}
  * @see https://developer.chrome.com/extensions/automation#type-flowTo
  */
@@ -939,25 +960,11 @@ chrome.automation.AutomationNode.prototype.textSelEnd;
 chrome.automation.AutomationNode.prototype.textInputType;
 
 /**
- * An array of indexes of the start position of each text marker.
- * @type {!Array<number>}
- * @see https://developer.chrome.com/extensions/automation#type-markerStarts
+ * An array of Marker objects for this node.
+ * @type {(!Array<!chrome.automation.Marker>|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-markers
  */
-chrome.automation.AutomationNode.prototype.markerStarts;
-
-/**
- * An array of indexes of the end position of each text marker.
- * @type {!Array<number>}
- * @see https://developer.chrome.com/extensions/automation#type-markerEnds
- */
-chrome.automation.AutomationNode.prototype.markerEnds;
-
-/**
- * An array of numerical types indicating the type of each text marker, such as a spelling error.
- * @type {!Array<number>}
- * @see https://developer.chrome.com/extensions/automation#type-markerTypes
- */
-chrome.automation.AutomationNode.prototype.markerTypes;
+chrome.automation.AutomationNode.prototype.markers;
 
 /**
  * If a selection is present, whether the anchor of the selection comes after its focus in the accessibility tree.

@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_APPS_APP_SERVICE_EXTENSION_APPS_H_
 #define CHROME_BROWSER_APPS_APP_SERVICE_EXTENSION_APPS_H_
 
+#include <map>
+#include <set>
 #include <string>
 
 #include "base/macros.h"
@@ -18,6 +20,7 @@
 #include "chrome/services/app_service/public/mojom/app_service.mojom.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_prefs_observer.h"
@@ -115,6 +118,8 @@ class ExtensionApps : public apps::mojom::Publisher,
   void OnAppWindowAdded(extensions::AppWindow* app_window) override;
   void OnAppWindowShown(extensions::AppWindow* app_window,
                         bool was_hidden) override;
+  void OnAppWindowHidden(extensions::AppWindow* app_window) override;
+  void OnAppWindowRemoved(extensions::AppWindow* app_window) override;
 
   // extensions::ExtensionPrefsObserver overrides.
   void OnExtensionLastLaunchTimeChanged(
@@ -162,6 +167,12 @@ class ExtensionApps : public apps::mojom::Publisher,
   static bool ShouldShow(const extensions::Extension* extension,
                          Profile* profile);
 
+  // Handles profile prefs kHideWebStoreIcon changes.
+  void OnHideWebStoreIconPrefChanged();
+
+  // Update the show_in_xxx fields for the App structure.
+  void UpdateShowInFields(const std::string& app_id);
+
   void PopulatePermissions(const extensions::Extension* extension,
                            std::vector<mojom::PermissionPtr>* target);
   void PopulateIntentFilters(const base::Optional<GURL>& app_scope,
@@ -183,6 +194,7 @@ class ExtensionApps : public apps::mojom::Publisher,
 
   void SetIconEffect(const std::string& app_id);
 
+  bool ShouldRecordAppWindowActivity(extensions::AppWindow* app_window);
   void RegisterInstance(extensions::AppWindow* app_window, InstanceState state);
 
   mojo::Receiver<apps::mojom::Publisher> receiver_{this};
@@ -212,10 +224,15 @@ class ExtensionApps : public apps::mojom::Publisher,
 
   std::set<std::string> paused_apps_;
 
+  std::map<extensions::AppWindow*, aura::Window*> app_window_to_aura_window_;
+
   ArcAppListPrefs* arc_prefs_ = nullptr;
 
   // app_service_ is owned by the object that owns this object.
   apps::mojom::AppService* app_service_;
+
+  // Registrar used to monitor the profile prefs.
+  PrefChangeRegistrar profile_pref_change_registrar_;
 
   base::WeakPtrFactory<ExtensionApps> weak_factory_{this};
 

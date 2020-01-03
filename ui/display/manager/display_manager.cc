@@ -172,11 +172,11 @@ bool GetDisplayModeForNextResolution(const ManagedDisplayInfo& info,
       info.display_modes();
   ManagedDisplayMode tmp(info.size_in_pixel(), 0.0, false, false,
                          info.device_scale_factor());
-  const gfx::Size resolution = tmp.GetSizeInDIP(false);
+  const gfx::Size resolution = tmp.GetSizeInDIP();
 
   auto iter = std::find_if(modes.begin(), modes.end(),
                            [resolution](const ManagedDisplayMode& mode) {
-                             return mode.GetSizeInDIP(false) == resolution;
+                             return mode.GetSizeInDIP() == resolution;
                            });
   if (iter == modes.end())
     return false;
@@ -351,6 +351,7 @@ bool DisplayManager::InitFromCommandLine() {
            size_str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
     info_list.push_back(ManagedDisplayInfo::CreateFromSpec(part));
     info_list.back().set_native(true);
+    info_list.back().set_from_native_platform(true);
   }
   MaybeInitInternalDisplay(&info_list[0]);
   OnNativeDisplaysChanged(info_list);
@@ -2038,6 +2039,7 @@ Display DisplayManager::CreateDisplayFromDisplayInfoById(int64_t id) {
   new_display.SetScaleAndBounds(device_scale_factor,
                                 gfx::Rect(bounds_in_native.size()));
   new_display.set_rotation(display_info.GetActiveRotation());
+  new_display.set_panel_rotation(display_info.GetLogicalActiveRotation());
   new_display.set_touch_support(display_info.touch_support());
   new_display.set_maximum_cursor_size(display_info.maximum_cursor_size());
   new_display.SetColorSpaceAndDepth(display_info.color_space());
@@ -2106,7 +2108,7 @@ void DisplayManager::UpdateNonPrimaryDisplayBoundsForLayout(
 
 void DisplayManager::CreateMirrorWindowIfAny() {
   if (software_mirroring_display_list_.empty() || !delegate_) {
-    if (!created_mirror_window_.is_null())
+    if (created_mirror_window_)
       std::move(created_mirror_window_).Run();
     return;
   }
@@ -2114,7 +2116,7 @@ void DisplayManager::CreateMirrorWindowIfAny() {
   for (auto& display : software_mirroring_display_list_)
     list.push_back(GetDisplayInfo(display.id()));
   delegate_->CreateOrUpdateMirroringDisplay(list);
-  if (!created_mirror_window_.is_null())
+  if (created_mirror_window_)
     std::move(created_mirror_window_).Run();
 }
 

@@ -128,25 +128,37 @@ TEST_F(WebDocumentTest, InsertAndRemoveStyleSheet) {
             style_after_removing.VisitedDependentColor(GetCSSPropertyColor()));
 }
 
+namespace {
+
+// This is the public key which the test below will use to enable origin
+// trial features. Trial tokens for use in tests can be created with the
+// tool in /tools/origin_trials/generate_token.py, using the private key
+// contained in /tools/origin_trials/eftest.key.
+static const uint8_t kOriginTrialPublicKey[] = {
+    0x75, 0x10, 0xac, 0xf9, 0x3a, 0x1c, 0xb8, 0xa9, 0x28, 0x70, 0xd2,
+    0x9a, 0xd0, 0x0b, 0x59, 0xe1, 0xac, 0x2b, 0xb7, 0xd5, 0xca, 0x1f,
+    0x64, 0x90, 0x08, 0x8e, 0xa8, 0xe0, 0x56, 0x3a, 0x04, 0xd0,
+};
+
+}  // anonymous namespace
+
 // Origin Trial Policy which vends the test public key so that the token
 // can be validated.
 class TestOriginTrialPolicy : public blink::OriginTrialPolicy {
-  bool IsOriginTrialsSupported() const override { return true; }
-  base::StringPiece GetPublicKey() const override {
-    // This is the public key which the test below will use to enable origin
-    // trial features. Trial tokens for use in tests can be created with the
-    // tool in /tools/origin_trials/generate_token.py, using the private key
-    // contained in /tools/origin_trials/eftest.key.
-    static const uint8_t kOriginTrialPublicKey[] = {
-        0x75, 0x10, 0xac, 0xf9, 0x3a, 0x1c, 0xb8, 0xa9, 0x28, 0x70, 0xd2,
-        0x9a, 0xd0, 0x0b, 0x59, 0xe1, 0xac, 0x2b, 0xb7, 0xd5, 0xca, 0x1f,
-        0x64, 0x90, 0x08, 0x8e, 0xa8, 0xe0, 0x56, 0x3a, 0x04, 0xd0,
-    };
-    return base::StringPiece(
+ public:
+  TestOriginTrialPolicy() {
+    public_keys_.push_back(base::StringPiece(
         reinterpret_cast<const char*>(kOriginTrialPublicKey),
-        base::size(kOriginTrialPublicKey));
+        base::size(kOriginTrialPublicKey)));
+  }
+  bool IsOriginTrialsSupported() const override { return true; }
+  std::vector<base::StringPiece> GetPublicKeys() const override {
+    return public_keys_;
   }
   bool IsOriginSecure(const GURL& url) const override { return true; }
+
+ private:
+  std::vector<base::StringPiece> public_keys_;
 };
 
 TEST_F(WebDocumentTest, OriginTrialDisabled) {
@@ -207,6 +219,10 @@ const char* g_nested_origin_b_in_origin_a =
 const char* g_nested_origin_b_in_origin_b =
     "first_party/nested-originB-in-originB.html";
 const char* g_nested_src_doc = "first_party/nested-srcdoc.html";
+
+KURL ToFile(const char* file) {
+  return ToKURL(std::string("file:///") + file);
+}
 
 KURL ToOriginA(const char* file) {
   return ToKURL(std::string(g_base_url_origin_a) + file);
@@ -280,6 +296,8 @@ void WebDocumentFirstPartyTest::SetUpTestCase() {
   RegisterMockedURLLoad(ToOriginB(g_empty_file), g_empty_file);
   RegisterMockedURLLoad(ToOriginB(g_nested_origin_a), g_nested_origin_a);
   RegisterMockedURLLoad(ToOriginB(g_nested_origin_b), g_nested_origin_b);
+
+  RegisterMockedURLLoad(ToFile(g_nested_origin_a), g_nested_origin_a);
 }
 
 void WebDocumentFirstPartyTest::Load(const char* file) {
@@ -309,7 +327,7 @@ Document* WebDocumentFirstPartyTest::NestedNestedDocument() const {
 bool OriginsEqual(const char* path,
                   scoped_refptr<const SecurityOrigin> origin) {
   return SecurityOrigin::Create(ToOriginA(path))
-      ->IsSameSchemeHostPort(origin.get());
+      ->IsSameOriginWith(origin.get());
 }
 
 TEST_F(WebDocumentFirstPartyTest, Empty) {
@@ -509,6 +527,14 @@ TEST_F(WebDocumentFirstPartyTest,
                            NestedDocument()->TopFrameOrigin()));
   ASSERT_TRUE(OriginsEqual(g_nested_origin_a_in_origin_b,
                            NestedNestedDocument()->TopFrameOrigin()));
+}
+
+TEST_F(WebDocumentFirstPartyTest, FileScheme) {
+  web_view_helper_.InitializeAndLoad(std::string("file:///") +
+                                     g_nested_origin_a);
+
+  EXPECT_EQ("file:///", TopDocument()->SiteForCookies().GetString());
+  EXPECT_EQ(NullURL(), NestedDocument()->SiteForCookies());
 }
 
 }  // namespace blink

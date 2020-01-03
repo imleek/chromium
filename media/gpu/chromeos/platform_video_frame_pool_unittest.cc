@@ -79,7 +79,8 @@ class PlatformVideoFramePoolTest
     scoped_refptr<VideoFrame> frame = pool_->GetFrame();
     frame->set_timestamp(base::TimeDelta::FromMilliseconds(timestamp_ms));
 
-    EXPECT_EQ(layout_->fourcc(), Fourcc::FromVideoPixelFormat(frame->format()));
+    EXPECT_EQ(layout_->fourcc(),
+              *Fourcc::FromVideoPixelFormat(frame->format()));
     EXPECT_EQ(layout_->size(), frame->coded_size());
     EXPECT_EQ(visible_rect_, frame->visible_rect());
     EXPECT_EQ(natural_size_, frame->natural_size());
@@ -102,7 +103,7 @@ class PlatformVideoFramePoolTest
   gfx::Size natural_size_;
 };
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          PlatformVideoFramePoolTest,
                          testing::Values(PIXEL_FORMAT_I420,
                                          PIXEL_FORMAT_NV12,
@@ -177,6 +178,23 @@ TEST_F(PlatformVideoFramePoolTest, UnwrapVideoFrame) {
   scoped_refptr<VideoFrame> frame_3 = GetFrame(20);
   EXPECT_NE(pool_->UnwrapFrame(*frame_1), pool_->UnwrapFrame(*frame_3));
   EXPECT_FALSE(frame_1->IsSameDmaBufsAs(*frame_3));
+}
+
+TEST_F(PlatformVideoFramePoolTest, FormatNotChange) {
+  RequestFrames(Fourcc(Fourcc::YV12));
+  scoped_refptr<VideoFrame> frame1 = GetFrame(10);
+  DmabufId id1 = DmabufVideoFramePool::GetDmabufId(*frame1);
+
+  // Clear frame references to return the frames to the pool.
+  frame1 = nullptr;
+  task_environment_.RunUntilIdle();
+
+  // Request frame with the same format. The pool should not request new frames.
+  RequestFrames(Fourcc(Fourcc::YV12));
+
+  scoped_refptr<VideoFrame> frame2 = GetFrame(20);
+  DmabufId id2 = DmabufVideoFramePool::GetDmabufId(*frame2);
+  EXPECT_EQ(id1, id2);
 }
 
 // TODO(akahuang): Add a testcase to verify calling RequestFrames() only with

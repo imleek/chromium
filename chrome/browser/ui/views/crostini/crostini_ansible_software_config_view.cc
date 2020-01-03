@@ -9,13 +9,13 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/generated_resources.h"
+#include "content/public/browser/network_service_instance.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/views/controls/label.h"
-#include "ui/views/controls/progress_bar.h"
+#include "ui/chromeos/devicetype_utils.h"
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/view_class_properties.h"
-#include "ui/views/window/dialog_client_view.h"
 
 namespace {
 
@@ -47,19 +47,45 @@ void CloseCrostiniAnsibleSoftwareConfigViewForTesting() {
 
 }  // namespace crostini
 
-int CrostiniAnsibleSoftwareConfigView::GetDialogButtons() const {
-  if (state_ == State::ERROR) {
-    return ui::DIALOG_BUTTON_OK;
+bool CrostiniAnsibleSoftwareConfigView::Accept() {
+  if (state_ == State::ERROR_OFFLINE) {
+    state_ = State::CONFIGURING;
+    OnStateChanged();
+
+    ansible_management_service_->ConfigureDefaultContainer(base::DoNothing());
+    return false;
   }
-  return ui::DIALOG_BUTTON_NONE;
+  DCHECK_EQ(state_, State::ERROR);
+  return true;
 }
 
 base::string16 CrostiniAnsibleSoftwareConfigView::GetWindowTitle() const {
-  if (state_ == State::ERROR) {
-    return l10n_util::GetStringUTF16(
-        IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_LABEL);
+  switch (state_) {
+    case State::CONFIGURING:
+      return l10n_util::GetStringUTF16(
+          IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_LABEL);
+    case State::ERROR:
+      return l10n_util::GetStringUTF16(
+          IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_LABEL);
+    case State::ERROR_OFFLINE:
+      return l10n_util::GetStringFUTF16(
+          IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_OFFLINE_LABEL,
+          ui::GetChromeOSDeviceName());
   }
-  return l10n_util::GetStringUTF16(IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_LABEL);
+}
+
+base::string16 CrostiniAnsibleSoftwareConfigView::GetSubtextLabel() const {
+  switch (state_) {
+    case State::CONFIGURING:
+      return l10n_util::GetStringUTF16(
+          IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_SUBTEXT);
+    case State::ERROR:
+      return l10n_util::GetStringUTF16(
+          IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_SUBTEXT);
+    case State::ERROR_OFFLINE:
+      return l10n_util::GetStringUTF16(
+          IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_OFFLINE_SUBTEXT);
+  }
 }
 
 gfx::Size CrostiniAnsibleSoftwareConfigView::CalculatePreferredSize() const {
@@ -70,24 +96,19 @@ gfx::Size CrostiniAnsibleSoftwareConfigView::CalculatePreferredSize() const {
 }
 
 void CrostiniAnsibleSoftwareConfigView::
-    OnAnsibleSoftwareConfigurationStarted() {
-  NOTIMPLEMENTED();
-}
+    OnAnsibleSoftwareConfigurationStarted() {}
 
 void CrostiniAnsibleSoftwareConfigView::OnAnsibleSoftwareConfigurationFinished(
     bool success) {
   DCHECK_EQ(state_, State::CONFIGURING);
 
   if (!success) {
-    state_ = State::ERROR;
+    if (content::GetNetworkConnectionTracker()->IsOffline())
+      state_ = State::ERROR_OFFLINE;
+    else
+      state_ = State::ERROR;
 
-    GetWidget()->UpdateWindowTitle();
-    subtext_label_->SetText(l10n_util::GetStringUTF16(
-        IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_SUBTEXT));
-
-    progress_bar_->SetVisible(false);
-
-    DialogModelChanged();
+    OnStateChanged();
     return;
   }
   // TODO(crbug.com/1005774): We should preferably add another ClosedReason
@@ -137,9 +158,34 @@ CrostiniAnsibleSoftwareConfigView::CrostiniAnsibleSoftwareConfigView(
 
   chrome::RecordDialogCreation(
       chrome::DialogIdentifier::CROSTINI_ANSIBLE_SOFTWARE_CONFIG);
+
+  // In the initial state (CONFIGURING), there are no buttons and hence no set
+  // labels.
+  DialogDelegate::set_buttons(ui::DIALOG_BUTTON_NONE);
 }
 
 CrostiniAnsibleSoftwareConfigView::~CrostiniAnsibleSoftwareConfigView() {
   ansible_management_service_->RemoveObserver(this);
   g_crostini_ansible_software_configuration_view = nullptr;
+}
+
+void CrostiniAnsibleSoftwareConfigView::OnStateChanged() {
+  progress_bar_->SetVisible(state_ == State::CONFIGURING);
+  subtext_label_->SetText(GetSubtextLabel());
+  DialogDelegate::set_buttons(
+      state_ == State::CONFIGURING
+          ? ui::DIALOG_BUTTON_NONE
+          : (state_ == State::ERROR
+                 ? ui::DIALOG_BUTTON_OK
+                 : ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL));
+  // The cancel button, even when present, always uses the default text.
+  DialogDelegate::set_button_label(
+      ui::DIALOG_BUTTON_OK,
+      state_ == State::ERROR
+          ? l10n_util::GetStringUTF16(IDS_APP_OK)
+          : l10n_util::GetStringUTF16(
+                IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_RETRY_BUTTON));
+  DialogModelChanged();
+  GetWidget()->UpdateWindowTitle();
+  GetWidget()->SetSize(GetWidget()->non_client_view()->GetPreferredSize());
 }

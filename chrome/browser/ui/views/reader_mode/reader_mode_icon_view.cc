@@ -14,9 +14,14 @@
 
 using dom_distiller::url_utils::IsDistilledPage;
 
-ReaderModeIconView::ReaderModeIconView(CommandUpdater* command_updater,
-                                       PageActionIconView::Delegate* delegate)
-    : PageActionIconView(command_updater, IDC_DISTILL_PAGE, delegate) {}
+ReaderModeIconView::ReaderModeIconView(
+    CommandUpdater* command_updater,
+    IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+    PageActionIconView::Delegate* page_action_icon_delegate)
+    : PageActionIconView(command_updater,
+                         IDC_DISTILL_PAGE,
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate) {}
 
 void ReaderModeIconView::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
@@ -24,18 +29,17 @@ void ReaderModeIconView::DidFinishNavigation(
     AnimateInkDrop(views::InkDropState::HIDDEN, nullptr);
 }
 
-bool ReaderModeIconView::Update() {
+void ReaderModeIconView::UpdateImpl() {
   content::WebContents* contents = GetWebContents();
   if (!contents) {
     SetVisible(false);
-    return false;
+    return;
   }
 
   // Notify the icon when navigation to and from a distilled page occurs so that
   // it can hide the inkdrop.
   Observe(contents);
 
-  const bool was_previously_active = active();
   if (IsDistilledPage(contents->GetLastCommittedURL())) {
     SetVisible(true);
     SetActive(true);
@@ -46,7 +50,6 @@ bool ReaderModeIconView::Update() {
     SetVisible(distillability && distillability.value().is_distillable);
     SetActive(false);
   }
-  return active() != was_previously_active;
 }
 
 const gfx::VectorIcon& ReaderModeIconView::GetVectorIcon() const {
@@ -55,6 +58,10 @@ const gfx::VectorIcon& ReaderModeIconView::GetVectorIcon() const {
 
 base::string16 ReaderModeIconView::GetTextForTooltipAndAccessibleName() const {
   return l10n_util::GetStringUTF16(IDS_DISTILL_PAGE);
+}
+
+const char* ReaderModeIconView::GetClassName() const {
+  return "ReaderModeIconView";
 }
 
 // TODO(gilmanmh): Consider displaying a bubble the first time a user

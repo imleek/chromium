@@ -22,8 +22,8 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.flags.FeatureUtilities;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
-import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.services.AndroidEduAndChildAccountHelper;
+import org.chromium.chrome.browser.settings.privacy.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.util.IntentUtils;
@@ -99,7 +99,7 @@ public abstract class FirstRunFlowSequencer  {
 
     @VisibleForTesting
     protected boolean isSyncAllowed() {
-        SigninManager signinManager = IdentityServicesProvider.getSigninManager();
+        SigninManager signinManager = IdentityServicesProvider.get().getSigninManager();
         return FirstRunUtils.canAllowSync() && !signinManager.isSigninDisabledByPolicy()
                 && signinManager.isSigninSupported();
     }

@@ -27,6 +27,9 @@ import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ActivityTabProvider.ActivityTabTabObserver;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.GlobalDiscardableReferencePool;
+import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
+import org.chromium.chrome.browser.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcher;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcherConfig;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcherFactory;
@@ -111,6 +114,9 @@ class AutocompleteMediator
     private final EntitySuggestionProcessor mEntitySuggestionProcessor;
 
     private ToolbarDataProvider mDataProvider;
+    private OverviewModeBehavior mOverviewModeBehavior;
+    private OverviewModeBehavior.OverviewModeObserver mOverviewModeObserver;
+
     private boolean mNativeInitialized;
     private AutocompleteController mAutocomplete;
     private long mUrlFocusTime;
@@ -160,6 +166,7 @@ class AutocompleteMediator
     private ActivityTabTabObserver mTabObserver;
 
     private ImageFetcher mImageFetcher;
+    private LargeIconBridge mIconBridge;
 
     public AutocompleteMediator(Context context, AutocompleteDelegate delegate,
             UrlBarEditingTextStateProvider textProvider, PropertyModel listPropertyModel) {
@@ -170,14 +177,27 @@ class AutocompleteMediator
         mCurrentModels = new ArrayList<>();
         mAutocomplete = new AutocompleteController(this);
         mHandler = new Handler();
-        Supplier<ImageFetcher> imageFetcherSupplier = this::getImageFetcher;
-        mBasicSuggestionProcessor = new BasicSuggestionProcessor(mContext, this, textProvider);
+
+        final Supplier<ImageFetcher> imageFetcherSupplier = createImageFetcherSupplier();
+        final Supplier<LargeIconBridge> iconBridgeSupplier = createIconBridgeSupplier();
+
+        mBasicSuggestionProcessor =
+                new BasicSuggestionProcessor(mContext, this, textProvider, iconBridgeSupplier);
         mAnswerSuggestionProcessor =
                 new AnswerSuggestionProcessor(mContext, this, textProvider, imageFetcherSupplier);
-        mEditUrlProcessor = new EditUrlSuggestionProcessor(
-                mContext, this, delegate, (suggestion) -> onSelection(suggestion, 0));
+        mEditUrlProcessor = new EditUrlSuggestionProcessor(mContext, this, delegate,
+                (suggestion) -> onSelection(suggestion, 0), iconBridgeSupplier);
         mEntitySuggestionProcessor =
                 new EntitySuggestionProcessor(mContext, this, imageFetcherSupplier);
+
+        mOverviewModeObserver = new EmptyOverviewModeObserver() {
+            @Override
+            public void onOverviewModeStartedShowing(boolean showToolbar) {
+                if (mDataProvider.shouldShowLocationBarInOverviewMode()) {
+                    AutocompleteControllerJni.get().prefetchZeroSuggestResults();
+                }
+            }
+        };
     }
 
     public void destroy() {
@@ -187,6 +207,10 @@ class AutocompleteMediator
         if (mImageFetcher != null) {
             mImageFetcher.destroy();
             mImageFetcher = null;
+        }
+        if (mOverviewModeObserver != null) {
+            mOverviewModeBehavior.removeOverviewModeObserver(mOverviewModeObserver);
+            mOverviewModeObserver = null;
         }
     }
 
@@ -207,16 +231,57 @@ class AutocompleteMediator
         notifyPropertyModelsChanged();
     }
 
-    private ImageFetcher getImageFetcher() {
-        if (getCurrentProfile() == null) {
-            return null;
-        }
-        if (mImageFetcher == null) {
-            mImageFetcher = ImageFetcherFactory.createImageFetcher(
-                    ImageFetcherConfig.IN_MEMORY_ONLY,
-                    GlobalDiscardableReferencePool.getReferencePool(), MAX_IMAGE_CACHE_SIZE);
-        }
-        return mImageFetcher;
+    /**
+     * Create a new supplier that returns ImageFetcher instances.
+     * Consumers of this call:
+     * - should never cache the returned object, since its lifecycle is bound to external
+     *   objects, such as Profile,
+     * - should always check for null ahead of using returned value. ImageFetcher may not be
+     *   constructed if Profile is not yet initialized.
+     *
+     * @return Supplier returning ImageFetcher.
+     */
+    private Supplier<ImageFetcher> createImageFetcherSupplier() {
+        return new Supplier<ImageFetcher>() {
+            @Override
+            public ImageFetcher get() {
+                if (getCurrentProfile() == null) {
+                    return null;
+                }
+                if (mImageFetcher == null) {
+                    mImageFetcher = ImageFetcherFactory.createImageFetcher(
+                            ImageFetcherConfig.IN_MEMORY_ONLY,
+                            GlobalDiscardableReferencePool.getReferencePool(),
+                            MAX_IMAGE_CACHE_SIZE);
+                }
+                return mImageFetcher;
+            }
+        };
+    }
+
+    /**
+     * Create a new supplier that returns LargeIconBridge instances.
+     * Consumers of this call:
+     * - should never cache the returned object, since its lifecycle is bound to external
+     *   objects, such as Profile,
+     * - should always check for null ahead of using returned value. LargeIconBridge may not be
+     *   constructed if Profile is not yet initialized.
+     *
+     * @return Supplier returning LargeIconBridge.
+     */
+    private Supplier<LargeIconBridge> createIconBridgeSupplier() {
+        return new Supplier<LargeIconBridge>() {
+            @Override
+            public LargeIconBridge get() {
+                if (getCurrentProfile() == null) {
+                    return null;
+                }
+                if (mIconBridge == null) {
+                    mIconBridge = new LargeIconBridge(getCurrentProfile());
+                }
+                return mIconBridge;
+            }
+        };
     }
 
     private Profile getCurrentProfile() {
@@ -289,6 +354,17 @@ class AutocompleteMediator
      */
     void setToolbarDataProvider(ToolbarDataProvider provider) {
         mDataProvider = provider;
+    }
+
+    /**
+     * @param overviewModeBehavior A means of accessing the current OverviewModeState and a way to
+     *         listen to state changes.
+     */
+    public void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {
+        assert mOverviewModeBehavior == null;
+
+        mOverviewModeBehavior = overviewModeBehavior;
+        mOverviewModeBehavior.addOverviewModeObserver(mOverviewModeObserver);
     }
 
     /** Set the WindowAndroid instance associated with the containing Activity. */
@@ -458,8 +534,7 @@ class AutocompleteMediator
      */
     void setAutocompleteProfile(Profile profile) {
         mAutocomplete.setProfile(profile);
-        mBasicSuggestionProcessor.setProfile(profile);
-        if (mEditUrlProcessor != null) mEditUrlProcessor.setProfile(profile);
+        mIconBridge = null;
     }
 
     /**
@@ -775,7 +850,9 @@ class AutocompleteMediator
                 boolean preventAutocomplete = !mUrlBarEditingTextProvider.shouldAutocomplete();
                 mRequestSuggestions = null;
 
-                if (!mDataProvider.hasTab()) {
+                // There may be no tabs when searching form omnibox in overview mode. In that case,
+                // ToolbarDataProvider.getCurrentUrl() returns NTP url.
+                if (!mDataProvider.hasTab() && !mDataProvider.isInOverviewAndShowingOmnibox()) {
                     // crbug.com/764749
                     Log.w(TAG, "onTextChangedForAutocomplete: no tab");
                     return;
@@ -809,12 +886,13 @@ class AutocompleteMediator
      * @param suggestion The suggestion to be processed.
      * @return The appropriate suggestion processor for the provided suggestion.
      */
-    private SuggestionProcessor getProcessorForSuggestion(OmniboxSuggestion suggestion) {
+    private SuggestionProcessor getProcessorForSuggestion(
+            OmniboxSuggestion suggestion, boolean isFirst) {
         if (mAnswerSuggestionProcessor.doesProcessSuggestion(suggestion)) {
             return mAnswerSuggestionProcessor;
         } else if (mEntitySuggestionProcessor.doesProcessSuggestion(suggestion)) {
             return mEntitySuggestionProcessor;
-        } else if (mEditUrlProcessor != null
+        } else if (isFirst && mEditUrlProcessor != null
                 && mEditUrlProcessor.doesProcessSuggestion(suggestion)) {
             return mEditUrlProcessor;
         }
@@ -864,7 +942,7 @@ class AutocompleteMediator
         mCurrentModels.clear();
         for (int i = 0; i < newSuggestions.size(); i++) {
             OmniboxSuggestion suggestion = newSuggestions.get(i);
-            SuggestionProcessor processor = getProcessorForSuggestion(suggestion);
+            SuggestionProcessor processor = getProcessorForSuggestion(suggestion, i == 0);
             PropertyModel model = processor.createModelForSuggestion(suggestion);
             model.set(SuggestionCommonProperties.LAYOUT_DIRECTION, mLayoutDirection);
             model.set(SuggestionCommonProperties.USE_DARK_COLORS, mUseDarkColors);
@@ -1003,14 +1081,16 @@ class AutocompleteMediator
      * Make a zero suggest request if:
      * - Native is loaded.
      * - The URL bar has focus.
-     * - The current tab is not incognito.
+     * - The the tab/overview is not incognito.
      */
     private void startZeroSuggest() {
         // Reset "edited" state in the omnibox if zero suggest is triggered -- new edits
         // now count as a new session.
         mHasStartedNewOmniboxEditSession = false;
         mNewOmniboxEditSessionTimestamp = -1;
-        if (mNativeInitialized && mDelegate.isUrlBarFocused() && mDataProvider.hasTab()) {
+
+        if (mNativeInitialized && mDelegate.isUrlBarFocused()
+                && (mDataProvider.hasTab() || mDataProvider.isInOverviewAndShowingOmnibox())) {
             int pageClassification =
                     mDataProvider.getPageClassification(mDelegate.didFocusUrlFromFakebox());
             mAutocomplete.startZeroSuggest(mDataProvider.getProfile(),

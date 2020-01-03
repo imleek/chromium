@@ -10,9 +10,9 @@
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/sandbox_flags.h"
 #include "third_party/blink/public/common/frame/user_activation_update_type.h"
+#include "third_party/blink/public/common/input/web_scroll_types.h"
 #include "third_party/blink/public/platform/web_content_security_policy.h"
 #include "third_party/blink/public/platform/web_insecure_request_policy.h"
-#include "third_party/blink/public/platform/web_scroll_types.h"
 #include "third_party/blink/public/web/web_frame.h"
 #include "ui/events/types/scroll_types.h"
 #include "v8/include/v8.h"
@@ -115,7 +115,7 @@ class WebRemoteFrame : public WebFrame {
   virtual void AddReplicatedContentSecurityPolicyHeader(
       const WebString& header_value,
       network::mojom::ContentSecurityPolicyType,
-      WebContentSecurityPolicySource) = 0;
+      network::mojom::ContentSecurityPolicySource) = 0;
 
   // Resets replicated CSP headers to an empty set.
   virtual void ResetReplicatedContentSecurityPolicy() = 0;
@@ -146,7 +146,7 @@ class WebRemoteFrame : public WebFrame {
   virtual void TransferUserActivationFrom(
       blink::WebRemoteFrame* source_frame) = 0;
 
-  virtual void SetHasReceivedUserGestureBeforeNavigation(bool value) = 0;
+  virtual void SetHadStickyUserActivationBeforeNavigation(bool value) = 0;
 
   // Scrolls the given rectangle into view. This kicks off the recursive scroll
   // into visible starting from the frame's owner element. The coordinates of

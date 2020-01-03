@@ -81,6 +81,10 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 
 #pragma mark - Navigation Utilities (EG2)
 
+// Instructs the application delegate to open |URL| with default opening
+// options.
+- (void)applicationOpenURL:(const GURL&)URL;
+
 // Loads |URL| in the current WebState with transition type
 // ui::PAGE_TRANSITION_TYPED, and if waitForCompletion is YES
 // waits for the loading to complete within a timeout.
@@ -128,6 +132,12 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Waits for there to be |count| number of incognito tabs within a timeout, or a
 // GREYAssert is induced.
 - (void)waitForIncognitoTabCount:(NSUInteger)count;
+
+// Loads |URL| as if it was opened from an external application.
+- (void)openURLFromExternalApp:(const GURL&)URL;
+
+// Programmatically dismisses settings screen.
+- (void)dismissSettings;
 
 #pragma mark - Settings Utilities (EG2)
 
@@ -216,6 +226,9 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // timeout, or a GREYAssert is induced.
 - (void)openNewTab;
 
+// Simulates opening http://www.example.com/ from another application.
+- (void)simulateExternalAppURLOpening;
+
 // Closes the current tab and waits for the UI to complete.
 - (void)closeCurrentTab;
 
@@ -256,6 +269,9 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 
 // Returns the number of incognito tabs.
 - (NSUInteger)incognitoTabCount WARN_UNUSED_RESULT;
+
+// Returns the index of active tab in normal (non-incognito) mode.
+- (NSUInteger)indexOfActiveNormalTab;
 
 // Simulates a backgrounding and raises an EarlGrey exception if simulation not
 // succeeded.
@@ -360,6 +376,9 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Returns the current web state's VisibleURL.
 - (GURL)webStateVisibleURL;
 
+// Returns the current web state's last committed URL.
+- (GURL)webStateLastCommittedURL;
+
 // Purges cached web view pages, so the next time back navigation will not use
 // a cached page. Browsers don't have to use a fresh version for back/forward
 // navigation for HTTP pages and may serve a version from the cache even if the
@@ -400,6 +419,9 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // induced.
 - (id)executeJavaScript:(NSString*)javaScript;
 
+// Returns the user agent that should be used for the mobile version.
+- (NSString*)mobileUserAgentString;
+
 #pragma mark - Cookie Utilities (EG2)
 
 // Returns cookies as key value pairs, where key is a cookie name and value is a
@@ -415,9 +437,6 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 - (void)verifyAccessibilityForCurrentScreen;
 
 #pragma mark - Feature enables checkers (EG2)
-
-// Returns YES if SlimNavigationManager feature is enabled.
-- (BOOL)isSlimNavigationManagerEnabled WARN_UNUSED_RESULT;
 
 // Returns YES if BlockNewTabPagePendingLoad feature is enabled.
 - (BOOL)isBlockNewTabPagePendingLoadEnabled WARN_UNUSED_RESULT;
@@ -460,6 +479,15 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 
 // The count of key commands registered with the currently active BVC.
 - (NSInteger)registeredKeyCommandCount;
+
+#pragma mark - Pref Utilities (EG2)
+
+// Sets the value of a boolean user pref in the original browser state.
+- (void)setBoolValue:(BOOL)value forUserPref:(const std::string&)UTF8PrefName;
+
+// Resets the BrowsingDataPrefs, which defines if its selected or not when
+// clearing Browsing data.
+- (void)resetBrowsingDataPrefs;
 
 @end
 

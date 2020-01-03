@@ -1,0 +1,26 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef IOS_CHROME_BROWSER_UI_TOOLBAR_ACCESSORY_TOOLBAR_ACCESSORY_PRESENTER_H_
+#define IOS_CHROME_BROWSER_UI_TOOLBAR_ACCESSORY_TOOLBAR_ACCESSORY_PRESENTER_H_
+
+#import <UIKit/UIKit.h>
+
+#import "ios/chrome/browser/ui/presenters/contained_presenter.h"
+
+// Presenter that displays accessories over or next to the toolbar. Note that
+// there are different presentations styles for iPhone (Compact Toolbar) vs.
+// iPad. This is used by Find in Page.
+@interface ToolbarAccessoryPresenter : NSObject <ContainedPresenter>
+
+- (instancetype)initWithIsIncognito:(BOOL)isIncognito NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)init NS_UNAVAILABLE;
+
+// The main presented view.
+@property(nonatomic, strong, readonly) UIView* backgroundView;
+
+@end
+
+#endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_ACCESSORY_TOOLBAR_ACCESSORY_PRESENTER_H_

@@ -16,8 +16,6 @@
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
-#include "ash/public/cpp/app_list/tokenized_string.h"
-#include "ash/public/cpp/app_list/tokenized_string_match.h"
 #include "base/bind.h"
 #include "base/callback_list.h"
 #include "base/macros.h"
@@ -41,7 +39,9 @@
 #include "chrome/browser/ui/app_list/search/app_service_app_result.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/app_search_result_ranker.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/ranking_item_util.h"
-#include "chrome/browser/ui/app_list/search/search_utils/fuzzy_tokenized_string_match.h"
+#include "chrome/common/string_matching/fuzzy_tokenized_string_match.h"
+#include "chrome/common/string_matching/tokenized_string.h"
+#include "chrome/common/string_matching/tokenized_string_match.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync_sessions/session_sync_service.h"
 
@@ -130,12 +130,12 @@ class AppSearchProvider::App {
     }
   };
 
-  ash::TokenizedString* GetTokenizedIndexedName() {
+  TokenizedString* GetTokenizedIndexedName() {
     // Tokenizing a string is expensive. Don't pay the price for it at
     // construction of every App, but rather, only when needed (i.e. when the
     // query is not empty and cache the result.
     if (!tokenized_indexed_name_)
-      tokenized_indexed_name_ = std::make_unique<ash::TokenizedString>(name_);
+      tokenized_indexed_name_ = std::make_unique<TokenizedString>(name_);
     return tokenized_indexed_name_.get();
   }
 
@@ -147,16 +147,16 @@ class AppSearchProvider::App {
     return base::Time();
   }
 
-  bool MatchSearchableText(const ash::TokenizedString& query) {
+  bool MatchSearchableText(const TokenizedString& query) {
     if (searchable_text_.empty())
       return false;
     if (tokenized_indexed_searchable_text_.empty()) {
       for (const base::string16& curr_text : searchable_text_) {
         tokenized_indexed_searchable_text_.push_back(
-            std::make_unique<ash::TokenizedString>(curr_text));
+            std::make_unique<TokenizedString>(curr_text));
       }
     }
-    ash::TokenizedStringMatch match;
+    TokenizedStringMatch match;
     for (auto& curr_text : tokenized_indexed_searchable_text_) {
       match.Calculate(query, *curr_text);
       if (match.relevance() > relevance_threshold())
@@ -196,8 +196,8 @@ class AppSearchProvider::App {
 
  private:
   AppSearchProvider::DataSource* data_source_;
-  std::unique_ptr<ash::TokenizedString> tokenized_indexed_name_;
-  std::vector<std::unique_ptr<ash::TokenizedString>>
+  std::unique_ptr<TokenizedString> tokenized_indexed_name_;
+  std::vector<std::unique_ptr<TokenizedString>>
       tokenized_indexed_searchable_text_;
   const std::string id_;
   const base::string16 name_;
@@ -316,8 +316,7 @@ class AppServiceDataSource : public AppSearchProvider::DataSource,
 
       // Until it's been installed, the Crostini Terminal is hidden and
       // requires a few characters before being shown in search results.
-      if ((update.AppType() == apps::mojom::AppType::kCrostini) &&
-          (update.AppId() == crostini::kCrostiniTerminalId) &&
+      if (update.AppId() == crostini::GetTerminalId() &&
           !crostini::CrostiniFeatures::Get()->IsEnabled(profile())) {
         apps_vector->back()->set_recommendable(false);
         apps_vector->back()->set_relevance_threshold(
@@ -498,14 +497,14 @@ void AppSearchProvider::UpdateQueriedResults() {
   const size_t apps_size = apps_.size();
   new_results.reserve(apps_size);
 
-  const ash::TokenizedString query_terms(query_);
+  const TokenizedString query_terms(query_);
   for (auto& app : apps_) {
     if (!app->searchable())
       continue;
 
-    ash::TokenizedString* indexed_name = app->GetTokenizedIndexedName();
+    TokenizedString* indexed_name = app->GetTokenizedIndexedName();
     if (!app_list_features::IsFuzzyAppSearchEnabled()) {
-      ash::TokenizedStringMatch match;
+      TokenizedStringMatch match;
       if (match.Calculate(query_terms, *indexed_name)) {
         // Exact matches should be shown even if the threshold isn't reached,
         // e.g. due to a localized name being particularly short.
@@ -523,7 +522,27 @@ void AppSearchProvider::UpdateQueriedResults() {
       MaybeAddResult(&new_results, std::move(result), &seen_or_filtered_apps);
     } else {
       FuzzyTokenizedStringMatch match;
-      if (match.IsRelevant(query_terms, *indexed_name) ||
+
+      // TODO(crbug.com/1018613): consolidate finch parameters.
+      const bool use_prefix_only = base::GetFieldTrialParamByFeatureAsBool(
+          app_list_features::kEnableFuzzyAppSearch, "use_prefix_only", false);
+      const bool use_weighted_ratio = base::GetFieldTrialParamByFeatureAsBool(
+          app_list_features::kEnableFuzzyAppSearch, "use_weighted_ratio", true);
+      const bool use_edit_distance = base::GetFieldTrialParamByFeatureAsBool(
+          app_list_features::kEnableFuzzyAppSearch, "use_edit_distance", false);
+
+      const double relevance_threshold =
+          base::GetFieldTrialParamByFeatureAsDouble(
+              app_list_features::kEnableFuzzyAppSearch, "relevance_threshold",
+              0.3);
+      const double partial_match_penalty_rate =
+          base::GetFieldTrialParamByFeatureAsDouble(
+              app_list_features::kEnableFuzzyAppSearch,
+              "partial_match_penalty_rate", 0.9);
+
+      if (match.IsRelevant(query_terms, *indexed_name, relevance_threshold,
+                           use_prefix_only, use_weighted_ratio,
+                           use_edit_distance, partial_match_penalty_rate) ||
           app->MatchSearchableText(query_terms) ||
           base::EqualsCaseInsensitiveASCII(query_, app->name())) {
         std::unique_ptr<AppResult> result = app->data_source()->CreateResult(

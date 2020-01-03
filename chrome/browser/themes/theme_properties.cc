@@ -104,7 +104,7 @@ SkColor GetLightModeColor(int id) {
     case ThemeProperties::COLOR_TAB_PIP_PLAYING:
       return gfx::kGoogleBlue600;
     case ThemeProperties::COLOR_TOOLBAR_CONTENT_AREA_SEPARATOR:
-      return SkColorSetRGB(0xB6, 0xB4, 0xB6);
+      return gfx::kGoogleGrey300;
     case ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR:
     case ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR_INACTIVE:
       return SkColorSetA(SK_ColorBLACK, 0x40);
@@ -141,10 +141,15 @@ base::Optional<SkColor> GetIncognitoColor(int id) {
   switch (id) {
     case ThemeProperties::COLOR_FRAME:
     case ThemeProperties::COLOR_BACKGROUND_TAB:
-      return gfx::kGoogleGrey900;
+      return color_utils::HSLShift(
+          GetLightModeColor(ThemeProperties::COLOR_FRAME),
+          ThemeProperties::GetDefaultTint(ThemeProperties::TINT_FRAME, true));
     case ThemeProperties::COLOR_FRAME_INACTIVE:
     case ThemeProperties::COLOR_BACKGROUND_TAB_INACTIVE:
-      return gfx::kGoogleGrey800;
+      return color_utils::HSLShift(
+          GetLightModeColor(ThemeProperties::COLOR_FRAME),
+          ThemeProperties::GetDefaultTint(ThemeProperties::TINT_FRAME_INACTIVE,
+                                          true));
     case ThemeProperties::COLOR_DOWNLOAD_SHELF:
     case ThemeProperties::COLOR_STATUS_BUBBLE:
     case ThemeProperties::COLOR_INFOBAR:
@@ -255,26 +260,31 @@ std::string ThemeProperties::TilingToString(int tiling) {
 }
 
 // static
-color_utils::HSL ThemeProperties::GetDefaultTint(int id, bool incognito) {
+color_utils::HSL ThemeProperties::GetDefaultTint(int id,
+                                                 bool incognito,
+                                                 bool dark_mode) {
   DCHECK(id != TINT_FRAME_INCOGNITO && id != TINT_FRAME_INCOGNITO_INACTIVE)
       << "These values should be queried via their respective non-incognito "
          "equivalents and an appropriate |incognito| value.";
+
   // If you change these defaults, you must increment the version number in
   // browser_theme_pack.cc.
 
   // TINT_BUTTONS is used by ThemeService::GetDefaultColor() for both incognito
   // and dark mode, and so must be applied to both.
-  if ((id == TINT_BUTTONS) &&
-      (incognito ||
-       ui::NativeTheme::GetInstanceForNativeUi()->ShouldUseDarkColors()))
+  if ((id == TINT_BUTTONS) && (incognito || dark_mode))
     return {-1, 0.57, 0.9605};  // kChromeIconGrey -> kGoogleGrey100
 
-  // The frame tints are used only when parsing browser themes, and should not
-  // take dark mode into account, lest themes with custom frame images get those
-  // images unexpectedly modified just because the user is in dark mode.
   if ((id == TINT_FRAME) && incognito)
     return {-1, 0.7, 0.075};  // #DEE1E6 -> kGoogleGrey900
   if (id == TINT_FRAME_INACTIVE) {
+    // |dark_mode| is only true here when attempting to tint the Windows native
+    // frame color while in dark mode.  The goal in this case is to match the
+    // difference between Chrome default dark mode active and inactive frames,
+    // so return a shift that matches that.
+    if (dark_mode)
+      return {0.59, 0.53, 0.567};  // kGoogleGrey900 -> kGoogleGrey800
+
     if (incognito)
       return {0.57, 0.65, 0.1405};  // #DEE1E6 -> kGoogleGrey800
     return {-1, -1, 0.642};         // #DEE1E6 -> #E7EAED
@@ -284,13 +294,15 @@ color_utils::HSL ThemeProperties::GetDefaultTint(int id, bool incognito) {
 }
 
 // static
-SkColor ThemeProperties::GetDefaultColor(int id, bool incognito) {
+SkColor ThemeProperties::GetDefaultColor(int id,
+                                         bool incognito,
+                                         bool dark_mode) {
   if (incognito) {
     base::Optional<SkColor> incognito_color = GetIncognitoColor(id);
     if (incognito_color.has_value())
       return incognito_color.value();
   }
-  if (ui::NativeTheme::GetInstanceForNativeUi()->ShouldUseDarkColors()) {
+  if (dark_mode) {
     base::Optional<SkColor> dark_mode_color = GetDarkModeColor(id);
     if (dark_mode_color.has_value())
       return dark_mode_color.value();

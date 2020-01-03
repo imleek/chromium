@@ -249,8 +249,8 @@ bool ShelfButtonIsInDrag(const ShelfItemType item_type,
 // opacity of the layer as the animation progress.
 class ShelfView::FadeOutAnimationDelegate : public gfx::AnimationDelegate {
  public:
-  FadeOutAnimationDelegate(ShelfView* host, views::View* view)
-      : shelf_view_(host), view_(view) {}
+  FadeOutAnimationDelegate(ShelfView* host, std::unique_ptr<views::View> view)
+      : shelf_view_(host), view_(std::move(view)) {}
   ~FadeOutAnimationDelegate() override = default;
 
   // AnimationDelegate overrides:
@@ -259,6 +259,12 @@ class ShelfView::FadeOutAnimationDelegate : public gfx::AnimationDelegate {
     view_->layer()->ScheduleDraw();
   }
   void AnimationEnded(const Animation* animation) override {
+    // Ensures that |view| is not used after destruction.
+    shelf_view_->StopAnimatingViewIfAny(view_.get());
+
+    // Remove the view which has been faded away.
+    view_.reset();
+
     shelf_view_->OnFadeOutAnimationEnded();
   }
   void AnimationCanceled(const Animation* animation) override {}
@@ -369,8 +375,10 @@ void ShelfView::Init() {
   for (ShelfItems::const_iterator i = items.begin(); i != items.end(); ++i) {
     views::View* child = CreateViewForItem(*i);
     child->SetPaintToLayer();
-    view_model_->Add(child, static_cast<int>(i - items.begin()));
-    AddChildView(child);
+    int index = static_cast<int>(i - items.begin());
+    view_model_->Add(child, index);
+    // Add child view so it has the same ordering as in the |view_model_|.
+    AddChildViewAt(child, index);
   }
   overflow_button_ = new OverflowButton(this);
   ConfigureChildView(overflow_button_);
@@ -379,7 +387,6 @@ void ShelfView::Init() {
   // We'll layout when our bounds change.
 
   if (chromeos::switches::ShouldShowScrollableShelf()) {
-    UpdateVisibleIndice();
     overflow_button_->SetVisible(false);
   } else if (!is_overflow_mode()) {
     // Add the main shelf view as ShelfTooltipDelegate when scrollable shelf
@@ -456,6 +463,11 @@ ShelfAppButton* ShelfView::GetShelfAppButton(const ShelfID& id) {
   views::View* const view = view_model_->view_at(index);
   DCHECK_EQ(ShelfAppButton::kViewClassName, view->GetClassName());
   return static_cast<ShelfAppButton*>(view);
+}
+
+void ShelfView::StopAnimatingViewIfAny(views::View* view) {
+  if (bounds_animator_->IsAnimating(view))
+    bounds_animator_->StopAnimatingView(view);
 }
 
 bool ShelfView::ShouldHideTooltip(const gfx::Point& cursor_location) const {
@@ -607,7 +619,7 @@ void ShelfView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
 
 bool ShelfView::OnKeyPressed(const ui::KeyEvent& event) {
   if (event.IsControlDown() &&
-      ash::keyboard_util::IsArrowKeyCode(event.key_code())) {
+      keyboard_util::IsArrowKeyCode(event.key_code())) {
     bool swap_with_next = (event.key_code() == ui::VKEY_DOWN ||
                            event.key_code() == ui::VKEY_RIGHT);
     SwapButtons(GetFocusManager()->GetFocusedView(), swap_with_next);
@@ -731,13 +743,6 @@ void ShelfView::ButtonPressed(views::Button* sender,
   if (keyboard::KeyboardUIController::Get()->IsEnabled())
     keyboard::KeyboardUIController::Get()->HideKeyboardExplicitlyBySystem();
 
-  // Close the overflow bubble if an item on either shelf is clicked. Press
-  // events elsewhere will close the overflow shelf via OverflowBubble's
-  // EventHandler functionality.
-  ShelfView* shelf_view = main_shelf_ ? main_shelf_ : this;
-  if (shelf_view->IsShowingOverflowBubble())
-    shelf_view->ToggleOverflowBubble();
-
   // Record the index for the last pressed shelf item.
   last_pressed_index_ = view_model_->GetIndexOfView(sender);
   DCHECK_LT(-1, last_pressed_index_);
@@ -794,6 +799,15 @@ void ShelfView::ButtonPressed(views::Button* sender,
       base::BindOnce(&ShelfView::AfterItemSelected, weak_factory_.GetWeakPtr(),
                      item, sender, base::Passed(ui::Event::Clone(event)),
                      ink_drop));
+
+  // Close the overflow bubble if an item on either shelf is clicked and no
+  // context menu is showing on the overflow shelf. Press events elsewhere will
+  // close the overflow shelf via OverflowBubble's EventHandler functionality.
+  ShelfView* shelf_view = main_shelf_ ? main_shelf_ : this;
+  if (shelf_view->IsShowingOverflowBubble() &&
+      !overflow_shelf()->IsShowingMenu()) {
+    shelf_view->ToggleOverflowBubble();
+  }
 }
 
 bool ShelfView::IsShowingMenuForView(const views::View* view) const {
@@ -1287,6 +1301,7 @@ bool ShelfView::StartDrag(const std::string& app_id,
   // When an item is dragged from overflow to shelf, IsShowingOverflowBubble()
   // returns true. At this time, we don't need to pin the item.
   if (!IsShowingOverflowBubble() && !model_->IsAppPinned(app_id)) {
+    ShelfModel::ScopedUserTriggeredMutation user_triggered(model_);
     model_->PinAppWithID(app_id);
     drag_and_drop_item_pinned_ = true;
   }
@@ -1349,6 +1364,7 @@ void ShelfView::EndDrag(bool cancel) {
 
   // Either destroy the temporarily created item - or - make the item visible.
   if (drag_and_drop_item_pinned_ && cancel) {
+    ShelfModel::ScopedUserTriggeredMutation user_triggered(model_);
     model_->UnpinAppWithID(drag_and_drop_shelf_id_.app_id);
   } else if (drag_and_drop_view) {
     std::unique_ptr<gfx::AnimationDelegate> animation_delegate;
@@ -1922,6 +1938,7 @@ void ShelfView::FinalizeRipOffDrag(bool cancel) {
     } else {
       // Make sure the item stays invisible upon removal.
       drag_view_->SetVisible(false);
+      ShelfModel::ScopedUserTriggeredMutation user_triggered(model_);
       model_->UnpinAppWithID(model_->items()[current_index].id.app_id);
     }
   }
@@ -2047,14 +2064,14 @@ gfx::Rect ShelfView::GetMenuAnchorRect(const views::View& source,
           : GetBoundsInScreen();
   gfx::Point origin;
   switch (shelf_->alignment()) {
-    case SHELF_ALIGNMENT_BOTTOM:
-    case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+    case ShelfAlignment::kBottom:
+    case ShelfAlignment::kBottomLocked:
       origin = gfx::Point(location.x(), shelf_bounds_in_screen.y());
       break;
-    case SHELF_ALIGNMENT_LEFT:
+    case ShelfAlignment::kLeft:
       origin = gfx::Point(shelf_bounds_in_screen.right(), location.y());
       break;
-    case SHELF_ALIGNMENT_RIGHT:
+    case ShelfAlignment::kRight:
       origin = gfx::Point(shelf_bounds_in_screen.x(), location.y());
       break;
   }
@@ -2064,36 +2081,51 @@ gfx::Rect ShelfView::GetMenuAnchorRect(const views::View& source,
 void ShelfView::AnnounceShelfAlignment() {
   base::string16 announcement;
   switch (shelf_->alignment()) {
-    case SHELF_ALIGNMENT_BOTTOM:
-    case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+    case ShelfAlignment::kBottom:
+    case ShelfAlignment::kBottomLocked:
       announcement = l10n_util::GetStringUTF16(IDS_SHELF_ALIGNMENT_BOTTOM);
       break;
-    case SHELF_ALIGNMENT_LEFT:
+    case ShelfAlignment::kLeft:
       announcement = l10n_util::GetStringUTF16(IDS_SHELF_ALIGNMENT_LEFT);
       break;
-    case SHELF_ALIGNMENT_RIGHT:
+    case ShelfAlignment::kRight:
       announcement = l10n_util::GetStringUTF16(IDS_SHELF_ALIGNMENT_RIGHT);
       break;
   }
   announcement_view_->GetViewAccessibility().OverrideName(announcement);
-  announcement_view_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
+  announcement_view_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert,
+                                               /*send_native_event=*/true);
 }
 
 void ShelfView::AnnounceShelfAutohideBehavior() {
   base::string16 announcement;
   switch (shelf_->auto_hide_behavior()) {
-    case SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS:
+    case ShelfAutoHideBehavior::kAlways:
       announcement = l10n_util::GetStringUTF16(IDS_SHELF_STATE_AUTO_HIDE);
       break;
-    case SHELF_AUTO_HIDE_BEHAVIOR_NEVER:
+    case ShelfAutoHideBehavior::kNever:
       announcement = l10n_util::GetStringUTF16(IDS_SHELF_STATE_ALWAYS_SHOWN);
       break;
-    case SHELF_AUTO_HIDE_ALWAYS_HIDDEN:
+    case ShelfAutoHideBehavior::kAlwaysHidden:
       announcement = l10n_util::GetStringUTF16(IDS_SHELF_STATE_ALWAYS_HIDDEN);
       break;
   }
   announcement_view_->GetViewAccessibility().OverrideName(announcement);
-  announcement_view_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
+  announcement_view_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert,
+                                               /*send_native_event=*/true);
+}
+
+void ShelfView::AnnouncePinUnpinEvent(const ShelfItem& item, bool pinned) {
+  base::string16 item_title =
+      item.title.empty()
+          ? l10n_util::GetStringUTF16(IDS_SHELF_ITEM_GENERIC_NAME)
+          : item.title;
+  base::string16 announcement = l10n_util::GetStringFUTF16(
+      pinned ? IDS_SHELF_ITEM_WAS_PINNED : IDS_SHELF_ITEM_WAS_UNPINNED,
+      item_title);
+  announcement_view_->GetViewAccessibility().OverrideName(announcement);
+  announcement_view_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert,
+                                               /*send_native_event=*/true);
 }
 
 gfx::Rect ShelfView::GetBoundsForDragInsertInScreen() {
@@ -2184,22 +2216,14 @@ void ShelfView::ShelfItemAdded(int model_index) {
   }
   const ShelfItem& item(model_->items()[model_index]);
   views::View* view = CreateViewForItem(item);
-  AddChildView(view);
   // Hide the view, it'll be made visible when the animation is done. Using
   // opacity 0 here to avoid messing with CalculateIdealBounds which touches
   // the view's visibility.
   view->layer()->SetOpacity(0);
   view_model_->Add(view, model_index);
 
-  // When the scrollable shelf is enabled, |last_visible_index_| is always the
-  // index to the last shelf item.
-  if (chromeos::switches::ShouldShowScrollableShelf()) {
-    UpdateVisibleIndice();
-
-    // Call PreferredSizeChanged() to notify container to re-layout before
-    // starting the animation of the shelf item addition.
-    PreferredSizeChanged();
-  }
+  // Add child view so it has the same ordering as in the |view_model_|.
+  AddChildViewAt(view, model_index);
 
   // Give the button its ideal bounds. That way if we end up animating the
   // button before this animation completes it doesn't appear at some random
@@ -2207,6 +2231,9 @@ void ShelfView::ShelfItemAdded(int model_index) {
   // target).
   CalculateIdealBounds();
   view->SetBoundsRect(view_model_->ideal_bounds(model_index));
+
+  if (model_->is_current_mutation_user_triggered())
+    view->ScrollViewToVisible();
 
   // The first animation moves all the views to their target position. |view|
   // is hidden, so it visually appears as though we are providing space for
@@ -2220,19 +2247,21 @@ void ShelfView::ShelfItemAdded(int model_index) {
     // Undo the hiding if animation does not run.
     view->layer()->SetOpacity(1.0f);
   }
+
+  if (model_->is_current_mutation_user_triggered() &&
+      item.type == TYPE_PINNED_APP) {
+    AnnouncePinUnpinEvent(item, /*pinned=*/true);
+  }
 }
 
 void ShelfView::ShelfItemRemoved(int model_index, const ShelfItem& old_item) {
   if (old_item.id == context_menu_id_ && shelf_menu_model_adapter_)
     shelf_menu_model_adapter_->Cancel();
 
-  views::View* view = view_model_->view_at(model_index);
+  // If std::move is not called on |view|, |view| will be deleted once out of
+  // scope.
+  std::unique_ptr<views::View> view(view_model_->view_at(model_index));
   view_model_->Remove(model_index);
-
-  // When the scrollable shelf is enabled, |last_visible_index_| is always the
-  // index to the last shelf item.
-  if (chromeos::switches::ShouldShowScrollableShelf())
-    UpdateVisibleIndice();
 
   {
     base::AutoReset<bool> cancelling_drag(&cancelling_drag_model_changed_,
@@ -2249,14 +2278,27 @@ void ShelfView::ShelfItemRemoved(int model_index, const ShelfItem& old_item) {
     UpdateOverflowRange(overflow_bubble_->bubble_view()->shelf_view());
   }
 
+  if (view.get() == shelf_->tooltip()->GetCurrentAnchorView())
+    shelf_->tooltip()->Close();
+
   if (view->GetVisible()) {
+    if (chromeos::switches::ShouldShowScrollableShelf())
+      UpdateVisibleIndices();
+
     // The first animation fades out the view. When done we'll animate the rest
     // of the views to their target location.
-    bounds_animator_->AnimateViewTo(view, view->bounds());
+    bounds_animator_->AnimateViewTo(view.get(), view->bounds());
     bounds_animator_->SetAnimationDelegate(
-        view, std::unique_ptr<gfx::AnimationDelegate>(
-                  new FadeOutAnimationDelegate(this, view)));
+        view.get(), std::unique_ptr<gfx::AnimationDelegate>(
+                        new FadeOutAnimationDelegate(this, std::move(view))));
   } else {
+    // Ensures that |view| is not used after destruction.
+    StopAnimatingViewIfAny(view.get());
+
+    // Removes |view| to trigger ViewHierarchyChanged function in the parent
+    // view if any.
+    view.reset();
+
     // If there is no fade out animation, notify the parent view of the
     // changed size before bounds animations start.
     if (chromeos::switches::ShouldShowScrollableShelf())
@@ -2267,8 +2309,10 @@ void ShelfView::ShelfItemRemoved(int model_index, const ShelfItem& old_item) {
     AnimateToIdealBounds();
   }
 
-  if (view == shelf_->tooltip()->GetCurrentAnchorView())
-    shelf_->tooltip()->Close();
+  if (model_->is_current_mutation_user_triggered() &&
+      old_item.type == TYPE_PINNED_APP) {
+    AnnouncePinUnpinEvent(old_item, /*pinned=*/false);
+  }
 }
 
 void ShelfView::ShelfItemChanged(int model_index, const ShelfItem& old_item) {
@@ -2303,8 +2347,11 @@ void ShelfView::ShelfItemChanged(int model_index, const ShelfItem& old_item) {
 
     // If an item is being pinned or unpinned, show the new status of the
     // shelf immediately so that the separator gets drawn as needed.
-    if (old_item.type == TYPE_PINNED_APP || item.type == TYPE_PINNED_APP)
+    if (old_item.type == TYPE_PINNED_APP || item.type == TYPE_PINNED_APP) {
+      if (model_->is_current_mutation_user_triggered())
+        AnnouncePinUnpinEvent(old_item, item.type == TYPE_PINNED_APP);
       AnimateToIdealBounds();
+    }
     return;
   }
 
@@ -2329,6 +2376,12 @@ void ShelfView::ShelfItemChanged(int model_index, const ShelfItem& old_item) {
 
 void ShelfView::ShelfItemMoved(int start_index, int target_index) {
   view_model_->Move(start_index, target_index);
+
+  // Reorder the child view to be in the same order as in the |view_model_|.
+  ReorderChildView(view_model_->view_at(target_index), target_index);
+  NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged,
+                           true /* send_native_event */);
+
   // When cancelling a drag due to a shelf item being added, the currently
   // dragged item is moved back to its initial position. AnimateToIdealBounds
   // will be called again when the new item is added to the |view_model_| but
@@ -2505,15 +2558,14 @@ void ShelfView::OnBoundsAnimatorDone(views::BoundsAnimator* animator) {
       // previously hidden status can be shown again. Since the button itself
       // might have gone away or changed locations we check that the button
       // is still in the shelf and show its status again.
-      for (int index = 0; index < view_model_->view_size(); index++) {
-        views::View* view = view_model_->view_at(index);
-        if (view == snap_back_from_rip_off_view_) {
-          CHECK_EQ(ShelfAppButton::kViewClassName, view->GetClassName());
-          ShelfAppButton* button = static_cast<ShelfAppButton*>(view);
-          button->ClearState(ShelfAppButton::STATE_HIDDEN);
-          break;
-        }
-      }
+      const auto& entries = view_model_->entries();
+      const auto iter = std::find_if(
+          entries.begin(), entries.end(), [this](const auto& entry) {
+            return entry.view == snap_back_from_rip_off_view_;
+          });
+      if (iter != entries.end())
+        snap_back_from_rip_off_view_->ClearState(ShelfAppButton::STATE_HIDDEN);
+
       snap_back_from_rip_off_view_ = nullptr;
     }
   }
@@ -2586,8 +2638,11 @@ base::string16 ShelfView::GetTitleForChildView(const views::View* view) const {
   return item ? item->title : base::string16();
 }
 
-void ShelfView::UpdateVisibleIndice() {
+void ShelfView::UpdateVisibleIndices() {
   DCHECK_EQ(true, chromeos::switches::ShouldShowScrollableShelf());
+
+  // When the scrollable shelf is enabled, ShelfView's |last_visible_index_| is
+  // always the index to the last shelf item.
   first_visible_index_ = view_model()->view_size() == 0 ? -1 : 0;
   last_visible_index_ = model_->item_count() - 1;
 }

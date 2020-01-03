@@ -6,6 +6,8 @@
 
 #include "base/numerics/ranges.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/extensions/settings_api_bubble_helpers.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/browser/ui/views/extensions/browser_action_drag_data.h"
@@ -13,6 +15,9 @@
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_actions_bar_bubble_views.h"
 #include "ui/views/layout/animating_layout_manager.h"
+#include "ui/views/layout/flex_layout.h"
+#include "ui/views/layout/flex_layout_types.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget_observer.h"
 
 struct ExtensionsToolbarContainer::DropInfo {
@@ -39,8 +44,22 @@ ExtensionsToolbarContainer::ExtensionsToolbarContainer(Browser* browser)
   model_observer_.Add(model_);
   // Do not flip the Extensions icon in RTL.
   extensions_button_->EnableCanvasFlippingForRTLUI(false);
+  extensions_button_->SetProperty(views::kFlexBehaviorKey,
+                                  views::FlexSpecification());
   AddMainButton(extensions_button_);
+  target_layout_manager()
+      ->SetFlexAllocationOrder(views::FlexAllocationOrder::kReverse)
+      .SetDefault(views::kFlexBehaviorKey,
+                  views::FlexSpecification::ForSizeRule(
+                      views::MinimumFlexSizeRule::kPreferredSnapToZero,
+                      views::MaximumFlexSizeRule::kPreferred)
+                      .WithWeight(0));
   CreateActions();
+
+  // TODO(pbos): Consider splitting out tab-strip observing into another class.
+  // Triggers for Extensions-related bubbles should preferably be separate from
+  // the container where they are shown.
+  browser_->tab_strip_model()->AddObserver(this);
 }
 
 ExtensionsToolbarContainer::~ExtensionsToolbarContainer() {
@@ -130,7 +149,18 @@ void ExtensionsToolbarContainer::PopOutAction(
   icons_[popped_out_action_->GetId()]->SetVisible(true);
   ReorderViews();
   static_cast<views::AnimatingLayoutManager*>(GetLayoutManager())
-      ->RunOrQueueAction(closure);
+      ->PostOrQueueAction(closure);
+}
+
+bool ExtensionsToolbarContainer::ShowToolbarActionPopup(
+    const std::string& action_id,
+    bool grant_active_tab) {
+  // Don't override another popup, and only show in the active window.
+  if (popped_out_action_ || !browser_->window()->IsActive())
+    return false;
+
+  ToolbarActionViewController* action = GetActionForId(action_id);
+  return action && action->ExecuteAction(grant_active_tab);
 }
 
 void ExtensionsToolbarContainer::ShowToolbarActionBubble(
@@ -144,7 +174,7 @@ void ExtensionsToolbarContainer::ShowToolbarActionBubble(
   anchor_view->SetVisible(true);
 
   static_cast<views::AnimatingLayoutManager*>(GetLayoutManager())
-      ->RunOrQueueAction(
+      ->PostOrQueueAction(
           base::BindOnce(&ExtensionsToolbarContainer::ShowActiveBubble,
                          weak_ptr_factory_.GetWeakPtr(), anchor_view,
                          base::Passed(std::move(controller))));
@@ -156,6 +186,17 @@ void ExtensionsToolbarContainer::ShowToolbarActionBubbleAsync(
       FROM_HERE,
       base::BindOnce(&ExtensionsToolbarContainer::ShowToolbarActionBubble,
                      weak_ptr_factory_.GetWeakPtr(), std::move(bubble)));
+}
+
+void ExtensionsToolbarContainer::OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  if (tab_strip_model->empty() || !selection.active_tab_changed())
+    return;
+
+  extensions::MaybeShowExtensionControlledNewTabPage(browser_,
+                                                     selection.new_contents);
 }
 
 void ExtensionsToolbarContainer::OnToolbarActionAdded(
@@ -363,7 +404,7 @@ void ExtensionsToolbarContainer::OnDragExited() {
   drop_info_.reset();
   ReorderViews();
   static_cast<views::AnimatingLayoutManager*>(GetLayoutManager())
-      ->RunOrQueueAction(base::BindOnce(
+      ->PostOrQueueAction(base::BindOnce(
           &ExtensionsToolbarContainer::SetExtensionIconVisibility,
           weak_ptr_factory_.GetWeakPtr(), dragged_extension_id, true));
 }

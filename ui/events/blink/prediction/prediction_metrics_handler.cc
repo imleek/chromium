@@ -37,8 +37,15 @@ void PredictionMetricsHandler::AddPredictedEvent(
   // predicted event and that each predicted events are ordered over time
   DCHECK(!events_queue_.empty());
   DCHECK(time_stamp >= events_queue_.front().time_stamp);
-  DCHECK(predicted_events_queue_.empty() ||
-         time_stamp >= predicted_events_queue_.back().time_stamp);
+  // TODO(nzolghadr): The following DCHECK is commented out due to
+  // crbug.com/1017661. More investigation needs to be done as why this happens.
+  // DCHECK(predicted_events_queue_.empty() ||
+  //       time_stamp >= predicted_events_queue_.back().time_stamp);
+  bool needs_sorting = false;
+  if (!predicted_events_queue_.empty() &&
+      time_stamp < predicted_events_queue_.back().time_stamp)
+    needs_sorting = true;
+
   EventData e;
   if (scrolling)
     e.pos = gfx::PointF(0, pos.y());
@@ -47,6 +54,15 @@ void PredictionMetricsHandler::AddPredictedEvent(
   e.time_stamp = time_stamp;
   e.frame_time = frame_time;
   predicted_events_queue_.push_back(e);
+
+  // TODO(nzolghadr): This should never be needed. Something seems to be wrong
+  // in the tests. See crbug.com/1017661.
+  if (needs_sorting) {
+    std::sort(predicted_events_queue_.begin(), predicted_events_queue_.end(),
+              [](const EventData& a, const EventData& b) {
+                return a.time_stamp < b.time_stamp;
+              });
+  }
 }
 
 void PredictionMetricsHandler::EvaluatePrediction() {
@@ -78,24 +94,23 @@ void PredictionMetricsHandler::Reset() {
 int PredictionMetricsHandler::GetInterpolatedEventForPredictedEvent(
     const base::TimeTicks& interpolation_timestamp,
     gfx::PointF* interpolated) {
-  size_t idx = -1;
-  while (idx + 1 < events_queue_.size() &&
-         interpolation_timestamp >= events_queue_[idx + 1].time_stamp)
+  size_t idx = 0;
+  while (idx < events_queue_.size() &&
+         interpolation_timestamp >= events_queue_[idx].time_stamp)
     idx++;
 
-  DCHECK(idx >= 0);
-  if (idx < 0 || idx + 1 >= events_queue_.size())
+  if (idx == 0 || idx == events_queue_.size())
     return -1;
 
   float alpha =
-      (interpolation_timestamp - events_queue_[idx].time_stamp)
+      (interpolation_timestamp - events_queue_[idx - 1].time_stamp)
           .InMillisecondsF() /
-      (events_queue_[idx + 1].time_stamp - events_queue_[idx].time_stamp)
+      (events_queue_[idx].time_stamp - events_queue_[idx - 1].time_stamp)
           .InMillisecondsF();
   *interpolated =
-      events_queue_[idx].pos +
-      ScaleVector2d(events_queue_[idx + 1].pos - events_queue_[idx].pos, alpha);
-  return idx;
+      events_queue_[idx - 1].pos +
+      ScaleVector2d(events_queue_[idx].pos - events_queue_[idx - 1].pos, alpha);
+  return idx - 1;
 }
 
 void PredictionMetricsHandler::ComputeMetrics() {

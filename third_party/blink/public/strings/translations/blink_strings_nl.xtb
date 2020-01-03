@@ -82,7 +82,6 @@
 <translation id="3822383571486410024">Breid deze tekst uit tot <ph name="MIN_CHARACTERS" /> tekens of meer (je gebruikt momenteel <ph name="CURRENT_LENGTH" /> tekens).</translation>
 <translation id="383465348367842624">Het naamgedeelte vóór '<ph name="ATSIGN" />' mag niet het teken '<ph name="INVALIDCHARACTER" />' bevatten.</translation>
 <translation id="3846214748874656680">Volledig scherm sluiten</translation>
-<translation id="3889183436948184105">revisie</translation>
 <translation id="3920932319529768807">conclusie</translation>
 <translation id="3924558731517983934">app</translation>
 <translation id="3944740393230681990">proloog</translation>
@@ -114,9 +113,12 @@
 <translation id="479989351350248267">zoeken</translation>
 <translation id="4812940957355064477">Voer een getal in.</translation>
 <translation id="4912536737030637138">bibliografievermelding</translation>
+<translation id="492244087561876220">reactie</translation>
+<translation id="4971739861736909480"><ph name="ACCNAME" /> geselecteerd</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> geselecteerd</translation>
 <translation id="4992066212339426712">Dempen opheffen</translation>
 <translation id="49969490063480558">Geef een adresgedeelte op na '<ph name="ATSIGN" />'. '<ph name="INVALIDADDRESS" />' is onvolledig.</translation>
+<translation id="5022314756875057021">rijgroep</translation>
 <translation id="5034860022980953847">voortgangsindicator</translation>
 <translation id="5090250355906949916">scrollbar met tijd van de video</translation>
 <translation id="5093189678851173835">epigraaf</translation>
@@ -217,6 +219,7 @@
 <translation id="7888071071722539607">Gebruik een '<ph name="ATSIGN" />' in het e-mailadres. In '<ph name="INVALIDADDRESS" />' ontbreekt een '<ph name="ATSIGN" />'.</translation>
 <translation id="7891486169920085145">splitser</translation>
 <translation id="795667975304826397">Geen bestand gekozen</translation>
+<translation id="7962328325860248200"><ph name="ACCNAME" /> niet geselecteerd</translation>
 <translation id="8034303206267677282">sterk</translation>
 <translation id="8053789581856978548">zoektekstveld</translation>
 <translation id="8057695513531652401">kennisgeving</translation>

@@ -38,6 +38,7 @@ import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
+import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.PermissionRequest;
 import android.webkit.TracingConfig;
@@ -52,6 +53,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.StrictModeContext;
@@ -233,6 +235,7 @@ public class WebViewBrowserActivity extends AppCompatActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        ContextUtils.initApplicationContext(getApplicationContext());
         WebView.setWebContentsDebuggingEnabled(true);
         setContentView(R.layout.activity_webview_browser);
         setSupportActionBar((Toolbar) findViewById(R.id.browser_toolbar));
@@ -327,6 +330,11 @@ public class WebViewBrowserActivity extends AppCompatActivity {
         WebView webview = new WebView(this);
         WebSettings settings = webview.getSettings();
         initializeSettings(settings);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            // Third party cookies are off by default on L+;
+            // turn them on for consistency with normal browsers.
+            CookieManager.getInstance().setAcceptThirdPartyCookies(webview, true);
+        }
 
         Matcher matcher = WEBVIEW_VERSION_PATTERN.matcher(settings.getUserAgentString());
         if (matcher.find()) {

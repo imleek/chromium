@@ -60,7 +60,7 @@
 <translation id="2872353916818027657">Hauptmonitor tauschen</translation>
 <translation id="2914313326123580426">Steuerfeld für Entwicklertools ein- oder ausblenden</translation>
 <translation id="292495055542441795">Vollbildmodus an oder aus</translation>
-<translation id="3020183492814296499">Tastenkombinationen</translation>
+<translation id="3020183492814296499">Verknüpfungen</translation>
 <translation id="3084301071537457911">Nächstes Element in der Ablage markieren</translation>
 <translation id="309173601632226815">Launcher-Symbol in der Ablage markieren</translation>
 <translation id="3105917916468784889">Screenshot aufnehmen</translation>
@@ -98,7 +98,9 @@
 <translation id="4148761611071495477">"<ph name="CTRL" />" <ph name="SEPARATOR" /> "<ph name="G" />" oder "<ph name="ENTER" />"</translation>
 <translation id="4240486403425279990">Übersichtsmodus</translation>
 <translation id="4382340674111381977">Zurück zur vorherigen Seite</translation>
+<translation id="4458670250301149821">Ein App-Symbol in einen/aus einem Ordner im App-Raster verschieben</translation>
 <translation id="4472417192667361414">System- &amp; Displayeinstellungen</translation>
+<translation id="449214506787633354"><ph name="CTRL" />, dann <ph name="LEFT" /> oder <ph name="RIGHT" /> oder <ph name="UP" /> oder <ph name="DOWN" /></translation>
 <translation id="4556221320735744018">Siehe Hilfe zu Tastenkombinationen</translation>
 <translation id="4628718545549558538">Statusbereich mit dem Kontobild öffnen</translation>
 <translation id="4642092649622328492">Screenshot eines Bildschirmausschnitts erstellen</translation>
@@ -134,7 +136,7 @@
 <translation id="6143669479988153888">Seite heranzoomen</translation>
 <translation id="6185696379715117369">Bildlauf nach oben</translation>
 <translation id="6228457605945141550">Helligkeit verringern</translation>
-<translation id="6276708887952587684">Quelltext der Seite ansehen</translation>
+<translation id="6276708887952587684">Seitenquelltext anzeigen</translation>
 <translation id="6321940490215594447">Verlauf öffnen</translation>
 <translation id="6340769215862220182">Display heranzoomen</translation>
 <translation id="6359811074279051077">"<ph name="MODIFIER" />" <ph name="SEPARATOR" /> "<ph name="KEY" />"</translation>
@@ -170,6 +172,7 @@
 <translation id="7439718573248533901">Nächsten Buchstaben löschen (vorwärts löschen)</translation>
 <translation id="7500368597227394048">Bindestrich</translation>
 <translation id="7611271430932669992">Fokus auf Pop-up-Fenster und Dialogfelder verschieben</translation>
+<translation id="7635348532214572995">Verschieben Sie ein App-Symbol im App-Raster</translation>
 <translation id="766326951329901120">Inhalt aus der Zwischenablage als unformatierten Text einfügen</translation>
 <translation id="7703010453515335249">öffnende eckige Klammer</translation>
 <translation id="7724603315864178912">Ausschneiden</translation>
@@ -204,6 +207,7 @@
 <translation id="9041599225465145264">Inhalt aus der Zwischenablage einfügen</translation>
 <translation id="9052808072970550123">Zum nächsten Nutzer wechseln</translation>
 <translation id="906458777597946297">Fenster maximieren</translation>
+<translation id="9072882242928138086"><ph name="CTRL" /><ph name="SEPARATOR" /><ph name="SHIFT" />, dann <ph name="LEFT" /> oder <ph name="RIGHT" /> oder <ph name="UP" /> oder <ph name="DOWN" /></translation>
 <translation id="9091855755813503076">Zum Zeilenanfang springen</translation>
 <translation id="9106898733795143799">Seite &amp; Webbrowser</translation>
 <translation id="9162942292291287644">Kein Suchergebnis für <ph name="QUERY" /></translation>

@@ -48,7 +48,6 @@
 #include "content/common/drag_event_source_info.h"
 #include "content/common/input/input_handler.mojom.h"
 #include "content/common/render_frame_metadata.mojom.h"
-#include "content/common/render_widget_surface_properties.h"
 #include "content/common/widget.mojom.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_widget_host.h"
@@ -864,9 +863,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   friend class OverscrollNavigationOverlayTest;
   friend class RenderViewHostTester;
   friend class TestRenderViewHost;
-  friend bool TestChildOrGuestAutoresize(bool,
-                                         RenderProcessHost*,
-                                         RenderWidgetHost*);
+  friend bool TestGuestAutoresize(RenderProcessHost*, RenderWidgetHost*);
 
   // Tell this object to destroy itself. If |also_delete| is specified, the
   // destructor is called as well.

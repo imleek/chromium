@@ -73,7 +73,6 @@
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_local_frame.h"
-#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "third_party/blink/public/web/web_view.h"
 
 #if defined(OS_ANDROID)
@@ -96,9 +95,8 @@ namespace {
 
 const char kWatchTimeHistogram[] = "Media.WebMediaPlayerImpl.WatchTime";
 
-void RecordSimpleWatchTimeUMA(RendererFactorySelector::FactoryType type) {
-  UMA_HISTOGRAM_ENUMERATION(kWatchTimeHistogram, type,
-                            RendererFactorySelector::FACTORY_TYPE_MAX + 1);
+void RecordSimpleWatchTimeUMA(RendererFactoryType type) {
+  UMA_HISTOGRAM_ENUMERATION(kWatchTimeHistogram, type);
 }
 
 void SetSinkIdOnMediaThread(
@@ -259,13 +257,9 @@ void DestructionHelper(
           std::move(media_log)));
 }
 
-void SetSanitizedStringProperty(MediaLog* log,
-                                std::string key,
-                                blink::WebString value) {
+std::string SanitizeUserStringProperty(blink::WebString value) {
   std::string converted = value.Utf8();
-  if (!base::IsStringUTF8(converted))
-    converted = "[invalid property]";
-  log->SetStringProperty(key, converted);
+  return base::IsStringUTF8(converted) ? converted : "[invalid property]";
 }
 
 }  // namespace
@@ -319,13 +313,14 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
           params->IsBackgroundVideoPlaybackEnabled()),
       is_background_video_track_optimization_supported_(
           params->IsBackgroundVideoTrackOptimizationSupported()),
-      reported_renderer_type_(RendererFactorySelector::DEFAULT),
+      reported_renderer_type_(RendererFactoryType::kDefault),
       simple_watch_timer_(
           base::BindRepeating(&WebMediaPlayerImpl::OnSimpleWatchTimerTick,
                               base::Unretained(this)),
           base::BindRepeating(&WebMediaPlayerImpl::GetCurrentTimeInternal,
                               base::Unretained(this))),
-      will_play_helper_(nullptr) {
+      will_play_helper_(nullptr),
+      power_status_helper_(params->TakePowerStatusHelper()) {
   DVLOG(1) << __func__;
   DCHECK(adjust_allocated_memory_cb_);
   DCHECK(renderer_factory_selector_);
@@ -372,28 +367,10 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
   media_log_->AddEvent(media_log_->CreateCreatedEvent(
       url::Origin(frame_->GetSecurityOrigin()).GetURL().spec()));
 
-  SetSanitizedStringProperty(media_log_.get(), "frame_url",
-                             frame_->GetDocument().Url().GetString());
-
-  SetSanitizedStringProperty(media_log_.get(), "frame_title",
-                             frame_->GetDocument().Title());
-
-  // To make manual testing easier, include |surface_layer_mode_| in the log.
-  // TODO(liberato): Move this into media_factory.cc, so that it can be shared
-  // with the MediaStream startup.
-  const char* surface_layer_mode_name = "(unset)";
-  switch (surface_layer_mode_) {
-    case SurfaceLayerMode::kAlways:
-      surface_layer_mode_name = "kAlways";
-      break;
-    case SurfaceLayerMode::kOnDemand:
-      surface_layer_mode_name = "kOnDemand";
-      break;
-    case SurfaceLayerMode::kNever:
-      surface_layer_mode_name = "kNever";
-      break;
-  }
-  media_log_->SetStringProperty("surface_layer_mode", surface_layer_mode_name);
+  media_log_->SetProperty<MediaLogProperty::kFrameUrl>(
+      SanitizeUserStringProperty(frame_->GetDocument().Url().GetString()));
+  media_log_->SetProperty<MediaLogProperty::kFrameTitle>(
+      SanitizeUserStringProperty(frame_->GetDocument().Title()));
 
   if (params->initial_cdm())
     SetCdmInternal(params->initial_cdm());
@@ -591,9 +568,15 @@ void WebMediaPlayerImpl::EnteredFullscreen() {
   // info before returning.
   if (!decoder_requires_restart_for_overlay_)
     MaybeSendOverlayInfoToDecoder();
+
+  if (power_status_helper_)
+    power_status_helper_->SetIsFullscreen(true);
 }
 
 void WebMediaPlayerImpl::ExitedFullscreen() {
+  if (power_status_helper_)
+    power_status_helper_->SetIsFullscreen(false);
+
   overlay_info_.is_fullscreen = false;
 
   // If we're in overlay mode, then exit it unless we're supposed to allow
@@ -755,7 +738,7 @@ void WebMediaPlayerImpl::Play() {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
   // User initiated play unlocks background video playback.
-  if (blink::WebUserGestureIndicator::IsProcessingUserGesture(frame_))
+  if (frame_->HasTransientUserActivation())
     video_locked_when_paused_when_hidden_ = false;
 
   // TODO(sandersd): Do we want to reset the idle timer here?
@@ -804,7 +787,7 @@ void WebMediaPlayerImpl::Pause() {
   paused_when_hidden_ = false;
 
   // User initiated pause locks background videos.
-  if (blink::WebUserGestureIndicator::IsProcessingUserGesture(frame_))
+  if (frame_->HasTransientUserActivation())
     video_locked_when_paused_when_hidden_ = true;
 
   pipeline_controller_->SetPlaybackRate(0.0);
@@ -929,7 +912,13 @@ void WebMediaPlayerImpl::SetVolume(double volume) {
 
 void WebMediaPlayerImpl::SetLatencyHint(double seconds) {
   DVLOG(1) << __func__ << "(" << seconds << ")";
-  // TODO(chcunningham): Plumb to the pipeline.
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  base::Optional<base::TimeDelta> latency_hint;
+  if (std::isfinite(seconds)) {
+    DCHECK_GE(seconds, 0);
+    latency_hint = base::TimeDelta::FromSecondsD(seconds);
+  }
+  pipeline_controller_->SetLatencyHint(latency_hint);
 }
 
 void WebMediaPlayerImpl::OnRequestPictureInPicture() {
@@ -1519,7 +1508,7 @@ void WebMediaPlayerImpl::OnCdmAttached(bool success) {
   // If the CDM is set from the constructor there is no promise
   // (|set_cdm_result_|) to fulfill.
   if (success) {
-    media_log_->SetBooleanProperty("has_cdm", true);
+    media_log_->SetProperty<MediaLogProperty::kIsVideoEncrypted>(true);
 
     // This will release the previously attached CDM (if any).
     cdm_context_ref_ = std::move(pending_cdm_context_ref_);
@@ -1751,7 +1740,7 @@ void WebMediaPlayerImpl::OnError(PipelineStatus status) {
         frame_url_is_cryptographic && !manifest_url_is_cryptographic);
 
     renderer_factory_selector_->SetBaseFactoryType(
-        RendererFactorySelector::FactoryType::MEDIA_PLAYER);
+        RendererFactoryType::kMediaPlayer);
 
     loaded_url_ = mb_data_source_->GetUrlAfterRedirects();
     DCHECK(data_source_);
@@ -1839,6 +1828,13 @@ void WebMediaPlayerImpl::OnMetadata(const PipelineMetadata& metadata) {
   MaybeSetContainerName();
 
   pipeline_metadata_ = metadata;
+  if (power_status_helper_) {
+    power_status_helper_->SetMetadata(metadata);
+    // TODO(liberato): This shouldn't be set here, but it'll do until we get
+    // the fps estimator.
+    power_status_helper_->SetAverageDuration(
+        base::TimeDelta::FromSecondsD(1. / 30));
+  }
 
   UMA_HISTOGRAM_ENUMERATION(
       "Media.VideoRotation",
@@ -1867,11 +1863,7 @@ void WebMediaPlayerImpl::OnMetadata(const PipelineMetadata& metadata) {
     }
 
     if (surface_layer_mode_ ==
-            blink::WebMediaPlayer::SurfaceLayerMode::kAlways ||
-        (surface_layer_mode_ ==
-             blink::WebMediaPlayer::SurfaceLayerMode::kOnDemand &&
-         client_->DisplayType() ==
-             WebMediaPlayer::DisplayType::kPictureInPicture)) {
+        blink::WebMediaPlayer::SurfaceLayerMode::kAlways) {
       ActivateSurfaceLayerForVideo();
     } else {
       DCHECK(!video_layer_);
@@ -2154,7 +2146,7 @@ void WebMediaPlayerImpl::OnDurationChange() {
 }
 
 void WebMediaPlayerImpl::OnAddTextTrack(const TextTrackConfig& config,
-                                        const AddTextTrackDoneCB& done_cb) {
+                                        AddTextTrackDoneCB done_cb) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
   const WebInbandTextTrackImpl::Kind web_kind =
@@ -2170,7 +2162,7 @@ void WebMediaPlayerImpl::OnAddTextTrack(const TextTrackConfig& config,
   std::unique_ptr<TextTrack> text_track(new TextTrackImpl(
       main_task_runner_, client_, std::move(web_inband_text_track)));
 
-  done_cb.Run(std::move(text_track));
+  std::move(done_cb).Run(std::move(text_track));
 }
 
 void WebMediaPlayerImpl::OnWaiting(WaitingReason reason) {
@@ -2610,7 +2602,8 @@ void WebMediaPlayerImpl::MaybeSendOverlayInfoToDecoder() {
   }
 }
 
-std::unique_ptr<Renderer> WebMediaPlayerImpl::CreateRenderer() {
+std::unique_ptr<Renderer> WebMediaPlayerImpl::CreateRenderer(
+    base::Optional<RendererFactoryType> factory_type) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
   // Make sure that overlays are enabled if they're always allowed.
@@ -2622,6 +2615,13 @@ std::unique_ptr<Renderer> WebMediaPlayerImpl::CreateRenderer() {
   request_overlay_info_cb = BindToCurrentLoop(
       base::Bind(&WebMediaPlayerImpl::OnOverlayInfoRequested, weak_this_));
 #endif
+
+  if (factory_type) {
+    DVLOG(1) << __func__
+             << ": factory_type=" << static_cast<int>(factory_type.value());
+    renderer_factory_selector_->SetBaseFactoryType(factory_type.value());
+  }
+
   reported_renderer_type_ = renderer_factory_selector_->GetCurrentFactoryType();
 
   return renderer_factory_selector_->GetCurrentFactory()->CreateRenderer(
@@ -2802,6 +2802,12 @@ void WebMediaPlayerImpl::UpdatePlayState() {
   SetDelegateState(state.delegate_state, state.is_idle);
   SetMemoryReportingState(state.is_memory_reporting_enabled);
   SetSuspendState(state.is_suspended || pending_suspend_resume_cycle_);
+  if (power_status_helper_) {
+    // Make sure that we're in something like steady-state before recording.
+    power_status_helper_->SetIsPlaying(
+        !paused_ && !seeking_ && !IsHidden() && !state.is_suspended &&
+        ready_state_ == kReadyStateHaveEnoughData);
+  }
 }
 
 void WebMediaPlayerImpl::UpdateMediaPositionState() {
@@ -3523,6 +3529,7 @@ void WebMediaPlayerImpl::RecordVideoNaturalSize(const gfx::Size& natural_size) {
   // Always report video natural size to MediaLog.
   media_log_->AddEvent(media_log_->CreateVideoSizeSetEvent(
       natural_size.width(), natural_size.height()));
+  media_log_->SetProperty<MediaLogProperty::kResolution>(natural_size);
 
   if (initial_video_height_recorded_)
     return;

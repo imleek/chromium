@@ -55,7 +55,8 @@ struct GpuPreferences {
   bool enable_gpu_driver_debug_logging;
   bool disable_gpu_program_cache;
   bool enforce_gl_minimums;
-  uint32 force_gpu_mem_available;
+  uint32 force_gpu_mem_available_bytes;
+  uint32 force_gpu_mem_discardable_limit_bytes;
   uint32 gpu_program_cache_size;
   bool disable_gpu_shader_disk_cache;
   bool enable_threaded_texture_mailboxes;
@@ -68,7 +69,6 @@ struct GpuPreferences {
   bool disable_biplanar_gpu_memory_buffers_for_video_frames;
   array<gfx.mojom.BufferUsageAndFormat> texture_target_exception_list;
 
-  bool disable_gpu_driver_bug_workarounds;
   bool ignore_gpu_blacklist;
   bool enable_oop_rasterization;
   bool disable_oop_rasterization;
@@ -82,6 +82,7 @@ struct GpuPreferences {
   bool enable_metal;
   bool enable_gpu_benchmarking_extension;
   bool enable_webgpu;
+  bool enable_gpu_blocked_time_metric;
 
   [EnableIf=use_ozone]
   mojo_base.mojom.MessagePumpType message_pump_type;

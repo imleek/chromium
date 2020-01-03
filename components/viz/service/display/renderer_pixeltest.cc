@@ -244,8 +244,8 @@ void CreateTestTwoColoredTextureDrawQuad(
   ResourceId resource;
   if (gpu_resource) {
     resource = CreateGpuResource(
-        std::move(child_context_provider), child_resource_provider, rect.size(),
-        BGRA_8888, gfx::ColorSpace(), MakePixelSpan(pixels));
+        child_context_provider, child_resource_provider, rect.size(), BGRA_8888,
+        gfx::ColorSpace(), MakePixelSpan(pixels));
   } else {
     SharedBitmapId shared_bitmap_id = SharedBitmap::GenerateId();
     base::WritableSharedMemoryMapping mapping =
@@ -305,8 +305,8 @@ void CreateTestTextureDrawQuad(
   ResourceId resource;
   if (gpu_resource) {
     resource = CreateGpuResource(
-        std::move(child_context_provider), child_resource_provider, rect.size(),
-        RGBA_8888, gfx::ColorSpace(), MakePixelSpan(pixels));
+        child_context_provider, child_resource_provider, rect.size(), RGBA_8888,
+        gfx::ColorSpace(), MakePixelSpan(pixels));
   } else {
     SharedBitmapId shared_bitmap_id = SharedBitmap::GenerateId();
     base::WritableSharedMemoryMapping mapping =
@@ -1833,8 +1833,8 @@ TYPED_TEST(VideoRendererPixelTest, SimpleYUVRectBlack) {
 }
 
 // First argument (test case prefix) is intentionally left empty.
-INSTANTIATE_TEST_SUITE_P(, VideoGLRendererPixelHiLoTest, testing::Bool());
-INSTANTIATE_TEST_SUITE_P(, VideoSkiaRendererPixelHiLoTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, VideoGLRendererPixelHiLoTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, VideoSkiaRendererPixelHiLoTest, testing::Bool());
 
 TYPED_TEST(VideoRendererPixelTest, SimpleYUVJRect) {
   gfx::Rect rect(this->device_viewport_size_);
@@ -4899,8 +4899,6 @@ class ColorTransformPixelTest
     // Allow a difference of 2 bytes in comparison for shader-based transforms,
     // and 4 bytes for LUT-based transforms (determined empirically).
     cc::FuzzyPixelComparator comparator(false, 100.f, 0.f, 2.f, 2, 0);
-    if (!transform->CanGetShaderSource())
-      comparator = cc::FuzzyPixelComparator(false, 100.f, 0.f, 6.f, 6, 0);
     EXPECT_TRUE(
         this->RunPixelTest(&pass_list, &expected_output_colors, comparator));
   }

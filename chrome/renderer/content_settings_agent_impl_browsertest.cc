@@ -61,7 +61,8 @@ class MockContentSettingsManagerImpl
                  receiver) override {
     ADD_FAILURE() << "Not reached";
   }
-  void AllowStorageAccess(StorageType storage_type,
+  void AllowStorageAccess(int32_t render_frame_id,
+                          StorageType storage_type,
                           const url::Origin& origin,
                           const GURL& site_for_cookies,
                           const url::Origin& top_frame_origin,
@@ -69,7 +70,8 @@ class MockContentSettingsManagerImpl
     ++log_->allow_storage_access_count;
     std::move(callback).Run(true);
   }
-  void OnContentBlocked(ContentSettingsType type) override {
+  void OnContentBlocked(int32_t render_frame_id,
+                        ContentSettingsType type) override {
     ++log_->on_content_blocked_count;
     log_->on_content_blocked_type = type;
   }
@@ -442,6 +444,9 @@ TEST_F(ContentSettingsAgentImplBrowserTest,
 // allow JS and reload the page. In each case, only one of noscript or script
 // tags should be enabled, but never both.
 TEST_F(ContentSettingsAgentImplBrowserTest, ContentSettingsNoscriptTag) {
+  MockContentSettingsAgentImpl mock_agent(view_->GetMainRenderFrame(),
+                                          registry_.get());
+
   // 1. Block JavaScript.
   RendererContentSettingRules content_setting_rules;
   ContentSettingsForOneType& script_setting_rules =
@@ -575,38 +580,36 @@ TEST_F(ContentSettingsAgentImplBrowserTest, ContentSettingsInterstitialPages) {
   EXPECT_EQ(0, mock_agent.on_content_blocked_count());
 }
 
-TEST_F(ContentSettingsAgentImplBrowserTest, AutoplayContentSettings) {
+TEST_F(ContentSettingsAgentImplBrowserTest, MixedAutoupgradesDisabledByRules) {
   MockContentSettingsAgentImpl mock_agent(view_->GetMainRenderFrame(),
                                           registry_.get());
 
-  // Load some HTML.
-  LoadHTML("<html>Foo</html>");
+  LoadHTMLWithUrlOverride("<html></html>", "https://example.com/");
 
-  // Set the default setting.
+  // Set the default mixed content blocking setting.
   RendererContentSettingRules content_setting_rules;
-  ContentSettingsForOneType& autoplay_setting_rules =
-      content_setting_rules.autoplay_rules;
-  autoplay_setting_rules.push_back(ContentSettingPatternSource(
+  ContentSettingsForOneType& mixed_content_setting_rules =
+      content_setting_rules.mixed_content_rules;
+  mixed_content_setting_rules.push_back(ContentSettingPatternSource(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
       base::Value::FromUniquePtrValue(
-          content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
+          content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK)),
       std::string(), false));
 
   ContentSettingsAgentImpl* agent =
       ContentSettingsAgentImpl::Get(view_->GetMainRenderFrame());
   agent->SetContentSettingRules(&content_setting_rules);
+  EXPECT_TRUE(agent->ShouldAutoupgradeMixedContent());
 
-  EXPECT_TRUE(agent->AllowAutoplay(false));
-
-  // Add rule to block autoplay.
-  autoplay_setting_rules.insert(
-      autoplay_setting_rules.begin(),
+  // Create an exception which allows mixed content.
+  mixed_content_setting_rules.insert(
+      mixed_content_setting_rules.begin(),
       ContentSettingPatternSource(
-          ContentSettingsPattern::Wildcard(),
+          ContentSettingsPattern::FromString("https://example.com/"),
           ContentSettingsPattern::Wildcard(),
           base::Value::FromUniquePtrValue(
-              content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK)),
+              content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
           std::string(), false));
 
-  EXPECT_FALSE(agent->AllowAutoplay(true));
+  EXPECT_FALSE(agent->ShouldAutoupgradeMixedContent());
 }

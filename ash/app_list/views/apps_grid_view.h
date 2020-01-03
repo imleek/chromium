@@ -80,7 +80,7 @@ struct APP_LIST_EXPORT GridIndex {
 class APP_LIST_EXPORT AppsGridView : public views::View,
                                      public views::ButtonListener,
                                      public AppListItemListObserver,
-                                     public ash::PaginationModelObserver,
+                                     public PaginationModelObserver,
                                      public AppListModelObserver,
                                      public ui::ImplicitAnimationObserver,
                                      public views::BoundsAnimatorObserver {
@@ -178,7 +178,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   const AppListItemView* drag_view() const { return drag_view_; }
 
   // Gets the PaginationModel used for the grid view.
-  ash::PaginationModel* pagination_model() { return &pagination_model_; }
+  PaginationModel* pagination_model() { return &pagination_model_; }
 
   // Overridden from views::View:
   gfx::Size CalculatePreferredSize() const override;
@@ -196,7 +196,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   // Updates the visibility of app list items according to |app_list_state| and
   // |is_in_drag|.
-  void UpdateControlVisibility(ash::AppListViewState app_list_state,
+  void UpdateControlVisibility(AppListViewState app_list_state,
                                bool is_in_drag);
 
   // Overridden from ui::EventHandler:
@@ -668,11 +668,20 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // folder or creating a folder with two apps.
   void MaybeCreateFolderDroppingAccessibilityEvent();
 
-  // Modifies the announcement view to verbalize |moving_view_title| is creating
-  // a folder or moving into an existing folder with |target_view_title|.
+  // Modifies the announcement view to verbalize that the current drag will move
+  // |moving_view_title| and create a folder or move it into an existing folder
+  // with |target_view_title|.
   void AnnounceFolderDrop(const base::string16& moving_view_title,
                           const base::string16& target_view_title,
                           bool target_is_folder);
+
+  // Modifies the announcement view to vervalize that the most recent keyboard
+  // foldering action has either moved |moving_view_title| into
+  // |target_view_title| folder or that |moving_view_title| and
+  // |target_view_title| have formed a new folder.
+  void AnnounceKeyboardFoldering(const base::string16& moving_view_title,
+                                 const base::string16& target_view_title,
+                                 bool target_is_folder);
 
   // During an app drag, creates an a11y event to verbalize drop target
   // location.
@@ -697,9 +706,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // This can be nullptr. Only grid views inside folders have a folder delegate.
   AppsGridViewFolderDelegate* folder_delegate_ = nullptr;
 
-  ash::PaginationModel pagination_model_{this};
+  PaginationModel pagination_model_{this};
   // Must appear after |pagination_model_|.
-  std::unique_ptr<ash::PaginationController> pagination_controller_;
+  std::unique_ptr<PaginationController> pagination_controller_;
 
   // Created by AppListMainView, owned by views hierarchy.
   ContentsView* contents_view_ = nullptr;
@@ -831,7 +840,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   bool ignore_layout_ = false;
 
   // Records the presentation time for apps grid dragging.
-  std::unique_ptr<ash::PresentationTimeRecorder> presentation_time_recorder_;
+  std::unique_ptr<PresentationTimeRecorder> presentation_time_recorder_;
 
   // Indicates whether the AppsGridView is in mouse drag.
   bool is_in_mouse_drag_ = false;

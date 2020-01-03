@@ -156,25 +156,6 @@ components/rappor/rappor_parameters.h.
   </summary>
 </rappor-metric>
 
-<rappor-metric name="PowerfulFeatureUse.ETLDPlus1.GetUserMedia.Insecure"
-    type="ETLD_PLUS_ONE">
-  <owner>guidou@chromium.org</owner>
-  <owner>hta@chromium.org</owner>
-  <summary>
-    The ETLD+1 of the URL that uses the getUserMedia API from an insecure
-    origin.
-  </summary>
-</rappor-metric>
-
-<rappor-metric name="PowerfulFeatureUse.ETLDPlus1.GetUserMedia.Secure"
-    type="ETLD_PLUS_ONE">
-  <owner>guidou@chromium.org</owner>
-  <owner>hta@chromium.org</owner>
-  <summary>
-    The ETLD+1 of the URL that uses the getUserMedia API from a secure origin.
-  </summary>
-</rappor-metric>
-
 <rappor-metric name="PowerfulFeatureUse.Host.ApplicationCacheAPI.Insecure"
     type="ETLD_PLUS_ONE">
   <owner>jww@chromium.org</owner>
@@ -194,76 +175,11 @@ components/rappor/rappor_parameters.h.
   </summary>
 </rappor-metric>
 
-<rappor-metric name="PowerfulFeatureUse.Host.Fullscreen.Insecure"
-    type="ETLD_PLUS_ONE">
-  <owner>jww@chromium.org</owner>
-  <summary>
-    The host of the URL that uses the fullscreen API from an insecure origin.
-  </summary>
-</rappor-metric>
-
 <rappor-metric name="PowerfulFeatureUse.Host.Geolocation.Insecure"
     type="ETLD_PLUS_ONE">
   <owner>jww@chromium.org</owner>
   <summary>
     The host of the URL that uses the geolocation API from an insecure origin.
-  </summary>
-</rappor-metric>
-
-<rappor-metric name="PushMessaging.GenericNotificationShown.Origin"
-    type="ETLD_PLUS_ONE">
-  <owner>miguelg@chromium.org</owner>
-  <summary>
-    Number of times the generic (forced) notification was shown per origin. This
-    happens if the site uses the push api but does not generate a notification
-    of their own.
-  </summary>
-</rappor-metric>
-
-<rappor-metric name="PushMessaging.MessageReceived.Origin" type="ETLD_PLUS_ONE">
-  <owner>miguelg@chromium.org</owner>
-  <summary>
-    Push Messages received per Origin.
-  </summary>
-</rappor-metric>
-
-<rappor-metric name="RTCPeerConnection.Audio" type="ETLD_PLUS_ONE">
-  <owner>guidou@chromium.org</owner>
-  <owner>hta@chromium.org</owner>
-  <owner>tommi@chromium.org</owner>
-  <summary>
-    The ETLD+1 of the URL with a WebRTC peer connection with at least one audio
-    track.
-  </summary>
-</rappor-metric>
-
-<rappor-metric name="RTCPeerConnection.DataChannel" type="ETLD_PLUS_ONE">
-  <owner>guidou@chromium.org</owner>
-  <owner>hta@chromium.org</owner>
-  <owner>tommi@chromium.org</owner>
-  <summary>
-    The ETLD+1 of the URL with a WebRTC peer connection with at least one data
-    channel.
-  </summary>
-</rappor-metric>
-
-<rappor-metric name="RTCPeerConnection.Unconnected" type="ETLD_PLUS_ONE">
-  <owner>guidou@chromium.org</owner>
-  <owner>hta@chromium.org</owner>
-  <owner>tommi@chromium.org</owner>
-  <summary>
-    The ETLD+1 of the URL with a WebRTC peer connection that was created but
-    never connected.
-  </summary>
-</rappor-metric>
-
-<rappor-metric name="RTCPeerConnection.Video" type="ETLD_PLUS_ONE">
-  <owner>guidou@chromium.org</owner>
-  <owner>hta@chromium.org</owner>
-  <owner>tommi@chromium.org</owner>
-  <summary>
-    The ETLD+1 of the URL with a WebRTC peer connection with at least one video
-    track.
   </summary>
 </rappor-metric>
 
@@ -334,39 +250,6 @@ components/rappor/rappor_parameters.h.
       Bitfield for the tasks memory usage range.
     </summary>
   </flags-field>
-</rappor-metric>
-
-<rappor-metric name="Search.DefaultSearchProvider" type="ETLD_PLUS_ONE">
-  <owner>holte@chromium.org</owner>
-  <summary>
-    The domain and registry of the URL for the default search engine. Recorded
-    when a profile is opened or after a profile reset.
-  </summary>
-</rappor-metric>
-
-<rappor-metric name="Settings.FirstStartupPage" type="ETLD_PLUS_ONE">
-  <owner>holte@chromium.org</owner>
-  <summary>
-    The domain and registry of the URL of the first page opened on startup.
-    Recorded when a profile is loaded if preferences specify a fixed set of URLs
-    to open on startup.
-  </summary>
-</rappor-metric>
-
-<rappor-metric name="Settings.HomePage2" type="ETLD_PLUS_ONE">
-  <owner>holte@chromium.org</owner>
-  <summary>
-    The eTLD+1 of the prefs::kHomePage setting. Recorded when a profile is
-    loaded if the URL is valid and prefs::kHomePageIsNewTabPage is false.
-  </summary>
-</rappor-metric>
-
-<rappor-metric name="Settings.NewTabPage" type="ETLD_PLUS_ONE">
-  <owner>holte@chromium.org</owner>
-  <summary>
-    The domain and registry of the URL chrome://newtab is rewritten to. Recorded
-    when a profile is loaded, if the URL is valid.
-  </summary>
 </rappor-metric>
 
 </rappor-metrics>

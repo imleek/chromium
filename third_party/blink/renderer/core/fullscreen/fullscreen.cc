@@ -296,7 +296,7 @@ bool FullscreenElementReady(const Element& element,
 bool RequestFullscreenConditionsMet(Element& pending, Document& document) {
   // |pending|'s namespace is the HTML namespace or |pending| is an SVG svg or
   // MathML math element. Note: MathML is not supported.
-  if (!pending.IsHTMLElement() && !IsSVGSVGElement(pending))
+  if (!pending.IsHTMLElement() && !IsA<SVGSVGElement>(pending))
     return false;
 
   // |pending| is not a dialog element.
@@ -434,8 +434,8 @@ HeapVector<Member<Document>> CollectDocumentsToUnfullscreen(Document& doc) {
 
 // https://fullscreen.spec.whatwg.org/#run-the-fullscreen-rendering-steps
 void FireEvent(const AtomicString& type, Element* element, Document* document) {
-  DCHECK(document);
-  DCHECK(element);
+  if (!document || !element)
+    return;
 
   // |Document::EnqueueAnimationFrameTask()| is used instead of a "list of
   // pending fullscreen events", so only the body of the "run the fullscreen
@@ -473,8 +473,8 @@ void EnqueueEvent(const AtomicString& type,
                   Fullscreen::RequestType request_type) {
   const AtomicString& adjusted_type = AdjustEventType(type, request_type);
   document.EnqueueAnimationFrameTask(WTF::Bind(FireEvent, adjusted_type,
-                                               WrapPersistent(&element),
-                                               WrapPersistent(&document)));
+                                               WrapWeakPersistent(&element),
+                                               WrapWeakPersistent(&document)));
 }
 
 void DidEnterFullscreenTask(Document* document) {
@@ -604,13 +604,10 @@ ScriptPromise Fullscreen::RequestFullscreen(Element& pending,
   // Use counters only need to be incremented in the process of the actual
   // fullscreen element.
   if (!for_cross_process_descendant) {
-    if (document.IsSecureContext()) {
+    if (document.IsSecureContext())
       UseCounter::Count(document, WebFeature::kFullscreenSecureOrigin);
-    } else {
+    else
       UseCounter::Count(document, WebFeature::kFullscreenInsecureOrigin);
-      HostsUsingFeatures::CountAnyWorld(
-          document, HostsUsingFeatures::Feature::kFullscreenInsecureHost);
-    }
   }
 
   // 5. Let |error| be false.

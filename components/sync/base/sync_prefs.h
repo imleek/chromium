@@ -130,7 +130,7 @@ class SyncPrefs : public CryptoSyncPrefs,
   void SetSelectedOsTypes(bool sync_all_os_types,
                           UserSelectableOsTypeSet registered_types,
                           UserSelectableOsTypeSet selected_types);
-  bool GetOsSyncFeatureEnabled() const;
+  bool IsOsSyncFeatureEnabled() const;
   void SetOsSyncFeatureEnabled(bool enabled);
 #endif
 
@@ -149,7 +149,7 @@ class SyncPrefs : public CryptoSyncPrefs,
   void SetKeystoreEncryptionBootstrapToken(const std::string& token) override;
 
   // Maps |type| to its corresponding preference name.
-  static const char* GetPrefNameForTypeForTesting(UserSelectableType type);
+  static const char* GetPrefNameForType(UserSelectableType type);
 
   // Copy of various fields historically owned and persisted by the Directory.
   // This is a future-proof approach to ultimately replace the Directory once

@@ -109,9 +109,17 @@ class MockSearchIPCRouterDelegate : public SearchIPCRouter::Delegate {
                     bool prevent_inline_autocomplete));
   MOCK_METHOD1(StopAutocomplete, void(bool clear_result));
   MOCK_METHOD1(BlocklistPromo, void(const std::string& promo_id));
-  MOCK_METHOD7(OpenAutocompleteMatch,
+  MOCK_METHOD5(OpenExtensionsPage,
+               void(double button,
+                    bool alt_key,
+                    bool ctrl_key,
+                    bool meta_key,
+                    bool shift_key));
+  MOCK_METHOD9(OpenAutocompleteMatch,
                void(uint8_t line,
                     const GURL& url,
+                    bool are_matches_showing,
+                    double time_elapsed_since_last_focus,
                     double button,
                     bool alt_key,
                     bool ctrl_key,
@@ -155,6 +163,7 @@ class MockSearchIPCRouterPolicy : public SearchIPCRouter::Policy {
   MOCK_METHOD1(ShouldProcessQueryAutocomplete, bool(bool));
   MOCK_METHOD0(ShouldProcessStopAutocomplete, bool());
   MOCK_METHOD0(ShouldProcessBlocklistPromo, bool());
+  MOCK_METHOD0(ShouldProcessOpenExtensionsPage, bool());
   MOCK_METHOD1(ShouldProcessOpenAutocompleteMatch, bool(bool));
   MOCK_METHOD0(ShouldProcessDeleteAutocompleteMatch, bool());
 };
@@ -1139,14 +1148,15 @@ TEST_F(SearchIPCRouterTest, IgnoreOpenAutocompleteMatch) {
   NavigateAndCommitActiveTab(GURL("chrome-search://foo/bar"));
   SetupMockDelegateAndPolicy();
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
-  EXPECT_CALL(*mock_delegate(), OpenAutocompleteMatch(_, _, _, _, _, _, _))
+  EXPECT_CALL(*mock_delegate(),
+              OpenAutocompleteMatch(_, _, _, _, _, _, _, _, _))
       .Times(0);
   EXPECT_CALL(*policy, ShouldProcessOpenAutocompleteMatch(_))
       .Times(1)
       .WillOnce(Return(false));
 
-  GetSearchIPCRouter().OpenAutocompleteMatch(0, GURL(), 0, false, false, false,
-                                             false);
+  GetSearchIPCRouter().OpenAutocompleteMatch(0, GURL(), false, 1, 0, false,
+                                             false, false, false);
 }
 
 TEST_F(SearchIPCRouterTest, IgnoreDeleteAutocompleteMatch) {

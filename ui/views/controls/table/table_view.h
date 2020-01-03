@@ -227,9 +227,9 @@ class VIEWS_EXPORT TableView
  protected:
   // View overrides:
   gfx::Point GetKeyboardContextMenuLocation() override;
-  void OnPaint(gfx::Canvas* canvas) override;
   void OnFocus() override;
   void OnBlur() override;
+  void OnPaint(gfx::Canvas* canvas) override;
 
  private:
   friend class TableViewTestHelper;
@@ -251,6 +251,8 @@ class VIEWS_EXPORT TableView
     int min_column = 0;
     int max_column = 0;
   };
+
+  void OnPaintImpl(gfx::Canvas* canvas);
 
   // Returns the horizontal margin between the bounds of a cell and its
   // contents.
@@ -420,6 +422,14 @@ class VIEWS_EXPORT TableView
 
   // True if in SetVisibleColumnWidth().
   bool in_set_visible_column_width_ = false;
+
+  // Keeps track whether a focus change has occurred so that the accessibility
+  // focus would be updated after all the virtual accessibility children. Some
+  // screen readers don't process the accessibility focus event right away and
+  // by the time they do the focused virtual accessibility child is no longer
+  // there. We need to fire the accessibility focus event after the virtual
+  // accessibility children have been updated.
+  bool needs_update_accessibility_focus_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TableView);
 };

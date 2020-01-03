@@ -197,8 +197,8 @@ NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::BoxInfo::BoxInfo(
     const NGInlineItem& item)
     : item_index(item_index),
       should_create_box_fragment(item.ShouldCreateBoxFragment()),
-      style(*item.Style()),
-      text_metrics(NGLineHeightMetrics(style)) {
+      may_have_margin_(item.Style()->MayHaveMargin()),
+      text_metrics(NGLineHeightMetrics(*item.Style())) {
   DCHECK(item.Style());
 }
 
@@ -208,7 +208,7 @@ bool NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::BoxInfo::
     ShouldCreateBoxFragmentForChild(const BoxInfo& child) const {
   // When a child inline box has margins, the parent has different width/height
   // from the union of children.
-  if (child.style.MayHaveMargin())
+  if (child.may_have_margin_)
     return true;
 
   // Returns true when parent and child boxes have different font metrics, since
@@ -349,6 +349,9 @@ bool NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::AppendTextReusing(
           NOTREACHED();
           break;
       }
+    } else if (last_item->EndCollapseType() == NGInlineItem::kCollapsed) {
+      RestoreTrailingCollapsibleSpace(last_item);
+      return false;
     }
 
     // On nowrap -> wrap boundary, a break opporunity may be inserted.
@@ -1200,7 +1203,7 @@ void NGInlineItemsBuilderTemplate<OffsetMappingBuilder>::ExitInline(
         if (i == open_item_index) {
           DCHECK_EQ(i, current_box->item_index);
           // TODO(kojii): <area> element fails to hit-test when we don't cull.
-          if (!IsHTMLAreaElement(item.GetLayoutObject()->GetNode()))
+          if (!IsA<HTMLAreaElement>(item.GetLayoutObject()->GetNode()))
             item.SetShouldCreateBoxFragment();
           break;
         }

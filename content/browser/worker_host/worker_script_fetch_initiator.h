@@ -13,9 +13,9 @@
 #include "base/macros.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/resource_type.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 #include "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom.h"
@@ -23,7 +23,7 @@
 #include "third_party/blink/public/mojom/worker/worker_main_script_load_params.mojom.h"
 
 namespace blink {
-class URLLoaderFactoryBundleInfo;
+class PendingURLLoaderFactoryBundle;
 }  // namespace blink
 
 namespace network {
@@ -49,7 +49,7 @@ struct SubresourceLoaderParams;
 class WorkerScriptFetchInitiator {
  public:
   using CompletionCallback = base::OnceCallback<void(
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo>,
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle>,
       blink::mojom::WorkerMainScriptLoadParamsPtr,
       blink::mojom::ControllerServiceWorkerInfoPtr,
       base::WeakPtr<ServiceWorkerObjectHost>,
@@ -81,13 +81,13 @@ class WorkerScriptFetchInitiator {
   enum class LoaderType { kMainResource, kSubResource };
 
   // Creates a loader factory bundle. Must be called on the UI thread.
-  static std::unique_ptr<blink::URLLoaderFactoryBundleInfo> CreateFactoryBundle(
-      LoaderType loader_type,
-      int worker_process_id,
-      StoragePartitionImpl* storage_partition,
-      const std::string& storage_domain,
-      bool file_support,
-      bool filesystem_url_support);
+  static std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
+  CreateFactoryBundle(LoaderType loader_type,
+                      int worker_process_id,
+                      StoragePartitionImpl* storage_partition,
+                      const std::string& storage_domain,
+                      bool file_support,
+                      bool filesystem_url_support);
 
  private:
   // Adds additional request headers to |resource_request|. Must be called on
@@ -99,11 +99,11 @@ class WorkerScriptFetchInitiator {
   static void CreateScriptLoader(
       int worker_process_id,
       RenderFrameHost* creator_render_frame_host,
+      const net::NetworkIsolationKey& trusted_network_isolation_key,
       std::unique_ptr<network::ResourceRequest> resource_request,
-      StoragePartitionImpl* storage_partition,
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
           factory_bundle_for_browser_info,
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
           subresource_loader_factories,
       scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
       ServiceWorkerNavigationHandle* service_worker_handle,
@@ -115,7 +115,7 @@ class WorkerScriptFetchInitiator {
 
   static void DidCreateScriptLoader(
       CompletionCallback callback,
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
           subresource_loader_factories,
       blink::mojom::WorkerMainScriptLoadParamsPtr main_script_load_params,
       base::Optional<SubresourceLoaderParams> subresource_loader_params,

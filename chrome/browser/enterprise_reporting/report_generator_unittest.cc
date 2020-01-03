@@ -13,6 +13,7 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
+#include "chrome/browser/enterprise_reporting/report_request_definition.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -24,12 +25,18 @@
 #include "extensions/common/extension_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_test.h"
+#include "components/arc/arc_prefs.h"
+#include "components/arc/test/fake_app_instance.h"
+#endif
+
 namespace em = enterprise_management;
 
 namespace enterprise_reporting {
 namespace {
 
-#if !defined(OS_CHROMEOS)
 constexpr char kProfile[] = "Profile";
 
 const char kPluginName[] = "plugin";
@@ -37,6 +44,16 @@ const char kPluginVersion[] = "1.0";
 const char kPluginDescription[] = "This is a plugin.";
 const char kPluginFileName[] = "file_name";
 
+#if defined(OS_CHROMEOS)
+const char kArcAppName1[] = "app_name1";
+const char kArcPackageName1[] = "package_name1";
+const char kArcActivityName1[] = "activity_name1";
+const char kArcAppName2[] = "app_name2";
+const char kArcPackageName2[] = "package_name2";
+const char kArcActivityName2[] = "activity_name2";
+#endif
+
+#if !defined(OS_CHROMEOS)
 // We only upload serial number on Windows.
 void VerifySerialNumber(const std::string& serial_number) {
 #if defined(OS_WIN)
@@ -45,6 +62,7 @@ void VerifySerialNumber(const std::string& serial_number) {
   EXPECT_EQ(std::string(), serial_number);
 #endif
 }
+#endif
 
 // Controls the way of Profile creation which affects report.
 enum ProfileStatus {
@@ -76,12 +94,47 @@ void AddExtensionToProfile(TestingProfile* profile) {
                                      .Build());
 }
 
+#if defined(OS_CHROMEOS)
+
+arc::mojom::AppInfo CreateArcApp(const std::string& app_name,
+                                 const std::string& package_name,
+                                 const std::string& activity_name) {
+  arc::mojom::AppInfo app;
+  app.name = app_name;
+  app.package_name = package_name;
+  app.activity = activity_name;
+  app.suspended = false;
+  app.sticky = true;
+  app.notifications_enabled = true;
+  return app;
+}
+
+arc::mojom::ArcPackageInfoPtr CreateArcPackage(
+    const std::string& package_name) {
+  return arc::mojom::ArcPackageInfo::New(
+      package_name, 0 /* package_version */, 0 /* last_backup_android_id */,
+      0 /* last_backup_time */, false /* sync */);
+}
+
+void AddArcPackageAndApp(ArcAppTest* arc_app_test,
+                         const std::string& app_name,
+                         const std::string& package_name,
+                         const std::string& activity_name) {
+  arc::mojom::ArcPackageInfoPtr package = CreateArcPackage(package_name);
+  arc_app_test->app_instance()->SendPackageAdded(std::move(package));
+
+  arc::mojom::AppInfo app = CreateArcApp(app_name, package_name, activity_name);
+  arc_app_test->app_instance()->SendAppAdded(app);
+}
+
 #endif
+
 }  // namespace
 
-#if !defined(OS_CHROMEOS)
 class ReportGeneratorTest : public ::testing::Test {
  public:
+  using ReportRequest = definition::ReportRequest;
+
   ReportGeneratorTest()
       : profile_manager_(TestingBrowserProcess::GetGlobal()) {}
   ~ReportGeneratorTest() override = default;
@@ -141,13 +194,12 @@ class ReportGeneratorTest : public ::testing::Test {
     plugin_service->RefreshPlugins();
   }
 
-  std::vector<std::unique_ptr<em::ChromeDesktopReportRequest>>
-  GenerateRequests() {
+  std::vector<std::unique_ptr<ReportRequest>> GenerateRequests() {
     histogram_tester_ = std::make_unique<base::HistogramTester>();
     base::RunLoop run_loop;
-    std::vector<std::unique_ptr<em::ChromeDesktopReportRequest>> rets;
+    std::vector<std::unique_ptr<ReportRequest>> rets;
     generator_.Generate(base::BindLambdaForTesting(
-        [&run_loop, &rets](ReportGenerator::Requests requests) {
+        [&run_loop, &rets](ReportGenerator::ReportRequests requests) {
           while (!requests.empty()) {
             rets.push_back(std::move(requests.front()));
             requests.pop();
@@ -193,8 +245,7 @@ class ReportGeneratorTest : public ::testing::Test {
     }
   }
 
-  void VerifyMetrics(
-      std::vector<std::unique_ptr<em::ChromeDesktopReportRequest>>& rets) {
+  void VerifyMetrics(std::vector<std::unique_ptr<ReportRequest>>& rets) {
     histogram_tester_->ExpectUniqueSample(
         "Enterprise.CloudReportingRequestCount", rets.size(), 1);
     histogram_tester_->ExpectUniqueSample(
@@ -224,6 +275,10 @@ TEST_F(ReportGeneratorTest, GenerateBasicReport) {
   EXPECT_EQ(1u, requests.size());
 
   auto* basic_request = requests[0].get();
+
+  // In the ChromeOsUserReportRequest for Chrome OS, these fields are not
+  // existing. Therefore, they are skipped according to current environment.
+#if !defined(OS_CHROMEOS)
   EXPECT_NE(std::string(), basic_request->computer_name());
   EXPECT_NE(std::string(), basic_request->os_user_name());
   VerifySerialNumber(basic_request->serial_number());
@@ -233,12 +288,22 @@ TEST_F(ReportGeneratorTest, GenerateBasicReport) {
   EXPECT_NE(std::string(), os_report.name());
   EXPECT_NE(std::string(), os_report.arch());
   EXPECT_NE(std::string(), os_report.version());
+#endif
 
   EXPECT_TRUE(basic_request->has_browser_report());
   auto& browser_report = basic_request->browser_report();
+#if defined(OS_CHROMEOS)
+  EXPECT_FALSE(browser_report.has_browser_version());
+  EXPECT_FALSE(browser_report.has_channel());
+#else
   EXPECT_NE(std::string(), browser_report.browser_version());
-  EXPECT_NE(std::string(), browser_report.executable_path());
   EXPECT_TRUE(browser_report.has_channel());
+#endif
+  EXPECT_NE(std::string(), browser_report.executable_path());
+
+#if defined(OS_CHROMEOS)
+  EXPECT_EQ(0, browser_report.plugins_size());
+#else
   // There might be other plugins like PDF plugin, however, our fake plugin
   // should be the first one in the report.
   EXPECT_LE(1, browser_report.plugins_size());
@@ -246,90 +311,65 @@ TEST_F(ReportGeneratorTest, GenerateBasicReport) {
   EXPECT_EQ(kPluginVersion, browser_report.plugins(0).version());
   EXPECT_EQ(kPluginDescription, browser_report.plugins(0).description());
   EXPECT_EQ(kPluginFileName, browser_report.plugins(0).filename());
+#endif
 
   VerifyProfileReport(/*active_profile_names*/ std::set<std::string>(),
                       profile_names, browser_report);
 }
 
-TEST_F(ReportGeneratorTest, GenerateActiveProfiles) {
-  auto inactive_profiles_names = CreateProfiles(/*number*/ 2, kIdle);
-  auto active_profiles_names =
-      CreateProfiles(/*number*/ 2, kActive, /*start_index*/ 2);
+#if defined(OS_CHROMEOS)
 
+TEST_F(ReportGeneratorTest, ReportArcAppInChromeOS) {
+  ArcAppTest arc_app_test;
+  TestingProfile primary_profile;
+  arc_app_test.SetUp(&primary_profile);
+
+  // Create two Arc applications in primary profile.
+  AddArcPackageAndApp(&arc_app_test, kArcAppName1, kArcPackageName1,
+                      kArcActivityName1);
+  AddArcPackageAndApp(&arc_app_test, kArcAppName2, kArcPackageName2,
+                      kArcActivityName2);
+
+  EXPECT_EQ(2u, arc_app_test.arc_app_list_prefs()->GetAppIds().size());
+
+  // Verify the Arc application information in the report is same as the test
+  // data.
   auto requests = GenerateRequests();
   EXPECT_EQ(1u, requests.size());
 
-  VerifyProfileReport(active_profiles_names, inactive_profiles_names,
-                      requests[0]->browser_report());
+  ReportRequest* request = requests.front().get();
+  EXPECT_EQ(2, request->android_app_infos_size());
+  em::AndroidAppInfo app_info1 = request->android_app_infos(1);
+  EXPECT_EQ(kArcAppName1, app_info1.app_name());
+  em::AndroidAppInfo app_info2 = request->android_app_infos(0);
+  EXPECT_EQ(kArcAppName2, app_info2.app_name());
 
-  histogram_tester()->ExpectBucketCount("Enterprise.CloudReportingRequestSize",
-                                        /*report size floor to KB*/ 0, 1);
+  arc_app_test.TearDown();
 }
 
-TEST_F(ReportGeneratorTest, BasicReportIsTooBig) {
-  CreateProfiles(/*number*/ 2, kIdle);
+TEST_F(ReportGeneratorTest, ArcPlayStoreDisabled) {
+  ArcAppTest arc_app_test;
+  TestingProfile primary_profile;
+  arc_app_test.SetUp(&primary_profile);
 
-  // Set a super small limitation.
-  generator()->SetMaximumReportSizeForTesting(5);
+  // Create two Arc applications in primary profile.
+  AddArcPackageAndApp(&arc_app_test, kArcAppName1, kArcPackageName1,
+                      kArcActivityName1);
+  AddArcPackageAndApp(&arc_app_test, kArcAppName2, kArcPackageName2,
+                      kArcActivityName2);
 
-  // Because the limitation is so small, no request can be created.
-  auto requests = GenerateRequests();
-  EXPECT_EQ(0u, requests.size());
-  histogram_tester()->ExpectTotalCount("Enterprise.CloudReportingRequestSize",
-                                       0);
-}
+  EXPECT_EQ(2u, arc_app_test.arc_app_list_prefs()->GetAppIds().size());
 
-TEST_F(ReportGeneratorTest, ReportSeparation) {
-  auto profile_names =
-      CreateProfiles(/*number*/ 2, kActiveWithContent, /*start_index*/ 0);
-
-  // Set the limitation just below the size of the report so that it needs to be
-  // separated into two requests later.
+  // No Arc application information is reported after the Arc Play Store
+  // support for given profile is disabled.
+  primary_profile.GetPrefs()->SetBoolean(arc::prefs::kArcEnabled, false);
   auto requests = GenerateRequests();
   EXPECT_EQ(1u, requests.size());
-  generator()->SetMaximumReportSizeForTesting(requests[0]->ByteSizeLong() - 30);
 
-  std::set<std::string> first_request_profiles, second_request_profiles;
-  first_request_profiles.insert(
-      requests[0]->browser_report().chrome_user_profile_infos(0).name());
-  second_request_profiles.insert(
-      requests[0]->browser_report().chrome_user_profile_infos(1).name());
+  ReportRequest* request = requests.front().get();
+  EXPECT_EQ(0, request->android_app_infos_size());
 
-  requests = GenerateRequests();
-
-  // The first profile is activated in the first request only while the second
-  // profile is activated in the second request.
-  EXPECT_EQ(2u, requests.size());
-  VerifyProfileReport(first_request_profiles, second_request_profiles,
-                      requests[0]->browser_report());
-  VerifyProfileReport(second_request_profiles, first_request_profiles,
-                      requests[1]->browser_report());
-  histogram_tester()->ExpectBucketCount("Enterprise.CloudReportingRequestSize",
-                                        /*report size floor to KB*/ 0, 2);
-}
-
-TEST_F(ReportGeneratorTest, ProfileReportIsTooBig) {
-  std::set<std::string> first_profile_name =
-      CreateProfiles(/*number*/ 1, kActiveWithContent, /*start_index*/ 0);
-
-  // Set the limitation just below the size of the report.
-  auto requests = GenerateRequests();
-  EXPECT_EQ(1u, requests.size());
-  generator()->SetMaximumReportSizeForTesting(requests[0]->ByteSizeLong() - 30);
-
-  // Add a smaller Profile.
-  auto second_profile_name =
-      CreateProfiles(/*number*/ 1, kActive, /*start_index*/ 1);
-
-  requests = GenerateRequests();
-
-  EXPECT_EQ(1u, requests.size());
-  // Only the second Profile is activated while the first one is too big to be
-  // reported.
-  VerifyProfileReport(second_profile_name, first_profile_name,
-                      requests[0]->browser_report());
-  histogram_tester()->ExpectBucketCount("Enterprise.CloudReportingRequestSize",
-                                        /*report size floor to KB*/ 0, 2);
+  arc_app_test.TearDown();
 }
 
 #endif

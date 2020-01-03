@@ -100,15 +100,13 @@ class TestQuotaManagerProxy : public storage::QuotaManagerProxy {
   TestQuotaManagerProxy()
       : QuotaManagerProxy(nullptr, nullptr), registered_client_(nullptr) {}
 
-  void RegisterClient(storage::QuotaClient* client) override {
+  void RegisterClient(scoped_refptr<storage::QuotaClient> client) override {
     EXPECT_FALSE(registered_client_);
     registered_client_ = client;
   }
 
-  void NotifyStorageAccessed(storage::QuotaClient::ID client_id,
-                             const url::Origin& origin,
+  void NotifyStorageAccessed(const url::Origin& origin,
                              blink::mojom::StorageType type) override {
-    EXPECT_EQ(storage::QuotaClient::kDatabase, client_id);
     EXPECT_EQ(blink::mojom::StorageType::kTemporary, type);
     accesses_[origin] += 1;
   }
@@ -156,7 +154,7 @@ class TestQuotaManagerProxy : public storage::QuotaManagerProxy {
     modifications_.clear();
   }
 
-  storage::QuotaClient* registered_client_;
+  scoped_refptr<storage::QuotaClient> registered_client_;
 
   // Map from origin to count of access notifications.
   std::map<url::Origin, int> accesses_;

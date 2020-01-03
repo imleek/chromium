@@ -168,10 +168,9 @@ base::span<const PermissionsUIInfo> GetContentSettingsUIInfo() {
     {ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER,
      IDS_PAGE_INFO_TYPE_PROTECTED_MEDIA_IDENTIFIER},
 #endif
-    {ContentSettingsType::AUTOPLAY, IDS_PAGE_INFO_TYPE_AUTOPLAY},
     {ContentSettingsType::ADS, IDS_PAGE_INFO_TYPE_ADS},
     {ContentSettingsType::SOUND, IDS_PAGE_INFO_TYPE_SOUND},
-    {ContentSettingsType::CLIPBOARD_READ, IDS_PAGE_INFO_TYPE_CLIPBOARD},
+    {ContentSettingsType::CLIPBOARD_READ_WRITE, IDS_PAGE_INFO_TYPE_CLIPBOARD},
     {ContentSettingsType::SENSORS,
      base::FeatureList::IsEnabled(features::kGenericSensorExtraClasses)
          ? IDS_PAGE_INFO_TYPE_SENSORS
@@ -469,6 +468,9 @@ base::string16 PageInfoUI::PermissionDecisionReasonToUIString(
       case PermissionStatusSource::MULTIPLE_DISMISSALS:
         message_id = IDS_PAGE_INFO_PERMISSION_AUTOMATICALLY_BLOCKED;
         break;
+      case PermissionStatusSource::MULTIPLE_IGNORES:
+        message_id = IDS_PAGE_INFO_PERMISSION_AUTOMATICALLY_BLOCKED;
+        break;
       default:
         break;
     }
@@ -605,7 +607,7 @@ const gfx::ImageSkia PageInfoUI::GetPermissionIcon(const PermissionInfo& info,
     case ContentSettingsType::SOUND:
       icon = &kVolumeUpIcon;
       break;
-    case ContentSettingsType::CLIPBOARD_READ:
+    case ContentSettingsType::CLIPBOARD_READ_WRITE:
       icon = &kPageInfoContentPasteIcon;
       break;
     case ContentSettingsType::SENSORS:

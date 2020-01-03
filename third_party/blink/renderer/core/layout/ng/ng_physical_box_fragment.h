@@ -25,6 +25,13 @@ class CORE_EXPORT NGPhysicalBoxFragment final
       NGBoxFragmentBuilder* builder,
       WritingMode block_or_line_writing_mode);
 
+  using PassKey = util::PassKey<NGPhysicalBoxFragment>;
+  NGPhysicalBoxFragment(PassKey,
+                        NGBoxFragmentBuilder* builder,
+                        const NGPhysicalBoxStrut& borders,
+                        const NGPhysicalBoxStrut& padding,
+                        WritingMode block_or_line_writing_mode);
+
   scoped_refptr<const NGLayoutResult> CloneAsHiddenForPaint() const;
 
   ~NGPhysicalBoxFragment() {
@@ -66,6 +73,7 @@ class CORE_EXPORT NGPhysicalBoxFragment final
   bool ChildrenInline() const { return children_inline_; }
 
   PhysicalRect ScrollableOverflow() const;
+  PhysicalRect ScrollableOverflowFromChildren() const;
 
   // TODO(layout-dev): These three methods delegate to legacy layout for now,
   // update them to use LayoutNG based overflow information from the fragment
@@ -73,7 +81,7 @@ class CORE_EXPORT NGPhysicalBoxFragment final
   PhysicalRect OverflowClipRect(
       const PhysicalOffset& location,
       OverlayScrollbarClipBehavior = kIgnorePlatformOverlayScrollbarSize) const;
-  LayoutSize ScrolledContentOffset() const;
+  LayoutSize PixelSnappedScrolledContentOffset() const;
   PhysicalSize ScrollSize() const;
 
   // Compute visual overflow of this box in the local coordinate.
@@ -100,11 +108,6 @@ class CORE_EXPORT NGPhysicalBoxFragment final
 #endif
 
  private:
-  NGPhysicalBoxFragment(NGBoxFragmentBuilder* builder,
-                        const NGPhysicalBoxStrut& borders,
-                        const NGPhysicalBoxStrut& padding,
-                        WritingMode block_or_line_writing_mode);
-
   const NGFragmentItems* ComputeItemsAddress() const {
     DCHECK(has_fragment_items_ || has_borders_ || has_padding_);
     const NGLink* children_end = children_ + Children().size();

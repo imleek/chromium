@@ -53,15 +53,15 @@ bool RealTimePolicyEngine::IsUserOptedIn(
 // static
 bool RealTimePolicyEngine::IsEnabledByPolicy(
     content::BrowserContext* browser_context) {
-  PrefService* pref_service = user_prefs::UserPrefs::Get(browser_context);
-  return pref_service->IsManagedPreference(
-             prefs::kSafeBrowsingRealTimeLookupEnabled) &&
-         pref_service->GetBoolean(prefs::kSafeBrowsingRealTimeLookupEnabled);
+  return false;
 }
 
 // static
 bool RealTimePolicyEngine::CanPerformFullURLLookup(
     content::BrowserContext* browser_context) {
+  if (browser_context->IsOffTheRecord())
+    return false;
+
   if (IsEnabledByPolicy(browser_context))
     return true;
 

@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/hid/hid_connection_event.h"
 #include "third_party/blink/renderer/modules/hid/hid_device.h"
+#include "third_party/blink/renderer/modules/hid/hid_device_filter.h"
 #include "third_party/blink/renderer/modules/hid/hid_device_request_options.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 
@@ -111,8 +112,8 @@ ScriptPromise HID::getDevices(ScriptState* script_state,
     return ScriptPromise();
   }
 
-  if (!context->GetSecurityContext().IsFeatureEnabled(
-          mojom::FeaturePolicyFeature::kHid, ReportOptions::kReportOnFailure)) {
+  if (!context->IsFeatureEnabled(mojom::FeaturePolicyFeature::kHid,
+                                 ReportOptions::kReportOnFailure)) {
     exception_state.ThrowSecurityError(kFeaturePolicyBlocked);
     return ScriptPromise();
   }

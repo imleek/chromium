@@ -1263,6 +1263,98 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractivePDFTest,
   EXPECT_EQ(point_in_root_window.y(), menu_waiter.params().y);
 }
 
+IN_PROC_BROWSER_TEST_F(SitePerProcessInteractivePDFTest,
+                       LoadingPdfDoesNotStealFocus) {
+  // Load test HTML, and verify the text area has focus.
+  GURL main_url(embedded_test_server()->GetURL("/pdf/two_iframes.html"));
+  ui_test_utils::NavigateToURL(browser(), main_url);
+  auto* embedder_web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Make sure we can see the iframe's document.
+  ASSERT_TRUE(
+      content::EvalJs(embedder_web_contents,
+                      "new Promise((resolve) => {"
+                      "  var iframe1 = document.getElementById('iframe1');"
+                      "  var iframe1doc = iframe1.contentDocument;"
+                      "  resolve(iframe1doc != null);"
+                      "});")
+          .ExtractBool());
+
+  // Make sure the text area is focused. First, we must explicitly focus the
+  // child iframe containing the text area.
+  content::RenderFrameHost* main_frame = embedder_web_contents->GetMainFrame();
+  content::RenderFrameHost* child_text_area = ChildFrameAt(main_frame, 0);
+  ASSERT_TRUE(content::ExecJs(child_text_area, "window.focus();"));
+  bool starts_focused =
+      content::EvalJs(
+          embedder_web_contents,
+          "new Promise((resolve) => {"
+          "  iframe1doc = "
+          "      document.getElementById('iframe1').contentDocument;"
+          "  function timeoutFcn(n) {"
+          "    if (n == 0 || iframe1doc.hasFocus()) {"
+          "      resolve(iframe1doc.hasFocus());"
+          "      return;"
+          "    }"
+          "    window.console.log('Recursing: n = ' + n);"
+          "    setTimeout(() => { timeoutFcn(n-1); }, 1000);"
+          "  };"
+          "  timeoutFcn(5);"
+          "});")
+          .ExtractBool();
+  if (!starts_focused) {
+    LOG(ERROR) << "Embedder focused frame = "
+               << embedder_web_contents->GetFocusedFrame()
+               << ", main frame = " << main_frame
+               << ", embedder_contents_focused = "
+               << IsRenderWidgetHostFocused(
+                      embedder_web_contents->GetRenderWidgetHostView()
+                          ->GetRenderWidgetHost())
+               << ", iframe_text = " << child_text_area
+               << ", iframe_pdf = " << ChildFrameAt(main_frame, 1);
+  }
+  ASSERT_TRUE(starts_focused);
+
+  GURL pdf_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
+  ASSERT_TRUE(content::ExecJs(
+      embedder_web_contents,
+      content::JsReplace("document.getElementById('iframe2').src = $1;",
+                         pdf_url.spec())));
+
+  // Verify the pdf has loaded.
+  auto* guest_web_contents =
+      test_guest_view_manager()->WaitForSingleGuestCreated();
+  ASSERT_TRUE(guest_web_contents);
+  EXPECT_NE(embedder_web_contents, guest_web_contents);
+
+  // Make sure the load has started, before waiting for it to stop.
+  // This is a little hacky, but will unjank the test for now.
+  // TODO(wjmaclean): Make this less hacky.
+  while (!guest_web_contents->IsLoading() &&
+         !guest_web_contents->GetController().GetLastCommittedEntry()) {
+    base::RunLoop run_loop;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
+    run_loop.Run();
+  }
+
+  EXPECT_TRUE(content::WaitForLoadStop(guest_web_contents));
+
+  // Make sure the text area still has focus.
+  ASSERT_TRUE(
+      content::EvalJs(
+          embedder_web_contents,
+          "new Promise((resolve) => {"
+          "  iframe1doc = "
+          "      document.getElementById('iframe1').contentDocument;"
+          "  text_area = iframe1doc.getElementById('text_area');"
+          "  text_area_is_active = iframe1doc.activeElement == text_area;"
+          "  resolve(iframe1doc.hasFocus() && text_area_is_active);"
+          "});")
+          .ExtractBool());
+}
+
 class SitePerProcessAutofillTest : public SitePerProcessInteractiveBrowserTest {
  public:
   SitePerProcessAutofillTest() : SitePerProcessInteractiveBrowserTest() {}

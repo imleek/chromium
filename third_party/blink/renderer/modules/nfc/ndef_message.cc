@@ -17,9 +17,17 @@ namespace blink {
 NDEFMessage* NDEFMessage::Create(const ExecutionContext* execution_context,
                                  const NDEFMessageInit* init,
                                  ExceptionState& exception_state) {
+  // https://w3c.github.io/web-nfc/#creating-ndef-message
+
+  // NDEFMessageInit#records is a required field.
+  DCHECK(init->hasRecords());
+  if (init->records().IsEmpty()) {
+    exception_state.ThrowTypeError(
+        "NDEFMessageInit#records being empty makes no sense.");
+    return nullptr;
+  }
+
   NDEFMessage* message = MakeGarbageCollected<NDEFMessage>();
-  message->url_ = init->url();
-  if (init->hasRecords()) {
     for (const NDEFRecordInit* record_init : init->records()) {
       NDEFRecord* record =
           NDEFRecord::Create(execution_context, record_init, exception_state);
@@ -28,7 +36,6 @@ NDEFMessage* NDEFMessage::Create(const ExecutionContext* execution_context,
       DCHECK(record);
       message->records_.push_back(record);
     }
-  }
   return message;
 }
 
@@ -36,6 +43,7 @@ NDEFMessage* NDEFMessage::Create(const ExecutionContext* execution_context,
 NDEFMessage* NDEFMessage::Create(const ExecutionContext* execution_context,
                                  const NDEFMessageSource& source,
                                  ExceptionState& exception_state) {
+  // https://w3c.github.io/web-nfc/#creating-ndef-message
   if (source.IsString()) {
     NDEFMessage* message = MakeGarbageCollected<NDEFMessage>();
     message->records_.push_back(MakeGarbageCollected<NDEFRecord>(
@@ -45,9 +53,15 @@ NDEFMessage* NDEFMessage::Create(const ExecutionContext* execution_context,
 
   if (source.IsArrayBuffer()) {
     WTF::Vector<uint8_t> payload_data;
+    size_t byte_length = source.GetAsArrayBuffer()->ByteLengthAsSizeT();
+    if (byte_length > std::numeric_limits<wtf_size_t>::max()) {
+      exception_state.ThrowRangeError(
+          "Buffer size exceeds maximum heap object size.");
+      return nullptr;
+    }
     payload_data.Append(
         static_cast<uint8_t*>(source.GetAsArrayBuffer()->Data()),
-        source.GetAsArrayBuffer()->DeprecatedByteLengthAsUnsigned());
+        static_cast<wtf_size_t>(byte_length));
     NDEFMessage* message = MakeGarbageCollected<NDEFMessage>();
     message->records_.push_back(MakeGarbageCollected<NDEFRecord>(
         std::move(payload_data), "application/octet-stream"));
@@ -55,11 +69,18 @@ NDEFMessage* NDEFMessage::Create(const ExecutionContext* execution_context,
   }
 
   if (source.IsArrayBufferView()) {
+    size_t byte_length =
+        source.GetAsArrayBufferView().View()->byteLengthAsSizeT();
+    if (byte_length > std::numeric_limits<wtf_size_t>::max()) {
+      exception_state.ThrowRangeError(
+          "Buffer size exceeds maximum heap object size.");
+      return nullptr;
+    }
     WTF::Vector<uint8_t> payload_data;
     payload_data.Append(
         static_cast<uint8_t*>(
             source.GetAsArrayBufferView().View()->BaseAddress()),
-        source.GetAsArrayBufferView().View()->byteLength());
+        static_cast<wtf_size_t>(byte_length));
     NDEFMessage* message = MakeGarbageCollected<NDEFMessage>();
     message->records_.push_back(MakeGarbageCollected<NDEFRecord>(
         std::move(payload_data), "application/octet-stream"));
@@ -77,15 +98,10 @@ NDEFMessage* NDEFMessage::Create(const ExecutionContext* execution_context,
 
 NDEFMessage::NDEFMessage() = default;
 
-NDEFMessage::NDEFMessage(const device::mojom::blink::NDEFMessage& message)
-    : url_(message.url) {
+NDEFMessage::NDEFMessage(const device::mojom::blink::NDEFMessage& message) {
   for (wtf_size_t i = 0; i < message.data.size(); ++i) {
     records_.push_back(MakeGarbageCollected<NDEFRecord>(*message.data[i]));
   }
-}
-
-const String& NDEFMessage::url() const {
-  return url_;
 }
 
 const HeapVector<Member<NDEFRecord>>& NDEFMessage::records() const {

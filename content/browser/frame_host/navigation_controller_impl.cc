@@ -59,7 +59,7 @@
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/browser/web_package/bundled_exchanges_navigation_info.h"
+#include "content/browser/web_package/web_bundle_navigation_info.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/frame_messages.h"
 #include "content/common/view_messages.h"
@@ -387,7 +387,6 @@ void ValidateRequestMatchesEntry(NavigationRequest* request,
     return;
   }
 
-  DCHECK_EQ(request->common_params().url, frame_entry->url());
   DCHECK_EQ(request->common_params().method, frame_entry->method());
 
   size_t redirect_size = request->commit_params().redirects.size();
@@ -1042,7 +1041,8 @@ bool NavigationControllerImpl::RendererDidNavigate(
   if (!rfh->GetParent() && !is_same_document_navigation) {
     if (NavigationEntryImpl* navigation_entry = GetLastCommittedEntry()) {
       if (auto* metrics = navigation_entry->back_forward_cache_metrics()) {
-        metrics->MainFrameDidNavigateAwayFromDocument();
+        metrics->MainFrameDidNavigateAwayFromDocument(rfh, details,
+                                                      navigation_request);
       }
     }
   }
@@ -1180,6 +1180,10 @@ bool NavigationControllerImpl::RendererDidNavigate(
   // TODO(creis): Remove the "if" once https://crbug.com/522193 is fixed.
   if (frame_entry) {
     DCHECK(params.page_state == frame_entry->page_state());
+
+    // Remember the bindings the renderer process has at this point, so that
+    // we do not grant this entry additional bindings if we come back to it.
+    frame_entry->SetBindings(rfh->GetEnabledBindings());
   }
 
   // Once it is committed, we no longer need to track several pieces of state on
@@ -1196,10 +1200,6 @@ bool NavigationControllerImpl::RendererDidNavigate(
   // for subframe navigations.
   if (!rfh->GetParent())
     CHECK_EQ(active_entry->site_instance(), rfh->GetSiteInstance());
-
-  // Remember the bindings the renderer process has at this point, so that
-  // we do not grant this entry additional bindings if we come back to it.
-  active_entry->SetBindings(rfh->GetEnabledBindings());
 
   // Now prep the rest of the details for the notification and broadcast.
   details->entry = active_entry;
@@ -1481,9 +1481,9 @@ void NavigationControllerImpl::RendererDidNavigateToNewPage(
   new_entry->SetOriginalRequestURL(params.original_request_url);
   new_entry->SetIsOverridingUserAgent(params.is_overriding_user_agent);
 
-  if (request->bundled_exchanges_navigation_info()) {
-    new_entry->set_bundled_exchanges_navigation_info(
-        request->bundled_exchanges_navigation_info()->Clone());
+  if (request->web_bundle_navigation_info()) {
+    new_entry->set_web_bundle_navigation_info(
+        request->web_bundle_navigation_info()->Clone());
   }
 
   // Update the FrameNavigationEntry for new main frame commits.
@@ -2196,8 +2196,7 @@ bool NavigationControllerImpl::StartHistoryNavigationInNewSubframe(
   if (!request)
     return false;
 
-  request->SetNavigationClient(std::move(*navigation_client),
-                               render_frame_host->GetSiteInstance()->GetId());
+  request->SetNavigationClient(std::move(*navigation_client));
 
   render_frame_host->frame_tree_node()->navigator()->Navigate(
       std::move(request), ReloadType::NONE, RestoreType::NONE);
@@ -2277,8 +2276,10 @@ void NavigationControllerImpl::NavigateFromFrameProxy(
 
   // Don't allow an entry replacement if there is no entry to replace.
   // http://crbug.com/457149
-  if (should_replace_current_entry && GetEntryCount() > 0)
-    entry->set_should_replace_entry(true);
+  if (GetEntryCount() == 0)
+    should_replace_current_entry = false;
+
+  entry->set_should_replace_entry(should_replace_current_entry);
 
   bool override_user_agent = false;
   if (GetLastCommittedEntry() &&
@@ -2318,7 +2319,7 @@ void NavigationControllerImpl::NavigateFromFrameProxy(
   /* params.data_url_as_string: skip */
   params.post_data = post_body;
   params.can_load_local_resources = false;
-  params.should_replace_current_entry = false;
+  /* params.should_replace_current_entry: skip */
   /* params.frame_name: skip */
   // TODO(clamy): See if user gesture should be propagated to this function.
   params.has_user_gesture = false;
@@ -2574,6 +2575,7 @@ void NavigationControllerImpl::NavigateToExistingPendingEntry(
   // BackForwardCache:
   // Navigate immediately if the document is in the BackForwardCache.
   if (back_forward_cache_.GetEntry(nav_entry_id)) {
+    TRACE_EVENT0("navigation", "BackForwardCache_CreateNavigationRequest");
     DCHECK_EQ(reload_type, ReloadType::NONE);
     auto navigation_request = CreateNavigationRequestFromEntry(
         root, pending_entry_, pending_entry_->GetFrameEntry(root),
@@ -3108,13 +3110,15 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
 
     CHECK(virtual_url == entry->GetVirtualURL());
 
-    // This is a DCHECK and not a CHECK as URL rewrite has non-deterministic
-    // behavior in the field: it is possible for two calls to
-    // RewriteUrlForNavigation to return different results, leading to a
-    // different URL in the NavigationRequest and FrameEntry. This will be fixed
-    // once we remove the pending NavigationEntry, as we'll only make one call
-    // to RewriteUrlForNavigation.
-    DCHECK_EQ(url_to_load, frame_entry->url());
+    // This is a LOG and not a CHECK/DCHECK as URL rewrite has non-deterministic
+    // behavior: it is possible for two calls to RewriteUrlForNavigation to
+    // return different results, leading to a different URL in the
+    // NavigationRequest and FrameEntry. This will be fixed once we remove the
+    // pending NavigationEntry, as we'll only make one call to
+    // RewriteUrlForNavigation.
+    VLOG_IF(1, (url_to_load != frame_entry->url()))
+        << "NavigationRequest and FrameEntry have different URLs: "
+        << url_to_load << " vs " << frame_entry->url();
 
     // TODO(clamy): In order to remove the pending NavigationEntry,
     // |virtual_url| and |reverse_on_redirect| should be stored in the
@@ -3190,13 +3194,7 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
           params.started_from_context_menu, has_user_gesture,
           InitiatorCSPInfo(), std::vector<int>(), params.href_translate,
           false /* is_history_navigation_in_new_child_frame */,
-          params.input_start,
-          // TODO(chenleihu): The value of frame policy should be set to a
-          // valid value here. Currently when we navigate a remote frame, the
-          // frame_policy value in common_params is not used to initialize
-          // container policy in document.cc.
-          // https://crbug.com/972089
-          base::nullopt /* frame policy */);
+          params.input_start);
 
   mojom::CommitNavigationParamsPtr commit_params =
       mojom::CommitNavigationParams::New(
@@ -3222,7 +3220,9 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
 #endif
           false, /* is_browser_initiated */
           network::mojom::IPAddressSpace::kUnknown,
-          GURL() /* base_url_override_for_bundled_exchanges */);
+          GURL() /* web_bundle_physical_url */,
+          GURL() /* base_url_override_for_web_bundle */,
+          node->pending_frame_policy());
 #if defined(OS_ANDROID)
   if (ValidateDataURLAsString(params.data_url_as_string)) {
     commit_params->data_url_as_string = params.data_url_as_string->data();
@@ -3333,8 +3333,7 @@ NavigationControllerImpl::CreateNavigationRequestFromEntry(
           *frame_entry, request_body, dest_url,
           blink::mojom::Referrer::New(dest_referrer.url, dest_referrer.policy),
           navigation_type, previews_state, navigation_start,
-          base::TimeTicks() /* input_start */,
-          frame_tree_node->pending_frame_policy());
+          base::TimeTicks() /* input_start */);
   common_params->is_history_navigation_in_new_child_frame =
       is_history_navigation_in_new_child_frame;
 
@@ -3346,8 +3345,8 @@ NavigationControllerImpl::CreateNavigationRequestFromEntry(
           *frame_entry, common_params->url, origin_to_commit,
           common_params->method, entry->GetSubframeUniqueNames(frame_tree_node),
           GetPendingEntryIndex() == -1 /* intended_as_new_entry */,
-          GetIndexOfEntry(entry), GetLastCommittedEntryIndex(),
-          GetEntryCount());
+          GetIndexOfEntry(entry), GetLastCommittedEntryIndex(), GetEntryCount(),
+          frame_tree_node->pending_frame_policy());
   commit_params->post_content_type = post_content_type;
 
   return NavigationRequest::CreateBrowserInitiated(

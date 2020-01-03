@@ -21,6 +21,7 @@ group("telemetry_chrome_test") {
 
   if (is_android) {
     data_deps += [
+      ":telemetry_weblayer_apks",
       "//android_webview/test:webview_instrumentation_apk",
       "//chrome/android:chrome_public_apk",
     ]
@@ -33,6 +34,7 @@ group("telemetry_chrome_test") {
         "//android_webview:system_webview_apk",
         "//android_webview/tools/system_webview_shell:system_webview_shell_apk",
         "//chrome/android:monochrome_public_apk",
+        "//chrome/android:monochrome_public_bundle",
       ]
     }
   } else {
@@ -44,7 +46,10 @@ group("telemetry_chrome_test") {
   }
 
   if (is_linux) {
-    data_deps += [ "//third_party/breakpad:dump_syms($host_toolchain)" ]
+    data_deps += [
+      "//third_party/breakpad:dump_syms($host_toolchain)",
+      "//third_party/crashpad/crashpad/tools:crashpad_database_util",
+    ]
   }
 
   if (is_mac) {
@@ -71,6 +76,22 @@ group("telemetry_chrome_test") {
   }
 }
 
+group("telemetry_weblayer_apks") {
+  testonly = true
+
+  data_deps = []
+  if (is_android) {
+    data_deps += [
+      "//weblayer/shell/android:weblayer_shell_system_webview_apk",
+
+      # TODO(crbug.com/1022823): Remove the following two deps once our tooling
+      # is configured to use weblayer_shell_system_webview_apk.
+      "//weblayer/shell/android:weblayer_shell_apk",
+      "//weblayer/shell/android:weblayer_support_apk",
+    ]
+  }
+}
+
 group("telemetry_chrome_test_without_chrome") {
   testonly = true
 
@@ -81,11 +102,12 @@ group("telemetry_chrome_test_without_chrome") {
   ]
   data_deps = [
     "//third_party/catapult:telemetry_chrome_test_support",
+    "//tools/metrics:metrics_python_tests",
   ]
   if (is_chromeos) {
     data_deps += [
-      "//third_party/breakpad:minidump_stackwalk",
       "//third_party/breakpad:dump_syms",
+      "//third_party/breakpad:minidump_stackwalk",
     ]
   }
   if (is_android) {
@@ -100,8 +122,8 @@ group("telemetry_chrome_test_without_chrome") {
       "$root_out_dir/build.ninja",
     ]
     data_deps += [
-      "//chrome/android/webapk/shell_apk:maps_go_webapk",
       "//build/android:devil_chromium_py",
+      "//chrome/android/webapk/shell_apk:maps_go_webapk",
       "//third_party/breakpad:dump_syms",
       "//third_party/breakpad:minidump_dump",
       "//third_party/breakpad:minidump_stackwalk",

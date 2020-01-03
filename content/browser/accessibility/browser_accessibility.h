@@ -80,6 +80,11 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // caller.
   static BrowserAccessibility* Create();
 
+  // Returns |delegate| as a BrowserAccessibility object, if |delegate| is
+  // non-null and an object in the BrowserAccessibility class hierarchy.
+  static BrowserAccessibility* FromAXPlatformNodeDelegate(
+      ui::AXPlatformNodeDelegate* delegate);
+
   ~BrowserAccessibility() override;
 
   // Called only once, immediately after construction. The constructor doesn't
@@ -164,9 +169,8 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
     gfx::NativeViewAccessible GetNativeViewAccessible() const override;
     BrowserAccessibility* get() const;
     int GetIndexInParent() const override;
-
-    BrowserAccessibility& operator*() const;
-    BrowserAccessibility* operator->() const;
+    BrowserAccessibility& operator*() const override;
+    BrowserAccessibility* operator->() const override;
 
    private:
     const BrowserAccessibility* parent_;
@@ -184,11 +188,6 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   BrowserAccessibility* PlatformGetSelectionContainer() const;
 
   // Returns true if an ancestor of this node (not including itself) is a
-  // leaf node, meaning that this node is not actually exposed to the
-  // platform.
-  bool PlatformIsChildOfLeaf() const;
-
-  // Returns true if an ancestor of this node (not including itself) is a
   // leaf node, including ignored nodes, meaning that this node is not
   // actually exposed to the platform, but a node shouldn't be
   // considered a leaf node solely because it has only ignored children.
@@ -196,7 +195,7 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
 
   // If this object is exposed to the platform, returns this object. Otherwise,
   // returns the platform leaf under which this object is found.
-  BrowserAccessibility* GetClosestPlatformObject() const;
+  BrowserAccessibility* PlatformGetClosestPlatformObject() const;
 
   bool IsPreviousSiblingOnSameLine() const;
   bool IsNextSiblingOnSameLine() const;
@@ -446,6 +445,9 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   gfx::NativeViewAccessible GetNextSibling() override;
   gfx::NativeViewAccessible GetPreviousSibling() override;
 
+  bool IsChildOfLeaf() const override;
+  gfx::NativeViewAccessible GetClosestPlatformObject() const override;
+
   std::unique_ptr<ChildIterator> ChildrenBegin() override;
   std::unique_ptr<ChildIterator> ChildrenEnd() override;
 
@@ -543,6 +545,7 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   bool IsOrderedSet() const override;
   base::Optional<int> GetPosInSet() const override;
   base::Optional<int> GetSetSize() const override;
+  bool IsInListMarker() const;
 
   // Returns true if:
   // 1. This node is a list, AND
@@ -567,10 +570,10 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   BrowserAccessibility();
 
   // The manager of this tree of accessibility objects.
-  BrowserAccessibilityManager* manager_;
+  BrowserAccessibilityManager* manager_ = nullptr;
 
   // The underlying node.
-  ui::AXNode* node_;
+  ui::AXNode* node_ = nullptr;
 
   // Protected so that it can't be called directly on a BrowserAccessibility
   // where it could be confused with an id that comes from the node data,
@@ -582,6 +585,8 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // object, such as a text field or static text, where spelling and grammar
   // errors are present.
   ui::TextAttributeMap GetSpellingAndGrammarAttributes() const;
+
+  std::string SubtreeToStringHelper(size_t level) override;
 
  private:
   // Return the bounds after converting from this node's coordinate system
@@ -648,9 +653,6 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
 
   DISALLOW_COPY_AND_ASSIGN(BrowserAccessibility);
 };
-
-CONTENT_EXPORT std::ostream& operator<<(std::ostream& stream,
-                                        const BrowserAccessibility& object);
 
 }  // namespace content
 

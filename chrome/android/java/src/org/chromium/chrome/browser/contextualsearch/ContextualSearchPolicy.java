@@ -22,7 +22,7 @@ import org.chromium.chrome.browser.contextualsearch.ContextualSearchFieldTrial.C
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchSelectionController.SelectionType;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
-import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager;
+import org.chromium.chrome.browser.settings.privacy.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.util.UrlConstants;
 
 import java.net.URL;
@@ -112,8 +112,6 @@ class ContextualSearchPolicy {
      * @return Whether a Tap gesture is currently supported as a trigger for the feature.
      */
     boolean isTapSupported() {
-        if (isTapDisabledDueToLongpress()) return false;
-
         return (!isUserUndecided()
                        || ContextualSearchFieldTrial.getSwitch(
                                ContextualSearchSwitch
@@ -254,15 +252,6 @@ class ContextualSearchPolicy {
         int selectionType = mSelectionController.getSelectionType();
         return (mSelectionController.getSelectedText() != null
                 && (selectionType == SelectionType.LONG_PRESS || !shouldPreviousGestureResolve()));
-    }
-
-    /** @return whether Tap is disabled due to the longpress experiment. */
-    private boolean isTapDisabledDueToLongpress() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.CONTEXTUAL_SEARCH_LONGPRESS_RESOLVE)
-                && !ContextualSearchFieldTrial.LONGPRESS_RESOLVE_PRESERVE_TAP.equals(
-                        ChromeFeatureList.getFieldTrialParamByFeature(
-                                ChromeFeatureList.CONTEXTUAL_SEARCH_LONGPRESS_RESOLVE,
-                                ContextualSearchFieldTrial.LONGPRESS_RESOLVE_PARAM_NAME));
     }
 
     /**
@@ -454,13 +443,6 @@ class ContextualSearchPolicy {
         } else {
             return "";
         }
-    }
-
-    /**
-     * @return Whether any translation feature for Contextual Search is enabled.
-     */
-    boolean isTranslationDisabled() {
-        return ContextualSearchFieldTrial.getSwitch(ContextualSearchSwitch.IS_TRANSLATION_DISABLED);
     }
 
     /**

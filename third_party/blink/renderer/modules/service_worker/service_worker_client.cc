@@ -22,11 +22,6 @@
 
 namespace blink {
 
-ServiceWorkerClient* ServiceWorkerClient::Create(
-    const mojom::blink::ServiceWorkerClientInfo& info) {
-  return MakeGarbageCollected<ServiceWorkerClient>(info);
-}
-
 ServiceWorkerClient::ServiceWorkerClient(
     const mojom::blink::ServiceWorkerClientInfo& info)
     : uuid_(info.client_uuid),
@@ -116,6 +111,12 @@ void ServiceWorkerClient::postMessage(ScriptState* script_state,
       context, transferables.message_ports, exception_state);
   if (exception_state.HadException())
     return;
+
+  if (msg.message->IsLockedToAgentCluster()) {
+    msg.locked_agent_cluster_id = context->GetAgentClusterID();
+  } else {
+    msg.locked_agent_cluster_id = base::nullopt;
+  }
 
   To<ServiceWorkerGlobalScope>(context)
       ->GetServiceWorkerHost()

@@ -90,7 +90,8 @@
       android:networkSecurityConfig="@xml/network_security_config"
       android:roundIcon="@drawable/ic_launcher_round"
       android:supportsRtl="true"
-      android:use32bitAbi="true">
+      android:use32bitAbi="true"
+      android:zygotePreloadName="org.chromium.content.app.ZygotePreload">
     <activity
         android:autoRemoveFromRecents="false"
         android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode|density"
@@ -269,15 +270,15 @@
     <activity
         android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
         android:exported="false"
-        android:label="@string/preferences"
-        android:name="org.chromium.chrome.browser.preferences.Preferences"
-        android:theme="@style/Theme.Chromium.Preferences"/>
+        android:label="@string/settings"
+        android:name="org.chromium.chrome.browser.settings.SettingsActivity"
+        android:theme="@style/Theme.Chromium.Settings"/>
     <activity
         android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
         android:exported="false"
         android:label="@string/storage_management_activity_label"
-        android:name="org.chromium.chrome.browser.preferences.website.ManageSpaceActivity"
-        android:theme="@style/Theme.Chromium.Preferences.ManageSpace"/>
+        android:name="org.chromium.chrome.browser.settings.website.ManageSpaceActivity"
+        android:theme="@style/Theme.Chromium.Settings.ManageSpace"/>
     <activity
         android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
         android:exported="false"
@@ -1305,6 +1306,12 @@
           android:readPermission="android.permission.GLOBAL_SEARCH"/>
     </provider>
     <provider
+        android:authorities="org.chromium.chrome.DeveloperModeContentProvider"
+        android:enabled="false"
+        android:exported="true"
+        android:name="org.chromium.android_webview.services.DeveloperModeContentProvider"
+        android:process=":webview_service"/>
+    <provider
         android:authorities="org.chromium.chrome.DownloadFileProvider"
         android:exported="false"
         android:grantUriPermissions="true"
@@ -1400,6 +1407,9 @@
         <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
       </intent-filter>
     </receiver>
+    <receiver
+        android:exported="false"
+        android:name="org.chromium.components.background_task_scheduler.BackgroundTaskBroadcastReceiver"/>
     <receiver
         android:exported="true"
         android:name="com.google.android.gms.gcm.GcmReceiver"
@@ -1541,6 +1551,10 @@
         android:process=":webview_service"/>
     <service
         android:exported="false"
+        android:name="org.chromium.android_webview.services.DeveloperUiService"
+        android:process=":webview_service"/>
+    <service
+        android:exported="false"
         android:name="org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetService"
         android:permission="android.permission.BIND_REMOTEVIEWS"/>
     <service
@@ -1664,6 +1678,7 @@
         android:name="org.chromium.content.app.SandboxedProcessService0"
         android:permission="org.chromium.chrome.permission.CHILD_SERVICE"
         android:process=":sandboxed_process0"
+        android:useAppZygote="true"
         android:visibleToInstantApps="true"
         tools:ignore="ExportedService"/>
     <service
@@ -2025,6 +2040,7 @@
         <action android:name="android.support.customtabs.action.CustomTabsService"/>
         <category android:name="androidx.browser.customtabs.category.ColorSchemeCustomization"/>
         <category android:name="androidx.browser.customtabs.category.NavBarColorCustomization"/>
+        <category android:name="androidx.browser.trusted.category.ImmersiveMode"/>
         <category android:name="androidx.browser.trusted.category.TrustedWebActivities"/>
         <category
             android:name="androidx.browser.trusted.category.TrustedWebActivitySplashScreensV1"/>

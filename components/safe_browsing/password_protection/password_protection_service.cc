@@ -63,6 +63,18 @@ PasswordProtectionService::PasswordProtectionService(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (history_service)
     history_service_observer_.Add(history_service);
+
+  common_spoofed_domains_ = {
+      "login.live.com"
+      "facebook.com",
+      "box.com",
+      "paypal.com",
+      "apple.com",
+      "yahoo.com",
+      "adobe.com",
+      "amazon.com",
+      "linkedin.com",
+      "att.com"};
 }
 
 PasswordProtectionService::~PasswordProtectionService() {
@@ -268,12 +280,8 @@ void PasswordProtectionService::RequestFinished(
         GetPasswordProtectionReusedPasswordAccountType(request->password_type(),
                                                        request->username());
     if (outcome != RequestOutcome::RESPONSE_ALREADY_CACHED) {
-      base::TimeTicks cache_verdict_start_time = base::TimeTicks::Now();
       CacheVerdict(request->main_frame_url(), request->trigger_type(),
                    password_type, *response, base::Time::Now());
-      // TODO(crbug.com/1016546): Remove once the bug is fixed.
-      UMA_HISTOGRAM_TIMES("PasswordProtection.CacheVerdictDuration",
-                          base::TimeTicks::Now() - cache_verdict_start_time);
     }
     bool enable_warning_for_non_sync_users = base::FeatureList::IsEnabled(
         safe_browsing::kPasswordProtectionForSignedInUsers);
@@ -296,6 +304,7 @@ void PasswordProtectionService::RequestFinished(
                                response->verdict_type())) {
       username_for_last_shown_warning_ = request->username();
       reused_password_account_type_for_last_shown_warning_ = password_type;
+      saved_passwords_matching_domains_ = request->matching_domains();
       ShowModalWarning(request->web_contents(), request->request_outcome(),
                        response->verdict_type(), response->verdict_token(),
                        password_type);
@@ -312,17 +321,19 @@ void PasswordProtectionService::RequestFinished(
     auto verdict =
         response ? response->verdict_type()
                  : LoginReputationClientResponse::VERDICT_TYPE_UNSPECIFIED;
-    auto is_phishing_url = verdict == LoginReputationClientResponse::PHISHING;
 
 #if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
-    MaybeReportPasswordReuseDetected(request->web_contents(),
-                                     request->username(),
-                                     request->password_type(), is_phishing_url);
+    MaybeReportPasswordReuseDetected(
+        request->web_contents(), request->username(), request->password_type(),
+        verdict == LoginReputationClientResponse::PHISHING);
 #endif
 
     // Persist a bit in CompromisedCredentials table when saved password is
-    // reused on a phishing site.
-    if (is_phishing_url) {
+    // reused on a phishing or low reputation site.
+    auto is_unsafe_url =
+        verdict == LoginReputationClientResponse::PHISHING ||
+        verdict == LoginReputationClientResponse::LOW_REPUTATION;
+    if (is_unsafe_url) {
       PersistPhishedSavedPasswordCredential(request->username(),
                                             request->matching_domains());
     }

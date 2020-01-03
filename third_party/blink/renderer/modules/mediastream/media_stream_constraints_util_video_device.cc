@@ -12,11 +12,11 @@
 
 #include "media/base/limits.h"
 #include "media/mojo/mojom/display_media_information.mojom-blink.h"
-#include "third_party/blink/public/platform/web_media_constraints.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_sets.h"
+#include "third_party/blink/renderer/platform/mediastream/media_constraints.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 
 namespace blink {
@@ -395,7 +395,7 @@ bool FacingModeSatisfiesConstraint(media::VideoFacingMode value,
                                    const StringConstraint& constraint) {
   WebString string_value = ToWebString(value);
   if (string_value.IsNull())
-    return constraint.Exact().empty();
+    return constraint.Exact().IsEmpty();
 
   return constraint.Matches(string_value);
 }
@@ -564,7 +564,7 @@ VideoDeviceCaptureCapabilities& VideoDeviceCaptureCapabilities::operator=(
 
 VideoCaptureSettings SelectSettingsVideoDeviceCapture(
     const VideoDeviceCaptureCapabilities& capabilities,
-    const WebMediaConstraints& constraints,
+    const MediaConstraints& constraints,
     int default_width,
     int default_height,
     double default_frame_rate) {

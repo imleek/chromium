@@ -52,6 +52,7 @@
 #include "third_party/blink/renderer/core/style/shape_clip_path_operation.h"
 #include "third_party/blink/renderer/core/style_property_shorthand.h"
 #include "third_party/blink/renderer/platform/geometry/length.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
@@ -798,11 +799,11 @@ const CSSValue* BorderImageOutset::CSSValueFromComputedStyleInternal(
 }
 
 const CSSValue* BorderImageOutset::InitialValue() const {
-  DEFINE_STATIC_LOCAL(
-      const Persistent<CSSQuadValue>, value,
-      (CSSQuadValue::Create(CSSNumericLiteralValue::Create(
-                                0, CSSPrimitiveValue::UnitType::kInteger),
-                            CSSQuadValue::kSerializeAsQuad)));
+  DEFINE_STATIC_LOCAL(const Persistent<CSSQuadValue>, value,
+                      (MakeGarbageCollected<CSSQuadValue>(
+                          CSSNumericLiteralValue::Create(
+                              0, CSSPrimitiveValue::UnitType::kInteger),
+                          CSSQuadValue::kSerializeAsQuad)));
   return value;
 }
 
@@ -847,7 +848,7 @@ const CSSValue* BorderImageSlice::InitialValue() const {
   DEFINE_STATIC_LOCAL(
       const Persistent<cssvalue::CSSBorderImageSliceValue>, value,
       (MakeGarbageCollected<cssvalue::CSSBorderImageSliceValue>(
-          CSSQuadValue::Create(
+          MakeGarbageCollected<CSSQuadValue>(
               CSSNumericLiteralValue::Create(
                   100, CSSPrimitiveValue::UnitType::kPercentage),
               CSSQuadValue::kSerializeAsQuad),
@@ -903,11 +904,11 @@ const CSSValue* BorderImageWidth::CSSValueFromComputedStyleInternal(
 }
 
 const CSSValue* BorderImageWidth::InitialValue() const {
-  DEFINE_STATIC_LOCAL(
-      const Persistent<CSSQuadValue>, value,
-      (CSSQuadValue::Create(CSSNumericLiteralValue::Create(
-                                1, CSSPrimitiveValue::UnitType::kInteger),
-                            CSSQuadValue::kSerializeAsQuad)));
+  DEFINE_STATIC_LOCAL(const Persistent<CSSQuadValue>, value,
+                      (MakeGarbageCollected<CSSQuadValue>(
+                          CSSNumericLiteralValue::Create(
+                              1, CSSPrimitiveValue::UnitType::kInteger),
+                          CSSQuadValue::kSerializeAsQuad)));
   return value;
 }
 
@@ -1361,8 +1362,8 @@ const CSSValue* ClipPath::CSSValueFromComputedStyleInternal(
           style, To<ShapeClipPathOperation>(operation)->GetBasicShape());
     }
     if (operation->GetType() == ClipPathOperation::REFERENCE) {
-      return cssvalue::CSSURIValue::Create(
-          To<ReferenceClipPathOperation>(operation)->Url());
+      AtomicString url = To<ReferenceClipPathOperation>(operation)->Url();
+      return MakeGarbageCollected<cssvalue::CSSURIValue>(url);
     }
   }
   return CSSIdentifierValue::Create(CSSValueID::kNone);
@@ -1487,11 +1488,11 @@ const CSSValue* ColorScheme::ParseSingleValue(
   CSSValueList* values = CSSValueList::CreateSpaceSeparated();
   do {
     CSSValueID id = range.Peek().Id();
-    // 'normal' is handled above, and 'none' is reserved for future use.
+    // 'normal' is handled above, and 'default' is reserved for future use.
     // 'revert' is not yet implemented as a keyword, but still skip it for
     // compat and interop.
-    if (id == CSSValueID::kNormal || id == CSSValueID::kNone ||
-        id == CSSValueID::kRevert || id == CSSValueID::kDefault) {
+    if (id == CSSValueID::kNormal || id == CSSValueID::kRevert ||
+        id == CSSValueID::kDefault) {
       return nullptr;
     }
     if (id == CSSValueID::kOnly) {
@@ -1977,7 +1978,7 @@ void Content::ApplyValue(StyleResolverState& state,
     ContentData* next_content = nullptr;
     if (item->IsImageGeneratorValue() || item->IsImageSetValue() ||
         item->IsImageValue()) {
-      next_content = ContentData::Create(
+      next_content = MakeGarbageCollected<ImageContentData>(
           state.GetStyleImage(CSSPropertyID::kContent, *item));
     } else if (const auto* counter_value =
                    DynamicTo<cssvalue::CSSCounterValue>(item.Get())) {
@@ -1987,7 +1988,8 @@ void Content::ApplyValue(StyleResolverState& state,
           std::make_unique<CounterContent>(
               AtomicString(counter_value->Identifier()), list_style_type,
               AtomicString(counter_value->Separator()));
-      next_content = ContentData::Create(std::move(counter));
+      next_content =
+          MakeGarbageCollected<CounterContentData>(std::move(counter));
     } else if (auto* item_identifier_value =
                    DynamicTo<CSSIdentifierValue>(item.Get())) {
       QuoteType quote_type;
@@ -2008,7 +2010,7 @@ void Content::ApplyValue(StyleResolverState& state,
           quote_type = QuoteType::kNoClose;
           break;
       }
-      next_content = ContentData::Create(quote_type);
+      next_content = MakeGarbageCollected<QuoteContentData>(quote_type);
     } else {
       String string;
       if (const auto* function_value =
@@ -2030,7 +2032,7 @@ void Content::ApplyValue(StyleResolverState& state,
         text_content->SetText(text_content->GetText() + string);
         continue;
       }
-      next_content = ContentData::Create(string);
+      next_content = MakeGarbageCollected<TextContentData>(string);
     }
 
     if (!first_content)
@@ -2044,7 +2046,7 @@ void Content::ApplyValue(StyleResolverState& state,
   // outer list.
   if (outer_list.length() > 1) {
     String string = To<CSSStringValue>(outer_list.Item(1)).Value();
-    ContentData* alt_content = ContentData::CreateAltText(string);
+    auto* alt_content = MakeGarbageCollected<AltTextContentData>(string);
     prev_content->SetNext(alt_content);
   }
   DCHECK(first_content);
@@ -3247,11 +3249,8 @@ const CSSValue* ImageOrientation::ParseSingleValue(
   DCHECK(RuntimeEnabledFeatures::ImageOrientationEnabled());
   if (range.Peek().Id() == CSSValueID::kFromImage)
     return css_property_parser_helpers::ConsumeIdent(range);
-  if (range.Peek().GetType() != kNumberToken) {
-    CSSPrimitiveValue* angle = css_property_parser_helpers::ConsumeAngle(
-        range, &context, base::Optional<WebFeature>());
-    if (angle && angle->GetDoubleValue() == 0)
-      return angle;
+  if (range.Peek().Id() == CSSValueID::kNone) {
+    return css_property_parser_helpers::ConsumeIdent(range);
   }
   return nullptr;
 }
@@ -3263,8 +3262,7 @@ const CSSValue* ImageOrientation::CSSValueFromComputedStyleInternal(
     bool allow_visited_style) const {
   if (style.RespectImageOrientation() == kRespectImageOrientation)
     return CSSIdentifierValue::Create(CSSValueID::kFromImage);
-  return CSSNumericLiteralValue::Create(0,
-                                        CSSPrimitiveValue::UnitType::kDegrees);
+  return CSSIdentifierValue::Create(CSSValueID::kNone);
 }
 
 const CSSValue* ImageRendering::CSSValueFromComputedStyleInternal(
@@ -7129,38 +7127,6 @@ void WebkitLocale::ApplyValue(StyleResolverState& state,
   }
 }
 
-const CSSValue* WebkitMarginAfterCollapse::CSSValueFromComputedStyleInternal(
-    const ComputedStyle& style,
-    const SVGComputedStyle&,
-    const LayoutObject*,
-    bool allow_visited_style) const {
-  return CSSIdentifierValue::Create(style.MarginAfterCollapse());
-}
-
-const CSSValue* WebkitMarginBeforeCollapse::CSSValueFromComputedStyleInternal(
-    const ComputedStyle& style,
-    const SVGComputedStyle&,
-    const LayoutObject*,
-    bool allow_visited_style) const {
-  return CSSIdentifierValue::Create(style.MarginBeforeCollapse());
-}
-
-const CSSValue* WebkitMarginBottomCollapse::CSSValueFromComputedStyleInternal(
-    const ComputedStyle& style,
-    const SVGComputedStyle&,
-    const LayoutObject*,
-    bool allow_visited_style) const {
-  return CSSIdentifierValue::Create(style.MarginAfterCollapse());
-}
-
-const CSSValue* WebkitMarginTopCollapse::CSSValueFromComputedStyleInternal(
-    const ComputedStyle& style,
-    const SVGComputedStyle&,
-    const LayoutObject*,
-    bool allow_visited_style) const {
-  return CSSIdentifierValue::Create(style.MarginBeforeCollapse());
-}
-
 const CSSValue* WebkitMaskBoxImageOutset::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext&,
@@ -7916,12 +7882,12 @@ const CSSValue* WillChange::ParseSingleValue(
     if (range.Peek().GetType() != kIdentToken)
       return nullptr;
     CSSPropertyID unresolved_property =
-        UnresolvedCSSPropertyID(range.Peek().Value());
+        UnresolvedCSSPropertyID(context.GetDocument(), range.Peek().Value());
     if (unresolved_property != CSSPropertyID::kInvalid &&
         unresolved_property != CSSPropertyID::kVariable) {
 #if DCHECK_IS_ON()
       DCHECK(CSSProperty::Get(resolveCSSPropertyID(unresolved_property))
-                 .IsWebExposed());
+                 .IsWebExposed(context.GetDocument()));
 #endif
       // Now "all" is used by both CSSValue and CSSPropertyValue.
       // Need to return nullptr when currentValue is CSSPropertyID::kAll.

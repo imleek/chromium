@@ -25,7 +25,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_DOM_ELEMENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_ELEMENT_H_
 
-#include "third_party/blink/public/platform/pointer_id.h"
+#include "third_party/blink/public/common/input/pointer_id.h"
 #include "third_party/blink/public/platform/web_focus_type.h"
 #include "third_party/blink/renderer/core/animation/animatable.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -96,6 +96,7 @@ enum class CSSPropertyID;
 enum class CSSValueID;
 enum class DisplayLockActivationReason;
 enum class DisplayLockLifecycleTarget;
+enum class DisplayLockContextCreateMethod;
 
 using ScrollOffset = FloatSize;
 
@@ -167,9 +168,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static Element* Create(const QualifiedName&, Document*);
-
-  Element(const QualifiedName& tag_name, Document*, ConstructionType);
+  Element(const QualifiedName& tag_name,
+          Document*,
+          ConstructionType = kCreateElement);
 
   // Animatable implementation.
   Element* GetAnimationTarget() override;
@@ -207,6 +208,14 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void SetFloatingPointAttribute(const QualifiedName& attribute_name,
                                  double value);
 
+  // Returns true if |this| element has attr-associated elements that were set
+  // via the IDL, rather than computed from the content attribute.
+  // See
+  // https://whatpr.org/html/3917/common-dom-interfaces.html#reflecting-content-attributes-in-idl-attributes:element
+  // for more information.
+  // This is only exposed as an implementation detail to AXRelationCache, which
+  // computes aria-owns differently for element reflection.
+  bool HasExplicitlySetAttrAssociatedElements(const QualifiedName& name);
   Element* GetElementAttribute(const QualifiedName& name);
   void SetElementAttribute(const QualifiedName&, Element*);
   HeapVector<Member<Element>> GetElementArrayAttribute(
@@ -612,8 +621,11 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   }
 
   bool IsDefined() const {
-    return !(static_cast<int>(GetCustomElementState()) &
-             static_cast<int>(CustomElementState::kNotDefinedFlag));
+    // An element whose custom element state is "uncustomized" or "custom"
+    // is said to be defined.
+    // https://dom.spec.whatwg.org/#concept-element-defined
+    return GetCustomElementState() == CustomElementState::kUncustomized ||
+           GetCustomElementState() == CustomElementState::kCustom;
   }
   bool IsUpgradedV0CustomElement() {
     return GetV0CustomElementState() == kV0Upgraded;
@@ -931,9 +943,11 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void SetNeedsResizeObserverUpdate();
 
   DisplayLockContext* GetDisplayLockContext() const;
-  DisplayLockContext& EnsureDisplayLockContext();
+  DisplayLockContext& EnsureDisplayLockContext(DisplayLockContextCreateMethod);
 
+  // Display locking IDL implementation
   ScriptPromise updateRendering(ScriptState*);
+  void resetSubtreeRendered();
 
   bool StyleRecalcBlockedByDisplayLock(DisplayLockLifecycleTarget) const;
 
@@ -1213,7 +1227,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   Member<ElementData> element_data_;
 };
 
-DEFINE_NODE_TYPE_CASTS(Element, IsElementNode());
 template <typename T>
 bool IsElementOfType(const Node&);
 template <>
@@ -1234,27 +1247,6 @@ struct DowncastTraits<Element> {
   static bool AllowFrom(const Node& node) { return node.IsElementNode(); }
 };
 
-// Type casting.
-template <typename T>
-inline T& ToElement(Node& node) {
-  SECURITY_DCHECK(IsElementOfType<const T>(node));
-  return static_cast<T&>(node);
-}
-template <typename T>
-inline T* ToElement(Node* node) {
-  SECURITY_DCHECK(!node || IsElementOfType<const T>(*node));
-  return static_cast<T*>(node);
-}
-template <typename T>
-inline const T& ToElement(const Node& node) {
-  SECURITY_DCHECK(IsElementOfType<const T>(node));
-  return static_cast<const T&>(node);
-}
-template <typename T>
-inline const T* ToElement(const Node* node) {
-  SECURITY_DCHECK(!node || IsElementOfType<const T>(*node));
-  return static_cast<const T*>(node);
-}
 
 inline bool IsDisabledFormControl(const Node* node) {
   auto* element = DynamicTo<Element>(node);
@@ -1398,23 +1390,6 @@ inline bool IsAtShadowBoundary(const Element* element) {
   ContainerNode* parent_node = element->parentNode();
   return parent_node && parent_node->IsShadowRoot();
 }
-
-// These macros do the same as their NODE equivalents but additionally provide a
-// template specialization for isElementOfType<>() so that the Traversal<> API
-// works for these Element types.
-#define DEFINE_ELEMENT_TYPE_CASTS(thisType, predicate)            \
-  template <>                                                     \
-  inline bool IsElementOfType<const thisType>(const Node& node) { \
-    return node.predicate;                                        \
-  }                                                               \
-  DEFINE_NODE_TYPE_CASTS(thisType, predicate)
-
-#define DEFINE_ELEMENT_TYPE_CASTS_WITH_FUNCTION(thisType)         \
-  template <>                                                     \
-  inline bool IsElementOfType<const thisType>(const Node& node) { \
-    return Is##thisType(node);                                    \
-  }                                                               \
-  DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(thisType)
 
 }  // namespace blink
 

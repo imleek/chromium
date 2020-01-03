@@ -323,11 +323,13 @@ bool AutomationAXTreeWrapper::OnAccessibilityEvents(
   // Currently language detection only runs once for initial load complete, any
   // content loaded after this will not have language detection performed for
   // it.
+  //
+  // TODO(chrishall): We may want to run this more often for dynamic content.
   for (const auto& targeted_event : event_generator_) {
     if (targeted_event.event_params.event ==
         ui::AXEventGenerator::Event::LOAD_COMPLETE) {
-      tree_.language_detection_manager->DetectLanguageForSubtree(tree_.root());
-      tree_.language_detection_manager->LabelLanguageForSubtree(tree_.root());
+      tree_.language_detection_manager->DetectLanguages(tree_.root());
+      tree_.language_detection_manager->LabelLanguages(tree_.root());
       break;
     }
   }
@@ -427,6 +429,27 @@ ui::AXNode* AutomationAXTreeWrapper::GetUnignoredNodeFromId(int32_t id) {
   return (node && !node->IsIgnored()) ? node : nullptr;
 }
 
+void AutomationAXTreeWrapper::EventListenerAdded(ax::mojom::Event event_type,
+                                                 ui::AXNode* node) {
+  node_id_to_events_[node->id()].insert(event_type);
+}
+
+void AutomationAXTreeWrapper::EventListenerRemoved(ax::mojom::Event event_type,
+                                                   ui::AXNode* node) {
+  auto it = node_id_to_events_.find(node->id());
+  if (it != node_id_to_events_.end())
+    it->second.erase(event_type);
+}
+
+bool AutomationAXTreeWrapper::HasEventListener(ax::mojom::Event event_type,
+                                               ui::AXNode* node) {
+  auto it = node_id_to_events_.find(node->id());
+  if (it == node_id_to_events_.end())
+    return false;
+
+  return it->second.count(event_type);
+}
+
 // static
 std::map<ui::AXTreeID, AutomationAXTreeWrapper*>&
 AutomationAXTreeWrapper::GetChildTreeIDReverseMap() {
@@ -449,6 +472,7 @@ void AutomationAXTreeWrapper::OnNodeWillBeDeleted(ui::AXTree* tree,
   did_send_tree_change_during_unserialization_ |= owner_->SendTreeChangeEvent(
       api::automation::TREE_CHANGE_TYPE_NODEREMOVED, tree, node);
   deleted_node_ids_.push_back(node->id());
+  node_id_to_events_.erase(node->id());
 }
 
 void AutomationAXTreeWrapper::OnAtomicUpdateFinished(
@@ -501,8 +525,6 @@ bool AutomationAXTreeWrapper::IsEventTypeHandledByAXEventGenerator(
     case api::automation::EVENT_TYPE_DOCUMENTTITLECHANGED:
     case api::automation::EVENT_TYPE_EXPANDEDCHANGED:
     case api::automation::EVENT_TYPE_INVALIDSTATUSCHANGED:
-    case api::automation::EVENT_TYPE_LIVEREGIONCHANGED:
-    case api::automation::EVENT_TYPE_LIVEREGIONCREATED:
     case api::automation::EVENT_TYPE_LOADCOMPLETE:
     case api::automation::EVENT_TYPE_LOADSTART:
     case api::automation::EVENT_TYPE_ROWCOLLAPSED:
@@ -557,6 +579,8 @@ bool AutomationAXTreeWrapper::IsEventTypeHandledByAXEventGenerator(
     case api::automation::EVENT_TYPE_CONTROLSCHANGED:
     case api::automation::EVENT_TYPE_FOCUS:
     case api::automation::EVENT_TYPE_IMAGEFRAMEUPDATED:
+    case api::automation::EVENT_TYPE_LIVEREGIONCHANGED:
+    case api::automation::EVENT_TYPE_LIVEREGIONCREATED:
     case api::automation::EVENT_TYPE_LOCATIONCHANGED:
     case api::automation::EVENT_TYPE_MENUEND:
     case api::automation::EVENT_TYPE_MENULISTITEMSELECTED:

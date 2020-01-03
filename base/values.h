@@ -33,6 +33,7 @@
 
 #include "base/base_export.h"
 #include "base/containers/checked_iterators.h"
+#include "base/containers/checked_range.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/macros.h"
@@ -84,6 +85,10 @@ class BASE_EXPORT Value {
   using BlobStorage = std::vector<uint8_t>;
   using DictStorage = flat_map<std::string, std::unique_ptr<Value>>;
   using ListStorage = std::vector<Value>;
+
+  using ListView = CheckedContiguousRange<ListStorage>;
+  using ConstListView = CheckedContiguousConstRange<ListStorage>;
+
   // See technical note below explaining why this is used.
   using DoubleStorage = struct { alignas(4) char v[sizeof(double)]; };
 
@@ -179,7 +184,7 @@ class BASE_EXPORT Value {
   const BlobStorage& GetBlob() const;
 
   ListStorage& GetList();
-  span<const Value> GetList() const;
+  ConstListView GetList() const;
 
   // Transfers ownership of the the underlying list to the caller. Subsequent
   // calls to GetList() will return an empty list.
@@ -230,6 +235,10 @@ class BASE_EXPORT Value {
     base::EraseIf(list_, pred);
     return old_size - list_.size();
   }
+
+  // Erases all Values from the list.
+  // Note: This CHECKs that type() is Type::LIST.
+  void ClearList();
 
   // |FindKey| looks up |key| in the underlying dictionary. If found, it returns
   // a pointer to the element. Otherwise it returns nullptr.
@@ -780,7 +789,7 @@ class BASE_EXPORT ListValue : public Value {
   explicit ListValue(ListStorage&& in_list) noexcept;
 
   // Clears the contents of this ListValue
-  // DEPRECATED, use GetList()::clear() instead.
+  // DEPRECATED, use ClearList() instead.
   void Clear();
 
   // Returns the number of Values in this list.

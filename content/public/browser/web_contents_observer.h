@@ -22,7 +22,8 @@
 #include "ipc/ipc_listener.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/service_manager/public/cpp/bind_source_info.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -442,11 +443,17 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   virtual void UserAgentOverrideSet(const std::string& user_agent) {}
 
   // Invoked when new FaviconURL candidates are received from the renderer
-  // process.
+  // process. If the instance is created after the page is loaded, it is
+  // recommended to call WebContents::GetFaviconURLs() to get the current list
+  // as this callback will not be executed unless there is an update.
   virtual void DidUpdateFaviconURL(const std::vector<FaviconURL>& candidates) {}
 
   // Called when an audio change occurs.
   virtual void OnAudioStateChanged(bool audible) {}
+
+  // Called when the connected to Bluetooth device state changes.
+  virtual void OnIsConnectedToBluetoothDeviceChanged(
+      bool is_connected_to_bluetooth_device) {}
 
   // Invoked when the WebContents is muted/unmuted.
   virtual void DidUpdateAudioMutingState(bool muted) {}
@@ -503,6 +510,14 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
 
   // Invoked when theme color is changed to |theme_color|.
   virtual void DidChangeThemeColor(base::Optional<SkColor> theme_color) {}
+
+  // Called when a message is added to the console of the WebContents. This is
+  // invoked before forwarding the message to the WebContents' delegate.
+  virtual void OnDidAddMessageToConsole(
+      blink::mojom::ConsoleMessageLevel log_level,
+      const base::string16& message,
+      int32_t line_no,
+      const base::string16& source_id) {}
 
   // Invoked when media is playing or paused.  |id| is unique per player and per
   // RenderFrameHost.  There may be multiple players within a RenderFrameHost

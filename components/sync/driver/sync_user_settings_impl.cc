@@ -6,7 +6,12 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "components/sync/base/sync_prefs.h"
+#include "components/sync/base/user_selectable_type.h"
 #include "components/sync/driver/sync_service_crypto.h"
+
+#if defined(OS_CHROMEOS)
+#include "chromeos/constants/chromeos_features.h"
+#endif
 
 namespace syncer {
 
@@ -89,7 +94,6 @@ bool SyncUserSettingsImpl::IsSyncEverythingEnabled() const {
 
 UserSelectableTypeSet SyncUserSettingsImpl::GetSelectedTypes() const {
   UserSelectableTypeSet types = prefs_->GetSelectedTypes();
-  types.PutAll(GetForcedTypes());
   types.RetainAll(GetRegisteredSelectableTypes());
   return types;
 }
@@ -97,7 +101,9 @@ UserSelectableTypeSet SyncUserSettingsImpl::GetSelectedTypes() const {
 void SyncUserSettingsImpl::SetSelectedTypes(bool sync_everything,
                                             UserSelectableTypeSet types) {
   UserSelectableTypeSet registered_types = GetRegisteredSelectableTypes();
-  DCHECK(registered_types.HasAll(types));
+  DCHECK(registered_types.HasAll(types))
+      << "\n registered: " << UserSelectableTypeSetToString(registered_types)
+      << "\n setting to: " << UserSelectableTypeSetToString(types);
   prefs_->SetSelectedTypes(sync_everything, registered_types, types);
 }
 
@@ -115,10 +121,12 @@ UserSelectableTypeSet SyncUserSettingsImpl::GetRegisteredSelectableTypes()
 
 #if defined(OS_CHROMEOS)
 bool SyncUserSettingsImpl::IsSyncAllOsTypesEnabled() const {
+  DCHECK(chromeos::features::IsSplitSettingsSyncEnabled());
   return prefs_->IsSyncAllOsTypesEnabled();
 }
 
 UserSelectableOsTypeSet SyncUserSettingsImpl::GetSelectedOsTypes() const {
+  DCHECK(chromeos::features::IsSplitSettingsSyncEnabled());
   UserSelectableOsTypeSet types = prefs_->GetSelectedOsTypes();
   types.RetainAll(GetRegisteredSelectableOsTypes());
   return types;
@@ -126,6 +134,7 @@ UserSelectableOsTypeSet SyncUserSettingsImpl::GetSelectedOsTypes() const {
 
 void SyncUserSettingsImpl::SetSelectedOsTypes(bool sync_all_os_types,
                                               UserSelectableOsTypeSet types) {
+  DCHECK(chromeos::features::IsSplitSettingsSyncEnabled());
   UserSelectableOsTypeSet registered_types = GetRegisteredSelectableOsTypes();
   DCHECK(registered_types.HasAll(types));
   prefs_->SetSelectedOsTypes(sync_all_os_types, registered_types, types);
@@ -133,6 +142,7 @@ void SyncUserSettingsImpl::SetSelectedOsTypes(bool sync_all_os_types,
 
 UserSelectableOsTypeSet SyncUserSettingsImpl::GetRegisteredSelectableOsTypes()
     const {
+  DCHECK(chromeos::features::IsSplitSettingsSyncEnabled());
   UserSelectableOsTypeSet registered_types;
   for (UserSelectableOsType type : UserSelectableOsTypeSet::All()) {
     if (registered_model_types_.Has(
@@ -143,21 +153,16 @@ UserSelectableOsTypeSet SyncUserSettingsImpl::GetRegisteredSelectableOsTypes()
   return registered_types;
 }
 
-bool SyncUserSettingsImpl::GetOsSyncFeatureEnabled() const {
-  return prefs_->GetOsSyncFeatureEnabled();
+bool SyncUserSettingsImpl::IsOsSyncFeatureEnabled() const {
+  DCHECK(chromeos::features::IsSplitSettingsSyncEnabled());
+  return prefs_->IsOsSyncFeatureEnabled();
 }
 
 void SyncUserSettingsImpl::SetOsSyncFeatureEnabled(bool enabled) {
+  DCHECK(chromeos::features::IsSplitSettingsSyncEnabled());
   prefs_->SetOsSyncFeatureEnabled(enabled);
 }
 #endif  // defined(OS_CHROMEOS)
-
-UserSelectableTypeSet SyncUserSettingsImpl::GetForcedTypes() const {
-  if (preference_provider_) {
-    return preference_provider_->GetForcedTypes();
-  }
-  return UserSelectableTypeSet();
-}
 
 bool SyncUserSettingsImpl::IsEncryptEverythingAllowed() const {
   return !preference_provider_ ||
@@ -219,40 +224,18 @@ bool SyncUserSettingsImpl::SetDecryptionPassphrase(
   return result;
 }
 
-void SyncUserSettingsImpl::AddTrustedVaultDecryptionKeys(
-    const std::string& gaia_id,
-    const std::vector<std::string>& keys) {
-  DVLOG(1) << "Adding trusted vault decryption keys.";
-  crypto_->AddTrustedVaultDecryptionKeys(gaia_id, keys);
-}
-
 void SyncUserSettingsImpl::SetSyncRequestedIfNotSetExplicitly() {
   prefs_->SetSyncRequestedIfNotSetExplicitly();
 }
 
 ModelTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
-  ModelTypeSet types;
+  ModelTypeSet types = ResolvePreferredTypes(GetSelectedTypes());
+  types.PutAll(AlwaysPreferredUserTypes());
 #if defined(OS_CHROMEOS)
-  bool sync_everything = IsSyncAllOsTypesEnabled() && IsSyncEverythingEnabled();
-#else
-  bool sync_everything = IsSyncEverythingEnabled();
-#endif
-  if (sync_everything) {
-    // TODO(crbug.com/950874): it's possible to remove this case if we accept
-    // behavioral change. When one of UserSelectableTypes() isn't registered,
-    // but one of its corresponding UserTypes() is registered, current
-    // implementation treats that corresponding type as preferred while
-    // implementation without processing of this case won't treat that type
-    // as preferred.
-    types = registered_model_types_;
-  } else {
-    types = ResolvePreferredTypes(GetSelectedTypes());
-    types.PutAll(AlwaysPreferredUserTypes());
-#if defined(OS_CHROMEOS)
+  if (chromeos::features::IsSplitSettingsSyncEnabled())
     types.PutAll(ResolvePreferredOsTypes(GetSelectedOsTypes()));
 #endif
-    types.RetainAll(registered_model_types_);
-  }
+  types.RetainAll(registered_model_types_);
 
   static_assert(40 == ModelType::NUM_ENTRIES,
                 "If adding a new sync data type, update the list below below if"

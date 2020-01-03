@@ -43,6 +43,7 @@
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/sync_file_system/mock_remote_file_sync_service.h"
 #include "chrome/browser/sync_file_system/sync_file_system_service_factory.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
@@ -57,7 +58,7 @@
 #include "chromeos/components/drivefs/fake_drivefs.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
-#include "chromeos/dbus/concierge/service.pb.h"
+#include "chromeos/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_cros_disks_client.h"
 #include "components/arc/arc_features.h"
@@ -639,6 +640,22 @@ struct GetUserActionCountMessage {
   }
 
   std::string user_action_name;
+};
+
+struct GetLocalPathMessage {
+  static bool ConvertJSONValue(const base::DictionaryValue& value,
+                               GetLocalPathMessage* message) {
+    base::JSONValueConverter<GetLocalPathMessage> converter;
+    return converter.Convert(value, message);
+  }
+
+  static void RegisterJSONConverter(
+      base::JSONValueConverter<GetLocalPathMessage>* converter) {
+    converter->RegisterStringField("localPath",
+                                   &GetLocalPathMessage::local_path);
+  }
+
+  std::string local_path;
 };
 
 }  // anonymous namespace
@@ -1327,10 +1344,6 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
     enabled_features.emplace_back(chromeos::features::kFilesNG);
   }
 
-  if (!IsNativeSmbTest()) {
-    disabled_features.emplace_back(features::kNativeSmb);
-  }
-
   if (IsArcTest()) {
     arc::SetArcAvailableCommandLineForTesting(command_line);
   }
@@ -1468,9 +1481,11 @@ void FileManagerBrowserTestBase::SetUpOnMainThread() {
     }
 
     if (!IsIncognitoModeTest()) {
-      file_tasks_observer_ =
-          std::make_unique<testing::StrictMock<MockFileTasksObserver>>(
-              profile());
+      if (GetStartWithFileTasksObserver()) {
+        file_tasks_observer_ =
+            std::make_unique<testing::StrictMock<MockFileTasksObserver>>(
+                profile());
+      }
     } else {
       EXPECT_FALSE(file_tasks::FileTasksNotifier::GetForProfile(profile()));
     }
@@ -1544,6 +1559,10 @@ bool FileManagerBrowserTestBase::GetStartWithNoVolumesMounted() const {
   return false;
 }
 
+bool FileManagerBrowserTestBase::GetStartWithFileTasksObserver() const {
+  return true;
+}
+
 void FileManagerBrowserTestBase::StartTest() {
   LOG(INFO) << "FileManagerBrowserTest::StartTest " << GetFullTestCaseName();
   static const base::FilePath test_extension_dir =
@@ -1615,6 +1634,33 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
       ASSERT_EQ(NOT_IN_GUEST_MODE, GetGuestMode());
       *output = "false";
     }
+
+    return;
+  }
+
+  if (name == "launchAppOnLocalFolder") {
+    GetLocalPathMessage message;
+    ASSERT_TRUE(GetLocalPathMessage::ConvertJSONValue(value, &message));
+
+    base::FilePath folder_path =
+        file_manager::util::GetMyFilesFolderForProfile(profile());
+    folder_path = folder_path.AppendASCII(message.local_path);
+
+    platform_util::OpenItem(profile(), folder_path, platform_util::OPEN_FOLDER,
+                            platform_util::OpenOperationCallback());
+
+    return;
+  }
+
+  if (name == "launchAppOnDrive") {
+    auto* integration_service =
+        drive::DriveIntegrationServiceFactory::FindForProfile(profile());
+    ASSERT_TRUE(integration_service && integration_service->is_enabled());
+    base::FilePath mount_path =
+        integration_service->GetMountPointPath().AppendASCII("root");
+
+    platform_util::OpenItem(profile(), mount_path, platform_util::OPEN_FOLDER,
+                            platform_util::OpenOperationCallback());
 
     return;
   }
@@ -2194,6 +2240,15 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
         base::Value(user_actions_.GetActionCount(message.user_action_name)),
         output);
 
+    return;
+  }
+
+  if (name == "blockMounts") {
+    chromeos::DBusThreadManager* dbus_thread_manager =
+        chromeos::DBusThreadManager::Get();
+    static_cast<chromeos::FakeCrosDisksClient*>(
+        dbus_thread_manager->GetCrosDisksClient())
+        ->BlockMount();
     return;
   }
 

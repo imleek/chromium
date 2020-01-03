@@ -19,7 +19,7 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/safe_conversions.h"
-#include "media/capture/video/chromeos/local_gpu_memory_buffer_manager.h"
+#include "media/gpu/test/local_gpu_memory_buffer_manager.h"
 #include "media/gpu/vaapi/test_utils.h"
 #include "media/gpu/vaapi/vaapi_image_decoder.h"
 #include "media/gpu/vaapi/vaapi_image_decoder_test_common.h"
@@ -209,7 +209,7 @@ TEST_P(VaapiWebPDecoderTest, DecodeAndExportAsNativePixmapDmaBuf) {
 // TODO(crbug.com/986073): expand test coverage. See
 // vaapi_jpeg_decoder_unittest.cc as reference:
 // cs.chromium.org/chromium/src/media/gpu/vaapi/vaapi_jpeg_decoder_unittest.cc
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          VaapiWebPDecoderTest,
                          testing::ValuesIn(kTestCases),
                          vaapi_test_utils::TestParamToString);

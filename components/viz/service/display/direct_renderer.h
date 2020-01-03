@@ -15,8 +15,8 @@
 #include "build/build_config.h"
 #include "components/viz/common/quads/tile_draw_quad.h"
 #include "components/viz/service/display/display_resource_provider.h"
-#include "components/viz/service/display/overlay_candidate_list.h"
-#include "components/viz/service/display/overlay_processor.h"
+#include "components/viz/service/display/overlay_candidate.h"
+#include "components/viz/service/display/overlay_processor_interface.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
 #include "ui/gfx/geometry/quad_f.h"
@@ -68,7 +68,20 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
       float sdr_white_level = gfx::ColorSpace::kDefaultSDRWhiteLevel);
 
   // Public interface implemented by subclasses.
-  virtual void SwapBuffers(std::vector<ui::LatencyInfo> latency_info) = 0;
+  struct SwapFrameData {
+    SwapFrameData();
+    ~SwapFrameData();
+
+    SwapFrameData& operator=(SwapFrameData&&);
+    SwapFrameData(SwapFrameData&&);
+
+    SwapFrameData(const SwapFrameData&) = delete;
+    SwapFrameData& operator=(const SwapFrameData&) = delete;
+
+    std::vector<ui::LatencyInfo> latency_info;
+    bool top_controls_visible_height_changed = false;
+  };
+  virtual void SwapBuffers(SwapFrameData swap_frame_data) = 0;
   virtual void SwapBuffersSkipped() {}
   virtual void SwapBuffersComplete() {}
   virtual void DidReceiveTextureInUseResponses(
@@ -91,11 +104,11 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
     gfx::Transform projection_matrix;
     gfx::Transform window_matrix;
 
-    OverlayProcessor::CandidateList overlay_list;
+    OverlayProcessorInterface::CandidateList overlay_list;
     // When we have a buffer queue, the output surface could be treated as an
     // overlay plane, and the struct to store that information is in
     // |output_surface_plane|.
-    base::Optional<OverlayProcessor::OutputSurfaceOverlayPlane>
+    base::Optional<OverlayProcessorInterface::OutputSurfaceOverlayPlane>
         output_surface_plane;
   };
 
@@ -109,7 +122,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   }
 
   bool has_overlay_validator() const {
-    return !!overlay_processor_->GetOverlayCandidateValidator();
+    return overlay_processor_->IsOverlaySupported();
   }
   bool OverlayNeedsSurfaceOccludingDamageRect() const;
 
@@ -232,7 +245,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   OutputSurface* const output_surface_;
   DisplayResourceProvider* const resource_provider_;
   // This can be replaced by test implementations.
-  std::unique_ptr<OverlayProcessor> overlay_processor_;
+  std::unique_ptr<OverlayProcessorInterface> overlay_processor_;
 
   // Whether it's valid to SwapBuffers with an empty rect. Trivially true when
   // using partial swap.

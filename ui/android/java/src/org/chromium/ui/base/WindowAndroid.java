@@ -25,6 +25,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityManager;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ActivityState;
@@ -45,6 +46,7 @@ import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.VSyncMonitor;
 import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.display.DisplayAndroid.DisplayAndroidObserver;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.touchless.CursorObserver;
 import org.chromium.ui.touchless.TouchlessEventHandler;
 import org.chromium.ui.widget.Toast;
@@ -220,15 +222,6 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
                     }
                 }
             };
-
-    /**
-     * @return true if onVSync handler is executing.
-     *
-     * @see org.chromium.ui.VSyncMonitor#isInsideVSync()
-     */
-    public boolean isInsideVSync() {
-        return mVSyncMonitor.isInsideVSync();
-    }
 
     /**
      * @return The time interval between two consecutive vsync pulses in milliseconds.
@@ -672,6 +665,14 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
      */
     public boolean canResolveActivity(Intent intent) {
         return !PackageManagerUtils.queryIntentActivities(intent, 0).isEmpty();
+    }
+
+    /**
+     * Returns the ModalDialogManager to be used with this window.
+     * @return a {@link ModalDialogManager} for this window, or null if there is none.
+     */
+    public @Nullable ModalDialogManager getModalDialogManager() {
+        return null;
     }
 
     /**

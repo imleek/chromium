@@ -580,7 +580,8 @@ void HttpNetworkTransaction::OnStreamFailed(
     int result,
     const NetErrorDetails& net_error_details,
     const SSLConfig& used_ssl_config,
-    const ProxyInfo& used_proxy_info) {
+    const ProxyInfo& used_proxy_info,
+    ResolveErrorInfo resolve_error_info) {
   DCHECK_EQ(STATE_CREATE_STREAM_COMPLETE, next_state_);
   DCHECK_NE(OK, result);
   DCHECK(stream_request_.get());
@@ -589,6 +590,7 @@ void HttpNetworkTransaction::OnStreamFailed(
   net_error_details_ = net_error_details;
   proxy_info_ = used_proxy_info;
   SetProxyInfoInReponse(used_proxy_info, &response_);
+  response_.resolve_error_info = resolve_error_info;
 
   OnIOComplete(result);
 }
@@ -1393,11 +1395,8 @@ void HttpNetworkTransaction::GenerateNetworkErrorLoggingReport(int rv) {
 
   NetworkErrorLoggingService* service =
       session_->network_error_logging_service();
-  if (!service) {
-    NetworkErrorLoggingService::
-        RecordRequestDiscardedForNoNetworkErrorLoggingService();
+  if (!service)
     return;
-  }
 
   // Don't report on proxy auth challenges.
   if (response_.headers && response_.headers->response_code() ==
@@ -1411,10 +1410,8 @@ void HttpNetworkTransaction::GenerateNetworkErrorLoggingReport(int rv) {
     return;
 
   // Ignore errors from non-HTTPS origins.
-  if (!url_.SchemeIsCryptographic()) {
-    NetworkErrorLoggingService::RecordRequestDiscardedForInsecureOrigin();
+  if (!url_.SchemeIsCryptographic())
     return;
-  }
 
   NetworkErrorLoggingService::RequestDetails details;
 
@@ -1589,8 +1586,9 @@ int HttpNetworkTransaction::HandleIOError(int error) {
         retry_attempts_++;
         ResetConnectionAndRequestForResend();
         error = OK;
-      } else if (session_->params()
-                     .quic_params.retry_without_alt_svc_on_quic_errors) {
+      } else if (session_->context()
+                     .quic_context->params()
+                     ->retry_without_alt_svc_on_quic_errors) {
         // Disable alternative services for this request and retry it. If the
         // retry succeeds, then the alternative service will be marked as
         // broken then.

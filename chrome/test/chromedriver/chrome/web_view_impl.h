@@ -11,6 +11,7 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/containers/flat_map.h"
 #include "chrome/test/chromedriver/chrome/web_view.h"
 
 namespace base {
@@ -40,6 +41,7 @@ class WebViewImpl : public WebView {
  public:
   WebViewImpl(const std::string& id,
               const bool w3c_compliant,
+              const WebViewImpl* parent,
               const BrowserInfo* browser_info,
               std::unique_ptr<DevToolsClient> client,
               const DeviceMetrics* device_metrics,
@@ -125,6 +127,7 @@ class WebViewImpl : public WebView {
                    const std::string& value,
                    const std::string& domain,
                    const std::string& path,
+                   const std::string& sameSite,
                    bool secure,
                    bool httpOnly,
                    double expiry) override;
@@ -133,7 +136,7 @@ class WebViewImpl : public WebView {
                                    bool stop_load_on_timeout) override;
   Status IsPendingNavigation(const std::string& frame_id,
                              const Timeout* timeout,
-                             bool* is_pending) override;
+                             bool* is_pending) const override;
   JavaScriptDialogManager* GetJavaScriptDialogManager() override;
   Status OverrideGeolocation(const Geoposition& geoposition) override;
   Status OverrideNetworkConditions(
@@ -158,11 +161,12 @@ class WebViewImpl : public WebView {
                                  int y,
                                  int xoffset,
                                  int yoffset) override;
-  bool IsNonBlocking() override;
+  bool IsNonBlocking() const override;
   bool IsOOPIF(const std::string& frame_id) override;
   FrameTracker* GetFrameTracker() const override;
   std::unique_ptr<base::Value> GetCastSinks() override;
   std::unique_ptr<base::Value> GetCastIssueMessage() override;
+  void ClearNavigationState(const std::string& new_frame_id) override;
 
   const WebViewImpl* GetParent() const;
   bool Lock();

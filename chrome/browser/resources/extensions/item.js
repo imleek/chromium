@@ -19,7 +19,7 @@ import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classe
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
 
-import {getInstance} from 'chrome://resources/cr_elements/cr_toast/cr_toast_manager.m.js';
+import {getToastManager} from 'chrome://resources/cr_elements/cr_toast/cr_toast_manager.m.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
@@ -206,7 +206,7 @@ Polymer({
 
   /** @private */
   onEnableChange_: function() {
-    this.delegate.setItemEnabled(this.data.id, this.$['enable-toggle'].checked);
+    this.delegate.setItemEnabled(this.data.id, this.$.enableToggle.checked);
   },
 
   /** @private */
@@ -246,16 +246,16 @@ Polymer({
 
     this.isReloading_ = true;
 
-    const toastManager = getInstance();
+    const toastManager = getToastManager();
     // Keep the toast open indefinitely.
     toastManager.duration = 0;
-    toastManager.show(this.i18n('itemReloading'), false);
+    toastManager.show(this.i18n('itemReloading'));
     this.delegate.reloadItem(this.data.id)
         .then(
             () => {
               toastManager.hide();
               toastManager.duration = 3000;
-              toastManager.show(this.i18n('itemReloaded'), false);
+              toastManager.show(this.i18n('itemReloaded'));
               this.isReloading_ = false;
             },
             loadError => {
@@ -309,7 +309,8 @@ Polymer({
    * @private
    */
   isTerminated_: function() {
-    return this.data.state == chrome.developerPrivate.ExtensionState.TERMINATED;
+    return this.data.state ===
+        chrome.developerPrivate.ExtensionState.TERMINATED;
   },
 
   /**
@@ -355,8 +356,8 @@ Polymer({
     }
 
     const sourceType = getItemSource(this.data);
-    return sourceType == SourceType.WEBSTORE ? '' :
-                                               getItemSourceString(sourceType);
+    return sourceType === SourceType.WEBSTORE ? '' :
+                                                getItemSourceString(sourceType);
   },
 
   /**
@@ -364,7 +365,7 @@ Polymer({
    * @private
    */
   computeInspectViewsHidden_: function() {
-    return !this.data.views || this.data.views.length == 0;
+    return !this.data.views || this.data.views.length === 0;
   },
 
   /**
@@ -408,8 +409,8 @@ Polymer({
     // enabled. There's no point in reloading a disabled extension, and we'll
     // show a crashed reload button if it's terminated.
     const showIcon =
-        this.data.location == chrome.developerPrivate.Location.UNPACKED &&
-        this.data.state == chrome.developerPrivate.ExtensionState.ENABLED;
+        this.data.location === chrome.developerPrivate.Location.UNPACKED &&
+        this.data.state === chrome.developerPrivate.ExtensionState.ENABLED;
     return !showIcon;
   },
 

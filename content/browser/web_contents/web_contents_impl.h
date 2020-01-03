@@ -50,9 +50,8 @@
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/browser/web_contents_binding_set.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/page_importance_signals.h"
+#include "content/public/browser/web_contents_receiver_set.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/three_d_api_types.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -265,19 +264,19 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
 
 #endif  // !defined(OS_ANDROID)
 
-  // Adds a new binding set to the WebContents. Returns a closure which may be
-  // used to remove the binding set at any time. The closure is safe to call
+  // Adds a new receiver set to the WebContents. Returns a closure which may be
+  // used to remove the receiver set at any time. The closure is safe to call
   // even after WebContents destruction.
   //
-  // |binding_set| is not owned and must either outlive this WebContents or be
+  // |receiver_set| is not owned and must either outlive this WebContents or be
   // explicitly removed before being destroyed.
-  base::Closure AddBindingSet(const std::string& interface_name,
-                              WebContentsBindingSet* binding_set);
+  base::OnceClosure AddReceiverSet(const std::string& interface_name,
+                                   WebContentsReceiverSet* receiver_set);
 
-  // Accesses a WebContentsBindingSet for a specific interface on this
+  // Accesses a WebContentsReceiverSet for a specific interface on this
   // WebContents. Returns null of there is no registered binder for the
   // interface.
-  WebContentsBindingSet* GetBindingSet(const std::string& interface_name);
+  WebContentsReceiverSet* GetReceiverSet(const std::string& interface_name);
 
   // Returns the focused WebContents.
   // If there are multiple inner/outer WebContents (when embedding <webview>,
@@ -332,7 +331,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void EnableWebContentsOnlyAccessibilityMode() override;
   bool IsWebContentsOnlyAccessibilityModeForTesting() override;
   bool IsFullAccessibilityModeForTesting() override;
-  const PageImportanceSignals& GetPageImportanceSignals() override;
   const base::string16& GetTitle() override;
   void UpdateTitleForEntry(NavigationEntry* entry,
                            const base::string16& title) override;
@@ -383,6 +381,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void AttachInnerWebContents(std::unique_ptr<WebContents> inner_web_contents,
                               RenderFrameHost* render_frame_host,
                               bool is_full_page) override;
+  bool IsInnerWebContentsForGuest() override;
   RenderFrameHostImpl* GetOuterWebContentsFrame() override;
   WebContentsImpl* GetOuterWebContents() override;
   WebContentsImpl* GetOutermostWebContents() override;
@@ -494,6 +493,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   base::UnguessableToken GetAudioGroupId() override;
   bool CompletedFirstVisuallyNonEmptyPaint() override;
   ukm::SourceId GetLastCommittedSourceId() override;
+  std::vector<FaviconURL> GetFaviconURLs() override;
 
 #if defined(OS_ANDROID)
   base::android::ScopedJavaLocalRef<jobject> GetJavaWebContents() override;
@@ -782,7 +782,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
                              const gfx::Size& new_size) override;
   gfx::Size GetAutoResizeSize() override;
   void ResetAutoResizeSize() override;
-  InputEventShim* GetInputEventShim() const override;
   RenderFrameHostImpl* GetFocusedFrameFromFocusedDelegate() override;
   void OnVerticalScrollDirectionChanged(
       viz::VerticalScrollDirection scroll_direction) override;
@@ -1003,6 +1002,11 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void IncrementBluetoothConnectedDeviceCount();
   void DecrementBluetoothConnectedDeviceCount();
 
+  // Notifies the delegate and observers when the connected to Bluetooth device
+  // state changes.
+  void OnIsConnectedToBluetoothDeviceChanged(
+      bool is_connected_to_bluetooth_device);
+
   // Modify the counter of frames in this WebContents actively using serial
   // ports.
   void IncrementSerialActiveFrameCount();
@@ -1105,6 +1109,10 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void set_portal(Portal* portal) { portal_ = portal; }
   Portal* portal() const { return portal_; }
 
+  // Sends a page message to notify every process in the frame tree if the
+  // web contents is a portal web contents.
+  void NotifyInsidePortal(bool inside_portal);
+
   // Notifies observers that AppCache was accessed. Public so AppCache code can
   // call this directly.
   void OnAppCacheAccessed(const GURL& manifest_url, bool blocked_by_policy);
@@ -1141,6 +1149,9 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   FRIEND_TEST_ALL_PREFIXES(WebContentsImplTest,
                            ResetJavaScriptDialogOnUserNavigate);
   FRIEND_TEST_ALL_PREFIXES(WebContentsImplTest, ParseDownloadHeaders);
+  FRIEND_TEST_ALL_PREFIXES(WebContentsImplTest, FaviconURLsSet);
+  FRIEND_TEST_ALL_PREFIXES(WebContentsImplTest, FaviconURLsResetWithNavigation);
+  FRIEND_TEST_ALL_PREFIXES(WebContentsImplTest, FaviconURLsUpdateDelay);
   FRIEND_TEST_ALL_PREFIXES(WebContentsImplBrowserTest,
                            NotifyFullscreenAcquired);
   FRIEND_TEST_ALL_PREFIXES(WebContentsImplBrowserTest,
@@ -1292,6 +1303,12 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // all the unique RenderWidgetHostViews.
   std::set<RenderWidgetHostView*> GetRenderWidgetHostViewsInTree();
 
+  // Traverses all the WebContents in the WebContentsTree and creates a set of
+  // all the unique RenderWidgetHostViews.
+  std::set<RenderWidgetHostView*> GetRenderWidgetHostViewsInWebContentsTree();
+  void GetRenderWidgetHostViewsInWebContentsTree(
+      std::set<RenderWidgetHostView*>& result);
+
   // Called with the result of a DownloadImage() request.
   void OnDidDownloadImage(ImageDownloadCallback callback,
                           int id,
@@ -1337,8 +1354,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
 
   void OnDomOperationResponse(RenderFrameHostImpl* source,
                               const std::string& json_string);
-  void OnUpdatePageImportanceSignals(RenderFrameHostImpl* source,
-                                     const PageImportanceSignals& signals);
 #if BUILDFLAG(ENABLE_PLUGINS)
   void OnPepperInstanceCreated(RenderFrameHostImpl* source,
                                int32_t pp_instance);
@@ -1363,9 +1378,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void SendPpapiBrokerPermissionResult(int process_id,
                                        int ppb_broker_route_id,
                                        bool result);
-
-  void OnBrowserPluginMessage(RenderFrameHost* render_frame_host,
-                              const IPC::Message& message);
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
   void OnUpdateFaviconURL(RenderFrameHostImpl* source,
                           const std::vector<FaviconURL>& candidates);
@@ -1387,9 +1399,15 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // These functions are helpers in managing a hierarchy of WebContents
   // involved in rendering inner WebContents.
 
-  // Registers FrameSinkIds for all WebContents in the subtree of
-  // WebContentsTree, rooted at |contents|.
+  // The following functions register and unregister FrameSinkIds for all
+  // WebContents in the subtree of WebContentsTree rooted at |contents|. They
+  // are used when attaching/detaching an inner web contents. Frame sink ids are
+  // initially registered when a view is created, and they are registered with
+  // the outermost WebContents, which changes when attaching/detaching a
+  // WebContents so we need to unregister and reregister these ids for all
+  // persisting views in the WebContents.
   void RecursivelyRegisterFrameSinkIds();
+  void RecursivelyUnregisterFrameSinkIds();
 
   // When multiple WebContents are present within a tab or window, a single one
   // is focused and will route keyboard events in most cases to a RenderWidget
@@ -1513,8 +1531,8 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // an outer WebContents the method will return nullptr.
   FindRequestManager* GetOrCreateFindRequestManager();
 
-  // Removes a registered WebContentsBindingSet by interface name.
-  void RemoveBindingSet(const std::string& interface_name);
+  // Removes a registered WebContentsReceiverSet by interface name.
+  void RemoveReceiverSet(const std::string& interface_name);
 
   // Prints a console warning when visiting a localhost site with a bad
   // certificate via --allow-insecure-localhost.
@@ -1581,8 +1599,8 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // the observer list then.
   base::ObserverList<WebContentsObserver>::Unchecked observers_;
 
-  // Associated interface binding sets attached to this WebContents.
-  std::map<std::string, WebContentsBindingSet*> binding_sets_;
+  // Associated interface receiver sets attached to this WebContents.
+  std::map<std::string, WebContentsReceiverSet*> receiver_sets_;
 
   // True if this tab was opened by another tab. This is not unset if the opener
   // is closed.
@@ -1851,8 +1869,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
 
   std::unique_ptr<RenderWidgetHostInputEventRouter> rwh_input_event_router_;
 
-  PageImportanceSignals page_importance_signals_;
-
 #if !defined(OS_ANDROID)
   bool page_scale_factor_is_one_;
 #endif  // !defined(OS_ANDROID)
@@ -1944,6 +1960,10 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // This boolean value is used to keep track of whether we finished the first
   // successful navigation in this WebContents.
   bool first_navigation_completed_ = false;
+
+  // Represents the favicon urls candidates from the page.
+  // Empty std::vector until the first update from the renderer.
+  std::vector<FaviconURL> favicon_urls_;
 
   base::WeakPtrFactory<WebContentsImpl> loading_weak_factory_{this};
   base::WeakPtrFactory<WebContentsImpl> weak_factory_{this};

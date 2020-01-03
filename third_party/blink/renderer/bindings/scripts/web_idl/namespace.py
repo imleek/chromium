@@ -56,7 +56,7 @@ class Namespace(UserDefinedType, WithExtendedAttributes, WithCodeGeneratorInfo,
             WithExtendedAttributes.__init__(self, extended_attributes)
             WithCodeGeneratorInfo.__init__(self)
             WithExposure.__init__(self)
-            WithComponent.__init__(self, component=component)
+            WithComponent.__init__(self, component)
             WithDebugInfo.__init__(self, debug_info)
 
             self.is_partial = is_partial
@@ -67,18 +67,25 @@ class Namespace(UserDefinedType, WithExtendedAttributes, WithCodeGeneratorInfo,
             self.operations = list(operations)
             self.operation_groups = []
 
+        def iter_all_members(self):
+            for attribute in self.attributes:
+                yield attribute
+            for constant in self.constants:
+                yield constant
+            for operation in self.operations:
+                yield operation
+
     def __init__(self, ir):
         assert isinstance(ir, Namespace.IR)
         assert not ir.is_partial
 
         ir = make_copy(ir)
         UserDefinedType.__init__(self, ir.identifier)
-        WithExtendedAttributes.__init__(self, ir.extended_attributes)
-        WithCodeGeneratorInfo.__init__(
-            self, CodeGeneratorInfo(ir.code_generator_info))
-        WithExposure.__init__(self, Exposure(ir.exposure))
-        WithComponent.__init__(self, components=ir.components)
-        WithDebugInfo.__init__(self, ir.debug_info)
+        WithExtendedAttributes.__init__(self, ir, readonly=True)
+        WithCodeGeneratorInfo.__init__(self, ir, readonly=True)
+        WithExposure.__init__(self, ir, readonly=True)
+        WithComponent.__init__(self, ir, readonly=True)
+        WithDebugInfo.__init__(self, ir)
 
         self._attributes = tuple([
             Attribute(attribute_ir, owner=self)

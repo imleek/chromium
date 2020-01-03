@@ -67,11 +67,20 @@ class AX_EXPORT AXPlatformNodeDelegateBase : public AXPlatformNodeDelegate {
   gfx::NativeViewAccessible GetNextSibling() override;
   gfx::NativeViewAccessible GetPreviousSibling() override;
 
+  // Returns true if an ancestor of this node (not including itself) is a
+  // leaf node, meaning that this node is not actually exposed to the
+  // platform.
+  bool IsChildOfLeaf() const override;
+
+  // If this object is exposed to the platform, returns this object. Otherwise,
+  // returns the platform leaf under which this object is found.
+  gfx::NativeViewAccessible GetClosestPlatformObject() const override;
+
   class ChildIteratorBase : public ChildIterator {
    public:
     ChildIteratorBase(AXPlatformNodeDelegateBase* parent, int index);
     ChildIteratorBase(const ChildIteratorBase& it);
-    ~ChildIteratorBase() override {}
+    ~ChildIteratorBase() override = default;
     bool operator==(const ChildIterator& rhs) const override;
     bool operator!=(const ChildIterator& rhs) const override;
     void operator++() override;
@@ -79,9 +88,9 @@ class AX_EXPORT AXPlatformNodeDelegateBase : public AXPlatformNodeDelegate {
     void operator--() override;
     void operator--(int) override;
     gfx::NativeViewAccessible GetNativeViewAccessible() const override;
-
-   protected:
     int GetIndexInParent() const override;
+    AXPlatformNodeDelegate& operator*() const override;
+    AXPlatformNodeDelegate* operator->() const override;
 
    private:
     int index_;
@@ -280,6 +289,8 @@ class AX_EXPORT AXPlatformNodeDelegateBase : public AXPlatformNodeDelegate {
   bool ShouldIgnoreHoveredStateForTesting() override;
 
  protected:
+  std::string SubtreeToStringHelper(size_t level) override;
+
   // Given a list of node ids, return the nodes in this delegate's tree to
   // which they correspond.
   std::set<ui::AXPlatformNode*> GetNodesForNodeIds(

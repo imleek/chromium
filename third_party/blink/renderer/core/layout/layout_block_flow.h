@@ -62,6 +62,7 @@ class MarginInfo;
 class NGBlockBreakToken;
 class NGFragmentItems;
 class NGOffsetMapping;
+class NGPhysicalContainerFragment;
 class NGPhysicalFragment;
 
 struct NGInlineNodeData;
@@ -463,9 +464,6 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
   virtual void WillCollectInlines() {}
   virtual void SetPaintFragment(const NGBlockBreakToken*,
                                 scoped_refptr<const NGPhysicalFragment>);
-  virtual const NGPhysicalBoxFragment* CurrentFragment() const {
-    return nullptr;
-  }
   const NGFragmentItems* FragmentItems() const;
 
 #if DCHECK_IS_ON()
@@ -774,8 +772,6 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
     unsigned break_after_ : 4;
     int line_break_to_avoid_widow_;
     bool did_break_at_line_to_avoid_widow_ : 1;
-    bool discard_margin_before_ : 1;
-    bool discard_margin_after_ : 1;
     DISALLOW_COPY_AND_ASSIGN(LayoutBlockFlowRareData);
   };
 
@@ -822,18 +818,6 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
   void SetMaxMarginBeforeValues(LayoutUnit pos, LayoutUnit neg);
   void SetMaxMarginAfterValues(LayoutUnit pos, LayoutUnit neg);
 
-  void SetMustDiscardMarginBefore(bool = true);
-  void SetMustDiscardMarginAfter(bool = true);
-
-  bool MustDiscardMarginBefore() const;
-  bool MustDiscardMarginAfter() const;
-
-  bool MustDiscardMarginBeforeForChild(const LayoutBox&) const;
-  bool MustDiscardMarginAfterForChild(const LayoutBox&) const;
-
-  bool MustSeparateMarginBeforeForChild(const LayoutBox&) const;
-  bool MustSeparateMarginAfterForChild(const LayoutBox&) const;
-
   void InitMaxMarginValues() {
     if (rare_data_) {
       rare_data_->margins_ = MarginValues(
@@ -841,9 +825,6 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
           LayoutBlockFlowRareData::NegativeMarginBeforeDefault(this),
           LayoutBlockFlowRareData::PositiveMarginAfterDefault(this),
           LayoutBlockFlowRareData::NegativeMarginAfterDefault(this));
-
-      rare_data_->discard_margin_before_ = false;
-      rare_data_->discard_margin_after_ = false;
     }
   }
 
@@ -865,29 +846,26 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   LayoutUnit CollapseMargins(LayoutBox& child,
                              BlockChildrenLayoutInfo&,
-                             bool child_is_self_collapsing,
-                             bool child_discard_margin_before,
-                             bool child_discard_margin_after);
+                             bool child_is_self_collapsing);
   LayoutUnit ClearFloatsIfNeeded(LayoutBox& child,
                                  MarginInfo&,
                                  LayoutUnit old_top_pos_margin,
                                  LayoutUnit old_top_neg_margin,
                                  LayoutUnit y_pos,
-                                 bool child_is_self_collapsing,
-                                 bool child_discard_margin);
+                                 bool child_is_self_collapsing);
   LayoutUnit EstimateLogicalTopPosition(
       LayoutBox& child,
       const BlockChildrenLayoutInfo&,
       LayoutUnit& estimate_without_pagination);
-  void MarginBeforeEstimateForChild(LayoutBox&,
-                                    LayoutUnit&,
-                                    LayoutUnit&,
-                                    bool&) const;
+  void MarginBeforeEstimateForChild(LayoutBox&, LayoutUnit&, LayoutUnit&) const;
   void HandleAfterSideOfBlock(LayoutBox* last_child,
                               LayoutUnit top,
                               LayoutUnit bottom,
                               MarginInfo&);
   void SetCollapsedBottomMargin(const MarginInfo&);
+
+  static void RecalcFloatingDescendantsVisualOverflow(
+      const NGPhysicalContainerFragment& fragment);
 
   // Apply any forced fragmentainer break that's set on the current class A
   // break point.

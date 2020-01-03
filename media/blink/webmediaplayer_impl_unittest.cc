@@ -63,15 +63,15 @@
 #include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
-#include "third_party/blink/public/web/web_scoped_user_gesture.h"
-#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/public/web/web_widget.h"
 #include "url/gurl.h"
 
 using ::base::test::RunClosure;
+using ::base::test::RunOnceCallback;
 using ::testing::_;
 using ::testing::AnyNumber;
+using ::testing::DoAll;
 using ::testing::Eq;
 using ::testing::Gt;
 using ::testing::InSequence;
@@ -81,6 +81,8 @@ using ::testing::NotNull;
 using ::testing::Return;
 using ::testing::ReturnRef;
 using ::testing::StrictMock;
+using ::testing::WithArg;
+using ::testing::WithoutArgs;
 
 namespace media {
 
@@ -326,13 +328,11 @@ class WebMediaPlayerImplTest : public testing::Test {
         std::make_unique<NiceMock<MockSurfaceLayerBridge>>();
     surface_layer_bridge_ptr_ = surface_layer_bridge_.get();
 
-    if (base::FeatureList::IsEnabled(kUseSurfaceLayerForVideo)) {
-      EXPECT_CALL(client_, SetCcLayer(_)).Times(0);
-      ON_CALL(*surface_layer_bridge_ptr_, GetSurfaceId())
-          .WillByDefault(ReturnRef(surface_id_));
-      ON_CALL(*surface_layer_bridge_ptr_, GetLocalSurfaceIdAllocationTime())
-          .WillByDefault(Return(base::TimeTicks()));
-    }
+    EXPECT_CALL(client_, SetCcLayer(_)).Times(0);
+    ON_CALL(*surface_layer_bridge_ptr_, GetSurfaceId())
+        .WillByDefault(ReturnRef(surface_id_));
+    ON_CALL(*surface_layer_bridge_ptr_, GetLocalSurfaceIdAllocationTime())
+        .WillByDefault(Return(base::TimeTicks()));
   }
 
   void InitializeWebMediaPlayerImpl() {
@@ -345,10 +345,11 @@ class WebMediaPlayerImplTest : public testing::Test {
     ASSERT_FALSE(media_log_) << "Reinitialization of media_log_ is disallowed";
     media_log_ = media_log.get();
 
-    decoder_factory_.reset(new media::DefaultDecoderFactory(nullptr));
     auto factory_selector = std::make_unique<RendererFactorySelector>();
+    renderer_factory_selector_ = factory_selector.get();
+    decoder_factory_.reset(new media::DefaultDecoderFactory(nullptr));
     factory_selector->AddBaseFactory(
-        RendererFactorySelector::FactoryType::DEFAULT,
+        RendererFactoryType::kDefault,
         std::make_unique<DefaultRendererFactory>(
             media_log.get(), decoder_factory_.get(),
             DefaultRendererFactory::GetGpuFactoriesCB()));
@@ -389,11 +390,9 @@ class WebMediaPlayerImplTest : public testing::Test {
         base::BindOnce(&WebMediaPlayerImplTest::CreateMockSurfaceLayerBridge,
                        base::Unretained(this)),
         viz::TestContextProvider::Create(),
-        base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideo)
-            ? blink::WebMediaPlayer::SurfaceLayerMode::kAlways
-            : blink::WebMediaPlayer::SurfaceLayerMode::kNever,
+        blink::WebMediaPlayer::SurfaceLayerMode::kAlways,
         is_background_suspend_enabled_, is_background_video_playback_enabled_,
-        true);
+        true, nullptr);
 
     auto compositor = std::make_unique<NiceMock<MockVideoFrameCompositor>>(
         params->video_frame_compositor_task_runner());
@@ -564,17 +563,35 @@ class WebMediaPlayerImplTest : public testing::Test {
   }
 
   void BackgroundPlayer() {
-    EXPECT_CALL(*compositor_, SetIsPageVisible(false));
+    base::RunLoop loop;
+    EXPECT_CALL(*compositor_, SetIsPageVisible(false))
+        .WillOnce(RunClosure(loop.QuitClosure()));
+
     delegate_.SetFrameHiddenForTesting(true);
     delegate_.SetFrameClosedForTesting(false);
+
     wmpi_->OnFrameHidden();
+
+    loop.Run();
+
+    // Clear the mock so it doesn't have a stale QuitClosure.
+    testing::Mock::VerifyAndClearExpectations(compositor_);
   }
 
   void ForegroundPlayer() {
-    EXPECT_CALL(*compositor_, SetIsPageVisible(true));
+    base::RunLoop loop;
+    EXPECT_CALL(*compositor_, SetIsPageVisible(true))
+        .WillOnce(RunClosure(loop.QuitClosure()));
+
     delegate_.SetFrameHiddenForTesting(false);
     delegate_.SetFrameClosedForTesting(false);
+
     wmpi_->OnFrameShown();
+
+    loop.Run();
+
+    // Clear the mock so it doesn't have a stale QuitClosure.
+    testing::Mock::VerifyAndClearExpectations(compositor_);
   }
 
   void Play() { wmpi_->Play(); }
@@ -825,6 +842,9 @@ class WebMediaPlayerImplTest : public testing::Test {
 
   // Total memory in bytes allocated by the WebMediaPlayerImpl instance.
   int64_t reported_memory_ = 0;
+
+  // Raw pointer of the RendererFactorySelector owned by |wmpi_|.
+  RendererFactorySelector* renderer_factory_selector_ = nullptr;
 
   // default decoder factory for WMPI
   std::unique_ptr<DecoderFactory> decoder_factory_;
@@ -1630,12 +1650,9 @@ TEST_F(WebMediaPlayerImplTest, NoStreams) {
   PipelineMetadata metadata;
 
   EXPECT_CALL(client_, SetCcLayer(_)).Times(0);
-
-  if (base::FeatureList::IsEnabled(media::kUseSurfaceLayerForVideo)) {
-    EXPECT_CALL(*surface_layer_bridge_ptr_, CreateSurfaceLayer()).Times(0);
-    EXPECT_CALL(*surface_layer_bridge_ptr_, GetSurfaceId()).Times(0);
-    EXPECT_CALL(*compositor_, EnableSubmission(_, _, _, _)).Times(0);
-  }
+  EXPECT_CALL(*surface_layer_bridge_ptr_, CreateSurfaceLayer()).Times(0);
+  EXPECT_CALL(*surface_layer_bridge_ptr_, GetSurfaceId()).Times(0);
+  EXPECT_CALL(*compositor_, EnableSubmission(_, _, _, _)).Times(0);
 
   // Nothing should happen.  In particular, no assertions should fail.
   OnMetadata(metadata);
@@ -1691,6 +1708,51 @@ TEST_F(WebMediaPlayerImplTest, Waiting_NoDecryptionKey) {
   EXPECT_CALL(encrypted_client_, DidResumePlaybackBlockedForKey());
 
   OnWaiting(WaitingReason::kNoDecryptionKey);
+}
+
+ACTION(ReportHaveEnough) {
+  arg0->OnBufferingStateChange(BUFFERING_HAVE_ENOUGH,
+                               BUFFERING_CHANGE_REASON_UNKNOWN);
+}
+
+TEST_F(WebMediaPlayerImplTest, FallbackToMediaFoundationRenderer) {
+  InitializeWebMediaPlayerImpl();
+  // To avoid PreloadMetadataLazyLoad.
+  wmpi_->SetPreload(blink::WebMediaPlayer::kPreloadAuto);
+
+  // Use MockRendererFactory for kMediaFoundation where the created Renderer
+  // will take the CDM, complete Renderer initialization and report HAVE_ENOUGH
+  // so that WMPI can reach kReadyStateHaveCurrentData.
+  auto mock_renderer_factory = std::make_unique<MockRendererFactory>();
+  EXPECT_CALL(*mock_renderer_factory, CreateRenderer(_, _, _, _, _, _))
+      .WillOnce(testing::WithoutArgs(Invoke([]() {
+        auto mock_renderer = std::make_unique<NiceMock<MockRenderer>>();
+        EXPECT_CALL(*mock_renderer, OnSetCdm(_, _))
+            .WillOnce(RunOnceCallback<1>(true));
+        EXPECT_CALL(*mock_renderer, OnInitialize(_, _, _))
+            .WillOnce(DoAll(RunOnceCallback<2>(PIPELINE_OK),
+                            WithArg<1>(ReportHaveEnough())));
+        return mock_renderer;
+      })));
+
+  renderer_factory_selector_->AddFactory(RendererFactoryType::kMediaFoundation,
+                                         std::move(mock_renderer_factory));
+
+  // Create and set CDM. The CDM doesn't support a Decryptor and requires Media
+  // Foundation Renderer.
+  EXPECT_CALL(mock_cdm_context_, GetDecryptor())
+      .WillRepeatedly(Return(nullptr));
+  EXPECT_CALL(mock_cdm_context_, RequiresMediaFoundationRenderer())
+      .WillRepeatedly(Return(true));
+
+  CreateCdm();
+  SetCdm();
+
+  // Load encrypted media and wait for HaveCurrentData.
+  EXPECT_CALL(encrypted_client_,
+              Encrypted(EmeInitDataType::WEBM, NotNull(), Gt(0u)));
+  LoadAndWaitForReadyState(kEncryptedVideoOnlyTestFile,
+                           blink::WebMediaPlayer::kReadyStateHaveCurrentData);
 }
 
 TEST_F(WebMediaPlayerImplTest, VideoConfigChange) {
@@ -1816,17 +1878,17 @@ TEST_F(WebMediaPlayerImplTest, VideoLockedWhenPausedWhenHidden) {
   EXPECT_TRUE(IsVideoLockedWhenPausedWhenHidden());
 
   // With a user gesture it does unlock the player.
-  blink::WebScopedUserGesture user_gesture1(GetWebLocalFrame());
+  GetWebLocalFrame()->NotifyUserActivation();
   Play();
   EXPECT_FALSE(IsVideoLockedWhenPausedWhenHidden());
 
   // Pause without a user gesture doesn't lock the player.
-  blink::WebUserGestureIndicator::ConsumeUserGesture(GetWebLocalFrame());
+  GetWebLocalFrame()->ConsumeTransientUserActivation();
   Pause();
   EXPECT_FALSE(IsVideoLockedWhenPausedWhenHidden());
 
   // With a user gesture, pause does lock the player.
-  blink::WebScopedUserGesture user_gesture2(GetWebLocalFrame());
+  GetWebLocalFrame()->NotifyUserActivation();
   Pause();
   EXPECT_TRUE(IsVideoLockedWhenPausedWhenHidden());
 
@@ -1886,9 +1948,6 @@ TEST_F(WebMediaPlayerImplTest, InfiniteDuration) {
 }
 
 TEST_F(WebMediaPlayerImplTest, SetContentsLayerGetsWebLayerFromBridge) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitFromCommandLine(kUseSurfaceLayerForVideo.name, "");
-
   InitializeWebMediaPlayerImpl();
 
   PipelineMetadata metadata;
@@ -1939,9 +1998,6 @@ TEST_F(WebMediaPlayerImplTest, PlaybackRateChangeMediaLogs) {
 
 // Tests that updating the surface id calls OnPictureInPictureStateChange.
 TEST_F(WebMediaPlayerImplTest, PictureInPictureStateChange) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitFromCommandLine(kUseSurfaceLayerForVideo.name, "");
-
   InitializeWebMediaPlayerImpl();
 
   EXPECT_CALL(*surface_layer_bridge_ptr_, CreateSurfaceLayer());
@@ -2171,8 +2227,15 @@ TEST_P(WebMediaPlayerImplBackgroundBehaviorTest, AudioVideo) {
 
   // Should start background disable timer, but not disable immediately.
   BackgroundPlayer();
-  EXPECT_FALSE(IsVideoTrackDisabled());
-  EXPECT_TRUE(IsDisableVideoTrackPending());
+  if (ShouldPausePlaybackWhenHidden()) {
+    EXPECT_FALSE(IsVideoTrackDisabled());
+    EXPECT_FALSE(IsDisableVideoTrackPending());
+  } else {
+    // Testing IsVideoTrackDisabled() leads to flakyness even though there
+    // should be a 10 minutes delay until it happens. Given that it doesn't
+    // provides much of a benefit at the moment, this is being ignored.
+    EXPECT_TRUE(IsDisableVideoTrackPending());
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -2182,12 +2245,12 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::Bool(),
         ::testing::Values(
             WebMediaPlayerImpl::kMaxKeyframeDistanceToDisableBackgroundVideoMs /
-                    base::Time::kMillisecondsPerSecond +
+                    base::Time::kMillisecondsPerSecond -
                 1,
             300),
         ::testing::Values(
             WebMediaPlayerImpl::kMaxKeyframeDistanceToDisableBackgroundVideoMs /
-                    base::Time::kMillisecondsPerSecond +
+                    base::Time::kMillisecondsPerSecond -
                 1,
             100),
         ::testing::Bool(),

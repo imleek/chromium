@@ -48,13 +48,15 @@ class XRRenderState;
 class XRRenderStateInit;
 class XRRigidTransform;
 class XRSpace;
+class XRTransientInputHitTestOptionsInit;
+class XRTransientInputHitTestSource;
 class XRViewData;
 class XRWebGLLayer;
 class XRWorldInformation;
 class XRWorldTrackingState;
 class XRWorldTrackingStateInit;
 
-using XRSessionFeatureSet = WTF::HashSet<device::mojom::XRSessionFeature>;
+using XRSessionFeatureSet = HashSet<device::mojom::XRSessionFeature>;
 
 class XRSession final
     : public EventTargetWithInlineData,
@@ -65,8 +67,6 @@ class XRSession final
   USING_GARBAGE_COLLECTED_MIXIN(XRSession);
 
  public:
-  enum SessionMode { kModeInline = 0, kModeImmersiveVR, kModeImmersiveAR };
-
   enum EnvironmentBlendMode {
     kBlendModeOpaque = 0,
     kBlendModeAdditive,
@@ -86,13 +86,13 @@ class XRSession final
 
     // Keeps track of which features have already been reported, to reduce
     // redundant mojom calls.
-    WTF::HashSet<device::mojom::blink::XRSessionFeature> reported_features_;
+    HashSet<device::mojom::blink::XRSessionFeature> reported_features_;
   };
 
   XRSession(XR* xr,
             mojo::PendingReceiver<device::mojom::blink::XRSessionClient>
                 client_receiver,
-            SessionMode mode,
+            device::mojom::blink::XRSessionMode mode,
             EnvironmentBlendMode environment_blend_mode,
             bool uses_input_eventing,
             bool sensorless_session,
@@ -146,6 +146,10 @@ class XRSession final
   ScriptPromise requestHitTestSource(ScriptState* script_state,
                                      XRHitTestOptionsInit* options,
                                      ExceptionState& exception_state);
+  ScriptPromise requestHitTestSourceForTransientInput(
+      ScriptState* script_state,
+      XRTransientInputHitTestOptionsInit* options_init,
+      ExceptionState& exception_state);
 
   ScriptPromise requestHitTest(ScriptState* script_state,
                                XRRay* ray,
@@ -192,12 +196,12 @@ class XRSession final
   void OnButtonEvent(
       device::mojom::blink::XRInputSourceStatePtr input_source) override;
 
-  WTF::Vector<XRViewData>& views();
+  Vector<XRViewData>& views();
 
   void AddTransientInputSource(XRInputSource* input_source);
   void RemoveTransientInputSource(XRInputSource* input_source);
 
-  void OnPoseReset();
+  void OnMojoSpaceReset();
 
   const device::mojom::blink::VRDisplayInfoPtr& GetVRDisplayInfo() const {
     return display_info_;
@@ -233,8 +237,19 @@ class XRSession final
   unsigned int StageParametersId() const { return stage_parameters_id_; }
 
   // Returns true if the session recognizes passed in hit_test_source as still
-  // existing.
+  // existing. Intended to be used by XRFrame to implement
+  // XRFrame.getHitTestResults() &
+  // XRFrame.getHitTestResultsForTransientInput().
   bool ValidateHitTestSourceExists(XRHitTestSource* hit_test_source);
+  bool ValidateHitTestSourceExists(
+      XRTransientInputHitTestSource* hit_test_source);
+
+  // Removes hit test source (effectively unsubscribing from the hit test).
+  // Intended to be used by hit test source interfaces (XRHitTestSource and
+  // XRTransientInputHitTestSource) to implement cancel() method. Returns true
+  // if hit test source existed and was removed, false otherwise.
+  bool RemoveHitTestSource(XRHitTestSource* hit_test_source);
+  bool RemoveHitTestSource(XRTransientInputHitTestSource* hit_test_source);
 
   void SetXRDisplayInfo(device::mojom::blink::VRDisplayInfoPtr display_info);
 
@@ -245,7 +260,8 @@ class XRSession final
   // ScriptWrappable
   bool HasPendingActivity() const override;
 
-  bool CanReportPoses();
+  bool CanReportPoses() const;
+  base::Optional<TransformationMatrix> MojoFromViewer() const;
 
   // Creates presentation frame based on current state of the session.
   // State currently used in XRFrame creation is mojo_from_viewer_ and
@@ -291,6 +307,15 @@ class XRSession final
   void ProcessInputSourceEvents(
       base::span<const device::mojom::blink::XRInputSourceStatePtr>
           input_states);
+
+  // Processes world understanding state for current frame:
+  // - updates state of hit test sources & fills them out with results
+  // - updates state of detected planes
+  // - updates state of anchors
+  // In order to correctly set the state of hit test sources, this *must* be
+  // called after updating XRInputSourceArray (performed by
+  // OnInputStateChangeInternal) as hit test results for transient input sources
+  // use the mapping of input source id to XRInputSource object.
   void UpdateWorldUnderstandingStateForFrame(
       double timestamp,
       const device::mojom::blink::XRFrameDataPtr& frame_data);
@@ -305,10 +330,14 @@ class XRSession final
 
   void OnHitTestResults(
       ScriptPromiseResolver* resolver,
-      base::Optional<WTF::Vector<device::mojom::blink::XRHitResultPtr>>
-          results);
+      base::Optional<Vector<device::mojom::blink::XRHitResultPtr>> results);
 
   void OnSubscribeToHitTestResult(
+      ScriptPromiseResolver* resolver,
+      device::mojom::SubscribeToHitTestResult result,
+      uint64_t subscription_id);
+
+  void OnSubscribeToHitTestForTransientInputResult(
       ScriptPromiseResolver* resolver,
       device::mojom::SubscribeToHitTestResult result,
       uint64_t subscription_id);
@@ -321,19 +350,19 @@ class XRSession final
   void OnEnvironmentProviderError();
 
   void ProcessAnchorsData(
-      const device::mojom::blink::XRAnchorsDataPtr& tracked_anchors_data,
+      const device::mojom::blink::XRAnchorsData* tracked_anchors_data,
       double timestamp);
 
   void CleanUpUnusedHitTestSources();
 
   void ProcessHitTestData(
-      const device::mojom::blink::XRHitTestSubscriptionResultsDataPtr&
+      const device::mojom::blink::XRHitTestSubscriptionResultsData*
           hit_test_data);
 
   void HandleShutdown();
 
   const Member<XR> xr_;
-  const SessionMode mode_;
+  const device::mojom::blink::XRSessionMode mode_;
   const bool environment_integration_;
   String blend_mode_string_;
   XRVisibilityState device_visibility_state_ = XRVisibilityState::VISIBLE;
@@ -368,8 +397,10 @@ class XRSession final
   // that we don't keep the XRHitTestSources alive.
   HeapHashMap<uint64_t, WeakMember<XRHitTestSource>>
       hit_test_source_ids_to_hit_test_sources_;
+  HeapHashMap<uint64_t, WeakMember<XRTransientInputHitTestSource>>
+      hit_test_source_ids_to_transient_input_hit_test_sources_;
 
-  WTF::Vector<XRViewData> views_;
+  Vector<XRViewData> views_;
 
   Member<XRInputSourceArray> input_sources_;
   Member<XRWebGLLayer> prev_base_layer_;
@@ -379,8 +410,8 @@ class XRSession final
   HeapHashSet<Member<ScriptPromiseResolver>> hit_test_promises_;
   // Set of promises returned from CreateAnchor that are still in-flight.
   HeapHashSet<Member<ScriptPromiseResolver>> create_anchor_promises_;
-  // Set of promises returned from requestHitTestSource that are still
-  // in-flight.
+  // Set of promises returned from requestHitTestSource and
+  // requestHitTestSourceForTransientInput that are still in-flight.
   HeapHashSet<Member<ScriptPromiseResolver>> request_hit_test_source_promises_;
   HeapVector<Member<XRReferenceSpace>> reference_spaces_;
 

@@ -60,8 +60,8 @@ class SupervisionTransitionScreenTest
     // and then postpone WaitForActiveSession() until later. So wait for active
     // session immediately if IsPreTest() and postpone the call to
     // WaitForActiveSession() otherwise.
-    logged_in_user_mixin_.SetUpOnMainThreadHelper(
-        host_resolver(), this, false /*issue_any_scope_token*/,
+    logged_in_user_mixin_.LogInUser(
+        false /*issue_any_scope_token*/,
         content::IsPreTest() /*wait_for_active_session*/);
   }
 
@@ -80,7 +80,7 @@ class SupervisionTransitionScreenTest
  private:
   LoggedInUserMixin logged_in_user_mixin_{
       &mixin_host_, content::IsPreTest() ? GetParam() : GetTargetUserType(),
-      embedded_test_server(), false /*should_launch_browser*/};
+      embedded_test_server(), this, false /*should_launch_browser*/};
 };
 
 IN_PROC_BROWSER_TEST_P(SupervisionTransitionScreenTest,
@@ -117,7 +117,9 @@ IN_PROC_BROWSER_TEST_P(SupervisionTransitionScreenTest, PRE_TransitionTimeout) {
   arc::SetArcPlayStoreEnabledForProfile(profile, true);
 }
 
-IN_PROC_BROWSER_TEST_P(SupervisionTransitionScreenTest, TransitionTimeout) {
+// Flaky on linux-chromeos-rel (see https://crbug.com/1032997)
+IN_PROC_BROWSER_TEST_P(SupervisionTransitionScreenTest,
+                       DISABLED_TransitionTimeout) {
   OobeScreenWaiter(SupervisionTransitionScreenView::kScreenId).Wait();
 
   test::OobeJS().ExpectVisiblePath(
@@ -164,7 +166,7 @@ IN_PROC_BROWSER_TEST_P(SupervisionTransitionScreenTest,
   logged_in_user_mixin().GetLoginManagerMixin()->WaitForActiveSession();
 }
 
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+INSTANTIATE_TEST_SUITE_P(All,
                          SupervisionTransitionScreenTest,
                          testing::Values(LoggedInUserMixin::LogInType::kRegular,
                                          LoggedInUserMixin::LogInType::kChild));

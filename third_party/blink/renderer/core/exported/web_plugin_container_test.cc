@@ -37,9 +37,9 @@
 #include "cc/layers/layer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "third_party/blink/public/common/input/web_pointer_event.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
-#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
-#include "third_party/blink/public/platform/web_pointer_event.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_element.h"
@@ -326,95 +326,6 @@ TEST_F(WebPluginContainerTest, WindowToLocalPointTest) {
   ASSERT_EQ(10, point4.y);
 }
 
-TEST_F(WebPluginContainerTest, PluginDocumentPluginIsFocused) {
-  RegisterMockedURL("test.pdf", "application/pdf");
-
-  // Must outlive |web_view_helper|.
-  TestPluginWebFrameClient plugin_web_frame_client;
-  frame_test_helpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
-      base_url_ + "test.pdf", &plugin_web_frame_client);
-  DCHECK(web_view);
-  UpdateAllLifecyclePhases(web_view);
-
-  WebDocument document = web_view->MainFrameImpl()->GetDocument();
-  EXPECT_TRUE(document.IsPluginDocument());
-  WebPluginContainer* plugin_container =
-      GetWebPluginContainer(web_view, "plugin");
-  EXPECT_EQ(document.FocusedElement(), plugin_container->GetElement());
-}
-
-TEST_F(WebPluginContainerTest, IFramePluginDocumentNotFocused) {
-  RegisterMockedURL("test.pdf", "application/pdf");
-  RegisterMockedURL("iframe_pdf.html", "text/html");
-
-  // Must outlive |web_view_helper|.
-  TestPluginWebFrameClient plugin_web_frame_client;
-  frame_test_helpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
-      base_url_ + "iframe_pdf.html", &plugin_web_frame_client);
-  DCHECK(web_view);
-  UpdateAllLifecyclePhases(web_view);
-
-  WebDocument document = web_view->MainFrameImpl()->GetDocument();
-  WebLocalFrame* iframe =
-      web_view->MainFrame()->FirstChild()->ToWebLocalFrame();
-  EXPECT_TRUE(iframe->GetDocument().IsPluginDocument());
-  WebPluginContainer* plugin_container =
-      iframe->GetDocument().GetElementById("plugin").PluginContainer();
-  EXPECT_NE(document.FocusedElement(), plugin_container->GetElement());
-  EXPECT_NE(iframe->GetDocument().FocusedElement(),
-            plugin_container->GetElement());
-}
-
-TEST_F(WebPluginContainerTest, PrintOnePage) {
-  RegisterMockedURL("test.pdf", "application/pdf");
-
-  // Must outlive |web_view_helper|.
-  TestPluginWebFrameClient plugin_web_frame_client;
-  frame_test_helpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
-      base_url_ + "test.pdf", &plugin_web_frame_client);
-  DCHECK(web_view);
-  UpdateAllLifecyclePhases(web_view);
-  RunPendingTasks();
-  WebLocalFrame* frame = web_view->MainFrameImpl();
-
-  WebPrintParams print_params;
-  print_params.print_content_area.width = 500;
-  print_params.print_content_area.height = 500;
-
-  frame->PrintBegin(print_params);
-  PaintRecorder recorder;
-  frame->PrintPage(0, recorder.beginRecording(IntRect()));
-  frame->PrintEnd();
-  DCHECK(plugin_web_frame_client.PrintedAtLeastOnePage());
-}
-
-TEST_F(WebPluginContainerTest, PrintAllPages) {
-  RegisterMockedURL("test.pdf", "application/pdf");
-
-  // Must outlive |web_view_helper|.
-  TestPluginWebFrameClient plugin_web_frame_client;
-  frame_test_helpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
-      base_url_ + "test.pdf", &plugin_web_frame_client);
-  DCHECK(web_view);
-  UpdateAllLifecyclePhases(web_view);
-  RunPendingTasks();
-  WebLocalFrame* frame = web_view->MainFrameImpl();
-
-  WebPrintParams print_params;
-  print_params.print_content_area.width = 500;
-  print_params.print_content_area.height = 500;
-
-  frame->PrintBegin(print_params);
-  PaintRecorder recorder;
-  frame->PrintPagesForTesting(recorder.beginRecording(IntRect()), WebSize());
-  frame->PrintEnd();
-  DCHECK(plugin_web_frame_client.PrintedAtLeastOnePage());
-}
-
 TEST_F(WebPluginContainerTest, LocalToWindowPointTest) {
   RegisterMockedURL("plugin_container.html");
   // Must outlive |web_view_helper|.
@@ -492,7 +403,7 @@ TEST_F(WebPluginContainerTest, CopyFromContextMenu) {
   // 1) open the context menu. This will focus the plugin.
   web_view->MainFrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
   // 2) document blurs the plugin, because it can.
-  web_view->ClearFocusedElement();
+  web_view->FocusedElement()->blur();
   // 3) Copy should still operate on the context node, even though the focus had
   //    shifted.
   EXPECT_TRUE(web_view->MainFrameImpl()->ExecuteCommand("Copy"));
@@ -732,15 +643,15 @@ class EventTestPlugin : public FakeWebPlugin {
         event.GetType() == WebInputEvent::kMouseWheel) {
       const WebMouseEvent& mouse_event =
           static_cast<const WebMouseEvent&>(event);
-      last_event_location_ = IntPoint(mouse_event.PositionInWidget().x,
-                                      mouse_event.PositionInWidget().y);
+      last_event_location_ = IntPoint(mouse_event.PositionInWidget().x(),
+                                      mouse_event.PositionInWidget().y());
     } else if (WebInputEvent::IsTouchEventType(event.GetType())) {
       const WebTouchEvent& touch_event =
           static_cast<const WebTouchEvent&>(event);
       if (touch_event.touches_length == 1) {
         last_event_location_ =
-            IntPoint(touch_event.touches[0].PositionInWidget().x,
-                     touch_event.touches[0].PositionInWidget().y);
+            IntPoint(touch_event.touches[0].PositionInWidget().x(),
+                     touch_event.touches[0].PositionInWidget().y());
       } else {
         last_event_location_ = IntPoint();
       }
@@ -791,7 +702,7 @@ TEST_F(WebPluginContainerTest, GestureLongPressReachesPlugin) {
 
   // First, send an event that doesn't hit the plugin to verify that the
   // plugin doesn't receive it.
-  event.SetPositionInWidget(WebFloatPoint(0, 0));
+  event.SetPositionInWidget(gfx::PointF());
 
   web_view->MainFrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
   RunPendingTasks();
@@ -802,7 +713,7 @@ TEST_F(WebPluginContainerTest, GestureLongPressReachesPlugin) {
   // it.
   WebRect rect = plugin_container_one_element.BoundsInViewport();
   event.SetPositionInWidget(
-      WebFloatPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+      gfx::PointF(rect.x + rect.width / 2, rect.y + rect.height / 2));
 
   web_view->MainFrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
   RunPendingTasks();
@@ -904,8 +815,8 @@ TEST_F(WebPluginContainerTest, TouchEventScrolled) {
       WebPointerProperties(
           1, WebPointerProperties::PointerType::kTouch,
           WebPointerProperties::Button::kLeft,
-          WebFloatPoint(rect.x + rect.width / 2, rect.y + rect.height / 2),
-          WebFloatPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)),
+          gfx::PointF(rect.x + rect.width / 2, rect.y + rect.height / 2),
+          gfx::PointF(rect.x + rect.width / 2, rect.y + rect.height / 2)),
       1.0f, 1.0f);
 
   web_view->MainFrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
@@ -946,8 +857,8 @@ TEST_F(WebPluginContainerTest, TouchEventScrolledWithCoalescedTouches) {
         WebPointerProperties(
             1, WebPointerProperties::PointerType::kTouch,
             WebPointerProperties::Button::kLeft,
-            WebFloatPoint(rect.x + rect.width / 2, rect.y + rect.height / 2),
-            WebFloatPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)),
+            gfx::PointF(rect.x + rect.width / 2, rect.y + rect.height / 2),
+            gfx::PointF(rect.x + rect.width / 2, rect.y + rect.height / 2)),
         1.0f, 1.0f);
 
     WebCoalescedInputEvent coalesced_event(event);
@@ -969,10 +880,10 @@ TEST_F(WebPluginContainerTest, TouchEventScrolledWithCoalescedTouches) {
         WebInputEvent::kPointerMove,
         WebPointerProperties(1, WebPointerProperties::PointerType::kTouch,
                              WebPointerProperties::Button::kLeft,
-                             WebFloatPoint(rect.x + rect.width / 2 + 1,
-                                           rect.y + rect.height / 2 + 1),
-                             WebFloatPoint(rect.x + rect.width / 2 + 1,
-                                           rect.y + rect.height / 2 + 1)),
+                             gfx::PointF(rect.x + rect.width / 2 + 1,
+                                         rect.y + rect.height / 2 + 1),
+                             gfx::PointF(rect.x + rect.width / 2 + 1,
+                                         rect.y + rect.height / 2 + 1)),
         1.0f, 1.0f);
 
     WebCoalescedInputEvent coalesced_event(event1);
@@ -981,19 +892,19 @@ TEST_F(WebPluginContainerTest, TouchEventScrolledWithCoalescedTouches) {
         WebInputEvent::kPointerMove,
         WebPointerProperties(1, WebPointerProperties::PointerType::kTouch,
                              WebPointerProperties::Button::kLeft,
-                             WebFloatPoint(rect.x + rect.width / 2 + 2,
-                                           rect.y + rect.height / 2 + 2),
-                             WebFloatPoint(rect.x + rect.width / 2 + 2,
-                                           rect.y + rect.height / 2 + 2)),
+                             gfx::PointF(rect.x + rect.width / 2 + 2,
+                                         rect.y + rect.height / 2 + 2),
+                             gfx::PointF(rect.x + rect.width / 2 + 2,
+                                         rect.y + rect.height / 2 + 2)),
         1.0f, 1.0f);
     WebPointerEvent event3(
         WebInputEvent::kPointerMove,
         WebPointerProperties(1, WebPointerProperties::PointerType::kTouch,
                              WebPointerProperties::Button::kLeft,
-                             WebFloatPoint(rect.x + rect.width / 2 + 3,
-                                           rect.y + rect.height / 2 + 3),
-                             WebFloatPoint(rect.x + rect.width / 2 + 3,
-                                           rect.y + rect.height / 2 + 3)),
+                             gfx::PointF(rect.x + rect.width / 2 + 3,
+                                         rect.y + rect.height / 2 + 3),
+                             gfx::PointF(rect.x + rect.width / 2 + 3,
+                                         rect.y + rect.height / 2 + 3)),
         1.0f, 1.0f);
 
     coalesced_event.AddCoalescedEvent(event2);
@@ -1198,8 +1109,8 @@ TEST_F(WebPluginContainerTest, TouchEventZoomed) {
       WebPointerProperties(
           1, WebPointerProperties::PointerType::kTouch,
           WebPointerProperties::Button::kLeft,
-          WebFloatPoint(rect.x + rect.width / 2, rect.y + rect.height / 2),
-          WebFloatPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)),
+          gfx::PointF(rect.x + rect.width / 2, rect.y + rect.height / 2),
+          gfx::PointF(rect.x + rect.width / 2, rect.y + rect.height / 2)),
       1.0f, 1.0f);
 
   web_view->MainFrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
@@ -1549,21 +1460,6 @@ TEST_F(WebPluginContainerTest, NeedsWheelEvents) {
                   ->GetFrame()
                   ->GetEventHandlerRegistry()
                   .HasEventHandlers(EventHandlerRegistry::kWheelEventBlocking));
-}
-
-TEST_F(WebPluginContainerTest, IFramePluginDocumentDisplayNone) {
-  RegisterMockedURL("test.pdf", "application/pdf");
-  RegisterMockedURL("iframe_pdf_display_none.html", "text/html");
-
-  TestPluginWebFrameClient plugin_web_frame_client;
-  frame_test_helpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
-      base_url_ + "iframe_pdf_display_none.html", &plugin_web_frame_client);
-  UpdateAllLifecyclePhases(web_view);
-
-  WebFrame* web_iframe = web_view->MainFrame()->FirstChild();
-  LocalFrame* iframe = To<LocalFrame>(WebFrame::ToCoreFrame(*web_iframe));
-  EXPECT_TRUE(iframe->GetWebPluginContainer());
 }
 
 }  // namespace blink

@@ -48,10 +48,6 @@ namespace storage {
 
 namespace {
 
-QuotaClient* CreateQuotaClient(FileSystemContext* context) {
-  return new FileSystemQuotaClient(context);
-}
-
 void DidGetMetadataForResolveURL(const base::FilePath& path,
                                  FileSystemContext::ResolveURLCallback callback,
                                  const FileSystemInfo& info,
@@ -94,7 +90,6 @@ int FileSystemContext::GetPermissionPolicy(FileSystemType type) {
     case kFileSystemTypeSyncable:
       return FILE_PERMISSION_SANDBOX;
 
-    case kFileSystemTypeDrive:
     case kFileSystemTypeNativeForPlatformApp:
     case kFileSystemTypeNativeLocal:
     case kFileSystemTypeCloudDevice:
@@ -195,7 +190,8 @@ FileSystemContext::FileSystemContext(
 
   if (quota_manager_proxy) {
     // Quota client assumes all backends have registered.
-    quota_manager_proxy->RegisterClient(CreateQuotaClient(this));
+    quota_manager_proxy->RegisterClient(
+        base::MakeRefCounted<FileSystemQuotaClient>(this));
   }
 
   sandbox_backend_->Initialize(this);

@@ -22,6 +22,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/trace_event/trace_event.h"
 #include "base/unguessable_token.h"
 
 // On POSIX, the fd is shared using the mapping in GlobalDescriptors.
@@ -32,9 +33,6 @@
 namespace base {
 
 namespace {
-
-// TODO(crbug.com/1018667): Remove when all unit tests are migrated.
-bool nested_field_trial_list_allowed_for_testing = false;
 
 // Define a separator character to use when creating a persistent form of an
 // instance.  This is intended for use as a command line argument, passed to a
@@ -445,14 +443,8 @@ FieldTrialList::FieldTrialList(
     : entropy_provider_(std::move(entropy_provider)),
       observer_list_(new ObserverListThreadSafe<FieldTrialList::Observer>(
           ObserverListPolicy::EXISTING_ONLY)) {
+  DCHECK(!global_);
   DCHECK(!used_without_global_);
-
-  if (nested_field_trial_list_allowed_for_testing) {
-    previous_global_ = global_;
-  } else {
-    DCHECK(!global_);
-  }
-
   global_ = this;
 }
 
@@ -467,7 +459,7 @@ FieldTrialList::~FieldTrialList() {
   // likely caused by nested ScopedFeatureLists being destroyed in a different
   // order than they are initialized.
   DCHECK_EQ(this, global_);
-  global_ = previous_global_;
+  global_ = nullptr;
 }
 
 // static
@@ -980,6 +972,7 @@ void FieldTrialList::OnGroupFinalized(bool is_locked, FieldTrial* field_trial) {
 
 // static
 void FieldTrialList::NotifyFieldTrialGroupSelection(FieldTrial* field_trial) {
+  TRACE_EVENT0("base", "FieldTrialList::NotifyFieldTrialGroupSelection");
   if (!global_)
     return;
 
@@ -1008,7 +1001,7 @@ void FieldTrialList::NotifyFieldTrialGroupSelection(FieldTrial* field_trial) {
         field_trial->trial_name(), field_trial->group_name_internal());
   }
 
-  global_->observer_list_->Notify(
+  global_->observer_list_->NotifySynchronously(
       FROM_HERE, &FieldTrialList::Observer::OnFieldTrialGroupFinalized,
       field_trial->trial_name(), field_trial->group_name_internal());
 }
@@ -1163,15 +1156,6 @@ FieldTrialList* FieldTrialList::BackupInstanceForTesting() {
 // static
 void FieldTrialList::RestoreInstanceForTesting(FieldTrialList* instance) {
   global_ = instance;
-}
-
-// static
-void FieldTrialList::AllowNestedFieldTrialListForTesting() {
-  nested_field_trial_list_allowed_for_testing = true;
-}
-
-const FieldTrialList* FieldTrialList::GetPreviousGlobal() const {
-  return previous_global_;
 }
 
 // static

@@ -64,13 +64,11 @@ void SVGImagePainter::PaintForeground(const PaintInfo& paint_info) {
   if (image_viewport_size.IsEmpty())
     return;
 
-  scoped_refptr<Image> image =
-      image_resource->GetImage(ExpandedIntSize(image_viewport_size));
+  scoped_refptr<Image> image = image_resource->GetImage(image_viewport_size);
   FloatRect dest_rect = layout_svg_image_.ObjectBoundingBox();
-  FloatRect src_rect(0, 0, image->width(), image->height());
+  FloatRect src_rect(FloatPoint(), image->SizeAsFloat());
 
-  SVGImageElement* image_element =
-      ToSVGImageElement(layout_svg_image_.GetElement());
+  auto* image_element = To<SVGImageElement>(layout_svg_image_.GetElement());
   image_element->preserveAspectRatio()->CurrentValue()->TransformRect(dest_rect,
                                                                       src_rect);
   ScopedInterpolationQuality interpolation_quality_scope(
@@ -99,7 +97,7 @@ void SVGImagePainter::PaintForeground(const PaintInfo& paint_info) {
 FloatSize SVGImagePainter::ComputeImageViewportSize() const {
   DCHECK(layout_svg_image_.ImageResource()->HasImage());
 
-  if (ToSVGImageElement(layout_svg_image_.GetElement())
+  if (To<SVGImageElement>(layout_svg_image_.GetElement())
           ->preserveAspectRatio()
           ->CurrentValue()
           ->Align() != SVGPreserveAspectRatio::kSvgPreserveaspectratioNone)
@@ -122,7 +120,7 @@ FloatSize SVGImagePainter::ComputeImageViewportSize() const {
     return ToSVGImage(image)->ConcreteObjectSize(
         layout_svg_image_.ObjectBoundingBox().Size());
   }
-  return FloatSize(image->Size());
+  return image->SizeAsFloat();
 }
 
 }  // namespace blink

@@ -876,6 +876,11 @@ interface CompositionEvent : UIEvent
     getter data
     method constructor
     method initCompositionEvent
+interface CompressionStream
+    attribute @@toStringTag
+    getter readable
+    getter writable
+    method constructor
 interface ConstantSourceNode : AudioScheduledSourceNode
     attribute @@toStringTag
     getter offset
@@ -1203,6 +1208,11 @@ interface DataTransferItemList
     method clear
     method constructor
     method remove
+interface DecompressionStream
+    attribute @@toStringTag
+    getter readable
+    getter writable
+    method constructor
 interface DelayNode : AudioNode
     attribute @@toStringTag
     getter delayTime
@@ -1794,6 +1804,13 @@ interface External
     method AddSearchProvider
     method IsSearchProviderInstalled
     method constructor
+interface FeaturePolicy
+    attribute @@toStringTag
+    method allowedFeatures
+    method allowsFeature
+    method constructor
+    method features
+    method getAllowlistForFeature
 interface FederatedCredential : Credential
     attribute @@toStringTag
     getter iconURL
@@ -1970,6 +1987,7 @@ interface HTMLAnchorElement : HTMLElement
     getter host
     getter hostname
     getter href
+    getter hrefTranslate
     getter hreflang
     getter name
     getter origin
@@ -1997,6 +2015,7 @@ interface HTMLAnchorElement : HTMLElement
     setter host
     setter hostname
     setter href
+    setter hrefTranslate
     setter hreflang
     setter name
     setter password
@@ -3493,6 +3512,7 @@ interface HTMLVideoElement : HTMLMediaElement
     getter webkitSupportsFullscreen
     getter width
     method constructor
+    method getVideoPlaybackQuality
     method requestPictureInPicture
     method webkitEnterFullScreen
     method webkitEnterFullscreen
@@ -4324,6 +4344,7 @@ interface Navigator
     method constructor
     method getBattery
     method getGamepads
+    method getInstalledRelatedApps
     method getUserMedia
     method javaEnabled
     method registerProtocolHandler
@@ -4664,6 +4685,7 @@ interface PaymentManager
     getter instruments
     getter userHint
     method constructor
+    method enableDelegations
     setter userHint
 interface PaymentMethodChangeEvent : PaymentRequestUpdateEvent
     attribute @@toStringTag
@@ -4862,6 +4884,12 @@ interface PerformanceTiming
     getter unloadEventStart
     method constructor
     method toJSON
+interface PeriodicSyncManager
+    attribute @@toStringTag
+    method constructor
+    method getTags
+    method register
+    method unregister
 interface PeriodicWave
     attribute @@toStringTag
     method constructor
@@ -5559,9 +5587,6 @@ interface SVGDefsElement : SVGGraphicsElement
     attribute @@toStringTag
     method constructor
 interface SVGDescElement : SVGElement
-    attribute @@toStringTag
-    method constructor
-interface SVGDiscardElement : SVGElement
     attribute @@toStringTag
     method constructor
 interface SVGElement : Element
@@ -6636,6 +6661,7 @@ interface ServiceWorkerContainer : EventTarget
     getter controller
     getter oncontrollerchange
     getter onmessage
+    getter onmessageerror
     getter ready
     method constructor
     method getRegistration
@@ -6644,6 +6670,7 @@ interface ServiceWorkerContainer : EventTarget
     method startMessages
     setter oncontrollerchange
     setter onmessage
+    setter onmessageerror
 interface ServiceWorkerRegistration : EventTarget
     attribute @@toStringTag
     getter active
@@ -6652,6 +6679,7 @@ interface ServiceWorkerRegistration : EventTarget
     getter navigationPreload
     getter onupdatefound
     getter paymentManager
+    getter periodicSync
     getter pushManager
     getter scope
     getter sync
@@ -7222,6 +7250,13 @@ interface ValidityState
     getter typeMismatch
     getter valid
     getter valueMissing
+    method constructor
+interface VideoPlaybackQuality
+    attribute @@toStringTag
+    getter corruptedVideoFrames
+    getter creationTime
+    getter droppedVideoFrames
+    getter totalVideoFrames
     method constructor
 interface VisualViewport : EventTarget
     attribute @@toStringTag

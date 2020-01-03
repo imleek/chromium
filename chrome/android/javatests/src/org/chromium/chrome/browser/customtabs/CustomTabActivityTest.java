@@ -67,7 +67,6 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.library_loader.LibraryLoader;
-import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
@@ -86,6 +85,7 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.TabsOpenedFromExternalAppTest;
 import org.chromium.chrome.browser.WarmupManager;
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider.CustomTabsUiType;
 import org.chromium.chrome.browser.browserservices.Origin;
 import org.chromium.chrome.browser.browserservices.OriginVerifier;
@@ -103,11 +103,11 @@ import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabTestUtils;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.test.ScreenShooter;
 import org.chromium.chrome.browser.toolbar.top.CustomTabToolbar;
@@ -226,7 +226,7 @@ public class CustomTabActivityTest {
         mTestServer = EmbeddedTestServer.createAndStartServer(appContext);
         mTestPage = mTestServer.getURL(TEST_PAGE);
         mTestPage2 = mTestServer.getURL(TEST_PAGE_2);
-        LibraryLoader.getInstance().ensureInitialized(LibraryProcessType.PROCESS_BROWSER);
+        LibraryLoader.getInstance().ensureInitialized();
         mWebServer = TestWebServer.start();
     }
 
@@ -726,7 +726,7 @@ public class CustomTabActivityTest {
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(customTabIntent);
 
         final OnFinishedForTest onFinished = new OnFinishedForTest(pi);
-        getActivity().getIntentDataProvider().setPendingIntentOnFinishedForTesting(onFinished);
+        getCustomTabIntentDataProvider().setPendingIntentOnFinishedForTesting(onFinished);
 
         openAppMenuAndAssertMenuShown();
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
@@ -1077,7 +1077,7 @@ public class CustomTabActivityTest {
 
         Assert.assertNull("Action button should not be shown", actionButton);
 
-        CustomTabIntentDataProvider dataProvider = getActivity().getIntentDataProvider();
+        BrowserServicesIntentDataProvider dataProvider = getActivity().getIntentDataProvider();
         Assert.assertThat(dataProvider.getCustomButtonsOnToolbar(), is(empty()));
     }
 
@@ -2927,5 +2927,9 @@ public class CustomTabActivityTest {
 
     private SessionDataHolder getSessionDataHolder() {
         return ChromeApplication.getComponent().resolveSessionDataHolder();
+    }
+
+    private CustomTabIntentDataProvider getCustomTabIntentDataProvider() {
+        return (CustomTabIntentDataProvider) getActivity().getIntentDataProvider();
     }
 }

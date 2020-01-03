@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/arc/accessibility/arc_accessibility_util.h"
 
+#include "components/arc/mojom/accessibility_helper.mojom.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 
 namespace arc {
@@ -22,15 +23,24 @@ ax::mojom::Event ToAXEvent(
       return ax::mojom::Event::kTextChanged;
     case mojom::AccessibilityEventType::VIEW_TEXT_SELECTION_CHANGED:
       return ax::mojom::Event::kTextSelectionChanged;
-    case mojom::AccessibilityEventType::WINDOW_STATE_CHANGED:
+    case mojom::AccessibilityEventType::WINDOW_STATE_CHANGED: {
+      if (focused_node_info_data)
+        return ax::mojom::Event::kFocus;
+      else
+        return ax::mojom::Event::kLayoutComplete;
+    }
     case mojom::AccessibilityEventType::NOTIFICATION_STATE_CHANGED:
     case mojom::AccessibilityEventType::WINDOW_CONTENT_CHANGED:
     case mojom::AccessibilityEventType::WINDOWS_CHANGED:
       return ax::mojom::Event::kLayoutComplete;
     case mojom::AccessibilityEventType::VIEW_HOVER_ENTER:
       return ax::mojom::Event::kHover;
-    case mojom::AccessibilityEventType::ANNOUNCEMENT:
-      return ax::mojom::Event::kAlert;
+    case mojom::AccessibilityEventType::ANNOUNCEMENT: {
+      // NOTE: Announcement event is handled in
+      // ArcAccessibilityHelperBridge::OnAccessibilityEvent.
+      NOTREACHED();
+      break;
+    }
     case mojom::AccessibilityEventType::VIEW_SCROLLED:
       return ax::mojom::Event::kScrollPositionChanged;
     case mojom::AccessibilityEventType::VIEW_SELECTED: {

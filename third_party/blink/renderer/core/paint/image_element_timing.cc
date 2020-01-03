@@ -95,8 +95,9 @@ void ImageElementTiming::NotifyImagePainted(
     return;
 
   auto it = images_notified_.find(std::make_pair(layout_object, cached_image));
-  DCHECK(it != images_notified_.end());
-  if (!it->value.is_painted_ && cached_image) {
+  // It is possible that the pair is not in |images_notified_|. See
+  // https://crbug.com/1027948
+  if (it != images_notified_.end() && !it->value.is_painted_ && cached_image) {
     it->value.is_painted_ = true;
     NotifyImagePaintedInternal(layout_object->GetNode(), *layout_object,
                                *cached_image, current_paint_chunk_properties,
@@ -133,6 +134,9 @@ void ImageElementTiming::NotifyImagePaintedInternal(
   if (!layout_object.HasNonZeroEffectiveOpacity())
     return;
 
+  RespectImageOrientationEnum respect_orientation =
+      LayoutObject::ShouldRespectImageOrientation(&layout_object);
+
   FloatRect intersection_rect = ElementTimingUtils::ComputeIntersectionRect(
       frame, layout_object.FirstFragment().VisualRect(),
       current_paint_chunk_properties);
@@ -146,12 +150,14 @@ void ImageElementTiming::NotifyImagePaintedInternal(
   DCHECK(layout_object.GetDocument().GetSecurityOrigin());
   // It's ok to expose rendering timestamp for data URIs so exclude those from
   // the Timing-Allow-Origin check.
-  bool tainted = false;
+  bool response_tainting_not_basic = false;
+  bool tainted_origin_flag = false;
   if (!url.ProtocolIsData() &&
       !Performance::PassesTimingAllowCheck(
-          cached_image.GetResponse(),
+          cached_image.GetResponse(), cached_image.GetResponse(),
           *layout_object.GetDocument().GetSecurityOrigin(),
-          &layout_object.GetDocument(), &tainted)) {
+          &layout_object.GetDocument(), &response_tainting_not_basic,
+          &tainted_origin_flag)) {
     WindowPerformance* performance =
         DOMWindowPerformance::performance(*GetSupplementable());
     if (performance) {
@@ -159,8 +165,7 @@ void ImageElementTiming::NotifyImagePaintedInternal(
       performance->AddElementTiming(
           ImagePaintString(), url.GetString(), intersection_rect,
           base::TimeTicks(), load_time, attr,
-          cached_image.IntrinsicSize(kDoNotRespectImageOrientation), id,
-          element);
+          cached_image.IntrinsicSize(respect_orientation), id, element);
     }
     return;
   }
@@ -174,7 +179,7 @@ void ImageElementTiming::NotifyImagePaintedInternal(
                                 : url.GetString();
   element_timings_.emplace_back(MakeGarbageCollected<ElementTimingInfo>(
       image_url, intersection_rect, load_time, attr,
-      cached_image.IntrinsicSize(kDoNotRespectImageOrientation), id, element));
+      cached_image.IntrinsicSize(respect_orientation), id, element));
   // Only queue a swap promise when |element_timings_| was empty. All of the
   // records in |element_timings_| will be processed when the promise succeeds
   // or fails, and at that time the vector is cleared.

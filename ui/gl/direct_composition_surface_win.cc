@@ -512,7 +512,7 @@ void* DirectCompositionSurfaceWin::GetHandle() {
 
 bool DirectCompositionSurfaceWin::Resize(const gfx::Size& size,
                                          float scale_factor,
-                                         ColorSpace color_space,
+                                         const gfx::ColorSpace& color_space,
                                          bool has_alpha) {
   // Force a resize and redraw (but not a move, activate, etc.).
   if (!SetWindowPos(window_, nullptr, 0, 0, size.width(), size.height(),
@@ -708,8 +708,8 @@ void DirectCompositionSurfaceWin::OnVSync(base::TimeTicks vsync_time,
   if (SupportsPresentationFeedback()) {
     task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&DirectCompositionSurfaceWin::HandleVSyncOnMainThread,
-                   weak_ptr_, vsync_time, interval));
+        base::BindOnce(&DirectCompositionSurfaceWin::HandleVSyncOnMainThread,
+                       weak_ptr_, vsync_time, interval));
   }
 }
 

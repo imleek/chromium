@@ -48,6 +48,9 @@ void SimulateSuccessfulFetchOfAccountInfo(IdentityManager*,
                                           const std::string&,
                                           const std::string&,
                                           const std::string&);
+void SimulateAccountImageFetch(signin::IdentityManager*,
+                               const CoreAccountId&,
+                               const gfx::Image&);
 }  // namespace signin
 
 // Retrieves and caches GAIA information about Google Accounts.
@@ -147,6 +150,10 @@ class AccountTrackerService {
   // valid GaiaId gets removed from |accounts_| (i.e. stops being tracked).
   void SetOnAccountRemovedCallback(AccountInfoCallback callback);
 
+  // Flushes the account changes to disk. The flush happens asynchronously and
+  // this function does not block on disk IO.
+  void CommitPendingAccountChanges();
+
  protected:
   // Available to be called in tests.
   void SetAccountInfoFromUserInfo(const CoreAccountId& account_id,
@@ -169,6 +176,9 @@ class AccountTrackerService {
       const std::string&,
       const std::string&,
       const std::string&);
+  friend void signin::SimulateAccountImageFetch(signin::IdentityManager*,
+                                                const CoreAccountId&,
+                                                const gfx::Image&);
 
   void NotifyAccountUpdated(const AccountInfo& account_info);
   void NotifyAccountRemoved(const AccountInfo& account_info);

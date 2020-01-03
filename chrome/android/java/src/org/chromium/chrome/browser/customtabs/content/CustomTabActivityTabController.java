@@ -24,6 +24,7 @@ import org.chromium.chrome.browser.ServiceTabLauncher;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.WebContentsFactory;
 import org.chromium.chrome.browser.browserservices.BrowserServicesActivityTabController;
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.customtabs.CustomTabDelegateFactory;
 import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
@@ -43,10 +44,10 @@ import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabAssociatedApp;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabRedirectHandler;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParams;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
@@ -87,7 +88,7 @@ public class CustomTabActivityTabController
     private final Lazy<CustomTabDelegateFactory> mCustomTabDelegateFactory;
     private final ChromeActivity mActivity;
     private final CustomTabsConnection mConnection;
-    private final CustomTabIntentDataProvider mIntentDataProvider;
+    private final BrowserServicesIntentDataProvider mIntentDataProvider;
     private final TabObserverRegistrar mTabObserverRegistrar;
     private final Lazy<CompositorViewHolder> mCompositorViewHolder;
     private final WarmupManager mWarmupManager;
@@ -116,7 +117,7 @@ public class CustomTabActivityTabController
     @Inject
     public CustomTabActivityTabController(ChromeActivity activity,
             Lazy<CustomTabDelegateFactory> customTabDelegateFactory,
-            CustomTabsConnection connection, CustomTabIntentDataProvider intentDataProvider,
+            CustomTabsConnection connection, BrowserServicesIntentDataProvider intentDataProvider,
             ActivityTabProvider activityTabProvider, TabObserverRegistrar tabObserverRegistrar,
             Lazy<CompositorViewHolder> compositorViewHolder,
             ActivityLifecycleDispatcher lifecycleDispatcher, WarmupManager warmupManager,
@@ -457,7 +458,9 @@ public class CustomTabActivityTabController
                 // Blink has rendered the page by this point, but we need to wait for the compositor
                 // frame swap to avoid flash of white content.
                 mCompositorViewHolder.get().getCompositorView().surfaceRedrawNeededAsync(() -> {
-                    if (!tab.isInitialized() || mActivity.isActivityFinishingOrDestroyed()) return;
+                    if (!tab.isInitialized() || mActivity.isActivityFinishingOrDestroyed()) {
+                        return;
+                    }
                     tab.getView().setBackgroundResource(0);
                 });
             }

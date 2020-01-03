@@ -84,7 +84,6 @@
 #include "content/browser/browser_child_process_host_impl.h"
 #include "content/browser/browser_main.h"
 #include "content/browser/browser_main_loop.h"
-#include "content/browser/browser_plugin/browser_plugin_message_filter.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/code_cache/generated_code_cache.h"
@@ -107,12 +106,15 @@
 #include "content/browser/media/media_internals.h"
 #include "content/browser/media/midi_host.h"
 #include "content/browser/mime_registry_impl.h"
+#include "content/browser/native_file_system/native_file_system_manager_impl.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/browser/network_service_instance_impl.h"
+#include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/payments/payment_manager.h"
 #include "content/browser/permissions/permission_service_context.h"
 #include "content/browser/permissions/permission_service_impl.h"
 #include "content/browser/push_messaging/push_messaging_manager.h"
+#include "content/browser/quota_dispatcher_host.h"
 #include "content/browser/renderer_host/agent_metrics_collector.h"
 #include "content/browser/renderer_host/clipboard_host_impl.h"
 #include "content/browser/renderer_host/code_cache_host_impl.h"
@@ -137,6 +139,9 @@
 #include "content/browser/storage_partition_impl.h"
 #include "content/browser/theme_helper.h"
 #include "content/browser/tracing/background_tracing_manager_impl.h"
+#include "content/browser/url_loader_factory_params_helper.h"
+#include "content/browser/v8_snapshot_files.h"
+#include "content/browser/websockets/websocket_connector_impl.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/common/child_process.mojom.h"
 #include "content/common/child_process_host_impl.h"
@@ -144,7 +149,6 @@
 #include "content/common/frame_messages.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/common/resource_messages.h"
-#include "content/common/service_manager/child_connection.h"
 #include "content/common/service_manager/service_manager_connection_impl.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/common/view_messages.h"
@@ -153,6 +157,7 @@
 #include "content/public/browser/browser_or_resource_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/device_service.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -164,9 +169,7 @@
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/resource_coordinator_service.h"
 #include "content/public/browser/site_isolation_policy.h"
-#include "content/public/browser/system_connector.h"
 #include "content/public/browser/webrtc_log.h"
-#include "content/public/common/bind_interface_helpers.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
@@ -192,6 +195,7 @@
 #include "ipc/ipc_logging.h"
 #include "media/audio/audio_manager.h"
 #include "media/base/media_switches.h"
+#include "media/capture/capture_switches.h"
 #include "media/media_buildflags.h"
 #include "media/mojo/services/video_decode_perf_history.h"
 #include "media/webrtc/webrtc_switches.h"
@@ -201,19 +205,17 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/device/public/mojom/battery_monitor.mojom.h"
-#include "services/device/public/mojom/constants.mojom.h"
 #include "services/device/public/mojom/power_monitor.mojom.h"
 #include "services/device/public/mojom/screen_orientation.mojom.h"
 #include "services/device/public/mojom/time_zone_monitor.mojom.h"
-#include "services/metrics/public/mojom/constants.mojom.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/mojom/ukm_interface.mojom.h"
-#include "services/network/cross_origin_read_blocking.h"
+#include "services/metrics/ukm_recorder_interface.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
 #include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/sandbox/switches.h"
 #include "services/service_manager/zygote/common/zygote_buildflags.h"
@@ -444,7 +446,7 @@ class RendererSandboxedProcessLauncherDelegate
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
   service_manager::SandboxType GetSandboxType() override {
-    return service_manager::SANDBOX_TYPE_RENDERER;
+    return service_manager::SandboxType::kRenderer;
   }
 
 #if defined(OS_WIN)
@@ -459,8 +461,7 @@ class SessionStorageHolder : public base::SupportsUserData::Data {
  public:
   SessionStorageHolder()
       : session_storage_namespaces_awaiting_close_(
-            new std::map<int, SessionStorageNamespaceMap>) {
-  }
+            new std::map<int, SessionStorageNamespaceMap>) {}
 
   ~SessionStorageHolder() override {
     // Its important to delete the map on the IO thread to avoid deleting
@@ -540,26 +541,42 @@ class SpareRenderProcessHostManager : public RenderProcessHostObserver {
 
     spare_render_process_host_ = RenderProcessHostImpl::CreateRenderProcessHost(
         browser_context, nullptr /* storage_partition_impl */,
-        nullptr /* site_instance */, false /* is_for_guests_only */);
+        nullptr /* site_instance */);
     spare_render_process_host_->AddObserver(this);
     spare_render_process_host_->Init();
   }
 
   RenderProcessHost* MaybeTakeSpareRenderProcessHost(
       BrowserContext* browser_context,
-      SiteInstanceImpl* site_instance,
-      bool is_for_guests_only) {
+      SiteInstanceImpl* site_instance) {
     // Give embedder a chance to disable using a spare RenderProcessHost for
     // certain SiteInstances.  Some navigations, such as to NTP or extensions,
     // require passing command-line flags to the renderer process at process
     // launch time, but this cannot be done for spare RenderProcessHosts, which
     // are started before it is known which navigation might use them.  So, a
     // spare RenderProcessHost should not be used in such cases.
+    //
+    // Note that exempting NTP and extensions from using the spare process might
+    // also happen via HasProcess check below (which returns true for
+    // process-per-site SiteInstances if the given process-per-site process
+    // already exists).  Despite this potential overlap, it is important to do
+    // both kinds of checks (to account for other non-ntp/extension
+    // process-per-site scenarios + to work correctly even if
+    // ShouldUseSpareRenderProcessHost starts covering non-process-per-site
+    // scenarios).
     bool embedder_allows_spare_usage =
         GetContentClient()->browser()->ShouldUseSpareRenderProcessHost(
             browser_context, site_instance->GetSiteURL());
 
+    // We shouldn't use the spare if:
+    // 1. The SiteInstance has already got an associated process.  This is
+    //    important to avoid taking and then immediately discarding the spare
+    //    for process-per-site scenarios (which the HasProcess call below
+    //    accounts for).  Note that HasProcess will return false and allow using
+    //    the spare if the given process-per-site process hasn't been launched.
+    // 2. The SiteInstance has opted out of using the spare process.
     bool site_instance_allows_spare_usage =
+        !site_instance->HasProcess() &&
         site_instance->CanAssociateWithSpareProcess();
 
     // Get the StoragePartition for |site_instance|.  Note that this might be
@@ -592,7 +609,7 @@ class SpareRenderProcessHostManager : public RenderProcessHostObserver {
     if (spare_render_process_host_ &&
         browser_context == spare_render_process_host_->GetBrowserContext() &&
         site_storage == spare_render_process_host_->GetStoragePartition() &&
-        !is_for_guests_only && embedder_allows_spare_usage &&
+        !site_instance->IsGuest() && embedder_allows_spare_usage &&
         site_instance_allows_spare_usage) {
       CHECK(spare_render_process_host_->HostHasNotBeenUsed());
 
@@ -683,15 +700,6 @@ class SpareRenderProcessHostManager : public RenderProcessHostObserver {
 
   DISALLOW_COPY_AND_ASSIGN(SpareRenderProcessHostManager);
 };
-
-// Forwards service requests to Service Manager since the renderer cannot launch
-// out-of-process services on is own.
-template <typename Interface>
-void ForwardRequest(const char* service_name,
-                    mojo::InterfaceRequest<Interface> request) {
-  // TODO(beng): This should really be using the per-profile connector.
-  GetSystemConnector()->BindInterface(service_name, std::move(request));
-}
 
 class RenderProcessHostIsReadyObserver : public RenderProcessHostObserver {
  public:
@@ -821,7 +829,7 @@ class SiteProcessCountTracker : public base::SupportsUserData::Data,
           !RenderProcessHostImpl::IsSuitableHost(
               host, host->GetBrowserContext(),
               site_instance->GetIsolationContext(), site_instance->GetSiteURL(),
-              site_instance->lock_url())) {
+              site_instance->lock_url(), site_instance->IsGuest())) {
         continue;
       }
 
@@ -1029,10 +1037,11 @@ class UnmatchedServiceWorkerProcessTracker
     // nonexistent extension URL.  See https://crbug.com/782349 and
     // https://crbug.com/780661.
     GURL site_url(site_instance->GetSiteURL());
-    if (!host->MayReuseHost() || !RenderProcessHostImpl::IsSuitableHost(
-                                     host, host->GetBrowserContext(),
-                                     site_instance->GetIsolationContext(),
-                                     site_url, site_instance->lock_url()))
+    if (!host->MayReuseHost() ||
+        !RenderProcessHostImpl::IsSuitableHost(
+            host, host->GetBrowserContext(),
+            site_instance->GetIsolationContext(), site_url,
+            site_instance->lock_url(), site_instance->IsGuest()))
       return nullptr;
 
     site_process_set_.erase(site_process_pair);
@@ -1190,6 +1199,27 @@ GetBindHostReceiverInterceptor() {
   return *interceptor;
 }
 
+RenderProcessHostImpl::BatteryMonitorBinder& GetBatteryMonitorBinderOverride() {
+  static base::NoDestructor<RenderProcessHostImpl::BatteryMonitorBinder> binder;
+  return *binder;
+}
+
+void BindBatteryMonitor(
+    mojo::PendingReceiver<device::mojom::BatteryMonitor> receiver) {
+  const auto& binder = GetBatteryMonitorBinderOverride();
+  if (binder)
+    binder.Run(std::move(receiver));
+  else
+    GetDeviceService().BindBatteryMonitor(std::move(receiver));
+}
+
+RenderProcessHostImpl::CreateNetworkFactoryCallback&
+GetCreateNetworkFactoryCallback() {
+  static base::NoDestructor<RenderProcessHostImpl::CreateNetworkFactoryCallback>
+      s_callback;
+  return *s_callback;
+}
+
 }  // namespace
 
 // A RenderProcessHostImpl's IO thread implementation of the
@@ -1253,6 +1283,12 @@ class RenderProcessHostImpl::IOThreadHostImpl
                  discardable_memory::mojom::DiscardableSharedMemoryManager>()) {
       discardable_memory::DiscardableSharedMemoryManager::Get()->Bind(
           std::move(r));
+      return;
+    }
+
+    if (auto r = receiver.As<ukm::mojom::UkmRecorderInterface>()) {
+      metrics::UkmRecorderInterface::Create(ukm::UkmRecorder::Get(),
+                                            std::move(r));
       return;
     }
 
@@ -1398,8 +1434,7 @@ int RenderProcessHost::GetCurrentRenderProcessCountForTesting() {
 RenderProcessHost* RenderProcessHostImpl::CreateRenderProcessHost(
     BrowserContext* browser_context,
     StoragePartitionImpl* storage_partition_impl,
-    SiteInstance* site_instance,
-    bool is_for_guests_only) {
+    SiteInstance* site_instance) {
   if (g_render_process_host_factory_) {
     return g_render_process_host_factory_->CreateRenderProcessHost(
         browser_context, site_instance);
@@ -1413,12 +1448,12 @@ RenderProcessHost* RenderProcessHostImpl::CreateRenderProcessHost(
   // stash the Site URL on it. This way, when we start a service worker inside
   // this storage partition, we can create the appropriate SiteInstance for
   // finding a process (e.g., we will try to start a worker from
-  // "https://example.com/sw.js" but need to use the site URL
-  // "chrome-guest://blahblah" to get a process in the guest's
-  // StoragePartition.)
-  if (is_for_guests_only && site_instance &&
-      storage_partition_impl->site_for_service_worker().is_empty()) {
-    storage_partition_impl->set_site_for_service_worker(
+  // "https://example.com/sw.js" but need to use the guest site URL
+  // to get a process in the guest's StoragePartition.)
+  const bool is_for_guests_only = site_instance && site_instance->IsGuest();
+  if (is_for_guests_only &&
+      storage_partition_impl->site_for_guest_service_worker().is_empty()) {
+    storage_partition_impl->set_site_for_guest_service_worker(
         site_instance->GetSiteURL());
   }
 
@@ -1469,9 +1504,9 @@ RenderProcessHostImpl::RenderProcessHostImpl(
           new IndexedDBDispatcherHost(
               id_,
               storage_partition_impl_->GetIndexedDBContext(),
-              ChromeBlobStorageContext::GetFor(browser_context_)),
+              ChromeBlobStorageContext::GetRemoteFor(browser_context)),
           base::OnTaskRunnerDeleter(
-              storage_partition_impl_->GetIndexedDBContext()->TaskRunner())),
+              storage_partition_impl_->GetIndexedDBContext()->IDBTaskRunner())),
       channel_connected_(false),
       sent_render_process_ready_(false),
       push_messaging_manager_(
@@ -1594,6 +1629,18 @@ RenderProcessHostImpl::~RenderProcessHostImpl() {
 
   if (cleanup_corb_exception_for_plugin_upon_destruction_)
     RemoveCorbExceptionForPluginOnUIThread(GetID());
+
+  // Do reporting here for the priority of the frames seen by the host.
+  FramePrioritiesSeen report = FramePrioritiesSeen::kNoFramesSeen;
+  if (normal_priority_frames_seen_ && low_priority_frames_seen_) {
+    report = FramePrioritiesSeen::kMixedPrioritiesSeen;
+  } else if (normal_priority_frames_seen_) {
+    report = FramePrioritiesSeen::kOnlyNormalPrioritiesSeen;
+  } else if (low_priority_frames_seen_) {
+    report = FramePrioritiesSeen::kOnlyLowPrioritiesSeen;
+  }
+  UMA_HISTOGRAM_ENUMERATION("BrowserRenderProcessHost.FramePrioritiesSeen",
+                            report);
 }
 
 bool RenderProcessHostImpl::Init() {
@@ -1653,8 +1700,8 @@ bool RenderProcessHostImpl::Init() {
 #if defined(OS_ANDROID)
   // Initialize the java audio manager so that media session tests will pass.
   // See internal b/29872494.
-  static_cast<media::AudioManagerAndroid*>(media::AudioManager::Get())->
-      InitializeIfNeeded();
+  static_cast<media::AudioManagerAndroid*>(media::AudioManager::Get())
+      ->InitializeIfNeeded();
 #endif  // defined(OS_ANDROID)
 
   CreateMessageFilters();
@@ -1671,7 +1718,7 @@ bool RenderProcessHostImpl::Init() {
     in_process_renderer_.reset(g_renderer_main_thread_factory(
         InProcessChildThreadParams(
             base::CreateSingleThreadTaskRunner({BrowserThread::IO}),
-            &mojo_invitation_, child_connection_->service_token()),
+            &mojo_invitation_),
         base::checked_cast<int32_t>(id_)));
 
     base::Thread::Options options;
@@ -1711,7 +1758,8 @@ bool RenderProcessHostImpl::Init() {
     child_process_launcher_ = std::make_unique<ChildProcessLauncher>(
         std::make_unique<RendererSandboxedProcessLauncherDelegate>(),
         std::move(cmd_line), GetID(), this, std::move(mojo_invitation_),
-        base::BindRepeating(&RenderProcessHostImpl::OnMojoError, id_));
+        base::BindRepeating(&RenderProcessHostImpl::OnMojoError, id_),
+        GetV8SnapshotFilesToPreload());
     channel_->Pause();
 
     // In single process mode, browser-side tracing and memory will cover the
@@ -1739,49 +1787,22 @@ void RenderProcessHostImpl::InitializeChannelProxy() {
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
       base::CreateSingleThreadTaskRunner({BrowserThread::IO});
 
-  // Acquire a Connector which will route connections to a new instance of the
-  // renderer service.
-  service_manager::Connector* connector =
-      BrowserContext::GetConnectorFor(browser_context_);
-  if (!connector) {
-    // Note that some embedders (e.g. Android WebView) may not initialize a
-    // Connector per BrowserContext. In those cases we fall back to the
-    // browser-wide Connector.
-    connector = GetSystemConnector();
-    if (!connector && !ServiceManagerConnection::GetForProcess()) {
-      // Additionally, some test code may not initialize the system Connector.
-      // We initialize one that the ChildConnection below can use.
-      // TODO(crbug.com/904240): Figure out why some unit tests fail when this
-      // doesn't create a full ServiceManagerConnection.
-      service_manager::mojom::ServicePtr unused_service;
-      ServiceManagerConnection::SetForProcess(ServiceManagerConnection::Create(
-          mojo::MakeRequest(&unused_service), io_task_runner));
-      connector = ServiceManagerConnection::GetForProcess()->GetConnector();
-    }
-  }
-
-  // Establish a ServiceManager connection for the new render service instance.
+  // Establish a ChildProcess interface connection to the new renderer. This is
+  // connected as the primordial message pipe via a Mojo invitation to the
+  // process.
   mojo_invitation_ = {};
-  child_connection_ = std::make_unique<ChildConnection>(
-      service_manager::Identity(
-          mojom::kRendererServiceName,
-          BrowserContext::GetServiceInstanceGroupFor(GetBrowserContext()),
-          base::Token::CreateRandom(), base::Token::CreateRandom()),
-      &mojo_invitation_, connector, io_task_runner);
+  child_process_.reset();
+  child_process_.Bind(mojo::PendingRemote<mojom::ChildProcess>(
+      mojo_invitation_.AttachMessagePipe(0), /*version=*/0));
 
-  // Send an interface request to bootstrap the IPC::Channel. Note that this
-  // request will happily sit on the pipe until the process is launched and
-  // connected to the ServiceManager. We take the other end immediately and
-  // plug it into a new ChannelProxy.
-  mojo::MessagePipe pipe;
-  BindInterface(IPC::mojom::ChannelBootstrap::Name_, std::move(pipe.handle1));
+  // Bootstrap the IPC Channel.
+  mojo::PendingRemote<IPC::mojom::ChannelBootstrap> bootstrap;
+  child_process_->BootstrapLegacyIpc(
+      bootstrap.InitWithNewPipeAndPassReceiver());
   std::unique_ptr<IPC::ChannelFactory> channel_factory =
       IPC::ChannelMojo::CreateServerFactory(
-          std::move(pipe.handle0), io_task_runner,
+          bootstrap.PassPipe(), io_task_runner,
           base::ThreadTaskRunnerHandle::Get());
-
-  child_process_.reset();
-  content::BindInterface(this, child_process_.BindNewPipeAndPassReceiver());
 
   ResetChannelProxy();
 
@@ -1840,10 +1861,6 @@ void RenderProcessHostImpl::ResetChannelProxy() {
 void RenderProcessHostImpl::CreateMessageFilters() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   MediaInternals* media_internals = MediaInternals::GetInstance();
-  // Add BrowserPluginMessageFilter to ensure it gets the first stab at messages
-  // from guests.
-  bp_message_filter_ = new BrowserPluginMessageFilter(GetID());
-  AddFilter(bp_message_filter_.get());
 
   scoped_refptr<RenderMessageFilter> render_message_filter =
       base::MakeRefCounted<RenderMessageFilter>(
@@ -1878,11 +1895,12 @@ void RenderProcessHostImpl::CreateMessageFilters() {
 }
 
 void RenderProcessHostImpl::BindCacheStorage(
-    mojo::PendingReceiver<blink::mojom::CacheStorage> receiver,
-    const url::Origin& origin) {
+    network::mojom::CrossOriginEmbedderPolicy cross_origin_embedder_policy,
+    const url::Origin& origin,
+    mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   storage_partition_impl_->GetCacheStorageContext()->AddReceiver(
-      std::move(receiver), origin);
+      cross_origin_embedder_policy, origin, std::move(receiver));
 }
 
 void RenderProcessHostImpl::BindIndexedDB(
@@ -1906,7 +1924,7 @@ void RenderProcessHostImpl::BindIndexedDB(
   // the IDB task runner deleter's task will be run after the next call,
   // guaranteeing that the usage of base::Unretained(indexed_db_factory_.get())
   // here is safe.
-  indexed_db_factory_->context()->TaskRunner()->PostTask(
+  indexed_db_factory_->context()->IDBTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(&IndexedDBDispatcherHost::AddReceiver,
                      base::Unretained(indexed_db_factory_.get()), GetID(),
@@ -1929,11 +1947,59 @@ void RenderProcessHostImpl::BindFileSystemManager(
                      std::move(receiver)));
 }
 
+void RenderProcessHostImpl::BindNativeFileSystemManager(
+    const url::Origin& origin,
+    mojo::PendingReceiver<blink::mojom::NativeFileSystemManager> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // This code path is only for workers, hence always pass in
+  // MSG_ROUTING_NONE as frame ID. Frames themselves go through
+  // RenderFrameHostImpl instead.
+  auto* storage_partition =
+      static_cast<StoragePartitionImpl*>(GetStoragePartition());
+  auto* manager = storage_partition->GetNativeFileSystemManager();
+  manager->BindReceiver(
+      NativeFileSystemManagerImpl::BindingContext(
+          origin,
+          // TODO(https://crbug.com/989323): Obtain and use a better
+          // URL for workers instead of the origin as source url.
+          // This URL will be used for SafeBrowsing checks and for
+          // the Quarantine Service.
+          origin.GetURL(), GetID(), MSG_ROUTING_NONE),
+      std::move(receiver));
+}
+
+void RenderProcessHostImpl::BindRestrictedCookieManagerForServiceWorker(
+    const url::Origin& origin,
+    mojo::PendingReceiver<network::mojom::RestrictedCookieManager> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  GetStoragePartition()->CreateRestrictedCookieManager(
+      network::mojom::RestrictedCookieManagerRole::SCRIPT, origin,
+      origin.GetURL(), origin, true /* is_service_worker */, GetID(),
+      MSG_ROUTING_NONE, std::move(receiver));
+}
+
 void RenderProcessHostImpl::BindVideoDecodePerfHistory(
     mojo::PendingReceiver<media::mojom::VideoDecodePerfHistory> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   GetBrowserContext()->GetVideoDecodePerfHistory()->BindReceiver(
       std::move(receiver));
+}
+
+void RenderProcessHostImpl::BindQuotaDispatcherHost(
+    int render_frame_id,
+    const url::Origin& origin,
+    mojo::PendingReceiver<blink::mojom::QuotaDispatcherHost> receiver) {
+  // TODO(crbug.com/779444): Save the |origin| here and use it rather than the
+  // one provided by QuotaDispatcher.
+
+  // Bind on the IO thread.
+  base::PostTask(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(
+          &QuotaDispatcherHost::BindQuotaDispatcherHostOnIOThread, GetID(),
+          render_frame_id,
+          base::RetainedRef(GetStoragePartition()->GetQuotaManager()),
+          std::move(receiver)));
 }
 
 void RenderProcessHostImpl::CreateLockManager(
@@ -1959,6 +2025,30 @@ void RenderProcessHostImpl::CreatePaymentManagerForOrigin(
   static_cast<StoragePartitionImpl*>(GetStoragePartition())
       ->GetPaymentAppContext()
       ->CreatePaymentManagerForOrigin(origin, std::move(receiver));
+}
+
+void RenderProcessHostImpl::CreateNotificationService(
+    const url::Origin& origin,
+    mojo::PendingReceiver<blink::mojom::NotificationService> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  storage_partition_impl_->GetPlatformNotificationContext()->CreateService(
+      origin, std::move(receiver));
+}
+
+void RenderProcessHostImpl::CreateWebSocketConnector(
+    const url::Origin& origin,
+    mojo::PendingReceiver<blink::mojom::WebSocketConnector> receiver) {
+  // TODO(jam): is it ok to not send extraHeaders for sockets created from
+  // shared and service workers?
+  //
+  // Shared Workers and service workers are not directly associated with a
+  // frame, so the concept of "top-level frame" does not exist. Can use
+  // (origin, origin) for the NetworkIsolationKey for requests because these
+  // workers can only be created when the site has cookie access.
+  mojo::MakeSelfOwnedReceiver(std::make_unique<WebSocketConnectorImpl>(
+                                  GetID(), MSG_ROUTING_NONE, origin,
+                                  net::NetworkIsolationKey(origin, origin)),
+                              std::move(receiver));
 }
 
 void RenderProcessHostImpl::CancelProcessShutdownDelayForUnload() {
@@ -2002,34 +2092,40 @@ RenderProcessHostImpl::GetPeerConnectionTrackerHost() {
   return peer_connection_tracker_host_.get();
 }
 
+// static
+void RenderProcessHostImpl::OverrideBatteryMonitorBinderForTesting(
+    BatteryMonitorBinder binder) {
+  GetBatteryMonitorBinderOverride() = std::move(binder);
+}
+
 void RenderProcessHostImpl::RegisterMojoInterfaces() {
   auto registry = std::make_unique<service_manager::BinderRegistry>();
 
-  AddUIThreadInterface(
-      registry.get(),
-      base::BindRepeating(&ForwardRequest<device::mojom::BatteryMonitor>,
-                          device::mojom::kServiceName));
-
-  AddUIThreadInterface(
-      registry.get(),
-      base::BindRepeating(&ForwardRequest<device::mojom::TimeZoneMonitor>,
-                          device::mojom::kServiceName));
-
-  AddUIThreadInterface(
-      registry.get(),
-      base::BindRepeating(&ForwardRequest<device::mojom::PowerMonitor>,
-                          device::mojom::kServiceName));
-
-  AddUIThreadInterface(
-      registry.get(),
-      base::BindRepeating(&ForwardRequest<ukm::mojom::UkmRecorderInterface>,
-                          metrics::mojom::kMetricsServiceName));
+  AddUIThreadInterface(registry.get(),
+                       base::BindRepeating(&BindBatteryMonitor));
 
   AddUIThreadInterface(
       registry.get(),
       base::BindRepeating(
-          &ForwardRequest<device::mojom::ScreenOrientationListener>,
-          device::mojom::kServiceName));
+          [](mojo::PendingReceiver<device::mojom::TimeZoneMonitor> receiver) {
+            GetDeviceService().BindTimeZoneMonitor(std::move(receiver));
+          }));
+
+  AddUIThreadInterface(
+      registry.get(),
+      base::BindRepeating(
+          [](mojo::PendingReceiver<device::mojom::PowerMonitor> receiver) {
+            GetDeviceService().BindPowerMonitor(std::move(receiver));
+          }));
+
+  AddUIThreadInterface(
+      registry.get(),
+      base::BindRepeating(
+          [](mojo::PendingReceiver<device::mojom::ScreenOrientationListener>
+                 receiver) {
+            GetDeviceService().BindScreenOrientationListener(
+                std::move(receiver));
+          }));
 
   AddUIThreadInterface(
       registry.get(),
@@ -2199,7 +2295,7 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
 
   AddUIThreadInterface(
       registry.get(),
-      base::BindRepeating(&P2PSocketDispatcherHost::BindRequest,
+      base::BindRepeating(&P2PSocketDispatcherHost::BindReceiver,
                           base::Unretained(p2p_socket_dispatcher_host_.get())));
 
 #if BUILDFLAG(ENABLE_MDNS)
@@ -2254,7 +2350,7 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
 
   AddUIThreadInterface(
       registry.get(),
-      base::BindRepeating(&AecDumpManagerImpl::AddRequest,
+      base::BindRepeating(&AecDumpManagerImpl::AddReceiver,
                           base::Unretained(&aec_dump_manager_)));
 
   // ---- Please do not register interfaces below this line ------
@@ -2389,8 +2485,8 @@ void RenderProcessHostImpl::RegisterCoordinatorClient(
     mojo::PendingRemote<memory_instrumentation::mojom::ClientProcess>
         client_process) {
   if (!GetProcess().IsValid()) {
-    // If the process dies before we get this message. we have no valid PID and
-    // there's nothing to register.
+    // If the process dies before we get this message. we have no valid PID
+    // and there's nothing to register.
     return;
   }
 
@@ -2410,24 +2506,9 @@ int RenderProcessHostImpl::GetNextRoutingID() {
   return widget_helper_->GetNextRoutingID();
 }
 
-void RenderProcessHostImpl::BindInterface(
-    const std::string& interface_name,
-    mojo::ScopedMessagePipeHandle interface_pipe) {
-  child_connection_->BindInterface(interface_name, std::move(interface_pipe));
-}
-
 void RenderProcessHostImpl::BindReceiver(
     mojo::GenericPendingReceiver receiver) {
   child_process_->BindReceiver(std::move(receiver));
-}
-
-const service_manager::Identity& RenderProcessHostImpl::GetChildIdentity() {
-  // GetChildIdentity should only be called if the RPH is (or soon will be)
-  // backed by an actual renderer process.  This helps prevent leaks similar to
-  // the ones raised in https://crbug.com/813045.
-  DCHECK(IsInitializedAndNotDead());
-
-  return child_connection_->child_identity();
 }
 
 std::unique_ptr<base::PersistentMemoryAllocator>
@@ -2487,126 +2568,42 @@ mojom::Renderer* RenderProcessHostImpl::GetRendererInterface() {
   return renderer_interface_.get();
 }
 
+// static
+void RenderProcessHostImpl::SetNetworkFactoryForTesting(
+    const CreateNetworkFactoryCallback& create_network_factory_callback) {
+  DCHECK(!BrowserThread::IsThreadInitialized(BrowserThread::UI) ||
+         BrowserThread::CurrentlyOn(BrowserThread::UI));
+  DCHECK(create_network_factory_callback.is_null() ||
+         GetCreateNetworkFactoryCallback().is_null())
+      << "It is not expected that this is called with non-null callback when "
+      << "another overriding callback is already set.";
+  GetCreateNetworkFactoryCallback() = create_network_factory_callback;
+}
+
 void RenderProcessHostImpl::CreateURLLoaderFactoryForRendererProcess(
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  base::Optional<url::Origin> request_initiator_site_lock;
-  GURL process_lock =
-      ChildProcessSecurityPolicyImpl::GetInstance()->GetOriginLock(GetID());
-  if (process_lock.is_valid()) {
-    request_initiator_site_lock =
-        SiteInstanceImpl::GetRequestInitiatorSiteLock(process_lock);
-  }
-
-  // Since this function is about to get deprecated (crbug.com/891872), it
-  // should be fine to not add support for network isolation thus sending empty
-  // key.
-  //
-  // We may not be able to allow powerful APIs such as memory measurement APIs
-  // (see https://crbug.com/887967) without removing this call.
-  CreateURLLoaderFactoryInternal(
-      request_initiator_site_lock.value_or(url::Origin()),
-      request_initiator_site_lock,
-      network::mojom::CrossOriginEmbedderPolicy::kNone,
-      nullptr /* preferences */, net::NetworkIsolationKey(),
-      mojo::NullRemote() /* header_client */, std::move(receiver),
-      false /* is_trusted */);
+  CreateURLLoaderFactory(
+      std::move(receiver),
+      URLLoaderFactoryParamsHelper::CreateForRendererProcess(this));
 }
 
 void RenderProcessHostImpl::CreateURLLoaderFactory(
-    const url::Origin& origin,
-    const url::Origin& main_world_origin,
-    network::mojom::CrossOriginEmbedderPolicy embedder_policy,
-    const WebPreferences* preferences,
-    const net::NetworkIsolationKey& network_isolation_key,
-    mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
-        header_client,
-    mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver) {
-  CreateURLLoaderFactoryInternal(origin, main_world_origin, embedder_policy,
-                                 preferences, network_isolation_key,
-                                 std::move(header_client), std::move(receiver),
-                                 false /* is_trusted */);
-}
-
-void RenderProcessHostImpl::CreateTrustedURLLoaderFactory(
-    const url::Origin& origin,
-    const url::Origin& main_world_origin,
-    network::mojom::CrossOriginEmbedderPolicy embedder_policy,
-    const WebPreferences* preferences,
-    mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
-        header_client,
-    mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver) {
-  CreateURLLoaderFactoryInternal(
-      origin, main_world_origin, embedder_policy, preferences, base::nullopt,
-      std::move(header_client), std::move(receiver), true /* is_trusted */);
-}
-
-void RenderProcessHostImpl::CreateURLLoaderFactoryInternal(
-    const url::Origin& origin,
-    const base::Optional<url::Origin>& main_world_origin,
-    network::mojom::CrossOriginEmbedderPolicy embedder_policy,
-    const WebPreferences* preferences,
-    const base::Optional<net::NetworkIsolationKey>& network_isolation_key,
-    mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
-        header_client,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
-    bool is_trusted) {
+    network::mojom::URLLoaderFactoryParamsPtr params) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(params);
+  DCHECK_EQ(GetID(), static_cast<int>(params->process_id));
 
-  // "chrome-guest://..." is never used as a main or isolated world origin.
-  DCHECK(origin.scheme() != kGuestScheme);
-  DCHECK(!main_world_origin.has_value() ||
-         main_world_origin->scheme() != kGuestScheme);
-
-  network::mojom::NetworkContext* network_context =
-      storage_partition_impl_->GetNetworkContext();
-  mojo::PendingRemote<network::mojom::URLLoaderFactory>
-      embedder_provided_factory;
-  if (main_world_origin.has_value()) {
-    embedder_provided_factory =
-        GetContentClient()->browser()->CreateURLLoaderFactoryForNetworkRequests(
-            this, network_context, &header_client, origin,
-            main_world_origin.value(), network_isolation_key);
-  }
-  if (embedder_provided_factory) {
-    mojo::FusePipes(std::move(receiver), std::move(embedder_provided_factory));
+  if (GetCreateNetworkFactoryCallback().is_null()) {
+    storage_partition_impl_->GetNetworkContext()->CreateURLLoaderFactory(
+        std::move(receiver), std::move(params));
   } else {
-    network::mojom::URLLoaderFactoryParamsPtr params =
-        network::mojom::URLLoaderFactoryParams::New();
-    params->process_id = GetID();
-    params->request_initiator_site_lock = main_world_origin;
-    params->disable_web_security =
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kDisableWebSecurity);
-    // If |network_isolation_key| does not have a value, we do not initialize
-    // the URLLoaderFactory with a NetworkIsolationKey.
-    if (network_isolation_key)
-      params->network_isolation_key = network_isolation_key.value();
-
-    params->is_trusted = is_trusted;
-
-    params->header_client = std::move(header_client);
-    params->cross_origin_embedder_policy = embedder_policy;
-
-    if (params->disable_web_security) {
-      // --disable-web-security also disables Cross-Origin Read Blocking (CORB).
-      params->is_corb_enabled = false;
-    } else if (preferences &&
-               preferences->allow_universal_access_from_file_urls &&
-               main_world_origin.has_value() &&
-               main_world_origin->scheme() == url::kFileScheme) {
-      // allow_universal_access_from_file_urls disables CORB (via
-      // |is_corb_enabled|) and CORS (via |disable_web_security|) for requests
-      // made from a file: |origin|.
-      params->is_corb_enabled = false;
-      params->disable_web_security = true;
-    } else {
-      params->is_corb_enabled = true;
-    }
-
-    network_context->CreateURLLoaderFactory(std::move(receiver),
-                                            std::move(params));
+    mojo::PendingRemote<network::mojom::URLLoaderFactory> original_factory;
+    storage_partition_impl_->GetNetworkContext()->CreateURLLoaderFactory(
+        original_factory.InitWithNewPipeAndPassReceiver(), std::move(params));
+    GetCreateNetworkFactoryCallback().Run(std::move(receiver), GetID(),
+                                          std::move(original_factory));
   }
 }
 
@@ -2628,8 +2625,8 @@ mojom::RouteProvider* RenderProcessHostImpl::GetRemoteRouteProvider() {
 
 void RenderProcessHostImpl::AddRoute(int32_t routing_id,
                                      IPC::Listener* listener) {
-  CHECK(!listeners_.Lookup(routing_id)) << "Found Routing ID Conflict: "
-                                        << routing_id;
+  CHECK(!listeners_.Lookup(routing_id))
+      << "Found Routing ID Conflict: " << routing_id;
   listeners_.AddWithID(listener, routing_id);
 }
 
@@ -2661,7 +2658,8 @@ void RenderProcessHostImpl::ShutdownForBadMessage(
   }
 
   // We kill the renderer but don't include a NOTREACHED, because we want the
-  // browser to try to survive when it gets illegal messages from the renderer.
+  // browser to try to survive when it gets illegal messages from the
+  // renderer.
   Shutdown(RESULT_CODE_KILLED_BAD_MESSAGE);
 
   if (crash_report_mode == CrashReportMode::GENERATE_CRASH_DUMP) {
@@ -2701,6 +2699,17 @@ void RenderProcessHostImpl::UpdateClientPriority(PriorityClient* client) {
 void RenderProcessHostImpl::UpdateFrameWithPriority(
     base::Optional<FramePriority> previous_priority,
     base::Optional<FramePriority> new_priority) {
+  // Record the priority of the frames seens so we know for reporting what
+  // combination of normal and low priority frames have been seen.
+  if (new_priority) {
+    if (new_priority == FramePriority::kNormal) {
+      normal_priority_frames_seen_ = true;
+    } else {
+      low_priority_frames_seen_ = true;
+    }
+  }
+
+  // If we're not using frame priorities, return after recording.
   if (!base::FeatureList::IsEnabled(
           features::kUseFramePriorityInRenderProcessHost)) {
     return;
@@ -2858,8 +2867,7 @@ void RenderProcessHostImpl::NotifySpareManagerAboutRecentlyUsedBrowserContext(
 }
 
 // static
-RenderProcessHost*
-RenderProcessHostImpl::GetSpareRenderProcessHostForTesting() {
+RenderProcessHost* RenderProcessHost::GetSpareRenderProcessHostForTesting() {
   return SpareRenderProcessHostManager::GetInstance()
       .spare_render_process_host();
 }
@@ -2901,10 +2909,10 @@ void RenderProcessHostImpl::LockToOrigin(
   ChildProcessSecurityPolicyImpl::GetInstance()->LockToOrigin(
       isolation_context, GetID(), lock_url);
 
-  // Note that LockToOrigin is only called once per RenderProcessHostImpl (when
-  // committing a navigation into an empty renderer).  Therefore, the call to
-  // NotifyRendererIfLockedToSite below is insufficient for setting up renderers
-  // respawned after crashing - this is handled by another call to
+  // Note that LockToOrigin is only called once per RenderProcessHostImpl
+  // (when committing a navigation into an empty renderer).  Therefore, the
+  // call to NotifyRendererIfLockedToSite below is insufficient for setting up
+  // renderers respawned after crashing - this is handled by another call to
   // NotifyRendererIfLockedToSite from OnProcessLaunched.
   NotifyRendererIfLockedToSite();
 }
@@ -2992,9 +3000,6 @@ void RenderProcessHostImpl::AppendRendererCommandLine(
 
   AppendCompositorCommandLineFlags(command_line);
 
-  command_line->AppendSwitchASCII(
-      service_manager::switches::kServiceRequestChannelToken,
-      child_connection_->service_token());
   command_line->AppendSwitchASCII(switches::kRendererClientId,
                                   std::to_string(GetID()));
 
@@ -3153,8 +3158,9 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kVModule,
     switches::kWebglAntialiasingMode,
     switches::kWebglMSAASampleCount,
-    // Please keep these in alphabetical order. Compositor switches here should
-    // also be added to chrome/browser/chromeos/login/chrome_restart_request.cc.
+    // Please keep these in alphabetical order. Compositor switches here
+    // should also be added to
+    // chrome/browser/chromeos/login/chrome_restart_request.cc.
     cc::switches::kCCScrollAnimationDurationForTesting,
     cc::switches::kCheckDamageEarly,
     cc::switches::kDisableCheckerImaging,
@@ -3171,7 +3177,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     cc::switches::kBrowserControlsHideThreshold,
     cc::switches::kBrowserControlsShowThreshold,
     switches::kRunAllCompositorStagesBeforeDraw,
-    switches::kUseVizHitTestSurfaceLayer,
 
 #if BUILDFLAG(ENABLE_PLUGINS)
     switches::kEnablePepperTesting,
@@ -3233,9 +3238,9 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
   }
 #elif !defined(OS_CHROMEOS)
   // If gpu compositing is not being used, tell the renderer at startup. This
-  // is inherently racey, as it may change while the renderer is being launched,
-  // but the renderer will hear about the correct state eventually. This
-  // optimizes the common case to avoid wasted work.
+  // is inherently racey, as it may change while the renderer is being
+  // launched, but the renderer will hear about the correct state eventually.
+  // This optimizes the common case to avoid wasted work.
   if (GpuDataManagerImpl::GetInstance()->IsGpuCompositingDisabled())
     renderer_cmd->AppendSwitch(switches::kDisableGpuCompositing);
 #endif  // defined(OS_ANDROID)
@@ -3340,8 +3345,8 @@ bool RenderProcessHostImpl::Send(IPC::Message* msg) {
 
   std::unique_ptr<IPC::Message> message(msg);
 
-  // |channel_| is only null after Cleanup(), at which point we don't care about
-  // delivering any messages.
+  // |channel_| is only null after Cleanup(), at which point we don't care
+  // about delivering any messages.
   if (!channel_)
     return false;
 
@@ -3354,8 +3359,8 @@ bool RenderProcessHostImpl::Send(IPC::Message* msg) {
     if (!IsInitializedAndNotDead())
       return false;
 
-    // Likewise if we've done Init(), but process launch has not yet completed,
-    // we avoid blocking on sync IPC.
+    // Likewise if we've done Init(), but process launch has not yet
+    // completed, we avoid blocking on sync IPC.
     if (child_process_launcher_.get() && child_process_launcher_->IsStarting())
       return false;
   }
@@ -3369,8 +3374,8 @@ bool RenderProcessHostImpl::Send(IPC::Message* msg) {
 }
 
 bool RenderProcessHostImpl::OnMessageReceived(const IPC::Message& msg) {
-  // If we're about to be deleted, or have initiated the fast shutdown sequence,
-  // we ignore incoming messages.
+  // If we're about to be deleted, or have initiated the fast shutdown
+  // sequence, we ignore incoming messages.
 
   if (deleting_soon_ || fast_shutdown_started_)
     return false;
@@ -3394,8 +3399,8 @@ bool RenderProcessHostImpl::OnMessageReceived(const IPC::Message& msg) {
   IPC::Listener* listener = listeners_.Lookup(msg.routing_id());
   if (!listener) {
     if (msg.is_sync()) {
-      // The listener has gone away, so we must respond or else the caller will
-      // hang waiting for a reply.
+      // The listener has gone away, so we must respond or else the caller
+      // will hang waiting for a reply.
       IPC::Message* reply = IPC::SyncMessage::GenerateReply(&msg);
       reply->set_reply_error();
       Send(reply);
@@ -3446,13 +3451,14 @@ void RenderProcessHostImpl::OnChannelError() {
 }
 
 void RenderProcessHostImpl::OnBadMessageReceived(const IPC::Message& message) {
-  // Message de-serialization failed. We consider this a capital crime. Kill the
-  // renderer if we have one.
+  // Message de-serialization failed. We consider this a capital crime. Kill
+  // the renderer if we have one.
   auto type = message.type();
   LOG(ERROR) << "bad message " << type << " terminating renderer.";
 
-  // The ReceivedBadMessage call below will trigger a DumpWithoutCrashing. Alias
-  // enough information here so that we can determine what the bad message was.
+  // The ReceivedBadMessage call below will trigger a DumpWithoutCrashing.
+  // Alias enough information here so that we can determine what the bad
+  // message was.
   base::debug::Alias(&type);
 
   bad_message::ReceivedBadMessage(this,
@@ -3500,11 +3506,11 @@ void RenderProcessHostImpl::Cleanup() {
   if (run_renderer_in_process())
     return;
 
-  // If within_process_died_observer_ is true, one of our observers performed an
-  // action that caused us to die (e.g. http://crbug.com/339504). Therefore,
-  // delay the destruction until all of the observer callbacks have been made,
-  // and guarantee that the RenderProcessHostDestroyed observer callback is
-  // always the last callback fired.
+  // If within_process_died_observer_ is true, one of our observers performed
+  // an action that caused us to die (e.g. http://crbug.com/339504).
+  // Therefore, delay the destruction until all of the observer callbacks have
+  // been made, and guarantee that the RenderProcessHostDestroyed observer
+  // callback is always the last callback fired.
   if (within_process_died_observer_) {
     delayed_cleanup_needed_ = true;
     return;
@@ -3518,7 +3524,8 @@ void RenderProcessHostImpl::Cleanup() {
     keep_alive_start_time_ = base::TimeTicks::Now();
   }
 
-  // Until there are no other owners of this object, we can't delete ourselves.
+  // Until there are no other owners of this object, we can't delete
+  // ourselves.
   if (!listeners_.IsEmpty() || keep_alive_ref_count_ != 0)
     return;
 
@@ -3558,8 +3565,8 @@ void RenderProcessHostImpl::Cleanup() {
   for (auto& observer : observers_)
     observer.RenderProcessHostDestroyed(this);
   NotificationService::current()->Notify(
-      NOTIFICATION_RENDERER_PROCESS_TERMINATED,
-      Source<RenderProcessHost>(this), NotificationService::NoDetails());
+      NOTIFICATION_RENDERER_PROCESS_TERMINATED, Source<RenderProcessHost>(this),
+      NotificationService::NoDetails());
 
 #ifndef NDEBUG
   is_self_deleted_ = true;
@@ -3671,19 +3678,14 @@ void RenderProcessHostImpl::DisableAudioDebugRecordings() {
 }
 
 RenderProcessHostImpl::WebRtcStopRtpDumpCallback
-RenderProcessHostImpl::StartRtpDump(
-    bool incoming,
-    bool outgoing,
-    const WebRtcRtpPacketCallback& packet_callback) {
+RenderProcessHostImpl::StartRtpDump(bool incoming,
+                                    bool outgoing,
+                                    WebRtcRtpPacketCallback packet_callback) {
   p2p_socket_dispatcher_host_->StartRtpDump(incoming, outgoing,
-                                            packet_callback);
+                                            std::move(packet_callback));
 
-  if (stop_rtp_dump_callback_.is_null()) {
-    stop_rtp_dump_callback_ =
-        base::Bind(&P2PSocketDispatcherHost::StopRtpDump,
-                   p2p_socket_dispatcher_host_->GetWeakPtr());
-  }
-  return stop_rtp_dump_callback_;
+  return base::BindOnce(&P2PSocketDispatcherHost::StopRtpDump,
+                        p2p_socket_dispatcher_host_->GetWeakPtr());
 }
 
 void RenderProcessHostImpl::EnableWebRtcEventLogOutput(int lid,
@@ -3765,9 +3767,9 @@ void RenderProcessHostImpl::FilterURL(RenderProcessHost* rph,
   ChildProcessSecurityPolicyImpl* policy =
       ChildProcessSecurityPolicyImpl::GetInstance();
   if (!policy->CanRequestURL(rph->GetID(), *url)) {
-    // If this renderer is not permitted to request this URL, we invalidate the
-    // URL.  This prevents us from storing the blocked URL and becoming confused
-    // later.
+    // If this renderer is not permitted to request this URL, we invalidate
+    // the URL.  This prevents us from storing the blocked URL and becoming
+    // confused later.
     VLOG(1) << "Blocked URL " << url->spec();
     *url = GURL(kBlockedURL);
   }
@@ -3779,7 +3781,8 @@ bool RenderProcessHostImpl::IsSuitableHost(
     BrowserContext* browser_context,
     const IsolationContext& isolation_context,
     const GURL& site_url,
-    const GURL& lock_url) {
+    const GURL& lock_url,
+    const bool is_guest) {
   if (run_renderer_in_process()) {
     DCHECK_EQ(host->GetBrowserContext(), browser_context)
         << " Single-process mode does not support multiple browser contexts.";
@@ -3790,15 +3793,15 @@ bool RenderProcessHostImpl::IsSuitableHost(
     return false;
 
   // Do not allow sharing of guest hosts. This is to prevent bugs where guest
-  // and non-guest storage gets mixed. In the future, we might consider enabling
-  // the sharing of guests, in this case this check should be removed and
-  // InSameStoragePartition should handle the possible sharing.
+  // and non-guest storage gets mixed. In the future, we might consider
+  // enabling the sharing of guests, in this case this check should be removed
+  // and InSameStoragePartition should handle the possible sharing.
   if (host->IsForGuestsOnly())
     return false;
 
   // Check whether the given host and the intended site_url will be using the
-  // same StoragePartition, since a RenderProcessHost can only support a single
-  // StoragePartition.  This is relevant for packaged apps.
+  // same StoragePartition, since a RenderProcessHost can only support a
+  // single StoragePartition.  This is relevant for packaged apps.
   StoragePartition* dest_partition =
       BrowserContext::GetStoragePartitionForSite(browser_context, site_url);
   if (!host->InSameStoragePartition(dest_partition))
@@ -3812,7 +3815,8 @@ bool RenderProcessHostImpl::IsSuitableHost(
   if (host->HostHasNotBeenUsed()) {
     // If the host hasn't been used, it won't have the expected WebUI bindings
     // or origin locks just *yet* - skip the checks in this case.  One example
-    // where this case can happen is when the spare RenderProcessHost gets used.
+    // where this case can happen is when the spare RenderProcessHost gets
+    // used.
     CHECK(!host_has_web_ui_bindings);
     CHECK(process_lock.is_empty());
   } else {
@@ -3828,7 +3832,8 @@ bool RenderProcessHostImpl::IsSuitableHost(
       // destination that doesn't require a dedicated process, even for the
       // same site. This can happen with dynamic isolated origins (see
       // https://crbug.com/950453).
-      if (!SiteInstanceImpl::ShouldLockToOrigin(isolation_context, site_url))
+      if (!SiteInstanceImpl::ShouldLockToOrigin(isolation_context, site_url,
+                                                is_guest))
         return false;
 
       // If the destination requires a different process lock, this process
@@ -3836,8 +3841,8 @@ bool RenderProcessHostImpl::IsSuitableHost(
       if (process_lock != lock_url)
         return false;
     } else {
-      if (!host->IsUnused() &&
-          SiteInstanceImpl::ShouldLockToOrigin(isolation_context, site_url)) {
+      if (!host->IsUnused() && SiteInstanceImpl::ShouldLockToOrigin(
+                                   isolation_context, site_url, is_guest)) {
         // If this process has been used to host any other content, it cannot
         // be reused if the destination site requires a dedicated process and
         // should use a process locked to just that site.
@@ -3852,10 +3857,10 @@ bool RenderProcessHostImpl::IsSuitableHost(
   // If this site_url is going to require a dedicated process, then check
   // whether this process has a pending navigation to a URL for which
   // SiteInstance does not assign site URLs.  If this is the case, it is not
-  // safe to reuse this process for a navigation which itself assigns site URLs,
-  // since in that case the latter navigation could lock this process before
-  // the commit for the siteless URL arrives, resulting in a renderer kill.
-  // See https://crbug.com/970046.
+  // safe to reuse this process for a navigation which itself assigns site
+  // URLs, since in that case the latter navigation could lock this process
+  // before the commit for the siteless URL arrives, resulting in a renderer
+  // kill. See https://crbug.com/970046.
   if (SiteInstanceImpl::ShouldAssignSiteForURL(site_url) &&
       SiteInstanceImpl::DoesSiteRequireDedicatedProcess(isolation_context,
                                                         site_url)) {
@@ -3894,8 +3899,8 @@ void RenderProcessHost::SetRunRendererInProcess(bool value) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (value) {
     if (!command_line->HasSwitch(switches::kLang)) {
-      // Modify the current process' command line to include the browser locale,
-      // as the renderer expects this flag to be set.
+      // Modify the current process' command line to include the browser
+      // locale, as the renderer expects this flag to be set.
       const std::string locale =
           GetContentClient()->browser()->GetApplicationLocale();
       command_line->AppendSwitchASCII(switches::kLang, locale);
@@ -3917,18 +3922,6 @@ RenderProcessHost::iterator RenderProcessHost::AllHostsIterator() {
 RenderProcessHost* RenderProcessHost::FromID(int render_process_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return GetAllHosts().Lookup(render_process_id);
-}
-
-// static
-RenderProcessHost* RenderProcessHost::FromRendererInstanceId(
-    const base::Token& instance_id) {
-  for (RenderProcessHost::iterator i(RenderProcessHost::AllHostsIterator());
-       !i.IsAtEnd(); i.Advance()) {
-    RenderProcessHost* process = i.GetCurrentValue();
-    if (process->GetChildIdentity().instance_id() == instance_id)
-      return process;
-  }
-  return nullptr;
 }
 
 // static
@@ -3963,7 +3956,7 @@ RenderProcessHost* RenderProcessHostImpl::GetExistingProcessHost(
         RenderProcessHostImpl::IsSuitableHost(
             iter.GetCurrentValue(), site_instance->GetBrowserContext(),
             site_instance->GetIsolationContext(), site_instance->GetSiteURL(),
-            site_instance->lock_url())) {
+            site_instance->lock_url(), site_instance->IsGuest())) {
       // The spare is always considered before process reuse.
       DCHECK_NE(iter.GetCurrentValue(),
                 SpareRenderProcessHostManager::GetInstance()
@@ -3998,11 +3991,11 @@ RenderProcessHost* RenderProcessHostImpl::GetUnusedProcessHostForServiceWorker(
   while (!iter.IsAtEnd()) {
     auto* host = iter.GetCurrentValue();
     // This function tries to choose the process that will be chosen by a
-    // navigation that will use the service worker that is being started. Prefer
-    // to not take the spare process host, since if the navigation is out of the
-    // New Tab Page on Android, it will be using the existing NTP process
-    // instead of the spare process. If this function doesn't find a suitable
-    // process, the spare can still be chosen when
+    // navigation that will use the service worker that is being started.
+    // Prefer to not take the spare process host, since if the navigation is
+    // out of the New Tab Page on Android, it will be using the existing NTP
+    // process instead of the spare process. If this function doesn't find a
+    // suitable process, the spare can still be chosen when
     // MaybeTakeSpareRenderProcessHost() is called later.
     bool is_spare = (host == spare_process_manager.spare_render_process_host());
 
@@ -4011,7 +4004,7 @@ RenderProcessHost* RenderProcessHostImpl::GetUnusedProcessHostForServiceWorker(
         RenderProcessHostImpl::IsSuitableHost(
             iter.GetCurrentValue(), site_instance->GetBrowserContext(),
             site_instance->GetIsolationContext(), site_instance->GetSiteURL(),
-            site_instance->lock_url())) {
+            site_instance->lock_url(), site_instance->IsGuest())) {
       return host;
     }
     iter.Advance();
@@ -4025,7 +4018,8 @@ bool RenderProcessHost::ShouldUseProcessPerSite(BrowserContext* browser_context,
   // Returns true if we should use the process-per-site model.  This will be
   // the case if the --process-per-site switch is specified, or in
   // process-per-site-instance for particular sites (e.g., WebUI).
-  // Note that --single-process is handled in ShouldTryToUseExistingProcessHost.
+  // Note that --single-process is handled in
+  // ShouldTryToUseExistingProcessHost.
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch(switches::kProcessPerSite))
@@ -4051,7 +4045,7 @@ RenderProcessHost* RenderProcessHostImpl::GetSoleProcessHostForURL(
   GURL lock_url =
       SiteInstanceImpl::DetermineProcessLockURL(isolation_context, url);
   return GetSoleProcessHostForSite(browser_context, isolation_context, site_url,
-                                   lock_url);
+                                   lock_url, /* is_guest */ false);
 }
 
 // static
@@ -4059,17 +4053,18 @@ RenderProcessHost* RenderProcessHostImpl::GetSoleProcessHostForSite(
     BrowserContext* browser_context,
     const IsolationContext& isolation_context,
     const GURL& site_url,
-    const GURL& lock_url) {
+    const GURL& lock_url,
+    const bool is_guest) {
   // Look up the map of site to process for the given browser_context.
   SiteProcessMap* map = GetSiteProcessMapForBrowserContext(browser_context);
 
-  // See if we have an existing process with appropriate bindings for this site.
-  // If not, the caller should create a new process and register it.  Note that
-  // IsSuitableHost expects a site URL rather than the full |url|.
+  // See if we have an existing process with appropriate bindings for this
+  // site. If not, the caller should create a new process and register it.
+  // Note that IsSuitableHost expects a site URL rather than the full |url|.
   RenderProcessHost* host = map->FindProcess(site_url.possibly_invalid_spec());
   if (host && (!host->MayReuseHost() ||
                !IsSuitableHost(host, browser_context, isolation_context,
-                               site_url, lock_url))) {
+                               site_url, lock_url, is_guest))) {
     // The registered process does not have an appropriate set of bindings for
     // the url.  Remove it from the map so we can register a better one.
     RecordAction(
@@ -4090,7 +4085,8 @@ void RenderProcessHostImpl::RegisterSoleProcessHostForSite(
 
   // Only register valid, non-empty sites.  Empty or invalid sites will not
   // use process-per-site mode.  We cannot check whether the process has
-  // appropriate bindings here, because the bindings have not yet been granted.
+  // appropriate bindings here, because the bindings have not yet been
+  // granted.
   std::string site = site_instance->GetSiteURL().possibly_invalid_spec();
   if (!site.empty())
     map->RegisterProcess(site, process);
@@ -4102,7 +4098,6 @@ RenderProcessHost* RenderProcessHostImpl::GetProcessHostForSiteInstance(
   const GURL site_url = site_instance->GetSiteURL();
   SiteInstanceImpl::ProcessReusePolicy process_reuse_policy =
       site_instance->process_reuse_policy();
-  bool is_for_guests_only = site_url.SchemeIs(kGuestScheme);
   RenderProcessHost* render_process_host = nullptr;
 
   bool is_unmatched_service_worker = site_instance->is_for_service_worker();
@@ -4113,7 +4108,7 @@ RenderProcessHost* RenderProcessHostImpl::GetProcessHostForSiteInstance(
     case SiteInstanceImpl::ProcessReusePolicy::PROCESS_PER_SITE:
       render_process_host = GetSoleProcessHostForSite(
           browser_context, site_instance->GetIsolationContext(), site_url,
-          site_instance->lock_url());
+          site_instance->lock_url(), site_instance->IsGuest());
       break;
     case SiteInstanceImpl::ProcessReusePolicy::REUSE_PENDING_OR_COMMITTED_SITE:
       render_process_host =
@@ -4166,7 +4161,7 @@ RenderProcessHost* RenderProcessHostImpl::GetProcessHostForSiteInstance(
   bool spare_was_taken = false;
   if (!render_process_host) {
     render_process_host = spare_process_manager.MaybeTakeSpareRenderProcessHost(
-        browser_context, site_instance, is_for_guests_only);
+        browser_context, site_instance);
     spare_was_taken = (render_process_host != nullptr);
   }
 
@@ -4180,10 +4175,11 @@ RenderProcessHost* RenderProcessHostImpl::GetProcessHostForSiteInstance(
   // hosting |site_url|. For example, if |site_url| requires a dedicated
   // process, we should never pick a process used by, or locked to, a different
   // site.
-  if (render_process_host && !RenderProcessHostImpl::IsSuitableHost(
-                                 render_process_host, browser_context,
-                                 site_instance->GetIsolationContext(), site_url,
-                                 site_instance->lock_url())) {
+  if (render_process_host &&
+      !RenderProcessHostImpl::IsSuitableHost(
+          render_process_host, browser_context,
+          site_instance->GetIsolationContext(), site_url,
+          site_instance->lock_url(), site_instance->IsGuest())) {
     base::debug::SetCrashKeyString(bad_message::GetRequestedSiteURLKey(),
                                    site_url.possibly_invalid_spec());
     ChildProcessSecurityPolicyImpl::GetInstance()->LogKilledProcessOriginLock(
@@ -4197,17 +4193,17 @@ RenderProcessHost* RenderProcessHostImpl::GetProcessHostForSiteInstance(
     // RenderProcessHostFactory may not instantiate a StoragePartition, and
     // creating one here with GetStoragePartition() can run into cross-thread
     // issues as TestBrowserContext initialization is done on the main thread.
-    render_process_host = CreateRenderProcessHost(
-        browser_context, nullptr, site_instance, is_for_guests_only);
+    render_process_host =
+        CreateRenderProcessHost(browser_context, nullptr, site_instance);
   }
 
   // It is important to call PrepareForFutureRequests *after* potentially
   // creating a process a few statements earlier - doing this avoids violating
   // the process limit.
   //
-  // We should not warm-up another spare if the spare was not taken, because in
-  // this case we might have created a new process - we want to avoid spawning
-  // two processes at the same time.  In this case the call to
+  // We should not warm-up another spare if the spare was not taken, because
+  // in this case we might have created a new process - we want to avoid
+  // spawning two processes at the same time.  In this case the call to
   // PrepareForFutureRequests will be postponed until later (e.g. until the
   // navigation commits or a cross-site redirect happens).
   if (spare_was_taken)
@@ -4270,15 +4266,15 @@ void RenderProcessHostImpl::ProcessDied(
     ChildProcessTerminationInfo* known_info) {
   // Our child process has died.  If we didn't expect it, it's a crash.
   // In any case, we need to let everyone know it's gone.
-  // The OnChannelError notification can fire multiple times due to nested sync
-  // calls to a renderer. If we don't have a valid channel here it means we
-  // already handled the error.
+  // The OnChannelError notification can fire multiple times due to nested
+  // sync calls to a renderer. If we don't have a valid channel here it means
+  // we already handled the error.
 
   // It should not be possible for us to be called re-entrantly.
   DCHECK(!within_process_died_observer_);
 
-  // It should not be possible for a process death notification to come in while
-  // we are dying.
+  // It should not be possible for a process death notification to come in
+  // while we are dying.
   DCHECK(!deleting_soon_);
 
   // child_process_launcher_ can be NULL in single process mode or if fast
@@ -4293,11 +4289,11 @@ void RenderProcessHostImpl::ProcessDied(
       // May be in case of IPC error, if it takes long time for renderer
       // to exit. Child process will be killed in any case during
       // child_process_launcher_.reset(). Make sure we will not broadcast
-      // RenderProcessExited with status TERMINATION_STATUS_STILL_RUNNING, since
-      // this will break WebContentsImpl logic.
+      // RenderProcessExited with status TERMINATION_STATUS_STILL_RUNNING,
+      // since this will break WebContentsImpl logic.
       info.status = base::TERMINATION_STATUS_PROCESS_CRASHED;
 
-// TODO(siggi): Remove this once https://crbug.com/806661 is resolved.
+      // TODO(siggi): Remove this once https://crbug.com/806661 is resolved.
 #if defined(OS_WIN)
       if (info.exit_code == WAIT_TIMEOUT && g_analyze_hung_renderer)
         g_analyze_hung_renderer(child_process_launcher_->GetProcess());
@@ -4330,14 +4326,14 @@ void RenderProcessHostImpl::ProcessDied(
   RemoveUserData(kSessionStorageHolderKey);
 
   // Initialize a new ChannelProxy in case this host is re-used for a new
-  // process. This ensures that new messages can be sent on the host ASAP (even
-  // before Init()) and they'll eventually reach the new process.
+  // process. This ensures that new messages can be sent on the host ASAP
+  // (even before Init()) and they'll eventually reach the new process.
   //
   // Note that this may have already been called by one of the above observers
   EnableSendQueue();
 
-  // It's possible that one of the calls out to the observers might have caused
-  // this object to be no longer needed.
+  // It's possible that one of the calls out to the observers might have
+  // caused this object to be no longer needed.
   if (delayed_cleanup_needed_)
     Cleanup();
 
@@ -4355,6 +4351,7 @@ void RenderProcessHostImpl::ResetIPC() {
   associated_interface_provider_receivers_.Clear();
   associated_interfaces_.reset();
   coordinator_connector_receiver_.reset();
+  tracing_registration_.reset();
 
   // Destroy all embedded CompositorFrameSinks.
   embedded_frame_sink_provider_.reset();
@@ -4382,6 +4379,15 @@ void RenderProcessHostImpl::ResetIPC() {
   // away first, since deleting the channel proxy will post a
   // OnChannelClosed() to IPC::ChannelProxy::Context on the IO thread.
   ResetChannelProxy();
+
+  // The PermissionServiceContext holds PermissionSubscriptions originating from
+  // service workers. These subscriptions observe the PermissionControllerImpl
+  // that is owned by the Profile corresponding to |this|. At this point, IPC
+  // are unbound so no new subscriptions can be made. Existing subscriptions
+  // need to be released here, as the Profile, and with it, the
+  // PermissionControllerImpl, can be destroyed anytime after
+  // RenderProcessHostImpl::Cleanup() returns.
+  permission_service_context_.reset();
 }
 
 size_t RenderProcessHost::GetActiveViewCount() {
@@ -4483,8 +4489,8 @@ void RenderProcessHostImpl::UpdateProcessPriorityInputs() {
 void RenderProcessHostImpl::UpdateProcessPriority() {
   if (!run_renderer_in_process() && (!child_process_launcher_.get() ||
                                      child_process_launcher_->IsStarting())) {
-    // This path can be hit early (no-op) or on ProcessDied(). Reset |priority_|
-    // to defaults in case this RenderProcessHostImpl is re-used.
+    // This path can be hit early (no-op) or on ProcessDied(). Reset
+    // |priority_| to defaults in case this RenderProcessHostImpl is re-used.
     priority_.visible = !blink::kLaunchingProcessIsBackgrounded;
     priority_.boost_for_pending_views = true;
     return;
@@ -4594,8 +4600,8 @@ void RenderProcessHostImpl::SendProcessStateToRenderer() {
 void RenderProcessHostImpl::OnProcessLaunched() {
   // No point doing anything, since this object will be destructed soon.  We
   // especially don't want to send the RENDERER_PROCESS_CREATED notification,
-  // since some clients might expect a RENDERER_PROCESS_TERMINATED afterwards to
-  // properly cleanup.
+  // since some clients might expect a RENDERER_PROCESS_TERMINATED afterwards
+  // to properly cleanup.
   if (deleting_soon_)
     return;
 
@@ -4611,17 +4617,12 @@ void RenderProcessHostImpl::OnProcessLaunched() {
     // preempt already queued messages.
     channel_->Unpause(false /* flush */);
 
-    if (child_connection_) {
-      child_connection_->SetProcess(
-          child_process_launcher_->GetProcess().Duplicate());
-    }
-
     if (coordinator_connector_receiver_.is_bound())
       coordinator_connector_receiver_.Resume();
 
-// Not all platforms launch processes in the same backgrounded state. Make
-// sure |priority_.visible| reflects this platform's initial process
-// state.
+      // Not all platforms launch processes in the same backgrounded state. Make
+      // sure |priority_.visible| reflects this platform's initial process
+      // state.
 #if defined(OS_MACOSX)
     priority_.visible =
         !child_process_launcher_->GetProcess().IsProcessBackgrounded(
@@ -4662,12 +4663,12 @@ void RenderProcessHostImpl::OnProcessLaunched() {
   ThemeHelper::GetInstance()->SendSystemColorInfo(GetRendererInterface());
 
   // NOTE: This needs to be before flushing queued messages, because
-  // ExtensionService uses this notification to initialize the renderer process
-  // with state that must be there before any JavaScript executes.
+  // ExtensionService uses this notification to initialize the renderer
+  // process with state that must be there before any JavaScript executes.
   //
-  // The queued messages contain such things as "navigate". If this notification
-  // was after, we can end up executing JavaScript before the initialization
-  // happens.
+  // The queued messages contain such things as "navigate". If this
+  // notification was after, we can end up executing JavaScript before the
+  // initialization happens.
   NotificationService::current()->Notify(NOTIFICATION_RENDERER_PROCESS_CREATED,
                                          Source<RenderProcessHost>(this),
                                          NotificationService::NoDetails());
@@ -4687,6 +4688,11 @@ void RenderProcessHostImpl::OnProcessLaunched() {
 
   aec_dump_manager_.set_pid(GetProcess().Pid());
   aec_dump_manager_.AutoStart();
+
+  tracing_registration_ = TracingServiceController::Get().RegisterClient(
+      GetProcess().Pid(),
+      base::BindRepeating(&RenderProcessHostImpl::BindTracedProcess,
+                          instance_weak_factory_->GetWeakPtr()));
 }
 
 void RenderProcessHostImpl::OnProcessLaunchFailed(int error_code) {
@@ -4837,9 +4843,9 @@ void RenderProcessHostImpl::GetBrowserHistogram(
   std::move(callback).Run(histogram_json);
 }
 
-void RenderProcessHostImpl::SetBrowserPluginMessageFilterSubFilterForTesting(
-    scoped_refptr<BrowserMessageFilter> message_filter) const {
-  bp_message_filter_->SetSubFilterForTesting(std::move(message_filter));
+void RenderProcessHostImpl::BindTracedProcess(
+    mojo::PendingReceiver<tracing::mojom::TracedProcess> receiver) {
+  BindReceiver(std::move(receiver));
 }
 
 void RenderProcessHostImpl::OnBindHostReceiver(

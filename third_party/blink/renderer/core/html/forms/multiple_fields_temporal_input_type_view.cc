@@ -56,6 +56,7 @@
 #include "third_party/blink/renderer/platform/text/date_time_format.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "third_party/blink/renderer/platform/wtf/date_math.h"
+#include "ui/base/ui_base_features.h"
 
 namespace blink {
 
@@ -324,6 +325,11 @@ bool MultipleFieldsTemporalInputTypeView::SetupDateTimeChooserParameters(
     parameters.has_ampm = edit->HasField(DateTimeField::kAMPM);
     parameters.has_second = edit->HasField(DateTimeField::kSecond);
     parameters.has_millisecond = edit->HasField(DateTimeField::kMillisecond);
+  } else {
+    parameters.is_ampm_first = false;
+    parameters.has_ampm = false;
+    parameters.has_second = false;
+    parameters.has_millisecond = false;
   }
 
   return GetElement().SetupDateTimeChooserParameters(parameters);
@@ -383,7 +389,7 @@ void MultipleFieldsTemporalInputTypeView::CreateShadowSubtree() {
       MakeGarbageCollected<DateTimeEditElement, Document&,
                            DateTimeEditElement::EditControlOwner&>(document,
                                                                    *this));
-  if (!RuntimeEnabledFeatures::FormControlsRefreshEnabled()) {
+  if (!features::IsFormControlsRefreshEnabled()) {
     GetElement().UpdateView();
     container->AppendChild(
         MakeGarbageCollected<ClearButtonElement, Document&,
@@ -483,7 +489,7 @@ void MultipleFieldsTemporalInputTypeView::HandleKeydownEvent(
       ((event.key() == "ArrowDown" && event.getModifierState("Alt")) ||
        (LayoutTheme::GetTheme().ShouldOpenPickerWithF4Key() &&
         event.key() == "F4") ||
-       (RuntimeEnabledFeatures::FormControlsRefreshEnabled() &&
+       (features::IsFormControlsRefreshEnabled() &&
         (event.key() == "Enter" || event.key() == " ")))) {
     if (PickerIndicatorElement* element = GetPickerIndicatorElement())
       element->OpenPopup();

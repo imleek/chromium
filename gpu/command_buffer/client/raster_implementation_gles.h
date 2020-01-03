@@ -61,7 +61,9 @@ class RASTER_EXPORT RasterImplementationGLES : public RasterInterface {
                       GLint x,
                       GLint y,
                       GLsizei width,
-                      GLsizei height) override;
+                      GLsizei height,
+                      GLboolean unpack_flip_y,
+                      GLboolean unpack_premultiply_alpha) override;
 
   // OOP-Raster
   void BeginRasterCHROMIUM(GLuint sk_color,
@@ -92,6 +94,9 @@ class RASTER_EXPORT RasterImplementationGLES : public RasterInterface {
   void DeleteGpuRasterTexture(GLuint texture) override;
   void BeginGpuRaster() override;
   void EndGpuRaster() override;
+  void BeginSharedImageAccessDirectCHROMIUM(GLuint texture,
+                                            GLenum mode) override;
+  void EndSharedImageAccessDirectCHROMIUM(GLuint texture) override;
 
   void TraceBeginCHROMIUM(const char* category_name,
                           const char* trace_name) override;

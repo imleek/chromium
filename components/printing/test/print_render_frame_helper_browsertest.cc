@@ -29,7 +29,7 @@
 #include "printing/print_job_constants.h"
 #include "printing/units.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_range.h"
@@ -262,7 +262,8 @@ class PrintRenderFrameHelperTestBase : public content::RenderViewTest {
   void OnPrintPreview(const base::DictionaryValue& dict) {
     PrintRenderFrameHelper* print_render_frame_helper =
         GetPrintRenderFrameHelper();
-    print_render_frame_helper->InitiatePrintPreview(nullptr, false);
+    print_render_frame_helper->InitiatePrintPreview(
+        mojo::NullAssociatedRemote(), false);
     base::RunLoop run_loop;
     DidPreviewPageListener filter(&run_loop);
     render_thread_->sink().AddFilter(&filter);

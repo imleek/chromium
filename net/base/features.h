@@ -17,11 +17,6 @@ namespace features {
 // https://github.com/WICG/lang-client-hint proposes that we deprecate.
 NET_EXPORT extern const base::Feature kAcceptLanguageHeader;
 
-// Caps the length of the `referer` header to 4k, which should be enough for
-// anyone.
-NET_EXPORT extern const base::Feature kCapRefererHeaderLength;
-NET_EXPORT extern const base::FeatureParam<int> kMaxRefererHeaderLength;
-
 // Enables TLS 1.3 early data.
 NET_EXPORT extern const base::Feature kEnableTLS13EarlyData;
 
@@ -92,6 +87,9 @@ NET_EXPORT extern const base::FeatureParam<int>
 // in order to make cookies available in a third-party context. When disabled,
 // the default behavior for cookies without a SameSite attribute specified is no
 // restriction, i.e., available in a third-party context.
+// The "Lax-allow-unsafe" mitigation allows these cookies to be sent on
+// top-level cross-site requests with an unsafe (e.g. POST) HTTP method, if the
+// cookie is no more than 2 minutes old.
 NET_EXPORT extern const base::Feature kSameSiteByDefaultCookies;
 
 // When enabled, cookies without SameSite restrictions that don't specify the
@@ -108,6 +106,36 @@ NET_EXPORT extern const base::Feature kCookiesWithoutSameSiteMustBeSecure;
 // integration tests which may want to test behavior of cookies older than the
 // threshold, but which would not be practical to run for 2 minutes.
 NET_EXPORT extern const base::Feature kShortLaxAllowUnsafeThreshold;
+
+// When enabled, the SameSite by default feature does not add the
+// "Lax-allow-unsafe" behavior. Any cookies that do not specify a SameSite
+// attribute will be treated as Lax only, i.e. POST and other unsafe HTTP
+// methods will not be allowed at all for top-level cross-site navigations.
+// This only has an effect if the cookie defaults to SameSite=Lax.
+NET_EXPORT extern const base::Feature kSameSiteDefaultChecksMethodRigorously;
+
+// If this is set and has a non-zero param value, any access to a cookie will be
+// granted Legacy access semantics if the last access to a cookie with the same
+// (name, domain, path) from a context that is same-site and permits
+// HttpOnly access occurred less than (param value) milliseconds ago. The last
+// eligible access must have occurred in the current browser session (i.e. it
+// does not persist across sessions). This feature does nothing if
+// kCookiesWithoutSameSiteMustBeSecure is not enabled.
+NET_EXPORT extern const base::Feature
+    kRecentHttpSameSiteAccessGrantsLegacyCookieSemantics;
+NET_EXPORT extern const base::FeatureParam<int>
+    kRecentHttpSameSiteAccessGrantsLegacyCookieSemanticsMilliseconds;
+
+// Recently created cookies are granted legacy access semantics. If this is set
+// and has a non-zero integer param value, then for the first (param value)
+// milliseconds after the cookie is created, the cookie will behave as if it
+// were "legacy" i.e. not handled according to SameSiteByDefaultCookies/
+// CookiesWithoutSameSiteMustBeSecure rules.
+// This does nothing if SameSiteByDefaultCookies is not enabled.
+NET_EXPORT extern const base::Feature
+    kRecentCreationTimeGrantsLegacyCookieSemantics;
+NET_EXPORT extern const base::FeatureParam<int>
+    kRecentCreationTimeGrantsLegacyCookieSemanticsMilliseconds;
 
 #if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
 // When enabled, use the builtin cert verifier instead of the platform verifier.

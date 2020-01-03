@@ -451,8 +451,11 @@ void Dispatcher::WillEvaluateServiceWorkerOnWorkerThread(
     std::unique_ptr<IPCMessageSender> ipc_sender =
         IPCMessageSender::CreateWorkerThreadIPCMessageSender(
             worker_dispatcher, service_worker_version_id);
+    int worker_activation_sequence =
+        *RendererExtensionRegistry::Get()->GetWorkerActivationSequence(
+            extension->id());
     worker_dispatcher->AddWorkerData(
-        service_worker_version_id, context,
+        service_worker_version_id, worker_activation_sequence, context,
         CreateBindingsSystem(std::move(ipc_sender)));
     worker_thread_util::SetWorkerContextProxy(context_proxy);
 
@@ -757,12 +760,6 @@ std::vector<Dispatcher::JsResourceInfo> Dispatcher::GetJsResources() {
       {"platformApp", IDR_PLATFORM_APP_JS},
   };
 
-  if (base::FeatureList::IsEnabled(::features::kGuestViewCrossProcessFrames)) {
-    resources.push_back({"guestViewIframe", IDR_GUEST_VIEW_IFRAME_JS});
-    resources.push_back(
-        {"guestViewIframeContainer", IDR_GUEST_VIEW_IFRAME_CONTAINER_JS});
-  }
-
   return resources;
 }
 
@@ -992,6 +989,10 @@ void Dispatcher::OnLoaded(
       // consider making this a release CHECK.
       NOTREACHED();
     }
+    if (param.worker_activation_sequence) {
+      extension_registry->SetWorkerActivationSequence(
+          extension, *param.worker_activation_sequence);
+    }
     if (param.uses_default_policy_blocked_allowed_hosts) {
       extension->permissions_data()->SetUsesDefaultHostRestrictions();
     } else {
@@ -1039,10 +1040,6 @@ void Dispatcher::OnDispatchEvent(
   content::RenderFrame* background_frame =
       ExtensionFrameHelper::GetBackgroundPageFrame(params.extension_id);
 
-  // Required for |web_user_gesture|.
-  std::unique_ptr<HandleScopeHelper> v8_handle_scope;
-
-  std::unique_ptr<InteractionProvider::Scope> web_user_gesture;
   // Synthesize a user gesture if this was in response to user action; this is
   // necessary if the gesture was e.g. by clicking on the extension toolbar
   // icon, context menu entry, etc.
@@ -1057,9 +1054,7 @@ void Dispatcher::OnDispatchEvent(
         ScriptContextSet::GetMainWorldContextForFrame(background_frame);
     if (background_context && bindings_system_->HasEventListenerInContext(
                                   params.event_name, background_context)) {
-      v8_handle_scope = std::make_unique<HandleScopeHelper>(background_context);
-      web_user_gesture = ExtensionInteractionProvider::Scope::ForFrame(
-          background_frame->GetWebFrame());
+      background_frame->GetWebFrame()->NotifyUserActivation();
     }
   }
 
@@ -1308,12 +1303,8 @@ void Dispatcher::UpdateOriginPermissions(const Extension& extension) {
 
 void Dispatcher::EnableCustomElementWhiteList() {
   blink::WebCustomElement::AddEmbedderCustomElementName("appview");
-  blink::WebCustomElement::AddEmbedderCustomElementName("appviewbrowserplugin");
   blink::WebCustomElement::AddEmbedderCustomElementName("extensionoptions");
-  blink::WebCustomElement::AddEmbedderCustomElementName(
-      "extensionoptionsbrowserplugin");
   blink::WebCustomElement::AddEmbedderCustomElementName("webview");
-  blink::WebCustomElement::AddEmbedderCustomElementName("webviewbrowserplugin");
 }
 
 void Dispatcher::UpdateAllBindings() {
@@ -1430,12 +1421,6 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
     delegate_->RequireWebViewModules(context);
   } else if (web_view_permission_exists) {
     module_system->Require("webViewDeny");
-  }
-
-  if (requires_guest_view_module &&
-      base::FeatureList::IsEnabled(::features::kGuestViewCrossProcessFrames)) {
-    module_system->Require("guestViewIframe");
-    module_system->Require("guestViewIframeContainer");
   }
 
   if (requires_guest_view_module) {

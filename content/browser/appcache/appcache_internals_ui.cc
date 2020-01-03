@@ -94,6 +94,11 @@ std::unique_ptr<base::DictionaryValue> GetDictionaryValueForAppCacheInfo(
   dict_value->SetString("groupId",
                         base::NumberToString(appcache_info.group_id));
 
+  dict_value->SetString(
+      "manifestParserVersion",
+      base::NumberToString(appcache_info.manifest_parser_version));
+  dict_value->SetString("manifestScope", appcache_info.manifest_scope);
+
   return dict_value;
 }
 
@@ -364,9 +369,10 @@ AppCacheInternalsUI::AppCacheInternalsUI(WebUI* web_ui)
 
   WebUIDataSource::Add(browser_context(), source);
 
-  BrowserContext::StoragePartitionCallback callback = base::BindRepeating(
-      &AppCacheInternalsUI::CreateProxyForPartition, AsWeakPtr());
-  BrowserContext::ForEachStoragePartition(browser_context(), callback);
+  BrowserContext::ForEachStoragePartition(
+      browser_context(),
+      base::BindRepeating(&AppCacheInternalsUI::CreateProxyForPartition,
+                          AsWeakPtr()));
 }
 
 AppCacheInternalsUI::~AppCacheInternalsUI() {

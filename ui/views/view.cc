@@ -425,15 +425,22 @@ int View::GetHeightForWidth(int w) const {
   return GetPreferredSize().height();
 }
 
+SizeBounds View::GetAvailableSize(const View* child) const {
+  if (layout_manager_)
+    return layout_manager_->GetAvailableSize(this, child);
+  return SizeBounds();
+}
+
 bool View::GetVisible() const {
   return visible_;
 }
 
 void View::SetVisible(bool visible) {
-  if (visible_ != visible) {
-    // If the View is currently visible, schedule paint to refresh parent.
+  const bool was_visible = visible_;
+  if (was_visible != visible) {
+    // If the View was visible, schedule paint to refresh parent.
     // TODO(beng): not sure we should be doing this if we have a layer.
-    if (visible_)
+    if (was_visible)
       SchedulePaint();
 
     visible_ = visible;
@@ -443,7 +450,7 @@ void View::SetVisible(bool visible) {
     if (parent_) {
       parent_->ChildVisibilityChanged(this);
       parent_->NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged,
-                                        false);
+                                        true);
     }
 
     // This notifies all sub-views recursively.
@@ -457,7 +464,7 @@ void View::SetVisible(bool visible) {
   if (parent_) {
     LayoutManager* const layout_manager = parent_->GetLayoutManager();
     if (layout_manager && layout_manager->view_setting_visibility_on_ != this)
-      layout_manager->ViewVisibilitySet(parent_, this, visible);
+      layout_manager->ViewVisibilitySet(parent_, this, was_visible, visible);
   }
 }
 
@@ -480,6 +487,7 @@ void View::SetEnabled(bool enabled) {
 
   enabled_ = enabled;
   AdvanceFocusIfNecessary();
+  NotifyAccessibilityEvent(ax::mojom::Event::kStateChanged, true);
   OnPropertyChanged(&enabled_, kPropertyEffectsPaint);
 }
 
@@ -1008,6 +1016,7 @@ void View::SetBackground(std::unique_ptr<Background> b) {
 }
 
 void View::SetBorder(std::unique_ptr<Border> b) {
+  const gfx::Rect old_contents_bounds = GetContentsBounds();
   border_ = std::move(b);
 
   // Conceptually, this should be PreferredSizeChanged(), but for some view
@@ -1017,7 +1026,8 @@ void View::SetBorder(std::unique_ptr<Border> b) {
   // InvalidateLayout() still triggers a re-layout of the view, which should
   // include re-querying its preferred size so in practice this is both safe and
   // has the intended effect.
-  InvalidateLayout();
+  if (old_contents_bounds != GetContentsBounds())
+    InvalidateLayout();
 
   SchedulePaint();
 }
@@ -2538,7 +2548,7 @@ void View::CreateLayer(ui::LayerType layer_type) {
 
   SetLayer(std::make_unique<ui::Layer>(layer_type));
   layer()->set_delegate(this);
-  layer()->set_name(GetClassName());
+  layer()->SetName(GetClassName());
 
   UpdateParentLayers();
   UpdateLayerVisibility();

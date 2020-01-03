@@ -7,10 +7,10 @@
 #include <limits>
 #include <vector>
 
+#include "ash/public/ash_interfaces.h"
 #include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/ash_prefs.h"
-#include "ash/public/mojom/constants.mojom.h"
 #include "ash/public/mojom/cros_display_config.mojom.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -32,6 +32,7 @@
 #include "chrome/browser/chromeos/net/wake_on_wifi_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/chromeos/sync/turn_sync_on_helper.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/chromeos/system/timezone_util.h"
@@ -58,8 +59,6 @@
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/system_connector.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "third_party/blink/public/mojom/speech/speech_synthesis.mojom.h"
 #include "third_party/cros_system_api/dbus/update_engine/dbus-constants.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
@@ -126,12 +125,8 @@ Preferences::Preferences(input_method::InputMethodManager* input_method_manager)
       input_method_manager_(input_method_manager),
       user_(NULL),
       user_is_primary_(false) {
-  // |connector| may be null in tests.
-  service_manager::Connector* connector = content::GetSystemConnector();
-  if (connector) {
-    connector->Connect(ash::mojom::kServiceName,
-                       cros_display_config_.BindNewPipeAndPassReceiver());
-  }
+  ash::BindCrosDisplayConfigController(
+      cros_display_config_.BindNewPipeAndPassReceiver());
 }
 
 Preferences::~Preferences() {
@@ -166,6 +161,10 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
 // static
 void Preferences::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
+  // Some classes register their own prefs.
+  TurnSyncOnHelper::RegisterProfilePrefs(registry);
+  input_method::InputMethodSyncer::RegisterProfilePrefs(registry);
+
   std::string hardware_keyboard_id;
   // TODO(yusukes): Remove the runtime hack.
   if (IsRunningAsSystemCompositor()) {
@@ -340,8 +339,6 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(prefs::kTouchVirtualKeyboardEnabled, false);
 
-  input_method::InputMethodSyncer::RegisterProfilePrefs(registry);
-
   std::string current_timezone_id;
   if (chromeos::CrosSettings::IsInitialized()) {
     // In unit tests CrosSettings is not always initialized.
@@ -388,8 +385,6 @@ void Preferences::RegisterProfilePrefs(
 
   // We don't sync EOL related prefs because they are device specific.
   registry->RegisterBooleanPref(prefs::kEolNotificationDismissed, false);
-  registry->RegisterIntegerPref(prefs::kEolStatus,
-                                update_engine::EndOfLifeStatus::kSupported);
   registry->RegisterTimePref(prefs::kEndOfLifeDate, base::Time());
   registry->RegisterBooleanPref(prefs::kFirstEolWarningDismissed, false);
   registry->RegisterBooleanPref(prefs::kSecondEolWarningDismissed, false);

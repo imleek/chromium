@@ -27,6 +27,7 @@ import org.chromium.chrome.browser.signin.UnifiedConsentServiceBridge;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
 import org.chromium.components.sync.AndroidSyncSettings;
 import org.chromium.components.sync.ModelType;
@@ -178,7 +179,7 @@ public class SyncTestRule extends ChromeActivityTestRule<ChromeActivity> {
     public void signOut() throws InterruptedException {
         final Semaphore s = new Semaphore(0);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            IdentityServicesProvider.getSigninManager().signOut(
+            IdentityServicesProvider.get().getSigninManager().signOut(
                     SignoutReason.SIGNOUT_TEST, s::release, false);
         });
         Assert.assertTrue(s.tryAcquire(SyncTestUtil.TIMEOUT_MS, TimeUnit.MILLISECONDS));
@@ -252,7 +253,7 @@ public class SyncTestRule extends ChromeActivityTestRule<ChromeActivity> {
 
                 TestThreadUtils.runOnUiThreadBlocking(() -> {
                     // Ensure SyncController is registered with the new AndroidSyncSettings.
-                    AndroidSyncSettings.get().registerObserver(SyncController.get(mContext));
+                    AndroidSyncSettings.get().registerObserver(SyncController.get());
                     mFakeServerHelper = FakeServerHelper.get();
                 });
                 FakeServerHelper.useFakeServer(mContext);
@@ -337,8 +338,8 @@ public class SyncTestRule extends ChromeActivityTestRule<ChromeActivity> {
 
     private void signinAndEnableSyncInternal(final Account account, boolean setFirstSetupComplete) {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            IdentityServicesProvider.getSigninManager().signIn(
-                    account, new SigninManager.SignInCallback() {
+            IdentityServicesProvider.get().getSigninManager().signIn(
+                    SigninAccessPoint.UNKNOWN, account, new SigninManager.SignInCallback() {
                         @Override
                         public void onSignInComplete() {
                             if (ChromeFeatureList.isEnabled(

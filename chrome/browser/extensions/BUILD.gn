@@ -464,8 +464,8 @@ jumbo_static_library("extensions") {
     "chrome_extensions_browser_api_provider.h",
     "chrome_extensions_browser_client.cc",
     "chrome_extensions_browser_client.h",
-    "chrome_extensions_interface_registration.cc",
-    "chrome_extensions_interface_registration.h",
+    "chrome_extensions_browser_interface_binders.cc",
+    "chrome_extensions_browser_interface_binders.h",
     "chrome_kiosk_delegate.h",
     "chrome_process_manager_delegate.cc",
     "chrome_process_manager_delegate.h",
@@ -527,7 +527,6 @@ jumbo_static_library("extensions") {
     "extension_disabled_ui.h",
     "extension_error_controller.cc",
     "extension_error_controller.h",
-    "extension_error_ui.cc",
     "extension_error_ui.h",
     "extension_error_ui_default.cc",
     "extension_error_ui_default.h",
@@ -774,6 +773,7 @@ jumbo_static_library("extensions") {
   ]
   deps = [
     "//apps",
+    "//base/util/values:values_util",
     "//build:branding_buildflags",
     "//chrome:extra_resources",
     "//chrome:resources",
@@ -840,6 +840,7 @@ jumbo_static_library("extensions") {
     "//components/safe_browsing:features",
     "//components/safe_browsing/common:safe_browsing_prefs",
     "//components/safe_browsing/db:database_manager",
+    "//components/safe_browsing/web_ui:web_ui",
     "//components/search_engines",
     "//components/services/patch/content",
     "//components/services/unzip/content",
@@ -1028,6 +1029,12 @@ jumbo_static_library("extensions") {
     sources += [
       "api/enterprise_reporting_private/chrome_desktop_report_request_helper.cc",
       "api/enterprise_reporting_private/chrome_desktop_report_request_helper.h",
+      "api/enterprise_reporting_private/device_info_fetcher.cc",
+      "api/enterprise_reporting_private/device_info_fetcher.h",
+      "api/enterprise_reporting_private/device_info_fetcher_mac.h",
+      "api/enterprise_reporting_private/device_info_fetcher_mac.mm",
+      "api/enterprise_reporting_private/device_info_fetcher_win.cc",
+      "api/enterprise_reporting_private/device_info_fetcher_win.h",
       "api/enterprise_reporting_private/enterprise_reporting_private_api.cc",
       "api/enterprise_reporting_private/enterprise_reporting_private_api.h",
       "api/enterprise_reporting_private/prefs.cc",
@@ -1116,7 +1123,10 @@ jumbo_static_library("extensions") {
       "//third_party/iaccessible2",
       "//third_party/isimpledom",
     ]
-    libs = [ "setupapi.lib" ]
+    libs = [
+      "setupapi.lib",
+      "propsys.lib",
+    ]
   } else if (use_aura && !is_chromeos) {
     sources += [
       "system_display/display_info_provider_aura.cc",

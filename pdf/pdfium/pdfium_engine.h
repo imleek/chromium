@@ -119,6 +119,8 @@ class PDFiumEngine : public PDFEngine,
       int start_char_index) override;
   std::vector<AccessibilityLinkInfo> GetLinkInfo(int page_index) override;
   std::vector<AccessibilityImageInfo> GetImageInfo(int page_index) override;
+  std::vector<AccessibilityHighlightInfo> GetHighlightInfo(
+      int page_index) override;
   bool GetPrintScaling() override;
   int GetCopiesToPrint() override;
   int GetDuplexType() override;
@@ -513,6 +515,8 @@ class PDFiumEngine : public PDFEngine,
                                      int form_type);
 
   bool PageIndexInBounds(int index) const;
+  bool IsPageCharacterIndexInBounds(
+      const PP_PdfPageCharacterIndex& index) const;
 
   // Gets the height of the top toolbar in screen coordinates. This is
   // independent of whether it is hidden or not at the moment.
@@ -534,6 +538,11 @@ class PDFiumEngine : public PDFEngine,
       const PP_PdfAccessibilityScrollAlignment& horizontal_scroll_alignment,
       const PP_PdfAccessibilityScrollAlignment& vertical_scroll_alignment);
 
+  // Scrolls top left of a rect in page |target_rect| to |global_point|.
+  // Global point is point relative to viewport in screen.
+  void ScrollToGlobalPoint(const pp::Rect& target_rect,
+                           const pp::Point& global_point);
+
   // Set if the document has any local edits.
   void SetEditMode(bool edit_mode);
 
@@ -545,6 +554,11 @@ class PDFiumEngine : public PDFEngine,
 
   // IFSDK_PAUSE callbacks
   static FPDF_BOOL Pause_NeedToPauseNow(IFSDK_PAUSE* param);
+
+  // Used for text selection. Given the start and end of selection, sets the
+  // text range in |selection_|.
+  void SetSelection(const PP_PdfPageCharacterIndex& selection_start_index,
+                    const PP_PdfPageCharacterIndex& selection_end_index);
 
   PDFEngine::Client* const client_;
 

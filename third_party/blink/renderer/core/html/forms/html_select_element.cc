@@ -163,9 +163,6 @@ String HTMLSelectElement::validationMessage() const {
 }
 
 bool HTMLSelectElement::ValueMissing() const {
-  if (!willValidate())
-    return false;
-
   if (!IsRequired())
     return false;
 
@@ -1240,6 +1237,7 @@ void HTMLSelectElement::RestoreFormControlState(const FormControlState& state) {
   }
 
   SetNeedsValidityCheck();
+  QueueInputAndChangeEvents();
 }
 
 void HTMLSelectElement::ParseMultipleAttribute(const AtomicString& value) {

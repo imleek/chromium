@@ -89,20 +89,6 @@ class OptimizationGuideConsumerWebContentsObserver
     last_can_apply_optimization_decision_ = service->CanApplyOptimization(
         navigation_handle, optimization_guide::proto::NOSCRIPT,
         /*optimization_metadata=*/nullptr);
-    last_optimization_guide_decision_ =
-        service->ShouldTargetNavigationAndCanApplyOptimization(
-            navigation_handle,
-            optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
-            optimization_guide::proto::NOSCRIPT,
-            /*optimization_metadata=*/nullptr);
-  }
-
-  // Returns the last optimization guide decision that was returned by the
-  // OptimizationGuideKeyedService's
-  // ShouldTargetNavigationAndCanApplyOptimization() method.
-  optimization_guide::OptimizationGuideDecision
-  last_optimization_guide_decision() const {
-    return last_optimization_guide_decision_;
   }
 
   // Returns the last optimization guide decision that was returned by the
@@ -120,9 +106,6 @@ class OptimizationGuideConsumerWebContentsObserver
   }
 
  private:
-  optimization_guide::OptimizationGuideDecision
-      last_optimization_guide_decision_ =
-          optimization_guide::OptimizationGuideDecision::kUnknown;
   optimization_guide::OptimizationGuideDecision
       last_should_target_navigation_decision_ =
           optimization_guide::OptimizationGuideDecision::kUnknown;
@@ -162,8 +145,7 @@ class OptimizationGuideKeyedServiceBrowserTest
   ~OptimizationGuideKeyedServiceBrowserTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* cmd) override {
-    cmd->AppendSwitch(
-        optimization_guide::switches::kPurgeOptimizationGuideStore);
+    cmd->AppendSwitch(optimization_guide::switches::kPurgeHintsStore);
   }
 
   void SetUpOnMainThread() override {
@@ -239,12 +221,6 @@ class OptimizationGuideKeyedServiceBrowserTest
     return consumer_->last_can_apply_optimization_decision();
   }
 
-  // Returns the last decision from the ShouldTargetAndCanApplyOptimization()
-  // method seen by the consumer of the OptimizationGuideKeyedService.
-  optimization_guide::OptimizationGuideDecision last_consumer_decision() {
-    return consumer_->last_optimization_guide_decision();
-  }
-
   GURL url_with_hints() { return url_with_hints_; }
 
   GURL url_that_redirects() { return url_that_redirects_; }
@@ -301,8 +277,6 @@ IN_PROC_BROWSER_TEST_F(
             last_should_target_navigation_decision());
   EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kUnknown,
             last_can_apply_optimization_decision());
-  EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kUnknown,
-            last_consumer_decision());
 }
 
 IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
@@ -341,8 +315,6 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
             last_should_target_navigation_decision());
   EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kTrue,
             last_can_apply_optimization_decision());
-  EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kTrue,
-            last_consumer_decision());
   // Expect that the optimization guide UKM was recorded.
   auto entries = ukm_recorder.GetEntriesByName(
       ukm::builders::OptimizationGuide::kEntryName);
@@ -383,8 +355,6 @@ IN_PROC_BROWSER_TEST_F(
             last_should_target_navigation_decision());
   EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kTrue,
             last_can_apply_optimization_decision());
-  EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kFalse,
-            last_consumer_decision());
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.TargetDecision.PainfulPageLoad",
       static_cast<int>(optimization_guide::OptimizationTargetDecision::
@@ -434,8 +404,6 @@ IN_PROC_BROWSER_TEST_F(
             last_should_target_navigation_decision());
   EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kTrue,
             last_can_apply_optimization_decision());
-  EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kTrue,
-            last_consumer_decision());
   // Make sure hint cache match UMA was logged.
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.HasHint.BeforeCommit", true, 1);
@@ -484,8 +452,6 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
             last_should_target_navigation_decision());
   EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kFalse,
             last_can_apply_optimization_decision());
-  EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kFalse,
-            last_consumer_decision());
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.ApplyDecision.NoScript",
       static_cast<int>(
@@ -513,7 +479,12 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
   // version recorded.
   auto entries = ukm_recorder.GetEntriesByName(
       ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_TRUE(entries.empty());
+  EXPECT_EQ(1u, entries.size());
+  auto* entry = entries[0];
+  EXPECT_FALSE(ukm_recorder.EntryHasMetric(
+      entry, ukm::builders::OptimizationGuide::kHintGenerationTimestampName));
+  EXPECT_FALSE(ukm_recorder.EntryHasMetric(
+      entry, ukm::builders::OptimizationGuide::kHintSourceName));
 }
 
 IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
@@ -536,8 +507,6 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
             last_should_target_navigation_decision());
   EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kFalse,
             last_can_apply_optimization_decision());
-  EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kFalse,
-            last_consumer_decision());
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.ApplyDecision.NoScript",
       static_cast<int>(
@@ -561,10 +530,16 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
       "OptimizationGuide.HintCache.HostMatch.AtCommit", true, 1);
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.PageMatch.AtCommit", true, 1);
-  // Should expect that UKM was not recorded since it did not have a version.
+  // Should expect that UKM was not recorded for hint timestamp and source since
+  // it did not have a version.
   auto entries = ukm_recorder.GetEntriesByName(
       ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_TRUE(entries.empty());
+  EXPECT_EQ(1u, entries.size());
+  auto* entry = entries[0];
+  EXPECT_FALSE(ukm_recorder.EntryHasMetric(
+      entry, ukm::builders::OptimizationGuide::kHintGenerationTimestampName));
+  EXPECT_FALSE(ukm_recorder.EntryHasMetric(
+      entry, ukm::builders::OptimizationGuide::kHintSourceName));
 }
 
 IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
@@ -587,8 +562,6 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
             last_should_target_navigation_decision());
   EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kFalse,
             last_can_apply_optimization_decision());
-  EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kFalse,
-            last_consumer_decision());
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.ApplyDecision.NoScript",
       static_cast<int>(
@@ -612,10 +585,16 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
       "OptimizationGuide.HintCache.HostMatch.AtCommit", true, 1);
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.HintCache.PageMatch.AtCommit", true, 1);
-  // Should expect that UKM was not recorded since it had a bad version string.
+  // Should expect that UKM was not recorded for the hint generation timestamp
+  // and source since it had a bad version string.
   auto entries = ukm_recorder.GetEntriesByName(
       ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_TRUE(entries.empty());
+  EXPECT_EQ(1u, entries.size());
+  auto* entry = entries[0];
+  EXPECT_FALSE(ukm_recorder.EntryHasMetric(
+      entry, ukm::builders::OptimizationGuide::kHintGenerationTimestampName));
+  EXPECT_FALSE(ukm_recorder.EntryHasMetric(
+      entry, ukm::builders::OptimizationGuide::kHintSourceName));
 }
 
 class OptimizationGuideKeyedServiceDataSaverUserWithInfobarShownTest
@@ -627,7 +606,7 @@ class OptimizationGuideKeyedServiceDataSaverUserWithInfobarShownTest
 
   void SetUp() override {
     scoped_feature_list_.InitAndEnableFeature(
-        optimization_guide::features::kOptimizationHintsFetching);
+        optimization_guide::features::kRemoteOptimizationGuideFetching);
 
     OptimizationGuideKeyedServiceBrowserTest::SetUp();
   }
@@ -645,7 +624,7 @@ class OptimizationGuideKeyedServiceDataSaverUserWithInfobarShownTest
     // Set the blacklist state to initialized so the sites in the engagement
     // service will be used and not blacklisted on the first GetTopHosts
     // request.
-    InitializeDataSaverTopHostBlacklist();
+    InitializeTopHostBlacklist();
   }
 
   void SetUpCommandLine(base::CommandLine* cmd) override {
@@ -675,17 +654,17 @@ class OptimizationGuideKeyedServiceDataSaverUserWithInfobarShownTest
     service->AddPointsForTesting(https_url2, 3);
   }
 
-  void InitializeDataSaverTopHostBlacklist() {
+  void InitializeTopHostBlacklist() {
     Profile::FromBrowserContext(browser()
                                     ->tab_strip_model()
                                     ->GetActiveWebContents()
                                     ->GetBrowserContext())
         ->GetPrefs()
-        ->SetInteger(optimization_guide::prefs::
-                         kHintsFetcherDataSaverTopHostBlacklistState,
-                     static_cast<int>(
-                         optimization_guide::prefs::
-                             HintsFetcherTopHostBlacklistState::kInitialized));
+        ->SetInteger(
+            optimization_guide::prefs::kHintsFetcherTopHostBlacklistState,
+            static_cast<int>(
+                optimization_guide::prefs::HintsFetcherTopHostBlacklistState::
+                    kInitialized));
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -746,7 +725,7 @@ class OptimizationGuideKeyedServiceTargetPredictionEnabledBrowserTest
 
   void SetUp() override {
     scoped_feature_list_.InitWithFeatures(
-        {optimization_guide::features::kOptimizationHintsFetching,
+        {optimization_guide::features::kRemoteOptimizationGuideFetching,
          optimization_guide::features::kOptimizationTargetPrediction},
         {});
 
@@ -797,8 +776,6 @@ IN_PROC_BROWSER_TEST_F(
             last_should_target_navigation_decision());
   EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kTrue,
             last_can_apply_optimization_decision());
-  EXPECT_EQ(optimization_guide::OptimizationGuideDecision::kUnknown,
-            last_consumer_decision());
   histogram_tester.ExpectUniqueSample(
       "OptimizationGuide.TargetDecision.PainfulPageLoad",
       static_cast<int>(optimization_guide::OptimizationTargetDecision::

@@ -17,6 +17,7 @@
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/sequence_local_storage_slot.h"
 #include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/cors_exempt_headers.h"
@@ -47,11 +48,11 @@
 #include "content/test/data/mojo_web_test_helper_test.mojom.h"
 #include "device/bluetooth/public/mojom/test/fake_bluetooth.mojom.h"
 #include "media/mojo/buildflags.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/ssl/client_cert_identity.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/service_manager/public/cpp/manifest.h"
 #include "services/service_manager/public/cpp/manifest_builder.h"
-#include "storage/browser/quota/quota_settings.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "ui/base/ui_base_features.h"
@@ -81,9 +82,7 @@
 #include "services/service_manager/sandbox/win/sandbox_win.h"
 #endif
 
-#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS) || \
-    BUILDFLAG(ENABLE_CAST_RENDERER)
-#include "media/mojo/mojom/constants.mojom.h"      // nogncheck
+#if BUILDFLAG(ENABLE_CAST_RENDERER)
 #include "media/mojo/services/media_service_factory.h"  // nogncheck
 #endif
 
@@ -155,24 +154,6 @@ const service_manager::Manifest& GetContentBrowserOverlayManifest() {
                   mojom::FakeBluetoothChooserFactory,
                   mojom::WebTestBluetoothFakeAdapterSetter,
                   bluetooth::mojom::FakeBluetooth>())
-          .ExposeInterfaceFilterCapability_Deprecated(
-              "navigation:frame", "renderer",
-              service_manager::Manifest::InterfaceList<
-                  mojom::MojoWebTestHelper>())
-          .Build()};
-  return *manifest;
-}
-
-const service_manager::Manifest& GetContentRendererOverlayManifest() {
-  static base::NoDestructor<service_manager::Manifest> manifest{
-      service_manager::ManifestBuilder()
-          .ExposeCapability(
-              "browser",
-              service_manager::Manifest::InterfaceList<mojom::PowerMonitorTest,
-                                                       mojom::TestService>())
-          .ExposeInterfaceFilterCapability_Deprecated(
-              "navigation:frame", "browser",
-              service_manager::Manifest::InterfaceList<mojom::WebTestControl>())
           .Build()};
   return *manifest;
 }
@@ -203,10 +184,8 @@ blink::UserAgentMetadata GetShellUserAgentMetadata() {
   metadata.full_version = CONTENT_SHELL_VERSION;
   metadata.major_version = CONTENT_SHELL_MAJOR_VERSION;
   metadata.platform = BuildOSCpuInfo(false);
-
-  // TODO(mkwst): Split these out from BuildOSCpuInfo().
-  metadata.architecture = "";
-  metadata.model = "";
+  metadata.architecture = BuildCpuInfo();
+  metadata.model = BuildModelInfo();
 
   return metadata;
 }
@@ -251,43 +230,6 @@ bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {
   return false;
 }
 
-void ShellContentBrowserClient::BindInterfaceRequestFromFrame(
-    RenderFrameHost* render_frame_host,
-    const std::string& interface_name,
-    mojo::ScopedMessagePipeHandle interface_pipe) {
-  if (!frame_interfaces_) {
-    frame_interfaces_ = std::make_unique<
-        service_manager::BinderRegistryWithArgs<content::RenderFrameHost*>>();
-    ExposeInterfacesToFrame(frame_interfaces_.get());
-  }
-
-  frame_interfaces_->TryBindInterface(interface_name, &interface_pipe,
-                                      render_frame_host);
-}
-
-void ShellContentBrowserClient::RunServiceInstance(
-    const service_manager::Identity& identity,
-    mojo::PendingReceiver<service_manager::mojom::Service>* receiver) {
-#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS) || \
-    BUILDFLAG(ENABLE_CAST_RENDERER)
-  bool is_media_service = false;
-#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  if (identity.name() == media::mojom::kMediaServiceName)
-    is_media_service = true;
-#endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-#if BUILDFLAG(ENABLE_CAST_RENDERER)
-  if (identity.name() == media::mojom::kMediaRendererServiceName)
-    is_media_service = true;
-#endif  // BUILDFLAG(ENABLE_CAST_RENDERER)
-
-  if (is_media_service) {
-    service_manager::Service::RunAsyncUntilTermination(
-        media::CreateMediaServiceForTesting(std::move(*receiver)));
-  }
-#endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS) ||
-        // BUILDFLAG(ENABLE_CAST_RENDERER)
-}
-
 bool ShellContentBrowserClient::ShouldTerminateOnServiceQuit(
     const service_manager::Identity& id) {
   if (should_terminate_on_service_quit_callback_)
@@ -299,8 +241,6 @@ base::Optional<service_manager::Manifest>
 ShellContentBrowserClient::GetServiceManifestOverlay(base::StringPiece name) {
   if (name == content::mojom::kBrowserServiceName)
     return GetContentBrowserOverlayManifest();
-  if (name == content::mojom::kRendererServiceName)
-    return GetContentRendererOverlayManifest();
 
   return base::nullopt;
 }
@@ -360,13 +300,6 @@ ShellContentBrowserClient::CreateQuotaPermissionContext() {
   return new ShellQuotaPermissionContext();
 }
 
-void ShellContentBrowserClient::GetQuotaSettings(
-    BrowserContext* context,
-    StoragePartition* partition,
-    storage::OptionalQuotaSettingsCallback callback) {
-  std::move(callback).Run(storage::GetHardCodedSettings(100 * 1024 * 1024));
-}
-
 GeneratedCodeCacheSettings
 ShellContentBrowserClient::GetGeneratedCodeCacheSettings(
     content::BrowserContext* context) {
@@ -399,6 +332,19 @@ base::FilePath ShellContentBrowserClient::GetFontLookupTableCacheDir() {
 DevToolsManagerDelegate*
 ShellContentBrowserClient::GetDevToolsManagerDelegate() {
   return new ShellDevToolsManagerDelegate(browser_context());
+}
+
+mojo::Remote<::media::mojom::MediaService>
+ShellContentBrowserClient::RunSecondaryMediaService() {
+  mojo::Remote<::media::mojom::MediaService> remote;
+#if BUILDFLAG(ENABLE_CAST_RENDERER)
+  static base::NoDestructor<
+      base::SequenceLocalStorageSlot<std::unique_ptr<::media::MediaService>>>
+      service;
+  service->emplace(::media::CreateMediaServiceForTesting(
+      remote.BindNewPipeAndPassReceiver()));
+#endif
+  return remote;
 }
 
 void ShellContentBrowserClient::OpenURL(
@@ -513,9 +459,5 @@ ShellBrowserContext*
     ShellContentBrowserClient::off_the_record_browser_context() {
   return shell_browser_main_parts_->off_the_record_browser_context();
 }
-
-void ShellContentBrowserClient::ExposeInterfacesToFrame(
-    service_manager::BinderRegistryWithArgs<content::RenderFrameHost*>*
-        registry) {}
 
 }  // namespace content

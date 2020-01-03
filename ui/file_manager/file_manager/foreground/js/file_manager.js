@@ -882,6 +882,15 @@ class FileManager extends cr.EventTarget {
     this.providersModel_ = new ProvidersModel(this.volumeManager_);
     this.fileFilter_ = new FileFilter(this.metadataModel_);
 
+    // Set the files-ng class for dialog header styling.
+    const dialogHeader = queryRequiredElement('.dialog-header');
+    if (util.isFilesNg()) {
+      dialogHeader.classList.add('files-ng');
+      // Move the dialog header to the side of the splitter above the list view.
+      const dialogMain = queryRequiredElement('.dialog-main');
+      dialogMain.insertBefore(dialogHeader, dialogMain.firstChild);
+    }
+
     // Create the root view of FileManager.
     assert(this.dialogDom_);
     assert(this.launchParams_);
@@ -1480,12 +1489,10 @@ class FileManager extends cr.EventTarget {
     // The native implementation of the Files app creates snapshot files for
     // non-native files. But it does not work for folders (e.g., dialog for
     // loading unpacked extensions).
-    if ((allowedPaths === AllowedPaths.NATIVE_PATH ||
-         allowedPaths === AllowedPaths.NATIVE_OR_DRIVE_PATH) &&
+    if (allowedPaths === AllowedPaths.NATIVE_PATH &&
         !DialogType.isFolderDialog(this.launchParams_.type)) {
       if (this.launchParams_.type == DialogType.SELECT_SAVEAS_FILE) {
-        // Only drive can create snapshot files for saving.
-        allowedPaths = AllowedPaths.NATIVE_OR_DRIVE_PATH;
+        allowedPaths = AllowedPaths.NATIVE_PATH;
       } else {
         allowedPaths = AllowedPaths.ANY_PATH;
       }
@@ -1502,9 +1509,6 @@ class FileManager extends cr.EventTarget {
     const allowedPaths = this.getAllowedPaths_();
     if (allowedPaths == AllowedPaths.NATIVE_PATH) {
       return chrome.fileManagerPrivate.SourceRestriction.NATIVE_SOURCE;
-    }
-    if (allowedPaths == AllowedPaths.NATIVE_OR_DRIVE_PATH) {
-      return chrome.fileManagerPrivate.SourceRestriction.NATIVE_OR_DRIVE_SOURCE;
     }
     return chrome.fileManagerPrivate.SourceRestriction.ANY_SOURCE;
   }

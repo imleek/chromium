@@ -31,7 +31,6 @@
 #include "components/url_formatter/url_fixer.h"
 #include "components/url_formatter/url_formatter.h"
 #include "net/http/http_response_headers.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "ui/base/device_form_factor.h"
 #include "url/url_constants.h"
@@ -149,12 +148,15 @@ operator=(const SuggestResult& rhs) = default;
 void SearchSuggestionParser::SuggestResult::ClassifyMatchContents(
     const bool allow_bolding_all,
     const base::string16& input_text) {
-  if (input_text.empty()) {
-    // In case of zero-suggest results, do not highlight matches.
-    match_contents_class_.push_back(
-        ACMatchClassification(0, ACMatchClassification::NONE));
+  // Start with the trivial nothing-bolded classification.
+  DCHECK(!match_contents_.empty());
+  match_contents_class_.clear();
+  match_contents_class_.push_back(
+      ACMatchClassification(0, ACMatchClassification::NONE));
+
+  // Leave trivial classification alone in the ZeroSuggest case.
+  if (input_text.empty())
     return;
-  }
 
   base::string16 lookup_text = input_text;
   if (type_ == AutocompleteMatchType::SEARCH_SUGGEST_TAIL) {
@@ -181,6 +183,7 @@ void SearchSuggestionParser::SuggestResult::ClassifyMatchContents(
     return;
   }
 
+  // Note we discard our existing match_contents_class_ with this call.
   match_contents_class_ = AutocompleteProvider::ClassifyAllMatchesInString(
       input_text, match_contents_, true);
 }
@@ -244,12 +247,15 @@ void
 SearchSuggestionParser::NavigationResult::CalculateAndClassifyMatchContents(
     const bool allow_bolding_nothing,
     const base::string16& input_text) {
-  if (input_text.empty()) {
-    // In case of zero-suggest results, do not highlight matches.
-    match_contents_class_.push_back(
-        ACMatchClassification(0, ACMatchClassification::NONE));
+  // Start with the trivial nothing-bolded classification.
+  DCHECK(url_.is_valid());
+  match_contents_class_.clear();
+  match_contents_class_.push_back(
+      ACMatchClassification(0, ACMatchClassification::NONE));
+
+  // Leave trivial classification alone in the ZeroSuggest case.
+  if (input_text.empty())
     return;
-  }
 
   // Set contents to the formatted URL while ensuring the scheme and subdomain
   // are kept if the user text seems to include them. E.g., for the user text
@@ -461,6 +467,7 @@ bool SearchSuggestionParser::ParseSuggestResults(
   for (size_t index = 0; results_list->GetString(index, &suggestion); ++index) {
     // Google search may return empty suggestions for weird input characters,
     // they make no sense at all and can cause problems in our code.
+    suggestion = base::CollapseWhitespace(suggestion, false);
     if (suggestion.empty())
       continue;
 
@@ -507,6 +514,9 @@ bool SearchSuggestionParser::ParseSuggestResults(
           // Calculator results include a "= " prefix but we don't want to
           // include this in the search terms.
           suggestion.erase(0, 2);
+          // Unlikely to happen, but better to be safe.
+          if (base::CollapseWhitespace(suggestion, false).empty())
+            continue;
         }
         if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_DESKTOP) {
           annotation = has_equals_prefix ? suggestion : match_contents;
@@ -553,7 +563,7 @@ bool SearchSuggestionParser::ParseSuggestResults(
 
       bool should_prefetch = static_cast<int>(index) == prefetch_index;
       results->suggest_results.push_back(SuggestResult(
-          base::CollapseWhitespace(suggestion, false),
+          suggestion,
           match_type,
           subtype_identifier,
           base::CollapseWhitespace(match_contents, false),

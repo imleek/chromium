@@ -24,13 +24,6 @@ class DisplayPanel extends HTMLElement {
     this.listener_;
 
     /**
-     * True if the panel is not visible.
-     * @type {boolean}
-     * @private
-     */
-    this.hidden_ = true;
-
-    /**
      * True if the panel is collapsed to summary view.
      * @type {boolean}
      * @private
@@ -43,6 +36,8 @@ class DisplayPanel extends HTMLElement {
      * @private
      */
     this.items_ = [];
+
+    this.setAriaHidden_();
   }
 
   /**
@@ -71,7 +66,7 @@ class DisplayPanel extends HTMLElement {
                   align-items: stretch;
                   background-color: #FFF;
                   box-shadow: 0px 1px 2px 0px rgba(60, 64, 67, 0.3),
-                              1px 1px 3px 1px rgba(60, 64, 67, 0.15);
+                              1px 1px 3px 0px rgba(60, 64, 67, 0.15);
                   border-radius: 4px;
                   display: flex;
                   flex-direction: column;
@@ -177,6 +172,7 @@ class DisplayPanel extends HTMLElement {
    */
   panelCollapseFinished(event) {
     this.hidden = true;
+    this.setAttribute('aria-hidden', 'true');
     this.classList.remove('expanding');
     this.classList.add('expandfinished');
     this.removeEventListener('animationend', this.listener_);
@@ -292,7 +288,7 @@ class DisplayPanel extends HTMLElement {
    * @public
    */
   updateSummaryPanel() {
-    let summaryHost = this.shadowRoot.querySelector('#summary');
+    const summaryHost = this.shadowRoot.querySelector('#summary');
     let summaryPanel = summaryHost.querySelector('#summary-panel');
 
     // Make the display panel available by tab if there are panels to
@@ -352,6 +348,7 @@ class DisplayPanel extends HTMLElement {
     panel.parent = this;
     panel.setAttribute('indicator', 'progress');
     this.items_.push(/** @type {!PanelItem} */ (panel));
+    this.setAriaHidden_();
     return /** @type {!PanelItem} */ (panel);
   }
 
@@ -376,6 +373,7 @@ class DisplayPanel extends HTMLElement {
 
     displayPanel.panels_.appendChild(panel);
     displayPanel.updateSummaryPanel();
+    this.setAriaHidden_();
   }
 
   /**
@@ -402,7 +400,17 @@ class DisplayPanel extends HTMLElement {
     }
     item.remove();
     this.items_.splice(index, 1);
+    this.setAriaHidden_();
     this.updateSummaryPanel();
+  }
+
+  /**
+   * Set aria-hidden to false if there is no panel.
+   * @private
+   */
+  setAriaHidden_() {
+    const hasItems = this.connectedPanelItems_().length > 0;
+    this.setAttribute('aria-hidden', !hasItems);
   }
 
   /**
@@ -410,7 +418,7 @@ class DisplayPanel extends HTMLElement {
    * @public
    */
   findPanelItemById(id) {
-    for (let item of this.items_) {
+    for (const item of this.items_) {
       if (item.getAttribute('id') === id) {
         return item;
       }
@@ -427,6 +435,7 @@ class DisplayPanel extends HTMLElement {
       item.remove();
     }
     this.items_ = [];
+    this.setAriaHidden_();
     this.updateSummaryPanel();
   }
 }

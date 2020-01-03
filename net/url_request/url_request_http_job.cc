@@ -83,16 +83,23 @@
 
 namespace {
 
-base::Value CookieExcludedNetLogParams(const std::string& operation,
-                                       const std::string& cookie_name,
-                                       const std::string& exclusion_reason,
-                                       net::NetLogCaptureMode capture_mode) {
+base::Value CookieInclusionStatusNetLogParams(
+    const std::string& operation,
+    const std::string& cookie_name,
+    const std::string& cookie_domain,
+    const std::string& cookie_path,
+    const net::CanonicalCookie::CookieInclusionStatus& status,
+    net::NetLogCaptureMode capture_mode) {
   base::Value dict(base::Value::Type::DICTIONARY);
   dict.SetStringKey("operation", operation);
-  dict.SetStringKey("exclusion_reason", exclusion_reason);
-  if (net::NetLogCaptureIncludesSensitive(capture_mode) &&
-      !cookie_name.empty()) {
-    dict.SetStringKey("name", cookie_name);
+  dict.SetStringKey("status", status.GetDebugString());
+  if (net::NetLogCaptureIncludesSensitive(capture_mode)) {
+    if (!cookie_name.empty())
+      dict.SetStringKey("name", cookie_name);
+    if (!cookie_domain.empty())
+      dict.SetStringKey("domain", cookie_domain);
+    if (!cookie_path.empty())
+      dict.SetStringKey("path", cookie_path);
   }
   return dict;
 }
@@ -275,10 +282,10 @@ void URLRequestHttpJob::Start() {
   // instance WebCore::FrameLoader::HideReferrer.
   if (referrer.is_valid()) {
     std::string referer_value = referrer.spec();
-    UMA_HISTOGRAM_COUNTS_10000("Referrer.HeaderLength", referer_value.length());
-    if (base::FeatureList::IsEnabled(features::kCapRefererHeaderLength) &&
-        base::saturated_cast<int>(referer_value.length()) >
-            features::kMaxRefererHeaderLength.Get()) {
+    // We limit the `referer` header to 4k: see step 6 of
+    // https://w3c.github.io/webappsec-referrer-policy/#determine-requests-referrer
+    // and https://github.com/whatwg/fetch/issues/903.
+    if (referer_value.length() > 4096) {
       // Strip the referrer down to its origin, but ensure that it's serialized
       // as a URL (e.g. retaining a trailing `/` character).
       referer_value = url::Origin::Create(referrer).GetURL().spec();
@@ -423,8 +430,6 @@ void URLRequestHttpJob::MaybeStartTransactionInternal(int result) {
 }
 
 void URLRequestHttpJob::StartTransactionInternal() {
-  // This should only be called while the request's status is IO_PENDING.
-  DCHECK_EQ(URLRequestStatus::IO_PENDING, request_->status().status());
   DCHECK(!override_response_headers_);
 
   // NOTE: This method assumes that request_info_ is already setup properly.
@@ -589,6 +594,37 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
 
     // Disable privacy mode as we are sending cookies anyway.
     request_info_.privacy_mode = PRIVACY_MODE_DISABLED;
+
+    // TODO(crbug.com/1031664): Reduce the number of times the cookie list is
+    // iterated over. Get metrics for every cookie which is included.
+    for (const auto& c : cookies_with_status_list) {
+      bool request_is_secure = request_->url().SchemeIsCryptographic();
+      net::CookieSourceScheme cookie_scheme = c.cookie.SourceScheme();
+      CookieRequestScheme cookie_request_schemes;
+
+      switch (cookie_scheme) {
+        case net::CookieSourceScheme::kSecure:
+          cookie_request_schemes =
+              request_is_secure
+                  ? CookieRequestScheme::kSecureSetSecureRequest
+                  : CookieRequestScheme::kSecureSetNonsecureRequest;
+          break;
+
+        case net::CookieSourceScheme::kNonSecure:
+          cookie_request_schemes =
+              request_is_secure
+                  ? CookieRequestScheme::kNonsecureSetSecureRequest
+                  : CookieRequestScheme::kNonsecureSetNonsecureRequest;
+          break;
+
+        case net::CookieSourceScheme::kUnset:
+          cookie_request_schemes = CookieRequestScheme::kUnsetCookieScheme;
+          break;
+      }
+
+      UMA_HISTOGRAM_ENUMERATION("Cookie.CookieSchemeRequestScheme",
+                                cookie_request_schemes);
+    }
   }
 
   // Report status for things in |excluded_list| and |cookies_with_status_list|
@@ -616,15 +652,15 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
 
   if (request_->net_log().IsCapturing()) {
     for (const auto& cookie_and_status : maybe_sent_cookies) {
-      if (!cookie_and_status.status.IsInclude()) {
-        request_->net_log().AddEvent(
-            NetLogEventType::COOKIE_INCLUSION_STATUS,
-            [&](NetLogCaptureMode capture_mode) {
-              return CookieExcludedNetLogParams(
-                  "send", cookie_and_status.cookie.Name(),
-                  cookie_and_status.status.GetDebugString(), capture_mode);
-            });
-      }
+      request_->net_log().AddEvent(
+          NetLogEventType::COOKIE_INCLUSION_STATUS,
+          [&](NetLogCaptureMode capture_mode) {
+            return CookieInclusionStatusNetLogParams(
+                "send", cookie_and_status.cookie.Name(),
+                cookie_and_status.cookie.Domain(),
+                cookie_and_status.cookie.Path(), cookie_and_status.status,
+                capture_mode);
+          });
     }
   }
 
@@ -734,14 +770,15 @@ void URLRequestHttpJob::OnSetCookieResult(
     base::Optional<CanonicalCookie> cookie,
     std::string cookie_string,
     CanonicalCookie::CookieInclusionStatus status) {
-  if (!status.IsInclude() && request_->net_log().IsCapturing()) {
-    request_->net_log().AddEvent(NetLogEventType::COOKIE_INCLUSION_STATUS,
-                                 [&](NetLogCaptureMode capture_mode) {
-                                   return CookieExcludedNetLogParams(
-                                       "store",
-                                       cookie ? cookie.value().Name() : "",
-                                       status.GetDebugString(), capture_mode);
-                                 });
+  if (request_->net_log().IsCapturing()) {
+    request_->net_log().AddEvent(
+        NetLogEventType::COOKIE_INCLUSION_STATUS,
+        [&](NetLogCaptureMode capture_mode) {
+          return CookieInclusionStatusNetLogParams(
+              "store", cookie ? cookie.value().Name() : "",
+              cookie ? cookie.value().Domain() : "",
+              cookie ? cookie.value().Path() : "", status, capture_mode);
+        });
   }
   set_cookie_status_list_.emplace_back(std::move(cookie),
                                        std::move(cookie_string), status);
@@ -872,7 +909,8 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
     TransportSecurityState* state = context->transport_security_state();
     NotifySSLCertificateError(
         result, transaction_->GetResponseInfo()->ssl_info,
-        state->ShouldSSLErrorsBeFatal(request_info_.url.host()));
+        state->ShouldSSLErrorsBeFatal(request_info_.url.host()) &&
+            result != ERR_CERT_KNOWN_INTERCEPTION_BLOCKED);
   } else if (result == ERR_SSL_CLIENT_AUTH_CERT_NEEDED) {
     NotifyCertificateRequested(
         transaction_->GetResponseInfo()->cert_request_info.get());
@@ -1424,8 +1462,7 @@ void URLRequestHttpJob::DoneWithRequest(CompletionCause reason) {
   NetworkQualityEstimator* network_quality_estimator =
       request()->context()->network_quality_estimator();
   if (network_quality_estimator) {
-    network_quality_estimator->NotifyRequestCompleted(
-        *request(), request_->status().error());
+    network_quality_estimator->NotifyRequestCompleted(*request());
   }
 
   RecordPerfHistograms(reason);

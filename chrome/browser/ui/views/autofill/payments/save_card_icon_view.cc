@@ -19,12 +19,14 @@
 
 namespace autofill {
 
-SaveCardIconView::SaveCardIconView(CommandUpdater* command_updater,
-                                   PageActionIconView::Delegate* delegate)
+SaveCardIconView::SaveCardIconView(
+    CommandUpdater* command_updater,
+    IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+    PageActionIconView::Delegate* page_action_icon_delegate)
     : PageActionIconView(command_updater,
                          IDC_SAVE_CREDIT_CARD_FOR_PAGE,
-                         delegate) {
-  DCHECK(delegate);
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate) {
   SetID(VIEW_ID_SAVE_CREDIT_CARD_BUTTON);
 
   if (base::FeatureList::IsEnabled(
@@ -45,11 +47,9 @@ views::BubbleDialogDelegateView* SaveCardIconView::GetBubble() const {
       controller->GetSaveCardBubbleView());
 }
 
-bool SaveCardIconView::Update() {
+void SaveCardIconView::UpdateImpl() {
   if (!GetWebContents())
-    return false;
-
-  const bool was_visible = GetVisible();
+    return;
 
   // |controller| may be nullptr due to lazy initialization.
   SaveCardBubbleController* controller = GetController();
@@ -69,8 +69,6 @@ bool SaveCardIconView::Update() {
 
   if (command_enabled && controller->ShouldShowCardSavedLabelAnimation())
     AnimateIn(IDS_AUTOFILL_CARD_SAVED);
-
-  return was_visible != GetVisible();
 }
 
 void SaveCardIconView::OnExecuting(
@@ -88,14 +86,23 @@ const gfx::VectorIcon& SaveCardIconView::GetVectorIconBadge() const {
   return gfx::kNoneIcon;
 }
 
-base::string16 SaveCardIconView::GetTextForTooltipAndAccessibleName() const {
-  SaveCardBubbleController* controller = GetController();
-  if (!controller) {
-    // The controller can be null in unit tests only.
-    return base::string16();
-  }
+const char* SaveCardIconView::GetClassName() const {
+  return "SaveCardIconView";
+}
 
-  return controller->GetSaveCardIconTooltipText();
+base::string16 SaveCardIconView::GetTextForTooltipAndAccessibleName() const {
+  base::string16 text;
+
+  SaveCardBubbleController* const controller = GetController();
+  if (controller)
+    text = controller->GetSaveCardIconTooltipText();
+
+  // Because the card icon is in an animated container, it is still briefly
+  // visible as it's disappearing. Since our test infrastructure does not allow
+  // views to have empty tooltip text when they are visible, we instead return
+  // the default text.
+  return text.empty() ? l10n_util::GetStringUTF16(IDS_TOOLTIP_SAVE_CREDIT_CARD)
+                      : text;
 }
 
 SaveCardBubbleController* SaveCardIconView::GetController() const {

@@ -41,17 +41,20 @@
 
 namespace extensions {
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-const base::Feature kExtensionsAllAccountsFeature{
-    "ExtensionsAllAccounts", base::FEATURE_ENABLED_BY_DEFAULT};
-#endif
-
 IdentityTokenCacheValue::IdentityTokenCacheValue()
     : status_(CACHE_STATUS_NOTFOUND) {}
 
 IdentityTokenCacheValue::IdentityTokenCacheValue(
     const IssueAdviceInfo& issue_advice)
     : status_(CACHE_STATUS_ADVICE), issue_advice_(issue_advice) {
+  expiration_time_ =
+      base::Time::Now() + base::TimeDelta::FromSeconds(
+                              identity_constants::kCachedIssueAdviceTTLSeconds);
+}
+
+IdentityTokenCacheValue::IdentityTokenCacheValue(
+    const RemoteConsentResolutionData& resolution_data)
+    : status_(CACHE_STATUS_REMOTE_CONSENT), resolution_data_(resolution_data) {
   expiration_time_ =
       base::Time::Now() + base::TimeDelta::FromSeconds(
                               identity_constants::kCachedIssueAdviceTTLSeconds);
@@ -86,6 +89,11 @@ IdentityTokenCacheValue::CacheValueStatus IdentityTokenCacheValue::status()
 
 const IssueAdviceInfo& IdentityTokenCacheValue::issue_advice() const {
   return issue_advice_;
+}
+
+const RemoteConsentResolutionData& IdentityTokenCacheValue::resolution_data()
+    const {
+  return resolution_data_;
 }
 
 const std::string& IdentityTokenCacheValue::token() const { return token_; }
@@ -155,13 +163,7 @@ BrowserContextKeyedAPIFactory<IdentityAPI>* IdentityAPI::GetFactoryInstance() {
 }
 
 bool IdentityAPI::AreExtensionsRestrictedToPrimaryAccount() {
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  if (!AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_))
-    return true;
-  return !base::FeatureList::IsEnabled(kExtensionsAllAccountsFeature);
-#else
-  return true;
-#endif
+  return !AccountConsistencyModeManager::IsDiceEnabledForProfile(profile_);
 }
 
 void IdentityAPI::OnRefreshTokenUpdatedForAccount(

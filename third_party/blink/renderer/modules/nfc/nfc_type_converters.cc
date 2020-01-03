@@ -30,8 +30,8 @@ namespace mojo {
 NDEFRecordPtr TypeConverter<NDEFRecordPtr, blink::NDEFRecord*>::Convert(
     const blink::NDEFRecord* record) {
   return NDEFRecord::New(
-      record->recordType(), record->mediaType(), record->id(),
-      record->encoding(), record->lang(), record->payloadData(),
+      record->category(), record->recordType(), record->mediaType(),
+      record->id(), record->encoding(), record->lang(), record->payloadData(),
       TypeConverter<NDEFMessagePtr, blink::NDEFMessage*>::Convert(
           record->payload_message()));
 }
@@ -43,7 +43,6 @@ NDEFMessagePtr TypeConverter<NDEFMessagePtr, blink::NDEFMessage*>::Convert(
   if (!message)
     return nullptr;
   NDEFMessagePtr messagePtr = NDEFMessage::New();
-  messagePtr->url = message->url();
   messagePtr->data.resize(message->records().size());
   for (wtf_size_t i = 0; i < message->records().size(); ++i) {
     NDEFRecordPtr record = NDEFRecord::From(message->records()[i].Get());
@@ -71,10 +70,13 @@ TypeConverter<NDEFScanOptionsPtr, const blink::NDEFScanOptions*>::Convert(
     const blink::NDEFScanOptions* scanOptions) {
   // https://w3c.github.io/web-nfc/#dom-ndefscanoptions
   // Default values for NDEFScanOptions dictionary are:
-  // url = "", recordType = null, mediaType = ""
+  // id = undefined, recordType = undefined, mediaType = ""
   NDEFScanOptionsPtr scanOptionsPtr = NDEFScanOptions::New();
-  scanOptionsPtr->url = scanOptions->url();
   scanOptionsPtr->media_type = scanOptions->mediaType();
+
+  if (scanOptions->hasId()) {
+    scanOptionsPtr->id = scanOptions->id();
+  }
 
   if (scanOptions->hasRecordType()) {
     scanOptionsPtr->record_type = scanOptions->recordType();

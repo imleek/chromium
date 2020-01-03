@@ -28,6 +28,7 @@ namespace blink {
 namespace {
 
 const char kFrobulateTrialName[] = "Frobulate";
+const char kFrobulateDeprecationTrialName[] = "FrobulateDeprecation";
 const char kFrobulateNavigationTrialName[] = "FrobulateNavigation";
 const char kFrobulateEnabledOrigin[] = "https://www.example.com";
 const char kFrobulateEnabledOriginUnsecure[] = "http://www.example.com";
@@ -72,7 +73,7 @@ class MockTokenValidator : public TrialTokenValidator {
 
 }  // namespace
 
-class OriginTrialContextTest : public testing::Test{
+class OriginTrialContextTest : public testing::Test {
  protected:
   OriginTrialContextTest()
       : token_validator_(new MockTokenValidator),
@@ -87,8 +88,11 @@ class OriginTrialContextTest : public testing::Test{
     KURL page_url(origin);
     scoped_refptr<SecurityOrigin> page_origin =
         SecurityOrigin::Create(page_url);
-    execution_context_->SetSecurityOrigin(page_origin);
-    execution_context_->SetIsSecureContext(SecurityOrigin::IsSecure(page_url));
+    execution_context_->GetSecurityContext().SetSecurityOrigin(page_origin);
+    execution_context_->SetSecureContextModeForTesting(
+        SecurityOrigin::IsSecure(page_url)
+            ? SecureContextMode::kSecureContext
+            : SecureContextMode::kInsecureContext);
   }
 
   bool IsFeatureEnabled(const String& origin, OriginTrialFeature feature) {
@@ -154,6 +158,25 @@ TEST_F(OriginTrialContextTest, EnabledSecureRegisteredOrigin) {
   EXPECT_EQ(nullptr, GetEnabledNavigationFeatures());
 }
 
+// The feature should be enabled if a valid token for a deprecation trial for
+// the origin is provided.
+TEST_F(OriginTrialContextTest, EnabledSecureRegisteredOriginDeprecation) {
+  TokenValidator()->SetResponse(OriginTrialTokenStatus::kSuccess,
+                                kFrobulateDeprecationTrialName);
+  bool is_origin_enabled =
+      IsFeatureEnabled(kFrobulateEnabledOrigin,
+                       OriginTrialFeature::kOriginTrialsSampleAPIDeprecation);
+  EXPECT_TRUE(is_origin_enabled);
+  EXPECT_EQ(1, TokenValidator()->CallCount());
+
+  // Status metric should be updated.
+  ExpectStatusUniqueMetric(OriginTrialTokenStatus::kSuccess, 1);
+
+  // kOriginTrialsSampleAPIDeprecation is not a navigation feature, so shouldn't
+  // be included in GetEnabledNavigationFeatures().
+  EXPECT_EQ(nullptr, GetEnabledNavigationFeatures());
+}
+
 // ... but if the browser says it's invalid for any reason, that's enough to
 // reject.
 TEST_F(OriginTrialContextTest, InvalidTokenResponseFromPlatform) {
@@ -177,8 +200,34 @@ TEST_F(OriginTrialContextTest, EnabledNonSecureRegisteredOrigin) {
       IsFeatureEnabled(kFrobulateEnabledOriginUnsecure,
                        OriginTrialFeature::kOriginTrialsSampleAPI);
   EXPECT_FALSE(is_origin_enabled);
-  EXPECT_EQ(0, TokenValidator()->CallCount());
+  EXPECT_EQ(1, TokenValidator()->CallCount());
   ExpectStatusUniqueMetric(OriginTrialTokenStatus::kInsecure, 1);
+}
+
+// The feature should be enabled if the origin is insecure, for a valid token
+// for a deprecation trial.
+TEST_F(OriginTrialContextTest,
+       EnabledNonSecureRegisteredOriginDeprecationWithToken) {
+  TokenValidator()->SetResponse(OriginTrialTokenStatus::kSuccess,
+                                kFrobulateDeprecationTrialName);
+  bool is_origin_enabled =
+      IsFeatureEnabled(kFrobulateEnabledOriginUnsecure,
+                       OriginTrialFeature::kOriginTrialsSampleAPIDeprecation);
+  EXPECT_TRUE(is_origin_enabled);
+  EXPECT_EQ(1, TokenValidator()->CallCount());
+  ExpectStatusUniqueMetric(OriginTrialTokenStatus::kSuccess, 1);
+}
+
+// The feature should not be enabled if the origin is insecure, without a valid
+// token for a deprecation trial.
+TEST_F(OriginTrialContextTest,
+       EnabledNonSecureRegisteredOriginDeprecationNoToken) {
+  TokenValidator()->SetResponse(OriginTrialTokenStatus::kSuccess,
+                                kFrobulateTrialName);
+  bool is_origin_enabled =
+      IsFeatureEnabled(kFrobulateEnabledOriginUnsecure,
+                       OriginTrialFeature::kOriginTrialsSampleAPIDeprecation);
+  EXPECT_FALSE(is_origin_enabled);
 }
 
 TEST_F(OriginTrialContextTest, ParseHeaderValue) {

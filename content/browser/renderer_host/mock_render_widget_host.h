@@ -15,7 +15,7 @@
 #include "content/test/mock_widget_impl.h"
 #include "content/test/mock_widget_input_handler.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 
 namespace viz {
 class MockCompositorFrameSinkClient;
@@ -57,7 +57,7 @@ class MockRenderWidgetHost : public RenderWidgetHostImpl {
   }
 
   // Mocks out |renderer_compositor_frame_sink_| with a
-  // CompositorFrameSinkClientPtr bound to
+  // CompositorFrameSinkClient bound to
   // |mock_renderer_compositor_frame_sink|.
   void SetMockRendererCompositorFrameSink(
       viz::MockCompositorFrameSinkClient* mock_renderer_compositor_frame_sink);

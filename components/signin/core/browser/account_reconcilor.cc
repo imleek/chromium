@@ -578,8 +578,7 @@ void AccountReconcilor::FinishReconcileWithMultiloginEndpoint(
     DCHECK_NE(AccountReconcilorState::ACCOUNT_RECONCILOR_RUNNING, state_);
     CoreAccountId first_gaia_account_after_reconcile =
         PickFirstGaiaAccount(parameters_for_multilogin, gaia_accounts);
-    delegate_->OnReconcileFinished(first_gaia_account_after_reconcile,
-                                   reconcile_is_noop_);
+    delegate_->OnReconcileFinished(first_gaia_account_after_reconcile);
   }
   first_execution_ = false;
 }
@@ -737,9 +736,6 @@ void AccountReconcilor::FinishReconcile(
   DCHECK(delegate_->IsUnknownInvalidAccountInCookieAllowed())
       << "Only supported in UPDATE mode";
 
-  delegate_->MaybeLogInconsistencyReason(primary_account, chrome_accounts,
-                                         gaia_accounts, first_execution_);
-
   size_t number_gaia_accounts = gaia_accounts.size();
   // If there are any accounts in the gaia cookie but not in chrome, then
   // those accounts need to be removed from the cookie.  This means we need
@@ -821,7 +817,7 @@ void AccountReconcilor::FinishReconcile(
   first_execution_ = false;
   CalculateIfReconcileIsDone();
   if (!is_reconcile_started_)
-    delegate_->OnReconcileFinished(first_account, reconcile_is_noop_);
+    delegate_->OnReconcileFinished(first_account);
   ScheduleStartReconcileIfChromeAccountsChanged();
 }
 

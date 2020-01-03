@@ -36,8 +36,8 @@ class DecoderBuffer;
 class MockDemuxerStream;
 
 // Return a callback that expects to be run once.
-base::Closure NewExpectedClosure();
-base::Callback<void(bool)> NewExpectedBoolCB(bool success);
+base::OnceClosure NewExpectedClosure();
+base::OnceCallback<void(bool)> NewExpectedBoolCB(bool success);
 PipelineStatusCB NewExpectedStatusCB(PipelineStatus status);
 
 // Helper class for running a message loop until a callback has run. Useful for
@@ -264,12 +264,12 @@ MATCHER_P2(CodecUnsupportedInContainer, codec, container, "") {
 
 MATCHER_P(FoundStream, stream_type_string, "") {
   return CONTAINS_STRING(
-      arg, "found_" + std::string(stream_type_string) + "_stream\":true");
+      arg, "kHasFound" + std::string(stream_type_string) + "Stream\":true");
 }
 
 MATCHER_P2(CodecName, stream_type_string, codec_string, "") {
   return CONTAINS_STRING(arg,
-                         std::string(stream_type_string) + "_codec_name") &&
+                         'k' + std::string(stream_type_string) + "CodecName") &&
          CONTAINS_STRING(arg, std::string(codec_string));
 }
 

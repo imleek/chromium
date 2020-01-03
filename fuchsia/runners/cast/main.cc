@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/fuchsia/default_context.h"
+#include "base/fuchsia/file_utils.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_executor.h"
@@ -19,31 +20,33 @@ int main(int argc, char** argv) {
   base::RunLoop run_loop;
 
   base::CommandLine::Init(argc, argv);
-  if (!cr_fuchsia::InitLoggingFromCommandLine(
-          *base::CommandLine::ForCurrentProcess())) {
-    return 1;
-  }
+  CHECK(cr_fuchsia::InitLoggingFromCommandLine(
+      *base::CommandLine::ForCurrentProcess()))
+      << "Failed to initialize logging.";
 
   fuchsia::web::ContextFeatureFlags features =
       fuchsia::web::ContextFeatureFlags::NETWORK |
       fuchsia::web::ContextFeatureFlags::AUDIO |
       fuchsia::web::ContextFeatureFlags::VULKAN |
       fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER |
-      fuchsia::web::ContextFeatureFlags::WIDEVINE_CDM;
+      fuchsia::web::ContextFeatureFlags::WIDEVINE_CDM |
+      fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER_ONLY;
 
-  if (!BUILDFLAG(ENABLE_SOFTWARE_VIDEO_DECODERS))
-    features |= fuchsia::web::ContextFeatureFlags::HARDWARE_VIDEO_DECODER_ONLY;
+  fuchsia::web::CreateContextParams create_context_params;
+  create_context_params.set_features(features);
 
-  fuchsia::web::CreateContextParams create_context_params =
-      WebContentRunner::BuildCreateContextParams(
-          fidl::InterfaceHandle<fuchsia::io::Directory>(), features);
+  create_context_params.set_service_directory(base::fuchsia::OpenDirectory(
+      base::FilePath(base::fuchsia::kServiceDirectoryPath)));
+  CHECK(create_context_params.service_directory());
+
+  // TODO(crbug.com/1025045): Set HEADLESS flag based on system config data.
 
   const char kCastPlayreadyKeySystem[] = "com.chromecast.playready";
   create_context_params.set_playready_key_system(kCastPlayreadyKeySystem);
 
   // TODO(b/141956135): Use CrKey version provided by the Agent.
   create_context_params.set_user_agent_product("CrKey");
-  create_context_params.set_user_agent_version("0");
+  create_context_params.set_user_agent_version("1.43");
 
   const uint16_t kRemoteDebuggingPort = 9222;
   create_context_params.set_remote_debugging_port(kRemoteDebuggingPort);
@@ -54,8 +57,8 @@ int main(int argc, char** argv) {
       {"allow-running-insecure-content"});
 
   CastRunner runner(
-      base::fuchsia::ComponentContextForCurrentProcess()->outgoing().get(),
-      std::move(create_context_params));
+      std::move(create_context_params),
+      base::fuchsia::ComponentContextForCurrentProcess()->outgoing().get());
 
   base::fuchsia::ComponentContextForCurrentProcess()
       ->outgoing()

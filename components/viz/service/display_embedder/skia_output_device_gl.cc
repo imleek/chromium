@@ -12,6 +12,7 @@
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
+#include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/texture_base.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -30,18 +31,23 @@ namespace viz {
 
 SkiaOutputDeviceGL::SkiaOutputDeviceGL(
     gpu::MailboxManager* mailbox_manager,
+    gpu::SharedContextState* context_state,
     scoped_refptr<gl::GLSurface> gl_surface,
     scoped_refptr<gpu::gles2::FeatureInfo> feature_info,
-    const DidSwapBufferCompleteCallback& did_swap_buffer_complete_callback)
-    : SkiaOutputDevice(false /*need_swap_semaphore */,
-                       did_swap_buffer_complete_callback),
+    gpu::MemoryTracker* memory_tracker,
+    DidSwapBufferCompleteCallback did_swap_buffer_complete_callback)
+    : SkiaOutputDevice(/*need_swap_semaphore=*/false,
+                       memory_tracker,
+                       std::move(did_swap_buffer_complete_callback)),
       mailbox_manager_(mailbox_manager),
+      context_state_(context_state),
       gl_surface_(std::move(gl_surface)) {
   capabilities_.flipped_output_surface = gl_surface_->FlipsVertically();
   capabilities_.supports_post_sub_buffer = gl_surface_->SupportsPostSubBuffer();
   if (feature_info->workarounds()
-          .disable_post_sub_buffers_for_onscreen_surfaces)
+          .disable_post_sub_buffers_for_onscreen_surfaces) {
     capabilities_.supports_post_sub_buffer = false;
+  }
   capabilities_.max_frames_pending = gl_surface_->GetBufferCount() - 1;
   capabilities_.supports_gpu_vsync = gl_surface_->SupportsGpuVSync();
   capabilities_.supports_dc_layers = gl_surface_->SupportsDCLayers();
@@ -53,20 +59,23 @@ SkiaOutputDeviceGL::SkiaOutputDeviceGL(
   // This output device is never offscreen.
   capabilities_.supports_surfaceless = gl_surface_->IsSurfaceless();
 #endif
-}
 
-void SkiaOutputDeviceGL::Initialize(GrContext* gr_context,
-                                    gl::GLContext* gl_context) {
-  DCHECK(gr_context);
-  DCHECK(gl_context);
-  gr_context_ = gr_context;
+  DCHECK(context_state_->gr_context());
+  DCHECK(context_state_->context());
 
-  gl::CurrentGL* current_gl = gl_context->GetCurrentGL();
-  DCHECK(current_gl);
+  if (gl_surface_->SupportsSwapTimestamps()) {
+    gl_surface_->SetEnableSwapTimestamps();
+
+    // Changes to swap timestamp queries are only picked up when making current.
+    context_state_->ReleaseCurrent(nullptr);
+    context_state_->MakeCurrent(gl_surface_.get());
+  }
+
+  gl::CurrentGL* current_gl = context_state_->context()->GetCurrentGL();
 
   // Get alpha bits from the default frame buffer.
   glBindFramebufferEXT(GL_FRAMEBUFFER, 0);
-  gr_context_->resetContext(kRenderTarget_GrGLBackendState);
+  context_state_->gr_context()->resetContext(kRenderTarget_GrGLBackendState);
   const auto* version = current_gl->Version;
   GLint alpha_bits = 0;
   if (version->is_desktop_core_profile) {
@@ -80,7 +89,7 @@ void SkiaOutputDeviceGL::Initialize(GrContext* gr_context,
   supports_alpha_ = alpha_bits > 0;
 }
 
-SkiaOutputDeviceGL::~SkiaOutputDeviceGL() {}
+SkiaOutputDeviceGL::~SkiaOutputDeviceGL() = default;
 
 bool SkiaOutputDeviceGL::Reshape(const gfx::Size& size,
                                  float device_scale_factor,
@@ -89,10 +98,7 @@ bool SkiaOutputDeviceGL::Reshape(const gfx::Size& size,
                                  gfx::OverlayTransform transform) {
   DCHECK_EQ(transform, gfx::OVERLAY_TRANSFORM_NONE);
 
-  gl::GLSurface::ColorSpace surface_color_space =
-      gl::ColorSpaceUtils::GetGLSurfaceColorSpace(color_space);
-  if (!gl_surface_->Resize(size, device_scale_factor, surface_color_space,
-                           has_alpha)) {
+  if (!gl_surface_->Resize(size, device_scale_factor, color_space, has_alpha)) {
     DLOG(ERROR) << "Failed to resize.";
     return false;
   }
@@ -101,18 +107,37 @@ bool SkiaOutputDeviceGL::Reshape(const gfx::Size& size,
 
   GrGLFramebufferInfo framebuffer_info;
   framebuffer_info.fFBOID = gl_surface_->GetBackingFramebufferObject();
-  framebuffer_info.fFormat = supports_alpha_ ? GL_RGBA8 : GL_RGB8_OES;
+
+  SkColorType color_type;
+  if (color_space.IsHDR()) {
+    framebuffer_info.fFormat = GL_RGBA16F;
+    color_type = kRGBA_F16_SkColorType;
+  } else if (supports_alpha_) {
+    framebuffer_info.fFormat = GL_RGBA8;
+    color_type = kRGBA_8888_SkColorType;
+  } else {
+    framebuffer_info.fFormat = GL_RGB8_OES;
+    color_type = kRGB_888x_SkColorType;
+  }
+  // TODO(kylechar): We might need to support RGB10A2 for HDR10. HDR10 was only
+  // used with Windows updated RS3 (2017) as a workaround for a DWM bug so it
+  // might not be relevant to support anymore as a result.
+
   GrBackendRenderTarget render_target(size.width(), size.height(), 0, 8,
                                       framebuffer_info);
   auto origin = gl_surface_->FlipsVertically() ? kTopLeft_GrSurfaceOrigin
                                                : kBottomLeft_GrSurfaceOrigin;
-  auto color_type =
-      supports_alpha_ ? kRGBA_8888_SkColorType : kRGB_888x_SkColorType;
   sk_surface_ = SkSurface::MakeFromBackendRenderTarget(
-      gr_context_, render_target, origin, color_type,
+      context_state_->gr_context(), render_target, origin, color_type,
       color_space.ToSkColorSpace(), &surface_props);
-  DCHECK(sk_surface_);
-  return true;
+  if (!sk_surface_) {
+    LOG(ERROR) << "Couldn't create surface: "
+               << context_state_->gr_context()->abandoned() << " " << color_type
+               << " " << framebuffer_info.fFBOID << " "
+               << framebuffer_info.fFormat << " " << color_space.ToString()
+               << " " << size.ToString();
+  }
+  return !!sk_surface_;
 }
 
 void SkiaOutputDeviceGL::SwapBuffers(
@@ -181,9 +206,9 @@ void SkiaOutputDeviceGL::SetEnableDCLayers(bool enable) {
   gl_surface_->SetEnableDCLayers(enable);
 }
 
-void SkiaOutputDeviceGL::ScheduleDCLayers(
-    std::vector<DCLayerOverlay> dc_layers) {
-  for (auto& dc_layer : dc_layers) {
+void SkiaOutputDeviceGL::ScheduleOverlays(
+    SkiaOutputSurface::OverlayList overlays) {
+  for (auto& dc_layer : overlays) {
     ui::DCRendererLayerParams params;
 
     // Get GLImages for DC layer textures.

@@ -59,6 +59,10 @@ class FailingRequestImpl : public HostResolver::ResolveHostRequest,
     return *nullopt_result;
   }
 
+  ResolveErrorInfo GetResolveErrorInfo() const override {
+    return ResolveErrorInfo(error_);
+  }
+
   const base::Optional<HostCache::EntryStaleness>& GetStaleInfo()
       const override {
     static const base::NoDestructor<base::Optional<HostCache::EntryStaleness>>
@@ -234,6 +238,16 @@ HostResolverFlags HostResolver::ParametersToHostResolverFlags(
   if (parameters.loopback_only)
     flags |= HOST_RESOLVER_LOOPBACK_ONLY;
   return flags;
+}
+
+// static
+int HostResolver::SquashErrorCode(int error) {
+  if (error == OK || error == ERR_IO_PENDING ||
+      error == ERR_NAME_NOT_RESOLVED) {
+    return error;
+  } else {
+    return ERR_NAME_NOT_RESOLVED;
+  }
 }
 
 HostResolver::HostResolver() = default;

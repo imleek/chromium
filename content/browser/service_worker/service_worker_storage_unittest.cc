@@ -22,6 +22,7 @@
 #include "build/build_config.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_consts.h"
+#include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_disk_cache.h"
 #include "content/browser/service_worker/service_worker_registration.h"
@@ -1190,6 +1191,38 @@ TEST_F(ServiceWorkerStorageTest,
   EXPECT_TRUE(data_list_out.empty());
 }
 
+TEST_F(ServiceWorkerStorageTest, GetAllRegistrationsInfosFields) {
+  LazyInitialize();
+  const GURL kScope("http://www.example.com/scope/");
+  const GURL kScript("http://www.example.com/script1.js");
+  scoped_refptr<ServiceWorkerRegistration> registration =
+      CreateServiceWorkerRegistrationAndVersion(context(), kScope, kScript);
+
+  // Set some fields to check ServiceWorkerStorage serializes/deserializes
+  // these fields correctly.
+  registration->SetUpdateViaCache(
+      blink::mojom::ServiceWorkerUpdateViaCache::kImports);
+  registration->EnableNavigationPreload(true);
+  registration->SetNavigationPreloadHeader("header");
+
+  storage()->NotifyInstallingRegistration(registration.get());
+  EXPECT_EQ(blink::ServiceWorkerStatusCode::kOk,
+            StoreRegistration(registration, registration->waiting_version()));
+  std::vector<ServiceWorkerRegistrationInfo> all_registrations;
+  EXPECT_EQ(blink::ServiceWorkerStatusCode::kOk,
+            GetAllRegistrationsInfos(&all_registrations));
+  ASSERT_EQ(1u, all_registrations.size());
+
+  ServiceWorkerRegistrationInfo info = all_registrations[0];
+  EXPECT_EQ(registration->scope(), info.scope);
+  EXPECT_EQ(registration->update_via_cache(), info.update_via_cache);
+  EXPECT_EQ(registration->id(), info.registration_id);
+  EXPECT_EQ(registration->navigation_preload_state().enabled,
+            info.navigation_preload_enabled);
+  EXPECT_EQ(registration->navigation_preload_state().header.size(),
+            info.navigation_preload_header_length);
+}
+
 class ServiceWorkerResourceStorageTest : public ServiceWorkerStorageTest {
  public:
   void SetUp() override {
@@ -1375,7 +1408,7 @@ TEST_F(ServiceWorkerResourceStorageTest, DeleteRegistration_ActiveVersion) {
   base::WeakPtr<ServiceWorkerProviderHost> host = CreateProviderHostForWindow(
       33 /* dummy render process id */, true /* is_parent_frame_secure */,
       context()->AsWeakPtr(), &remote_endpoint);
-  registration_->active_version()->AddControllee(host.get());
+  registration_->active_version()->AddControllee(host->container_host());
 
   // Deleting the registration should move the resources to the purgeable list
   // but keep them available.
@@ -1389,7 +1422,8 @@ TEST_F(ServiceWorkerResourceStorageTest, DeleteRegistration_ActiveVersion) {
   // Dooming the version should cause the resources to be deleted.
   base::RunLoop loop;
   storage()->SetPurgingCompleteCallbackForTest(loop.QuitClosure());
-  registration_->active_version()->RemoveControllee(host->client_uuid());
+  registration_->active_version()->RemoveControllee(
+      host->container_host()->client_uuid());
   registration_->active_version()->Doom();
   loop.Run();
   EXPECT_TRUE(GetPurgeableResourceIdsFromDB().empty());
@@ -1408,7 +1442,7 @@ TEST_F(ServiceWorkerResourceStorageDiskTest, CleanupOnRestart) {
   base::WeakPtr<ServiceWorkerProviderHost> host = CreateProviderHostForWindow(
       33 /* dummy render process id */, true /* is_parent_frame_secure */,
       context()->AsWeakPtr(), &remote_endpoint);
-  registration_->active_version()->AddControllee(host.get());
+  registration_->active_version()->AddControllee(host->container_host());
 
   // Deleting the registration should move the resources to the purgeable list
   // but keep them available.
@@ -1541,7 +1575,7 @@ TEST_F(ServiceWorkerResourceStorageTest, UpdateRegistration) {
   base::WeakPtr<ServiceWorkerProviderHost> host = CreateProviderHostForWindow(
       33 /* dummy render process id */, true /* is_parent_frame_secure */,
       helper_->context()->AsWeakPtr(), &remote_endpoint);
-  registration_->active_version()->AddControllee(host.get());
+  registration_->active_version()->AddControllee(host->container_host());
 
   // Make an updated registration.
   scoped_refptr<ServiceWorkerVersion> live_version = new ServiceWorkerVersion(
@@ -1572,7 +1606,7 @@ TEST_F(ServiceWorkerResourceStorageTest, UpdateRegistration) {
   storage()->SetPurgingCompleteCallbackForTest(loop.QuitClosure());
   scoped_refptr<ServiceWorkerVersion> old_version(
       registration_->active_version());
-  old_version->RemoveControllee(host->client_uuid());
+  old_version->RemoveControllee(host->container_host()->client_uuid());
   registration_->ActivateWaitingVersionWhenReady();
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, old_version->status());
 
@@ -1754,14 +1788,22 @@ class ServiceWorkerStorageOriginTrialsDiskTest
  private:
   class TestOriginTrialPolicy : public blink::OriginTrialPolicy {
    public:
+    TestOriginTrialPolicy() {
+      public_keys_.push_back(
+          base::StringPiece(reinterpret_cast<const char*>(kTestPublicKey),
+                            base::size(kTestPublicKey)));
+    }
+
     bool IsOriginTrialsSupported() const override { return true; }
-    base::StringPiece GetPublicKey() const override {
-      return base::StringPiece(reinterpret_cast<const char*>(kTestPublicKey),
-                               base::size(kTestPublicKey));
+    std::vector<base::StringPiece> GetPublicKeys() const override {
+      return public_keys_;
     }
     bool IsOriginSecure(const GURL& url) const override {
       return content::IsOriginSecure(url);
     }
+
+   private:
+    std::vector<base::StringPiece> public_keys_;
   };
   TestOriginTrialPolicy origin_trial_policy_;
 };

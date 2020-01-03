@@ -39,6 +39,12 @@ enum class PlatformWindowOpacity {
   kTranslucentWindow,
 };
 
+class WorkspaceExtensionDelegate;
+
+#if defined(OS_LINUX)
+class X11ExtensionDelegate;
+#endif
+
 // Initial properties which are passed to PlatformWindow to be initialized
 // with a desired set of properties.
 struct COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowInitProperties {
@@ -74,6 +80,8 @@ struct COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowInitProperties {
   bool remove_standard_frame = false;
   std::string workspace;
 
+  WorkspaceExtensionDelegate* workspace_extension_delegate = nullptr;
+
 #if defined(OS_LINUX)
   bool prefer_dark_theme = false;
   gfx::ImageSkia* icon = nullptr;
@@ -88,6 +96,8 @@ struct COMPONENT_EXPORT(PLATFORM_WINDOW) PlatformWindowInitProperties {
 
   // Stores visual id for the system tray in X11.
   base::Optional<int> x_visual_id;
+
+  X11ExtensionDelegate* x11_extension_delegate = nullptr;
 #endif
 };
 

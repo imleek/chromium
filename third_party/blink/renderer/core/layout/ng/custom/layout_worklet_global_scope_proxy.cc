@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/layout/ng/custom/layout_worklet_global_scope_proxy.h"
 
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -47,12 +48,12 @@ LayoutWorkletGlobalScopeProxy::LayoutWorkletGlobalScopeProxy(
       document->IsSecureContext(), document->GetHttpsState(),
       nullptr /* worker_clients */,
       frame->Client()->CreateWorkerContentSettingsClient(),
-      document->AddressSpace(), OriginTrialContext::GetTokens(document).get(),
+      document->GetSecurityContext().AddressSpace(),
+      OriginTrialContext::GetTokens(document).get(),
       base::UnguessableToken::Create(), nullptr /* worker_settings */,
       kV8CacheOptionsDefault, module_responses_map,
-      service_manager::mojom::blink::InterfaceProviderPtrInfo(),
-      mojo::NullRemote(), BeginFrameProviderParams(),
-      nullptr /* parent_feature_policy */,
+      mojo::NullRemote() /* browser_interface_broker */,
+      BeginFrameProviderParams(), nullptr /* parent_feature_policy */,
       base::UnguessableToken() /* agent_cluster_id */);
   global_scope_ = LayoutWorkletGlobalScope::Create(
       frame, std::move(creation_params), *reporting_proxy_,

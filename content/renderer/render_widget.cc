@@ -55,8 +55,6 @@
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_thread.h"
-#include "content/renderer/browser_plugin/browser_plugin.h"
-#include "content/renderer/browser_plugin/browser_plugin_manager.h"
 #include "content/renderer/compositor/layer_tree_view.h"
 #include "content/renderer/drop_data_builder.h"
 #include "content/renderer/external_popup_menu.h"
@@ -82,14 +80,15 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "skia/ext/platform_canvas.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_render_widget_scheduling_state.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
+#include "third_party/blink/public/platform/scheduler/web_widget_scheduler.h"
 #include "third_party/blink/public/platform/web_cursor_info.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
 #include "third_party/blink/public/platform/web_point.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
@@ -812,10 +811,7 @@ void RenderWidget::OnUpdateVisualProperties(
                       visual_properties.max_size_for_auto_resize,
                       visual_properties.screen_info.device_scale_factor);
 
-    browser_controls_shrink_blink_size_ =
-        visual_properties.browser_controls_shrink_blink_size;
-    top_controls_height_ = visual_properties.top_controls_height;
-    bottom_controls_height_ = visual_properties.bottom_controls_height;
+    browser_controls_params_ = visual_properties.browser_controls_params;
   }
 
   if (for_frame()) {
@@ -833,17 +829,11 @@ void RenderWidget::OnUpdateVisualProperties(
         observer.UpdateCaptureSequenceNumber(
             visual_properties.capture_sequence_number);
       }
-      for (auto& observer : browser_plugins_) {
-        observer.UpdateCaptureSequenceNumber(
-            visual_properties.capture_sequence_number);
-      }
     }
   }
 
-  layer_tree_host_->SetBrowserControlsHeight(
-      visual_properties.top_controls_height,
-      visual_properties.bottom_controls_height,
-      visual_properties.browser_controls_shrink_blink_size);
+  layer_tree_host_->SetBrowserControlsParams(
+      visual_properties.browser_controls_params);
 
   if (!auto_resize_mode_) {
     if (visual_properties.is_fullscreen_granted != is_fullscreen_granted_) {
@@ -1014,9 +1004,8 @@ void RenderWidget::OnDisableDeviceEmulation() {
   // TODO(https://crbug.com/1006052): We should move emulation into the browser
   // and send consistent ScreenInfo and ScreenRects to all RenderWidgets based
   // on emulation.
-  if (!delegate_)
+  if (!delegate_ || !device_emulator_)
     return;
-  DCHECK(device_emulator_);
   device_emulator_->DisableAndApply();
   device_emulator_.reset();
 }
@@ -1070,8 +1059,6 @@ void RenderWidget::SetZoomLevel(double zoom_level) {
     // BrowserPlugins in other frame trees/processes.
     for (auto& observer : render_frame_proxies_)
       observer.OnZoomLevelChanged(zoom_level);
-    for (auto& plugin : browser_plugins_)
-      plugin.OnZoomLevelChanged(zoom_level);
   }
 }
 
@@ -1226,10 +1213,6 @@ void RenderWidget::OnSetFocus(bool enable) {
 
   for (auto& observer : render_frames_)
     observer.RenderWidgetSetFocus(enable);
-
-  // Notify all BrowserPlugins of the RenderWidget's focus state.
-  if (BrowserPluginManager::Get())
-    BrowserPluginManager::Get()->UpdateFocusState();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1615,8 +1598,14 @@ void RenderWidget::UpdateTextInputStateInternal(bool show_virtual_keyboard,
     return;  // Not considered as a text input field in WebKit/Chromium.
 
   blink::WebTextInputInfo new_info;
-  if (auto* controller = GetInputMethodController())
+  if (auto* controller = GetInputMethodController()) {
     new_info = controller->TextInputInfo();
+    // Check if the input panel policy in |EditContext| is set to manual or not.
+    // This will be used to decide whether or not to show VK when |EditContext|
+    // is set focus.
+    if (controller->IsEditContextActive())
+      show_virtual_keyboard = !controller->IsInputPanelPolicyManual();
+  }
   const ui::TextInputMode new_mode =
       ConvertWebTextInputMode(new_info.input_mode);
 
@@ -1640,6 +1629,15 @@ void RenderWidget::UpdateTextInputStateInternal(bool show_virtual_keyboard,
     params.mode = new_mode;
     params.action = new_info.action;
     params.flags = new_info.flags;
+    if (auto* controller = GetInputMethodController()) {
+      if (controller->IsEditContextActive()) {
+        WebRect control_bounds;
+        WebRect selection_bounds;
+        controller->GetLayoutBounds(&control_bounds, &selection_bounds);
+        params.edit_context_control_bounds = control_bounds;
+        params.edit_context_selection_bounds = selection_bounds;
+      }
+    }
 #if defined(OS_ANDROID)
     if (next_previous_flags_ == kInvalidNextPreviousFlagsValue) {
       // Due to a focus change, values will be reset by the frame.
@@ -1705,7 +1703,7 @@ bool RenderWidget::WillHandleMouseEvent(const blink::WebMouseEvent& event) {
   possible_drag_event_info_.event_source =
       ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE;
   possible_drag_event_info_.event_location =
-      gfx::Point(event.PositionInScreen().x, event.PositionInScreen().y);
+      gfx::Point(event.PositionInScreen().x(), event.PositionInScreen().y());
 
   return mouse_lock_dispatcher()->WillHandleMouseEvent(event);
 }
@@ -1741,9 +1739,8 @@ void RenderWidget::ResizeWebWidget() {
     // When associated with a RenderView, the RenderView is in control of the
     // main frame's size, because it includes other factors for top and bottom
     // controls.
-    delegate()->ResizeWebWidgetForWidget(size_for_blink, top_controls_height_,
-                                         bottom_controls_height_,
-                                         browser_controls_shrink_blink_size_);
+    delegate()->ResizeWebWidgetForWidget(size_for_blink,
+                                         browser_controls_params_);
 
     RenderFrameImpl* render_frame =
         RenderFrameImpl::FromWebFrame(GetFrameWidget()->LocalRoot());
@@ -1882,11 +1879,11 @@ void RenderWidget::DidChangeCursor(const WebCursorInfo& cursor_info) {
     Send(new WidgetHostMsg_SetCursor(routing_id_, cursor));
 }
 
-void RenderWidget::AutoscrollStart(const blink::WebFloatPoint& point) {
+void RenderWidget::AutoscrollStart(const gfx::PointF& point) {
   Send(new WidgetHostMsg_AutoscrollStart(routing_id_, point));
 }
 
-void RenderWidget::AutoscrollFling(const blink::WebFloatSize& velocity) {
+void RenderWidget::AutoscrollFling(const gfx::Vector2dF& velocity) {
   Send(new WidgetHostMsg_AutoscrollFling(routing_id_, velocity));
 }
 
@@ -1945,6 +1942,8 @@ void RenderWidget::InitCompositing(const ScreenInfo& screen_info) {
   blink::scheduler::WebThreadScheduler* main_thread_scheduler =
       compositor_deps_->GetWebMainThreadScheduler();
 
+  widget_scheduler_ = main_thread_scheduler->CreateWidgetScheduler();
+
   blink::scheduler::WebThreadScheduler* compositor_thread_scheduler =
       blink::scheduler::WebThreadScheduler::CompositorThreadScheduler();
   scoped_refptr<base::SingleThreadTaskRunner> compositor_input_task_runner;
@@ -1953,11 +1952,11 @@ void RenderWidget::InitCompositing(const ScreenInfo& screen_info) {
   // without a compositor thread.
   if (for_frame() && compositor_thread_scheduler) {
     compositor_input_task_runner =
-        compositor_thread_scheduler->InputTaskRunner();
+        compositor_thread_scheduler->DefaultTaskRunner();
   }
 
   input_event_queue_ = base::MakeRefCounted<MainThreadEventQueue>(
-      this, main_thread_scheduler->InputTaskRunner(), main_thread_scheduler,
+      this, widget_scheduler_->InputTaskRunner(), main_thread_scheduler,
       /*allow_raf_aligned_input=*/!compositor_never_visible_);
 
   // We only use an external input handler for frame RenderWidgets because only
@@ -2409,8 +2408,6 @@ void RenderWidget::UpdateSurfaceAndScreenInfo(
       if (!is_undead_)
         observer.OnScreenInfoChanged(GetOriginalScreenInfo());
     }
-    for (auto& observer : browser_plugins_)
-      observer.ScreenInfoChanged(GetOriginalScreenInfo());
   }
 }
 
@@ -2901,11 +2898,10 @@ void RenderWidget::DidHandleGestureEvent(const WebGestureEvent& event,
 #endif
 }
 
-void RenderWidget::DidOverscroll(
-    const blink::WebFloatSize& overscroll_delta,
-    const blink::WebFloatSize& accumulated_overscroll,
-    const blink::WebFloatPoint& position,
-    const blink::WebFloatSize& velocity) {
+void RenderWidget::DidOverscroll(const gfx::Vector2dF& overscroll_delta,
+                                 const gfx::Vector2dF& accumulated_overscroll,
+                                 const gfx::PointF& position,
+                                 const gfx::Vector2dF& velocity) {
 #if defined(OS_MACOSX)
   // On OSX the user can disable the elastic overscroll effect. If that's the
   // case, don't forward the overscroll notification.
@@ -2920,7 +2916,7 @@ void RenderWidget::DidOverscroll(
 
 void RenderWidget::InjectGestureScrollEvent(
     blink::WebGestureDevice device,
-    const blink::WebFloatSize& delta,
+    const gfx::Vector2dF& delta,
     ui::input_types::ScrollGranularity granularity,
     cc::ElementId scrollable_area_element_id,
     blink::WebInputEvent::Type injected_type) {
@@ -3125,7 +3121,6 @@ cc::LayerTreeSettings RenderWidget::GenerateLayerTreeSettings(
 
   settings.initial_debug_state.SetRecordRenderingStats(
       cmd.HasSwitch(cc::switches::kEnableGpuBenchmarking));
-  settings.build_hit_test_data = features::IsVizHitTestingSurfaceLayerEnabled();
 
   if (cmd.HasSwitch(cc::switches::kSlowDownRasterScaleFactor)) {
     const int kMinSlowDownScaleFactor = 0;
@@ -3680,11 +3675,8 @@ void RenderWidget::SetBrowserControlsShownRatio(float top_ratio,
   layer_tree_host_->SetBrowserControlsShownRatio(top_ratio, bottom_ratio);
 }
 
-void RenderWidget::SetBrowserControlsHeight(float top_height,
-                                            float bottom_height,
-                                            bool shrink_viewport) {
-  layer_tree_host_->SetBrowserControlsHeight(top_height, bottom_height,
-                                             shrink_viewport);
+void RenderWidget::SetBrowserControlsParams(cc::BrowserControlsParams params) {
+  layer_tree_host_->SetBrowserControlsParams(params);
 }
 
 viz::FrameSinkId RenderWidget::GetFrameSinkId() {
@@ -3731,15 +3723,6 @@ void RenderWidget::RegisterRenderFrame(RenderFrameImpl* frame) {
 
 void RenderWidget::UnregisterRenderFrame(RenderFrameImpl* frame) {
   render_frames_.RemoveObserver(frame);
-}
-
-void RenderWidget::RegisterBrowserPlugin(BrowserPlugin* browser_plugin) {
-  browser_plugins_.AddObserver(browser_plugin);
-  browser_plugin->ScreenInfoChanged(GetOriginalScreenInfo());
-}
-
-void RenderWidget::UnregisterBrowserPlugin(BrowserPlugin* browser_plugin) {
-  browser_plugins_.RemoveObserver(browser_plugin);
 }
 
 void RenderWidget::OnWaitNextFrameForTests(

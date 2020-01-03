@@ -73,7 +73,7 @@ namespace {
 
 class EndOfTaskRunner : public Thread::TaskObserver {
  public:
-  void WillProcessTask(const base::PendingTask&) override {
+  void WillProcessTask(const base::PendingTask&, bool) override {
     AnimationClock::NotifyTaskStart();
   }
 
@@ -172,16 +172,16 @@ void BlinkInitializer::RegisterInterfaces(mojo::BinderMap& binders) {
     return;
 
 #if defined(OS_ANDROID)
-  binders.Add(ConvertToBaseCallback(
+  binders.Add(ConvertToBaseRepeatingCallback(
                   CrossThreadBindRepeating(&OomInterventionImpl::Create)),
               main_thread->GetTaskRunner());
 
-  binders.Add(ConvertToBaseCallback(CrossThreadBindRepeating(
+  binders.Add(ConvertToBaseRepeatingCallback(CrossThreadBindRepeating(
                   &CrashMemoryMetricsReporterImpl::Bind)),
               main_thread->GetTaskRunner());
 #endif
 
-  binders.Add(ConvertToBaseCallback(
+  binders.Add(ConvertToBaseRepeatingCallback(
                   CrossThreadBindRepeating(&BlinkLeakDetector::Create)),
               main_thread->GetTaskRunner());
 }

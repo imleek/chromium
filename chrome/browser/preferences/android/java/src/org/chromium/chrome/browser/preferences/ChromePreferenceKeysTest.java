@@ -13,7 +13,7 @@ import android.support.test.filters.SmallTest;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -27,7 +27,7 @@ import java.util.regex.Pattern;
  * - No keys are both in [keys in use] and in [deprecated keys].
  * - All keys follow the format "Chrome.[Feature].[Key]"
  */
-@RunWith(ChromeJUnit4ClassRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 public class ChromePreferenceKeysTest {
     /**
      * The important test: verify that keys in {@link ChromePreferenceKeys} are not reused.
@@ -38,7 +38,7 @@ public class ChromePreferenceKeysTest {
     @Test
     @SmallTest
     public void testKeysAreNotReused() {
-        doTestKeysAreNotReused(ChromePreferenceKeys.createUsedKeys(),
+        doTestKeysAreNotReused(ChromePreferenceKeys.createKeysInUse(),
                 ChromePreferenceKeys.createDeprecatedKeysForTesting());
     }
 
@@ -57,8 +57,8 @@ public class ChromePreferenceKeysTest {
         intersection.retainAll(deprecatedSet);
         if (!intersection.isEmpty()) {
             fail("\"" + intersection.iterator().next()
-                    + "\" is both in |ChromePreferenceKeys.sUsedKeys| and in "
-                    + "|ChromePreferenceKeys.sDeprecatedKeys|");
+                    + "\" is both in ChromePreferenceKeys' [keys in use] and in "
+                    + "[deprecated keys]");
         }
     }
 
@@ -107,38 +107,40 @@ public class ChromePreferenceKeysTest {
     @Test
     @SmallTest
     public void testKeysConformToFormat() {
-        doTestKeysConformToFormat(ChromePreferenceKeys.createUsedKeys(),
-                ChromePreferenceKeys.createGrandfatheredFormatKeysForTesting());
+        doTestKeysConformToFormat(ChromePreferenceKeys.createKeysInUse(),
+                ChromePreferenceKeys.createGrandfatheredFormatKeys());
     }
 
-    private void doTestKeysConformToFormat(List<String> usedKeysList, List<String> grandfathered) {
+    private void doTestKeysConformToFormat(List<String> usedList, List<String> grandfathered) {
         Set<String> grandfatheredSet = new HashSet<>(grandfathered);
-        Pattern regex = Pattern.compile("Chrome.([A-Z][a-z0-9]+)+.([A-Z][a-z0-9]+)+");
+        String term = "([A-Z][a-z0-9]*)+";
+        Pattern regex = Pattern.compile("Chrome\\." + term + "\\." + term + "(\\.\\*)?");
 
-        for (String usedKey : usedKeysList) {
-            if (grandfatheredSet.contains(usedKey)) {
+        for (String keyInUse : usedList) {
+            if (grandfatheredSet.contains(keyInUse)) {
                 continue;
             }
 
-            assertTrue("\"" + usedKey + "\" does not conform to format \"Chrome.[Feature].[Key]\"",
-                    regex.matcher(usedKey).matches());
+            assertTrue("\"" + keyInUse + "\" does not conform to format \"Chrome.[Feature].[Key]\"",
+                    regex.matcher(keyInUse).matches());
         }
     }
 
     // Below are tests to ensure that doTestKeysConformToFormat() works.
 
     private static class TestFormatConstantsClass {
-        public static final String GRANDFATHERED_IN = "grandfathered_in";
-        public static final String NEW1 = "Chrome.FeatureOne.Key1";
-        public static final String NEW2 = "Chrome.Foo.Key";
-        public static final String BROKEN_PREFIX = "Chrom.Foo.Key";
-        public static final String MISSING_FEATURE = "Chrome..Key";
-        public static final String LOWERCASE_KEY = "Chrome.Foo.key";
-    }
+        static final String GRANDFATHERED_IN = "grandfathered_in";
+        static final String NEW1 = "Chrome.FeatureOne.Key1";
+        static final String NEW2 = "Chrome.Foo.Key";
+        static final String BROKEN_PREFIX = "Chrom.Foo.Key";
+        static final String MISSING_FEATURE = "Chrome..Key";
+        static final String LOWERCASE_KEY = "Chrome.Foo.key";
 
-    private static final List<String> NON_FORMAT_CONFORMING_CONSTANTS = Arrays.asList(
-            TestFormatConstantsClass.GRANDFATHERED_IN, TestFormatConstantsClass.BROKEN_PREFIX,
-            TestFormatConstantsClass.MISSING_FEATURE, TestFormatConstantsClass.LOWERCASE_KEY);
+        static final KeyPrefix PREFIX = new KeyPrefix("Chrome.FeatureOne.KeyPrefix1.*");
+        static final KeyPrefix PREFIX_EXTRA_LEVEL =
+                new KeyPrefix("Chrome.FeatureOne.KeyPrefix1.ExtraLevel.*");
+        static final KeyPrefix PREFIX_MISSING_LEVEL = new KeyPrefix("Chrome.FeatureOne.*");
+    }
 
     @Test
     @SmallTest
@@ -183,5 +185,28 @@ public class ChromePreferenceKeysTest {
                 Arrays.asList(TestFormatConstantsClass.GRANDFATHERED_IN,
                         TestFormatConstantsClass.NEW1, TestFormatConstantsClass.LOWERCASE_KEY),
                 Arrays.asList(TestFormatConstantsClass.GRANDFATHERED_IN));
+    }
+
+    @Test
+    @SmallTest
+    public void testFormatCheck_prefixCorrect() {
+        doTestKeysConformToFormat(
+                Arrays.asList(TestFormatConstantsClass.PREFIX.pattern()), Collections.emptyList());
+    }
+
+    @Test(expected = AssertionError.class)
+    @SmallTest
+    public void testFormatCheck_prefixExtralevel() {
+        doTestKeysConformToFormat(
+                Arrays.asList(TestFormatConstantsClass.PREFIX_EXTRA_LEVEL.pattern()),
+                Collections.emptyList());
+    }
+
+    @Test(expected = AssertionError.class)
+    @SmallTest
+    public void testFormatCheck_prefixMissingLevel() {
+        doTestKeysConformToFormat(
+                Arrays.asList(TestFormatConstantsClass.PREFIX_MISSING_LEVEL.pattern()),
+                Collections.emptyList());
     }
 }

@@ -142,13 +142,15 @@ ui::AXTreeUpdate BrowserAccessibilityManagerMac::GetEmptyDocument() {
 
 BrowserAccessibility* BrowserAccessibilityManagerMac::GetFocus() const {
   BrowserAccessibility* focus = BrowserAccessibilityManager::GetFocus();
+  if (!focus)
+    return nullptr;
 
   // For editable combo boxes, focus should stay on the combo box so the user
   // will not be taken out of the combo box while typing.
-  if (focus && focus->GetRole() == ax::mojom::Role::kTextFieldWithComboBox)
+  if (focus->GetRole() == ax::mojom::Role::kTextFieldWithComboBox)
     return focus;
 
-  // For other roles, follow the active descendant.
+  // Otherwise, follow the active descendant.
   return GetActiveDescendant(focus);
 }
 
@@ -183,9 +185,22 @@ void PostAnnouncementNotification(NSString* announcement) {
     NSAccessibilityAnnouncementKey : announcement,
     NSAccessibilityPriorityKey : @(NSAccessibilityPriorityLow)
   };
+  // Trigger VoiceOver speech and show on Braille display, if available.
+  // The Braille will only appear for a few seconds, and then will be replaced
+  // with the previous announcement.
   NSAccessibilityPostNotificationWithUserInfo(
       [NSApp mainWindow], NSAccessibilityAnnouncementRequestedNotification,
       notification_info);
+}
+
+// Check whether the current batch of events contains the event type.
+bool BrowserAccessibilityManagerMac::IsInGeneratedEventBatch(
+    ui::AXEventGenerator::Event event_type) const {
+  for (const auto& event : event_generator_) {
+    if (event.event_params.event == event_type)
+      return true;  // Announcement will already be handled via this event.
+  }
+  return false;
 }
 
 void BrowserAccessibilityManagerMac::FireGeneratedEvent(
@@ -233,6 +248,30 @@ void BrowserAccessibilityManagerMac::FireGeneratedEvent(
       if (ui::IsTableLike(node->GetRole())) {
         mac_notification = NSAccessibilitySelectedRowsChangedNotification;
       } else {
+        // VoiceOver does not read anything if selection changes on the
+        // currently focused object, and the focus did not move. Detect a
+        // selection change in a where the focus did not change.
+        BrowserAccessibility* focus = GetFocus();
+        BrowserAccessibility* container =
+            focus->PlatformGetSelectionContainer();
+
+        if (focus && node == container &&
+            container->HasState(ax::mojom::State::kMultiselectable) &&
+            !IsInGeneratedEventBatch(
+                ui::AXEventGenerator::Event::ACTIVE_DESCENDANT_CHANGED) &&
+            !IsInGeneratedEventBatch(
+                ui::AXEventGenerator::Event::FOCUS_CHANGED)) {
+          // Force announcement of current focus / activedescendant, even though
+          // it's not changing. This way, the user can hear the new selection
+          // state of the current object. Because VoiceOver ignores focus events
+          // to an already focused object, this is done by destroying the native
+          // object and creating a new one that receives focus.
+          static_cast<BrowserAccessibilityMac*>(focus)->ReplaceNativeObject();
+          // Don't fire selected children change, it will sometimes override
+          // announcement of current focus.
+          return;
+        }
+
         mac_notification = NSAccessibilitySelectedChildrenChangedNotification;
       }
       break;
@@ -487,7 +526,7 @@ NSDictionary* BrowserAccessibilityManagerMac::
   int32_t focus_id = ax_tree()->GetUnignoredSelection().focus_object_id;
   BrowserAccessibility* focus_object = GetFromID(focus_id);
   if (focus_object) {
-    focus_object = focus_object->GetClosestPlatformObject();
+    focus_object = focus_object->PlatformGetClosestPlatformObject();
     auto native_focus_object = ToBrowserAccessibilityCocoa(focus_object);
     if (native_focus_object && [native_focus_object instanceActive]) {
       [user_info setObject:native_focus_object

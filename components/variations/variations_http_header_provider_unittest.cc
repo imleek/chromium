@@ -41,13 +41,15 @@ scoped_refptr<base::FieldTrial> CreateTrialAndAssociateId(
     const std::string& default_group_name,
     IDCollectionKey key,
     VariationID id) {
+  AssociateGoogleVariationID(key, trial_name, default_group_name, id);
   scoped_refptr<base::FieldTrial> trial(
       base::FieldTrialList::CreateFieldTrial(trial_name, default_group_name));
   EXPECT_TRUE(trial);
 
   if (trial) {
-    AssociateGoogleVariationID(key, trial->trial_name(), trial->group_name(),
-                               id);
+    // Ensure the trial is registered under the correct key so we can look it
+    // up.
+    trial->group();
   }
 
   return trial;
@@ -121,6 +123,42 @@ TEST_F(VariationsHttpHeaderProviderTest, ForceVariationIds_Invalid) {
   // Invalid command-line ids.
   EXPECT_EQ(VariationsHttpHeaderProvider::ForceIdsResult::INVALID_SWITCH_ENTRY,
             provider.ForceVariationIds({"12", "50"}, "tabc456"));
+  provider.InitVariationIDsCacheIfNeeded();
+  EXPECT_TRUE(provider.GetClientDataHeader(false).empty());
+}
+
+TEST_F(VariationsHttpHeaderProviderTest,
+       ForceDisableVariationIds_ValidCommandLine) {
+  base::test::SingleThreadTaskEnvironment task_environment;
+  VariationsHttpHeaderProvider provider;
+
+  // Valid experiment ids.
+  EXPECT_EQ(VariationsHttpHeaderProvider::ForceIdsResult::SUCCESS,
+            provider.ForceVariationIds({"1", "2", "t3", "t4"}, "5,6,t7,t8"));
+  EXPECT_TRUE(provider.ForceDisableVariationIds("2,t4,6,t8"));
+  provider.InitVariationIDsCacheIfNeeded();
+  std::string variations = provider.GetClientDataHeader(false);
+  EXPECT_FALSE(variations.empty());
+  std::set<VariationID> variation_ids;
+  std::set<VariationID> trigger_ids;
+  ASSERT_TRUE(ExtractVariationIds(variations, &variation_ids, &trigger_ids));
+  EXPECT_TRUE(variation_ids.find(1) != variation_ids.end());
+  EXPECT_FALSE(variation_ids.find(2) != variation_ids.end());
+  EXPECT_TRUE(trigger_ids.find(3) != trigger_ids.end());
+  EXPECT_FALSE(trigger_ids.find(4) != trigger_ids.end());
+  EXPECT_TRUE(variation_ids.find(5) != variation_ids.end());
+  EXPECT_FALSE(variation_ids.find(6) != variation_ids.end());
+  EXPECT_TRUE(trigger_ids.find(7) != trigger_ids.end());
+  EXPECT_FALSE(trigger_ids.find(8) != trigger_ids.end());
+}
+
+TEST_F(VariationsHttpHeaderProviderTest, ForceDisableVariationIds_Invalid) {
+  base::test::SingleThreadTaskEnvironment task_environment;
+  VariationsHttpHeaderProvider provider;
+
+  // Invalid command-line ids.
+  EXPECT_FALSE(provider.ForceDisableVariationIds("abc"));
+  EXPECT_FALSE(provider.ForceDisableVariationIds("tabc456"));
   provider.InitVariationIDsCacheIfNeeded();
   EXPECT_TRUE(provider.GetClientDataHeader(false).empty());
 }

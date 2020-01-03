@@ -22,6 +22,7 @@
 #include "media/mojo/mojom/remoting.mojom.h"
 #include "media/remoting/metrics.h"
 #include "media/remoting/rpc_broker.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 
 namespace media {
@@ -55,8 +56,8 @@ class CourierRenderer : public Renderer {
       scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
       base::WeakPtr<CourierRenderer> self,
       base::WeakPtr<RpcBroker> rpc_broker,
-      mojom::RemotingDataStreamSenderPtrInfo audio,
-      mojom::RemotingDataStreamSenderPtrInfo video,
+      mojo::PendingRemote<mojom::RemotingDataStreamSender> audio,
+      mojo::PendingRemote<mojom::RemotingDataStreamSender> video,
       mojo::ScopedDataPipeProducerHandle audio_handle,
       mojo::ScopedDataPipeProducerHandle video_handle);
 
@@ -74,6 +75,7 @@ class CourierRenderer : public Renderer {
                   RendererClient* client,
                   PipelineStatusCallback init_cb) final;
   void SetCdm(CdmContext* cdm_context, CdmAttachedCB cdm_attached_cb) final;
+  void SetLatencyHint(base::Optional<base::TimeDelta> latency_hint) final;
   void Flush(base::OnceClosure flush_cb) final;
   void StartPlayingFrom(base::TimeDelta time) final;
   void SetPlaybackRate(double playback_rate) final;
@@ -94,12 +96,13 @@ class CourierRenderer : public Renderer {
   };
 
   // Callback when attempting to establish data pipe. Runs on media thread only.
-  void OnDataPipeCreated(mojom::RemotingDataStreamSenderPtrInfo audio,
-                         mojom::RemotingDataStreamSenderPtrInfo video,
-                         mojo::ScopedDataPipeProducerHandle audio_handle,
-                         mojo::ScopedDataPipeProducerHandle video_handle,
-                         int audio_rpc_handle,
-                         int video_rpc_handle);
+  void OnDataPipeCreated(
+      mojo::PendingRemote<mojom::RemotingDataStreamSender> audio,
+      mojo::PendingRemote<mojom::RemotingDataStreamSender> video,
+      mojo::ScopedDataPipeProducerHandle audio_handle,
+      mojo::ScopedDataPipeProducerHandle video_handle,
+      int audio_rpc_handle,
+      int video_rpc_handle);
 
   // Callback function when RPC message is received. Runs on media thread only.
   void OnReceivedRpc(std::unique_ptr<pb::RpcMessage> message);

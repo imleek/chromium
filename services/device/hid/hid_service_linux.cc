@@ -51,9 +51,9 @@ const char kSysfsReportDescriptorKey[] = "report_descriptor";
 
 struct HidServiceLinux::ConnectParams {
   ConnectParams(scoped_refptr<HidDeviceInfo> device_info,
-                const ConnectCallback& callback)
+                ConnectCallback callback)
       : device_info(std::move(device_info)),
-        callback(callback),
+        callback(std::move(callback)),
         task_runner(base::SequencedTaskRunnerHandle::Get()),
         blocking_task_runner(
             base::CreateSequencedTaskRunner(kBlockingTaskTraits)) {}
@@ -211,28 +211,31 @@ base::WeakPtr<HidService> HidServiceLinux::GetWeakPtr() {
 }
 
 void HidServiceLinux::Connect(const std::string& device_guid,
-                              const ConnectCallback& callback) {
+                              ConnectCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const auto& map_entry = devices().find(device_guid);
   if (map_entry == devices().end()) {
     base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(callback, nullptr));
+        FROM_HERE, base::BindOnce(std::move(callback), nullptr));
     return;
   }
   scoped_refptr<HidDeviceInfo> device_info = map_entry->second;
 
-  auto params = std::make_unique<ConnectParams>(device_info, callback);
-
 #if defined(OS_CHROMEOS)
-  chromeos::PermissionBrokerClient::ErrorCallback error_callback =
-      base::BindOnce(&HidServiceLinux::OnPathOpenError,
-                     params->device_info->device_node(), params->callback);
+  // Adapt |callback| to a repeating callback because the implementation below
+  // requires separate callbacks for success and error. Only one will be called.
+  auto copyable_callback = base::AdaptCallbackForRepeating(std::move(callback));
   chromeos::PermissionBrokerClient::Get()->OpenPath(
       device_info->device_node(),
-      base::BindOnce(&HidServiceLinux::OnPathOpenComplete, std::move(params)),
-      std::move(error_callback));
+      base::BindOnce(
+          &HidServiceLinux::OnPathOpenComplete,
+          std::make_unique<ConnectParams>(device_info, copyable_callback)),
+      base::BindOnce(&HidServiceLinux::OnPathOpenError,
+                     device_info->device_node(), copyable_callback));
 #else
+  auto params =
+      std::make_unique<ConnectParams>(device_info, std::move(callback));
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner =
       params->blocking_task_runner;
   blocking_task_runner->PostTask(
@@ -252,12 +255,12 @@ void HidServiceLinux::OnPathOpenComplete(std::unique_ptr<ConnectParams> params,
 
 // static
 void HidServiceLinux::OnPathOpenError(const std::string& device_path,
-                                      const ConnectCallback& callback,
+                                      ConnectCallback callback,
                                       const std::string& error_name,
                                       const std::string& error_message) {
   HID_LOG(EVENT) << "Permission broker failed to open '" << device_path
                  << "': " << error_name << ": " << error_message;
-  callback.Run(nullptr);
+  std::move(callback).Run(nullptr);
 }
 
 #else
@@ -288,7 +291,8 @@ void HidServiceLinux::OpenOnBlockingThread(
     HID_LOG(EVENT) << "Failed to open '" << params->device_info->device_node()
                    << "': "
                    << base::File::ErrorToString(device_file.error_details());
-    task_runner->PostTask(FROM_HERE, base::BindOnce(params->callback, nullptr));
+    task_runner->PostTask(FROM_HERE,
+                          base::BindOnce(std::move(params->callback), nullptr));
     return;
   }
   params->fd.reset(device_file.TakePlatformFile());

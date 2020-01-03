@@ -48,20 +48,18 @@ const base::Feature kFreezePurgeMemoryAllPagesFrozen{
 const base::Feature kFreezeUserAgent{"FreezeUserAgent",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
-// When enabled, the compositing of trivial 3D transforms is disabled.
-const base::Feature kDoNotCompositeTrivial3D{"DoNotCompositeTrivial3D",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+// When enabled, enter assumed-overlap mode in compositing overlap testing
+// anytime a fixed or sticky position element is encountered.
+const base::Feature kAssumeOverlapAfterFixedOrStickyPosition{
+    "AssumeOverlapAfterFixedOrStickyPosition",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable Display Locking JavaScript APIs.
 const base::Feature kDisplayLocking{"DisplayLocking",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable applying rounded corner masks via a GL shader rather than
-// a mask layer.
-const base::Feature kFastBorderRadius {
-  "FastBorderRadius",
-      base::FEATURE_ENABLED_BY_DEFAULT
-};
+const base::Feature kJSONModules{"JSONModules",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable LayoutNG.
 const base::Feature kLayoutNG{"LayoutNG", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -143,6 +141,10 @@ const base::Feature kImplicitRootScroller {
 const base::Feature kCSSOMViewScrollCoordinates{
     "CSSOMViewScrollCoordinates", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables Raw Clipboard. https://crbug.com/897289.
+const base::Feature kRawClipboard{"RawClipboard",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables usage of getDisplayMedia() that allows capture of web content, see
 // https://crbug.com/865060.
 const base::Feature kRTCGetDisplayMedia{"RTCGetDisplayMedia",
@@ -177,9 +179,6 @@ const base::Feature kWebRtcHideLocalIpsWithMdns{
 const base::Feature kWebRtcH264WithOpenH264FFmpeg{
     "WebRTC-H264WithOpenH264FFmpeg", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // BUILDFLAG(RTC_USE_H264) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
-
-const base::Feature kServiceWorkerImportedScriptUpdateCheck{
-    "ServiceWorkerImportedScriptUpdateCheck", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Experiment of the delay from navigation to starting an update of a service
 // worker's script.
@@ -219,7 +218,7 @@ const base::Feature kTextFragmentAnchor{"TextFragmentAnchor",
 // and the origin lock of the renderer that is requesting the resource. When
 // this flag is enabled, content/GeneratedCodeCache handles code cache requests.
 const base::Feature kWasmCodeCache = {"WasmCodeCache",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Writable files and native file system access. https://crbug.com/853326
 const base::Feature kNativeFileSystemAPI{"NativeFileSystemAPI",
@@ -243,9 +242,7 @@ const base::Feature kPrefetchPrivacyChanges{"PrefetchPrivacyChanges",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 const char kMixedContentAutoupgradeModeParamName[] = "mode";
-const char kMixedContentAutoupgradeModeBlockable[] = "blockable";
-const char kMixedContentAutoupgradeModeOptionallyBlockable[] =
-    "optionally-blockable";
+const char kMixedContentAutoupgradeModeNoImages[] = "no-images";
 
 // Decodes jpeg 4:2:0 formatted images to YUV instead of RGBX and stores in this
 // format in the image decode cache. See crbug.com/919627 for details on the
@@ -287,6 +284,10 @@ const base::Feature kLightweightNoStatePrefetch{
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
+
+// A feature to enable web fonts to be fetched by No-State Prefetch.
+const base::Feature kLightweightNoStatePrefetch_FetchFonts{
+    "LightweightNoStatePrefetch_FetchFonts", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Automatically convert light-themed pages to use a Blink-generated dark theme
 const base::Feature kForceWebContentsDarkMode{
@@ -332,8 +333,9 @@ const base::FeatureParam<int> kForceDarkTextLightnessThresholdParam{
 const base::FeatureParam<int> kForceDarkBackgroundLightnessThresholdParam{
     &kForceWebContentsDarkMode, "background_lightness_threshold", -1};
 
-const base::Feature kCanvasAlwaysDeferral{"CanvasAlwaysDeferral",
-                                          base::FEATURE_ENABLED_BY_DEFAULT};
+// Instructs WebRTC to honor the Min/Max Video Encode Accelerator dimensions.
+const base::Feature kWebRtcUseMinMaxVEADimensions{
+    "WebRtcUseMinMaxVEADimensions", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Blink garbage collection.
 // Enables compaction of backing stores on Blink's heap.
@@ -353,13 +355,6 @@ const base::Feature kBlinkHeapIncrementalMarking{
 const base::Feature kBlinkHeapIncrementalMarkingStress{
     "BlinkHeapIncrementalMarkingStress", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables a delay before BufferingBytesConsumer begins reading from its
-// underlying consumer when instantiated with CreateWithDelay().
-const base::Feature kBufferingBytesConsumerDelay{
-    "BufferingBytesConsumerDelay", base::FEATURE_ENABLED_BY_DEFAULT};
-const base::FeatureParam<int> kBufferingBytesConsumerDelayMilliseconds{
-    &kBufferingBytesConsumerDelay, "milliseconds", 50};
-
 // Enables removing AppCache delays when triggering requests when the HTML was
 // not fetched from AppCache.
 const base::Feature kVerifyHTMLFetchedFromAppCacheBeforeDelay{
@@ -370,7 +365,7 @@ const base::Feature kVerifyHTMLFetchedFromAppCacheBeforeDelay{
 // compositor & IO threads.
 const base::Feature kBlinkCompositorUseDisplayThreadPriority {
   "BlinkCompositorUseDisplayThreadPriority",
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS) || defined(OS_WIN)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -392,10 +387,6 @@ const base::Feature kLowerJavaScriptPriorityWhenForceDeferred{
 const base::Feature kHtmlImportsRequestInitiatorLock{
     "HtmlImportsRequestInitiatorLock", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// When 'enabled', directly compositing images is turned off.
-const base::Feature kDisableDirectlyCompositedImages{
-    "DisableDirectlyCompositedImages", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables redirecting subresources in the page to better compressed and
 // optimized versions to provide data savings.
 const base::Feature kSubresourceRedirect{"SubresourceRedirect",
@@ -404,6 +395,11 @@ const base::Feature kSubresourceRedirect{"SubresourceRedirect",
 // When 'enabled', all cross-origin iframes will get a compositing layer.
 const base::Feature kCompositeCrossOriginIframes{
     "CompositeCrossOriginIframes", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When 'enabled', an accurate occlusion test will be performed to improve the
+// quality of viz hit test data.
+const base::Feature kVizHitTestOcclusionCheck{
+    "VizHitTestOcclusionCheck", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, beacons (and friends) have ResourceLoadPriority::kLow,
 // not ResourceLoadPriority::kVeryLow.
@@ -429,6 +425,33 @@ const base::Feature kCacheStorageCodeCacheHintHeader{
     "CacheStorageCodeCacheHintHeader", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::FeatureParam<std::string> kCacheStorageCodeCacheHintHeaderName{
     &kCacheStorageCodeCacheHintHeader, "name", "x-CacheStorageCodeCacheHint"};
+
+// When enabled, the beforeunload handler is dispatched when a frame is frozen.
+// This allows the browser to know whether discarding the frame could result in
+// lost user data, at the cost of extra CPU usage. The feature will be removed
+// once we have determine whether the CPU cost is acceptable.
+const base::Feature kDispatchBeforeUnloadOnFreeze{
+    "DispatchBeforeUnloadOnFreeze", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables the use of GpuMemoryBuffer images for low latency 2d canvas.
+// TODO(khushalsagar): Enable this if we're using SurfaceControl and GMBs allow
+// us to overlay these resources.
+const base::Feature kLowLatencyCanvas2dImageChromium {
+  "LowLatencyCanvas2dImageChromium",
+#if defined(OS_CHROMEOS)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif  // OS_CHROMEOS
+};
+
+// Enables the use of shared image swap chains for low latency 2d canvas.
+const base::Feature kLowLatencyCanvas2dSwapChain{
+    "LowLatencyCanvas2dSwapChain", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables the use of shared image swap chains for low latency webgl canvas.
+const base::Feature kLowLatencyWebGLSwapChain{"LowLatencyWebGLSwapChain",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace features
 }  // namespace blink

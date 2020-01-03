@@ -18,8 +18,9 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/download/download_request_limiter.h"
-#include "chrome/browser/permissions/permission_features.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
+#include "chrome/browser/permissions/quiet_notification_permission_ui_config.h"
+#include "chrome/browser/permissions/quiet_notification_permission_ui_state.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
@@ -52,18 +53,18 @@ using content::WebContents;
 
 // The image models hierarchy:
 //
-// ContentSettingImageModel                  - base class
-//   ContentSettingSimpleImageModel            - single content setting
-//     ContentSettingBlockedImageModel           - generic blocked setting
-//     ContentSettingGeolocationImageModel       - geolocation
-//     ContentSettingRPHImageModel               - protocol handlers
-//     ContentSettingMIDISysExImageModel         - midi sysex
-//     ContentSettingDownloadsImageModel         - automatic downloads
-//     ContentSettingClipboardReadImageModel     - clipboard read
-//     ContentSettingSensorsImageModel           - sensors
-//     ContentSettingNotificationsImageModel     - notifications
-//   ContentSettingMediaImageModel             - media
-//   ContentSettingFramebustBlockImageModel    - blocked framebust
+// ContentSettingImageModel                   - base class
+//   ContentSettingSimpleImageModel             - single content setting
+//     ContentSettingBlockedImageModel            - generic blocked setting
+//     ContentSettingGeolocationImageModel        - geolocation
+//     ContentSettingRPHImageModel                - protocol handlers
+//     ContentSettingMIDISysExImageModel          - midi sysex
+//     ContentSettingDownloadsImageModel          - automatic downloads
+//     ContentSettingClipboardReadWriteImageModel - clipboard read and write
+//     ContentSettingSensorsImageModel            - sensors
+//     ContentSettingNotificationsImageModel      - notifications
+//   ContentSettingMediaImageModel              - media
+//   ContentSettingFramebustBlockImageModel     - blocked framebust
 
 class ContentSettingBlockedImageModel : public ContentSettingSimpleImageModel {
  public:
@@ -119,15 +120,15 @@ class ContentSettingDownloadsImageModel
   DISALLOW_COPY_AND_ASSIGN(ContentSettingDownloadsImageModel);
 };
 
-class ContentSettingClipboardReadImageModel
+class ContentSettingClipboardReadWriteImageModel
     : public ContentSettingSimpleImageModel {
  public:
-  ContentSettingClipboardReadImageModel();
+  ContentSettingClipboardReadWriteImageModel();
 
   bool UpdateAndGetVisibility(WebContents* web_contents) override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(ContentSettingClipboardReadImageModel);
+  DISALLOW_COPY_AND_ASSIGN(ContentSettingClipboardReadWriteImageModel);
 };
 
 // Image model for displaying media icons in the location bar.
@@ -179,6 +180,7 @@ class ContentSettingNotificationsImageModel
 
   // ContentSettingSimpleImageModel:
   bool UpdateAndGetVisibility(WebContents* web_contents) override;
+  void SetPromoWasShown(content::WebContents* contents) override;
   std::unique_ptr<ContentSettingBubbleModel> CreateBubbleModelImpl(
       ContentSettingBubbleModel::Delegate* delegate,
       WebContents* web_contents) override;
@@ -306,8 +308,8 @@ ContentSettingImageModel::CreateForContentType(ImageType image_type) {
           ImageType::SOUND, ContentSettingsType::SOUND);
     case ImageType::FRAMEBUST:
       return std::make_unique<ContentSettingFramebustBlockImageModel>();
-    case ImageType::CLIPBOARD_READ:
-      return std::make_unique<ContentSettingClipboardReadImageModel>();
+    case ImageType::CLIPBOARD_READ_WRITE:
+      return std::make_unique<ContentSettingClipboardReadWriteImageModel>();
     case ImageType::SENSORS:
       return std::make_unique<ContentSettingSensorsImageModel>();
     case ImageType::NOTIFICATIONS_QUIET_PROMPT:
@@ -333,6 +335,10 @@ void ContentSettingImageModel::Update(content::WebContents* contents) {
       ContentSettingImageModelStates::Get(contents)->SetBubbleWasAutoOpened(
           image_type(), false);
     }
+    if (should_show_promo_) {
+      ContentSettingImageModelStates::Get(contents)->SetPromoWasShown(
+          image_type(), false);
+    }
   }
 }
 
@@ -352,7 +358,7 @@ void ContentSettingImageModel::SetAnimationHasRun(
 
 bool ContentSettingImageModel::ShouldNotifyAccessibility(
     content::WebContents* contents) const {
-  return image_type_should_notify_accessibility_ &&
+  return image_type_should_notify_accessibility_ && explanatory_string_id_ &&
          !ContentSettingImageModelStates::Get(contents)
               ->GetAccessibilityNotified(image_type());
 }
@@ -361,6 +367,20 @@ void ContentSettingImageModel::AccessibilityWasNotified(
     content::WebContents* contents) {
   ContentSettingImageModelStates::Get(contents)->SetAccessibilityNotified(
       image_type(), true);
+}
+
+bool ContentSettingImageModel::ShouldShowPromo(content::WebContents* contents) {
+  DCHECK(contents);
+  return should_show_promo_ &&
+         !ContentSettingImageModelStates::Get(contents)->PromoWasShown(
+             image_type());
+}
+
+void ContentSettingImageModel::SetPromoWasShown(
+    content::WebContents* contents) {
+  DCHECK(contents);
+  ContentSettingImageModelStates::Get(contents)->SetPromoWasShown(image_type(),
+                                                                  true);
 }
 
 bool ContentSettingImageModel::ShouldAutoOpenBubble(
@@ -568,17 +588,19 @@ bool ContentSettingDownloadsImageModel::UpdateAndGetVisibility(
 
 // Clipboard -------------------------------------------------------------------
 
-ContentSettingClipboardReadImageModel::ContentSettingClipboardReadImageModel()
-    : ContentSettingSimpleImageModel(ImageType::CLIPBOARD_READ,
-                                     ContentSettingsType::CLIPBOARD_READ) {}
+ContentSettingClipboardReadWriteImageModel::
+    ContentSettingClipboardReadWriteImageModel()
+    : ContentSettingSimpleImageModel(
+          ImageType::CLIPBOARD_READ_WRITE,
+          ContentSettingsType::CLIPBOARD_READ_WRITE) {}
 
-bool ContentSettingClipboardReadImageModel::UpdateAndGetVisibility(
+bool ContentSettingClipboardReadWriteImageModel::UpdateAndGetVisibility(
     WebContents* web_contents) {
   TabSpecificContentSettings* content_settings =
       TabSpecificContentSettings::FromWebContents(web_contents);
   if (!content_settings)
     return false;
-  ContentSettingsType content_type = ContentSettingsType::CLIPBOARD_READ;
+  ContentSettingsType content_type = ContentSettingsType::CLIPBOARD_READ_WRITE;
   bool blocked = content_settings->IsContentBlocked(content_type);
   bool allowed = content_settings->IsContentAllowed(content_type);
   if (!blocked && !allowed)
@@ -849,17 +871,36 @@ ContentSettingNotificationsImageModel::ContentSettingNotificationsImageModel()
   set_icon(vector_icons::kNotificationsOffIcon, gfx::kNoneIcon);
   set_tooltip(
       l10n_util::GetStringUTF16(IDS_NOTIFICATIONS_OFF_EXPLANATORY_TEXT));
-  if (QuietNotificationsPromptConfig::UIFlavorToUse() ==
-      QuietNotificationsPromptConfig::UIFlavor::ANIMATED_ICON) {
-    set_explanatory_string_id(IDS_NOTIFICATIONS_OFF_EXPLANATORY_TEXT);
-  }
 }
 
 bool ContentSettingNotificationsImageModel::UpdateAndGetVisibility(
     WebContents* web_contents) {
   auto* manager = PermissionRequestManager::FromWebContents(web_contents);
+  auto* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+
+  if (!manager || !manager->ShouldCurrentRequestUseQuietUI())
+    return false;
   // |manager| may be null in tests.
-  return manager ? manager->ShouldShowQuietPermissionPrompt() : false;
+  // Show promo the first time a quiet prompt is shown to the user.
+  set_should_show_promo(
+      QuietNotificationPermissionUiState::ShouldShowPromo(profile));
+  if (manager->ReasonForUsingQuietUi() ==
+      PermissionRequestManager::QuietUiReason::kTriggeredByCrowdDeny) {
+    set_explanatory_string_id(0);
+  } else {
+    set_explanatory_string_id(IDS_NOTIFICATIONS_OFF_EXPLANATORY_TEXT);
+  }
+  return true;
+}
+
+void ContentSettingNotificationsImageModel::SetPromoWasShown(
+    content::WebContents* contents) {
+  DCHECK(contents);
+  auto* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+  QuietNotificationPermissionUiState::PromoWasShown(profile);
+
+  ContentSettingImageModel::SetPromoWasShown(contents);
 }
 
 std::unique_ptr<ContentSettingBubbleModel>
@@ -920,7 +961,7 @@ ContentSettingImageModel::GenerateContentSettingImageModels() {
       ImageType::MIDI_SYSEX,
       ImageType::SOUND,
       ImageType::FRAMEBUST,
-      ImageType::CLIPBOARD_READ,
+      ImageType::CLIPBOARD_READ_WRITE,
       ImageType::NOTIFICATIONS_QUIET_PROMPT,
   };
 

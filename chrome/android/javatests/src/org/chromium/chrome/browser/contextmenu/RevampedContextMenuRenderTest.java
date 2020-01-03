@@ -8,7 +8,6 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.support.test.filters.LargeTest;
-import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.View;
 
@@ -23,18 +22,17 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.contextmenu.RevampedContextMenuCoordinator.ListItemType;
-import org.chromium.chrome.browser.night_mode.NightModeTestUtils;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
-import org.chromium.chrome.test.ui.DummyUiActivityTestCase;
-import org.chromium.chrome.test.util.RenderTestRule;
+import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.ModelListAdapter;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.test.util.DummyUiActivityTestCase;
+import org.chromium.ui.test.util.NightModeTestUtils;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -48,7 +46,7 @@ public class RevampedContextMenuRenderTest extends DummyUiActivityTestCase {
             new NightModeTestUtils.NightModeParams().getParameters();
 
     @Rule
-    public RenderTestRule mRenderTestRule = new RenderTestRule();
+    public ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
 
     private ModelListAdapter mAdapter;
     private ModelList mListItems;
@@ -81,7 +79,7 @@ public class RevampedContextMenuRenderTest extends DummyUiActivityTestCase {
             mAdapter.registerType(
                     ListItemType.DIVIDER,
                     () -> LayoutInflater.from(listView.getContext())
-                            .inflate(R.layout.context_menu_divider, null),
+                            .inflate(R.layout.app_menu_divider, null),
                     (m, v, p) -> {
                     });
             mAdapter.registerType(
@@ -130,7 +128,6 @@ public class RevampedContextMenuRenderTest extends DummyUiActivityTestCase {
     @Feature({"RenderTest"})
     public void testRevampedContextMenuViewWithImageLink() throws IOException {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            List<Pair<Integer, PropertyModel>> itemList = new ArrayList<>();
             mListItems.add(new ListItem(
                     ListItemType.HEADER, getHeaderModel("Capybara", "www.google.com", true)));
             mListItems.add(new ListItem(ListItemType.DIVIDER, new PropertyModel()));

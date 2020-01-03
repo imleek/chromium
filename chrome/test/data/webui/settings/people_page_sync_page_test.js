@@ -16,6 +16,17 @@ cr.define('settings_people_page_sync_page', function() {
       PolymerTest.clearBody();
       syncPage = document.createElement('settings-sync-page');
       settings.navigateTo(settings.routes.SYNC);
+      // Preferences should exist for embedded 'personalization_options.html'.
+      // We don't perform tests on them.
+      syncPage.prefs = {
+        profile: {password_manager_leak_detection: {value: true}},
+        signin: {
+          allowed_on_next_startup:
+              {type: chrome.settingsPrivate.PrefType.BOOLEAN, value: true}
+        },
+        safebrowsing:
+            {enabled: {value: true}, scout_reporting_enabled: {value: true}},
+      };
 
       document.body.appendChild(syncPage);
 
@@ -307,8 +318,8 @@ cr.define('settings_people_page_sync_page', function() {
 
           // Assert that the radio boxes are disabled after encryption enabled.
           assertTrue(syncPage.$$('#encryptionRadioGroup').disabled);
-          assertEquals('-1', encryptWithGoogle.getAttribute('tabindex'));
-          assertEquals('-1', encryptWithPassphrase.getAttribute('tabindex'));
+          assertEquals(-1, encryptWithGoogle.$.button.tabIndex);
+          assertEquals(-1, encryptWithPassphrase.$.button.tabIndex);
         });
       }
       return browserProxy.whenCalled('setSyncEncryption').then(verifyPrefs);
@@ -410,8 +421,8 @@ cr.define('settings_people_page_sync_page', function() {
 
         // Verify that the encryption radio boxes are shown but disabled.
         assertTrue(syncPage.$$('#encryptionRadioGroup').disabled);
-        assertEquals('-1', encryptWithGoogle.getAttribute('tabindex'));
-        assertEquals('-1', encryptWithPassphrase.getAttribute('tabindex'));
+        assertEquals(-1, encryptWithGoogle.$.button.tabIndex);
+        assertEquals(-1, encryptWithPassphrase.$.button.tabIndex);
       });
     });
 

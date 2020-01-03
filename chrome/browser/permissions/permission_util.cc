@@ -44,10 +44,10 @@ std::string PermissionUtil::GetPermissionString(
       return "Sensors";
     case ContentSettingsType::ACCESSIBILITY_EVENTS:
       return "AccessibilityEvents";
-    case ContentSettingsType::CLIPBOARD_READ:
-      return "ClipboardRead";
-    case ContentSettingsType::CLIPBOARD_WRITE:
-      return "ClipboardWrite";
+    case ContentSettingsType::CLIPBOARD_READ_WRITE:
+      return "ClipboardReadWrite";
+    case ContentSettingsType::CLIPBOARD_SANITIZED_WRITE:
+      return "ClipboardSanitizedWrite";
     case ContentSettingsType::PAYMENT_HANDLER:
       return "PaymentHandler";
     case ContentSettingsType::BACKGROUND_FETCH:
@@ -62,6 +62,10 @@ std::string PermissionUtil::GetPermissionString(
       return "WakeLockSystem";
     case ContentSettingsType::NFC:
       return "NFC";
+    case ContentSettingsType::VR:
+      return "VR";
+    case ContentSettingsType::AR:
+      return "AR";
     default:
       break;
   }
@@ -87,10 +91,16 @@ PermissionRequestType PermissionUtil::GetRequestType(ContentSettingsType type) {
       return PermissionRequestType::PERMISSION_MEDIASTREAM_CAMERA;
     case ContentSettingsType::ACCESSIBILITY_EVENTS:
       return PermissionRequestType::PERMISSION_ACCESSIBILITY_EVENTS;
-    case ContentSettingsType::CLIPBOARD_READ:
-      return PermissionRequestType::PERMISSION_CLIPBOARD_READ;
+    case ContentSettingsType::CLIPBOARD_READ_WRITE:
+      return PermissionRequestType::PERMISSION_CLIPBOARD_READ_WRITE;
     case ContentSettingsType::PAYMENT_HANDLER:
       return PermissionRequestType::PERMISSION_PAYMENT_HANDLER;
+    case ContentSettingsType::NFC:
+      return PermissionRequestType::PERMISSION_NFC;
+    case ContentSettingsType::VR:
+      return PermissionRequestType::PERMISSION_VR;
+    case ContentSettingsType::AR:
+      return PermissionRequestType::PERMISSION_AR;
     default:
       NOTREACHED();
       return PermissionRequestType::UNKNOWN;
@@ -130,8 +140,8 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     *out = PermissionType::SENSORS;
   } else if (type == ContentSettingsType::ACCESSIBILITY_EVENTS) {
     *out = PermissionType::ACCESSIBILITY_EVENTS;
-  } else if (type == ContentSettingsType::CLIPBOARD_READ) {
-    *out = PermissionType::CLIPBOARD_READ;
+  } else if (type == ContentSettingsType::CLIPBOARD_READ_WRITE) {
+    *out = PermissionType::CLIPBOARD_READ_WRITE;
   } else if (type == ContentSettingsType::PAYMENT_HANDLER) {
     *out = PermissionType::PAYMENT_HANDLER;
   } else if (type == ContentSettingsType::BACKGROUND_FETCH) {
@@ -144,6 +154,10 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     *out = PermissionType::WAKE_LOCK_SYSTEM;
   } else if (type == ContentSettingsType::NFC) {
     *out = PermissionType::NFC;
+  } else if (type == ContentSettingsType::VR) {
+    *out = PermissionType::VR;
+  } else if (type == ContentSettingsType::AR) {
+    *out = PermissionType::AR;
   } else {
     return false;
   }
@@ -165,15 +179,15 @@ bool PermissionUtil::IsPermission(ContentSettingsType type) {
 #endif
     case ContentSettingsType::SENSORS:
     case ContentSettingsType::ACCESSIBILITY_EVENTS:
-    case ContentSettingsType::CLIPBOARD_READ:
+    case ContentSettingsType::CLIPBOARD_READ_WRITE:
     case ContentSettingsType::PAYMENT_HANDLER:
     case ContentSettingsType::BACKGROUND_FETCH:
     case ContentSettingsType::PERIODIC_BACKGROUND_SYNC:
     case ContentSettingsType::WAKE_LOCK_SCREEN:
     case ContentSettingsType::WAKE_LOCK_SYSTEM:
-#if defined(OS_ANDROID)
     case ContentSettingsType::NFC:
-#endif
+    case ContentSettingsType::VR:
+    case ContentSettingsType::AR:
       return true;
     default:
       return false;

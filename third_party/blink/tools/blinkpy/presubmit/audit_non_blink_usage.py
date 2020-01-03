@@ -221,17 +221,21 @@ _CONFIG = [
             # cc painting types.
             'cc::PaintCanvas',
             'cc::PaintFlags',
+            'cc::PaintImage',
+            'cc::PaintImageBuilder',
             'cc::PaintShader',
             'cc::PaintWorkletInput',
             'cc::NodeId',
 
             # Chromium geometry types.
             'gfx::Point',
+            'gfx::PointF',
             'gfx::Point3F',
             'gfx::Quaternion',
             'gfx::Rect',
             'gfx::RectF',
             'gfx::RRectF',
+            'gfx::ScaleVector2d',
             'gfx::Size',
             'gfx::SizeF',
             'gfx::Transform',
@@ -256,6 +260,7 @@ _CONFIG = [
             'cc::SurfaceLayer',
 
             # cc::Layer helper data structs.
+            'cc::BrowserControlsParams',
             'cc::ElementId',
             'cc::LayerPositionConstraint',
             'cc::OverscrollBehavior',
@@ -570,6 +575,9 @@ _CONFIG = [
             # Devtools binary protocol uses std::vector<uint8_t> for serialized
             # objects.
             'std::vector',
+            # [C]h[R]ome [D]ev[T]ools [P]rotocol implementation support library
+            # (see third_party/inspector_protocol/crdtp).
+            'crdtp::.+',
         ],
     },
     {
@@ -588,6 +596,12 @@ _CONFIG = [
         'paths': ['third_party/blink/renderer/core/workers/worker_thread.cc'],
         'allowed': [
             'base::ScopedAllowBaseSyncPrimitives',
+        ],
+    },
+    {
+        'paths': ['third_party/blink/renderer/core/xml'],
+        'allowed': [
+            'xpathyy::.+',
         ],
     },
     {
@@ -615,6 +629,8 @@ _CONFIG = [
             'base::MRUCache',
             'gl::GpuPreference',
             'gpu::gles2::GLES2Interface',
+            'gpu::raster::RasterInterface',
+            'gpu::Mailbox',
             'gpu::MailboxHolder',
             'display::Display',
         ],
@@ -631,7 +647,18 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/renderer/modules/webcodecs/',
+        ],
+        'allowed': [
+            'media::.+',
+        ]
+    },
+    {
+        'paths': [
             'third_party/blink/renderer/modules/encryptedmedia/',
+            'third_party/blink/renderer/modules/media/',
+            'third_party/blink/renderer/modules/media_capabilities/',
+            'third_party/blink/renderer/modules/video_raf/',
         ],
         'allowed': [
             'media::.+',
@@ -644,22 +671,6 @@ _CONFIG = [
         'allowed': [
             'media::.+',
             'libyuv::.+',
-        ]
-    },
-    {
-        'paths': [
-            'third_party/blink/renderer/modules/media/',
-        ],
-        'allowed': [
-            'media::.+',
-        ]
-    },
-    {
-        'paths': [
-            'third_party/blink/renderer/modules/media_capabilities/',
-        ],
-        'allowed': [
-            'media::.+',
         ]
     },
     {
@@ -752,6 +763,16 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/renderer/modules/remote_objects/',
+        ],
+        'allowed': [
+            'gin::.+',
+            # gin::NamedPropertyInterceptor uses std::vector.
+            'std::vector',
+        ],
+    },
+    {
+        'paths': [
             'third_party/blink/renderer/modules/webgpu/',
         ],
         # The WebGPU Blink module needs access to the WebGPU control
@@ -768,9 +789,11 @@ _CONFIG = [
         'allowed': [
             'base::AutoLock',
             'base::Erase',
+            'base::Lock',
             'base::StringPrintf',
             'media::.+',
             'rtc::scoped_refptr',
+            'webrtc::AudioDeviceModule',
             'webrtc::AudioSourceInterface',
             'webrtc::AudioTransport',
             'webrtc::kAdmMaxDeviceNameSize',
@@ -907,6 +930,7 @@ _CONFIG = [
             'rtc::.+',
             'webrtc::.+',
             'quic::.+',
+            'quiche::.+',
         ]
     },
     {
@@ -941,6 +965,12 @@ _CONFIG = [
     {
         'paths': ['third_party/blink/renderer/modules/webaudio/audio_worklet_thread.cc'],
         'allowed': ['base::ThreadPriority'],
+    },
+    {
+        'paths': ['third_party/blink/renderer/core/dom/document.cc'],
+        'allowed': [
+            'net::registry_controlled_domains::.+',
+        ],
     },
 ]
 

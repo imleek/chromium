@@ -4,6 +4,8 @@
 
 #include "chrome/browser/search_engines/template_url_service_test_util.h"
 
+#include <utility>
+
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -73,9 +75,8 @@ TemplateURLServiceTestUtil::TemplateURLServiceTestUtil() : changed_count_(0) {
   web_database_service->LoadDatabase();
 
   web_data_service_ = new KeywordWebDataService(
-      web_database_service.get(), base::ThreadTaskRunnerHandle::Get(),
-      KeywordWebDataService::ProfileErrorCallback());
-  web_data_service_->Init();
+      web_database_service.get(), base::ThreadTaskRunnerHandle::Get());
+  web_data_service_->Init(base::NullCallback());
 
   ResetModel(false);
 }
@@ -135,7 +136,7 @@ void TemplateURLServiceTestUtil::ResetModel(bool verify_load) {
               HistoryServiceFactory::GetForProfileIfExists(
                   profile(), ServiceAccessType::EXPLICIT_ACCESS),
               &search_term_)),
-      nullptr, base::Closure()));
+      base::Closure()));
   model()->AddObserver(this);
   changed_count_ = 0;
   if (verify_load)

@@ -7,17 +7,25 @@
 
 #include <memory>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/browser_controls_state.h"
+#include "weblayer/browser/i18n_util.h"
 #include "weblayer/public/tab.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
 #endif
+
+namespace autofill {
+class AutofillProvider;
+}  // namespace autofill
 
 namespace content {
 class WebContents;
@@ -89,6 +97,13 @@ class TabImpl : public Tab,
   void AttachToView(views::WebView* web_view) override;
 #endif
 
+  // Executes |script| with a user gesture.
+  void ExecuteScriptWithUserGestureForTests(const base::string16& script);
+
+  // Initializes the autofill system with |provider| for tests.
+  void InitializeAutofillForTests(
+      std::unique_ptr<autofill::AutofillProvider> provider);
+
  private:
   // content::WebContentsDelegate:
   content::WebContents* OpenURLFromTab(
@@ -133,6 +148,16 @@ class TabImpl : public Tab,
   // Called from closure supplied to delegate to exit fullscreen.
   void OnExitFullscreen();
 
+  void UpdateRendererPrefs(bool should_sync_prefs);
+
+  void InitializeAutofill();
+
+#if defined(OS_ANDROID)
+  void UpdateBrowserControlsState(content::BrowserControlsState constraints,
+                                  content::BrowserControlsState current,
+                                  bool animate);
+#endif
+
   DownloadDelegate* download_delegate_ = nullptr;
   ErrorPageDelegate* error_page_delegate_ = nullptr;
   FullscreenDelegate* fullscreen_delegate_ = nullptr;
@@ -141,14 +166,18 @@ class TabImpl : public Tab,
   std::unique_ptr<content::WebContents> web_contents_;
   std::unique_ptr<NavigationControllerImpl> navigation_controller_;
   base::ObserverList<TabObserver>::Unchecked observers_;
+  std::unique_ptr<i18n::LocaleChangeSubscription> locale_change_subscription_;
 #if defined(OS_ANDROID)
   TopControlsContainerView* top_controls_container_view_ = nullptr;
   base::android::ScopedJavaGlobalRef<jobject> java_impl_;
+  base::OneShotTimer update_browser_controls_state_timer_;
 #endif
 
   bool is_fullscreen_ = false;
   // Set to true doing EnterFullscreenModeForTab().
   bool processing_enter_fullscreen_ = false;
+
+  std::unique_ptr<autofill::AutofillProvider> autofill_provider_;
 
   base::WeakPtrFactory<TabImpl> weak_ptr_factory_{this};
 

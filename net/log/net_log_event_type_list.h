@@ -824,6 +824,7 @@ EVENT_TYPE(SOCKET_POOL_CONNECTING_N_SOCKETS)
 //      "method": <The method ("POST" or "GET" or "HEAD" etc..)>,
 //      "load_flags": <Numeric value of the combined load flags>,
 //      "privacy_mode": <True if privacy mode is enabled for the request>
+//      "network_isolation_key": <NIK associated with the request>
 //      "priority": <Numeric priority of the request>,
 //      "traffic_annotation": <int32 for the request's TrafficAnnotationTag>,
 //      "upload_id" <String of upload body identifier, if present>,
@@ -2809,7 +2810,11 @@ EVENT_TYPE(CERT_VERIFIER_REQUEST)
 //   "certificates": <A list of PEM encoded certificates, the first one
 //                    being the certificate to verify and the remaining
 //                    being intermediate certificates to assist path
-//                    building. Only present when byte logging is enabled.>
+//                    building.>
+//   "ocsp_response": <Optionally, a PEM encoded stapled OCSP response.>
+//   "sct_list": <Optionally, a PEM encoded SignedCertificateTimestampList.>
+//   "host": <The hostname verification is being performed for.>
+//   "verifier_flags": <The CertVerifier::VerifyFlags.>
 // }
 //
 // The END phase event parameters are:
@@ -3406,8 +3411,10 @@ EVENT_TYPE(COOKIE_SET_BLOCKED_BY_NETWORK_DELEGATE)
 // Event emitted when a cookie is received but not stored, or when a cookie is
 // not sent to an associated domain.
 //  {
-//    "exclusion_reason": <Exclusion flags>,
+//    "status": <Exclusion flags>,
 //    "name": <Name of the cookie>,
+//    "domain": <Domain of the cookie>,
+//    "path": <Path of the cookie>,
 //    "operation": <Operation, either "send" or "store">
 //  }
 EVENT_TYPE(COOKIE_INCLUSION_STATUS)

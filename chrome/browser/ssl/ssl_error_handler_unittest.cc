@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/captive_portal/captive_portal_service.h"
+#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/common_name_mismatch_handler.h"
 #include "chrome/browser/ssl/ssl_error_assistant.h"
@@ -163,8 +164,10 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
         captive_portal_interstitial_shown_(false),
         mitm_software_interstitial_shown_(false),
         is_mitm_software_interstitial_enterprise_(false),
+        blocked_interception_interstitial_shown_(false),
         redirected_to_suggested_url_(false),
-        is_overridable_error_(true) {}
+        is_overridable_error_(true),
+        has_blocked_interception_(false) {}
 
   void SendCaptivePortalNotification(
       captive_portal::CaptivePortalResult result) {
@@ -197,6 +200,9 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
   bool bad_clock_interstitial_shown() const {
     return bad_clock_interstitial_shown_;
   }
+  bool blocked_interception_interstitial_shown() const {
+    return blocked_interception_interstitial_shown_;
+  }
   bool suggested_url_checked() const { return suggested_url_checked_; }
   bool redirected_to_suggested_url() const {
     return redirected_to_suggested_url_;
@@ -205,6 +211,7 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
   void set_suggested_url_exists() { suggested_url_exists_ = true; }
   void set_non_overridable_error() { is_overridable_error_ = false; }
   void set_os_reports_captive_portal() { os_reports_captive_portal_ = true; }
+  void set_has_blocked_interception() { has_blocked_interception_ = true; }
 
   void ClearSeenOperations() {
     captive_portal_checked_ = false;
@@ -217,6 +224,7 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
     mitm_software_interstitial_shown_ = false;
     is_mitm_software_interstitial_enterprise_ = false;
     redirected_to_suggested_url_ = false;
+    has_blocked_interception_ = false;
   }
 
  private:
@@ -255,6 +263,10 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
     is_mitm_software_interstitial_enterprise_ = is_enterprise_managed;
   }
 
+  void ShowBlockedInterceptionInterstitial() override {
+    blocked_interception_interstitial_shown_ = true;
+  }
+
   void CheckSuggestedUrl(
       const GURL& suggested_url,
       const CommonNameMismatchHandler::CheckUrlCallback& callback) override {
@@ -271,6 +283,10 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
 
   void ReportNetworkConnectivity(base::OnceClosure callback) override {}
 
+  bool HasBlockedInterception() const override {
+    return has_blocked_interception_;
+  }
+
   Profile* profile_;
   bool captive_portal_checked_;
   bool os_reports_captive_portal_;
@@ -281,8 +297,10 @@ class TestSSLErrorHandlerDelegate : public SSLErrorHandler::Delegate {
   bool captive_portal_interstitial_shown_;
   bool mitm_software_interstitial_shown_;
   bool is_mitm_software_interstitial_enterprise_;
+  bool blocked_interception_interstitial_shown_;
   bool redirected_to_suggested_url_;
   bool is_overridable_error_;
+  bool has_blocked_interception_;
   CommonNameMismatchHandler::CheckUrlCallback suggested_url_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(TestSSLErrorHandlerDelegate);
@@ -605,16 +623,16 @@ class SSLErrorHandlerDateInvalidTest : public ChromeRenderViewHostTestHarness {
     SSLErrorHandler::ResetConfigForTesting();
 
     base::RunLoop run_loop;
-    std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-        url_loader_factory_info;
+    std::unique_ptr<network::PendingSharedURLLoaderFactory>
+        pending_url_loader_factory;
     base::PostTaskAndReply(
         FROM_HERE, {content::BrowserThread::IO},
-        base::BindOnce(CreateURLLoaderFactory, &url_loader_factory_info),
+        base::BindOnce(CreateURLLoaderFactory, &pending_url_loader_factory),
         run_loop.QuitClosure());
     run_loop.Run();
 
     shared_url_loader_factory_ = network::SharedURLLoaderFactory::Create(
-        std::move(url_loader_factory_info));
+        std::move(pending_url_loader_factory));
 
     tracker_.reset(new network_time::NetworkTimeTracker(
         std::unique_ptr<base::Clock>(clock_),
@@ -677,12 +695,12 @@ class SSLErrorHandlerDateInvalidTest : public ChromeRenderViewHostTestHarness {
 
  private:
   static void CreateURLLoaderFactory(
-      std::unique_ptr<network::SharedURLLoaderFactoryInfo>*
-          url_loader_factory_info) {
+      std::unique_ptr<network::PendingSharedURLLoaderFactory>*
+          pending_url_loader_factory) {
     scoped_refptr<network::TestSharedURLLoaderFactory> factory =
         base::MakeRefCounted<network::TestSharedURLLoaderFactory>();
     // Holds a reference to |factory|.
-    *url_loader_factory_info = factory->Clone();
+    *pending_url_loader_factory = factory->Clone();
   }
 
   net::SSLInfo ssl_info_;
@@ -1508,4 +1526,46 @@ TEST_F(SSLErrorAssistantProtoTest,
   SSLErrorHandler::SetErrorAssistantProto(std::move(config_proto));
 
   TestNoMITMSoftwareInterstitial();
+}
+
+using SSLErrorHandlerTest = ChromeRenderViewHostTestHarness;
+
+// Test that a blocked interception interstitial is shown. It would be nicer to
+// set the SSLInfo properly so that the cert is blocked at net level rather than
+// because of set_has_blocked_interception(), but that code path is already
+// executed in net unit tests and SSL browser tests. This test mainly checks
+// histogram accuracy.
+TEST_F(SSLErrorHandlerTest, BlockedInterceptionInterstitial) {
+  net::SSLInfo ssl_info;
+  ssl_info.cert =
+      net::ImportCertFromFile(net::GetTestCertsDirectory(), kOkayCertName);
+  ssl_info.cert_status = net::CERT_STATUS_COMMON_NAME_INVALID;
+  ssl_info.public_key_hashes.push_back(net::HashValue(kCertPublicKeyHashValue));
+
+  std::unique_ptr<TestSSLErrorHandlerDelegate> delegate(
+      new TestSSLErrorHandlerDelegate(profile(), web_contents(), ssl_info));
+
+  TestSSLErrorHandlerDelegate* delegate_ptr = delegate.get();
+  TestSSLErrorHandler error_handler(
+      std::move(delegate), web_contents(), profile(),
+      net::MapCertStatusToNetError(ssl_info.cert_status), ssl_info,
+      GURL() /*request_url*/);
+
+  base::HistogramTester histograms;
+  delegate_ptr->set_has_blocked_interception();
+
+  EXPECT_FALSE(error_handler.IsTimerRunningForTesting());
+  error_handler.StartHandlingError();
+  EXPECT_FALSE(error_handler.IsTimerRunningForTesting());
+  EXPECT_FALSE(delegate_ptr->captive_portal_checked());
+  EXPECT_FALSE(delegate_ptr->ssl_interstitial_shown());
+  EXPECT_FALSE(delegate_ptr->captive_portal_interstitial_shown());
+  EXPECT_TRUE(delegate_ptr->blocked_interception_interstitial_shown());
+
+  histograms.ExpectTotalCount(SSLErrorHandler::GetHistogramNameForTesting(), 2);
+  histograms.ExpectBucketCount(SSLErrorHandler::GetHistogramNameForTesting(),
+                               SSLErrorHandler::HANDLE_ALL, 1);
+  histograms.ExpectBucketCount(
+      SSLErrorHandler::GetHistogramNameForTesting(),
+      SSLErrorHandler::SHOW_BLOCKED_INTERCEPTION_INTERSTITIAL, 1);
 }

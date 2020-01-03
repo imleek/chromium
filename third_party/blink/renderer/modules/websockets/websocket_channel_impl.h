@@ -96,8 +96,8 @@ class MODULES_EXPORT WebSocketChannelImpl final
   SendResult Send(const std::string& message,
                   base::OnceClosure completion_callback) override;
   SendResult Send(const DOMArrayBuffer&,
-                  unsigned byte_offset,
-                  unsigned byte_length,
+                  size_t byte_offset,
+                  size_t byte_length,
                   base::OnceClosure completion_callback) override;
   void Send(scoped_refptr<BlobDataHandle>) override;
   // Start closing handshake. Use the CloseEventCodeNotSpecified for the code
@@ -130,8 +130,6 @@ class MODULES_EXPORT WebSocketChannelImpl final
                      uint16_t code,
                      const String& reason) override;
   void OnClosingHandshake() override;
-
-  ExecutionContext* GetExecutionContext();
 
   void Trace(blink::Visitor*) override;
 

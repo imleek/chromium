@@ -17,19 +17,6 @@ namespace base {
 
 namespace {
 
-// Used to make the output of base::FastHash() and base::HashInts()
-// non-deterministic between runs, to prevent inadvertent dependencies
-// on the underlying implementation.
-template <typename T>
-T Scramble(T input) {
-#if DCHECK_IS_ON()
-  static const T seed = RandUint64();
-  return input ^ seed;
-#else
-  return input;
-#endif
-}
-
 size_t FastHashImpl(base::span<const uint8_t> data) {
   // We use the updated CityHash within our namespace (not the deprecated
   // version from third_party/smhasher).
@@ -102,6 +89,28 @@ size_t HashInts64Impl(uint64_t value1, uint64_t value2) {
   return high_bits;
 }
 
+// The random seed is used to perturb the output of base::FastHash() and
+// base::HashInts() so that it is only deterministic within the lifetime of a
+// process. This prevents inadvertent dependencies on the underlying
+// implementation, e.g. anything that persists the hash value and expects it to
+// be unchanging will break.
+//
+// Note: this is the same trick absl uses to generate a random seed. This is
+// more robust than using base::RandBytes(), which can fail inside a sandboxed
+// environment. Note that without ASLR, the seed won't be quite as random...
+#if DCHECK_IS_ON()
+constexpr const void* kSeed = &kSeed;
+#endif
+
+template <typename T>
+T Scramble(T input) {
+#if DCHECK_IS_ON()
+  return HashInts64Impl(input, reinterpret_cast<uintptr_t>(kSeed));
+#else
+  return input;
+#endif
+}
+
 }  // namespace
 
 size_t FastHash(base::span<const uint8_t> data) {
@@ -116,22 +125,26 @@ uint32_t Hash(const void* data, size_t length) {
 }
 
 uint32_t Hash(const std::string& str) {
-  return PersistentHash(str.data(), str.size());
+  return PersistentHash(as_bytes(make_span(str)));
 }
 
 uint32_t Hash(const string16& str) {
-  return PersistentHash(str.data(), str.size() * sizeof(char16));
+  return PersistentHash(as_bytes(make_span(str)));
 }
 
-uint32_t PersistentHash(const void* data, size_t length) {
+uint32_t PersistentHash(span<const uint8_t> data) {
   // This hash function must not change, since it is designed to be persistable
   // to disk.
-  if (length > static_cast<size_t>(std::numeric_limits<int>::max())) {
+  if (data.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
     NOTREACHED();
     return 0;
   }
-  return ::SuperFastHash(reinterpret_cast<const char*>(data),
-                         static_cast<int>(length));
+  return ::SuperFastHash(reinterpret_cast<const char*>(data.data()),
+                         static_cast<int>(data.size()));
+}
+
+uint32_t PersistentHash(const void* data, size_t length) {
+  return PersistentHash(make_span(static_cast<const uint8_t*>(data), length));
 }
 
 uint32_t PersistentHash(const std::string& str) {

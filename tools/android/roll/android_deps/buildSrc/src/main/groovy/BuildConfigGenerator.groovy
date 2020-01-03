@@ -232,8 +232,9 @@ class BuildConfigGenerator extends DefaultTask {
 
     public static boolean isPlayServicesTarget(String dependencyId) {
         // Firebase has historically been treated as a part of play services, so it counts here for
-        // backwards compatibility.
-        return Pattern.matches(".*google.*(play_services|firebase).*", dependencyId)
+        // backwards compatibility. Datatransport is new as of 2019 and is used by many play
+        // services libraries.
+        return Pattern.matches(".*google.*(play_services|firebase|datatransport).*", dependencyId)
     }
 
     private static void addSpecialTreatment(StringBuilder sb, String dependencyId) {
@@ -319,7 +320,8 @@ class BuildConfigGenerator extends DefaultTask {
                 sb.append('  deps += [":com_google_guava_listenablefuture_java"]\n')
                 sb.append('  jar_excluded_patterns = ["*/ListenableFuture.class"]\n')
                 break
-            case 'com_google_guava_listenablefuture_java':
+            case 'com_google_guava_listenablefuture':
+            case 'com_googlecode_java_diff_utils_diffutils':
                 // Needed to break dependency cycle for errorprone_plugin_java.
                 sb.append('  no_build_hooks = true\n')
                 break

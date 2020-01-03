@@ -221,8 +221,8 @@ int main() {
   // The exit manager is in charge of calling the dtors of singletons.
   base::AtExitManager exit_manager;
 
-  // Only enable High DPI support for browser process.
-  if (process_type.empty())
+  // Only enable High DPI support for browser and GPU process.
+  if (process_type.empty() || process_type == switches::kGpuProcess)
     base::win::EnableHighDPISupport();
 
   if (AttemptFastNotify(*command_line))
@@ -236,5 +236,12 @@ int main() {
   int rc = loader->Launch(instance, exe_entry_point_ticks);
   loader->RelaunchChromeBrowserWithNewCommandLineIfNeeded();
   delete loader;
+
+  // Process shutdown is hard and some process types have been crashing during
+  // shutdown. TerminateProcess is safer and faster.
+  if (process_type == switches::kUtilityProcess ||
+      process_type == switches::kPpapiPluginProcess) {
+    TerminateProcess(GetCurrentProcess(), rc);
+  }
   return rc;
 }

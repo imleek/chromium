@@ -217,7 +217,7 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
     Keyframe* second = frame->CloneWithOffset(1);
 
     frames.push_back(frame);
-    frames.push_back(ToStringKeyframe(second));
+    frames.push_back(To<StringKeyframe>(second));
     return CanStartEffectOnCompositor(
         timing_, *MakeGarbageCollected<StringKeyframeEffectModel>(frames));
   }
@@ -345,7 +345,7 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
                                      LinearTimingFunction::Shared(),
                                      EffectModel::kCompositeReplace),
             compositor_keyframe_value_(
-                CompositorKeyframeDouble::Create(offset)) {}
+                MakeGarbageCollected<CompositorKeyframeDouble>(offset)) {}
       bool IsNeutral() const final { return true; }
       PropertySpecificKeyframe* CloneWithOffset(double) const final {
         NOTREACHED();
@@ -466,7 +466,7 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
     DCHECK_EQ(keyframe_timing_function->GetType(),
               TimingFunction::Type::CUBIC_BEZIER);
     const auto& cubic_timing_function =
-        ToCubicBezierTimingFunction(*keyframe_timing_function);
+        To<CubicBezierTimingFunction>(*keyframe_timing_function);
     EXPECT_EQ(cubic_timing_function.GetEaseType(), ease_type);
   }
 
@@ -1573,7 +1573,7 @@ TEST_P(AnimationCompositorAnimationsTest,
   EXPECT_EQ(curve_timing_function->GetType(),
             TimingFunction::Type::CUBIC_BEZIER);
   const auto& cubic_timing_function =
-      ToCubicBezierTimingFunction(*curve_timing_function);
+      To<CubicBezierTimingFunction>(*curve_timing_function);
   EXPECT_EQ(cubic_timing_function.GetEaseType(),
             CubicBezierTimingFunction::EaseType::CUSTOM);
   EXPECT_EQ(cubic_timing_function.X1(), 1.0);
@@ -1931,7 +1931,7 @@ TEST_P(AnimationCompositorAnimationsTest, CompositedTransformAnimation) {
   // Make sure the animation is started on the compositor.
   EXPECT_EQ(CheckCanStartElementOnCompositor(*target),
             CompositorAnimations::kNoFailure);
-  EXPECT_EQ(document->Timeline().PendingAnimationsCount(), 1u);
+  EXPECT_EQ(document->Timeline().AnimationsNeedingUpdateCount(), 1u);
   cc::AnimationHost* host = document->View()->GetCompositorAnimationHost();
   EXPECT_EQ(host->MainThreadAnimationsCount(), 0u);
   EXPECT_EQ(host->CompositedAnimationsCount(), 1u);
@@ -1968,7 +1968,7 @@ TEST_P(AnimationCompositorAnimationsTest, CompositedScaleAnimation) {
   // Make sure the animation is started on the compositor.
   EXPECT_EQ(CheckCanStartElementOnCompositor(*target),
             CompositorAnimations::kNoFailure);
-  EXPECT_EQ(document->Timeline().PendingAnimationsCount(), 1u);
+  EXPECT_EQ(document->Timeline().AnimationsNeedingUpdateCount(), 1u);
   cc::AnimationHost* host = document->View()->GetCompositorAnimationHost();
   EXPECT_EQ(host->MainThreadAnimationsCount(), 0u);
   EXPECT_EQ(host->CompositedAnimationsCount(), 1u);
@@ -2003,7 +2003,7 @@ TEST_P(AnimationCompositorAnimationsTest,
   EXPECT_TRUE(cc_transform->has_potential_animation);
   EXPECT_TRUE(cc_transform->is_currently_animating);
   // Make sure the animation is started on the compositor.
-  EXPECT_EQ(document->Timeline().PendingAnimationsCount(), 1u);
+  EXPECT_EQ(document->Timeline().AnimationsNeedingUpdateCount(), 1u);
   cc::AnimationHost* host = document->View()->GetCompositorAnimationHost();
   EXPECT_EQ(host->MainThreadAnimationsCount(), 0u);
   EXPECT_EQ(host->CompositedAnimationsCount(), 1u);
@@ -2053,7 +2053,7 @@ TEST_P(AnimationCompositorAnimationsTest,
   Element* target = document->getElementById("dots");
   EXPECT_TRUE(CheckCanStartElementOnCompositor(*target) &
               CompositorAnimations::kTargetHasInvalidCompositingState);
-  EXPECT_EQ(document->Timeline().PendingAnimationsCount(), 4u);
+  EXPECT_EQ(document->Timeline().AnimationsNeedingUpdateCount(), 4u);
   cc::AnimationHost* host = document->View()->GetCompositorAnimationHost();
   EXPECT_EQ(host->MainThreadAnimationsCount(), 4u);
   EXPECT_EQ(host->CompositedAnimationsCount(), 0u);

@@ -7,10 +7,12 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/main/browser_agent_util.h"
 #import "ios/chrome/browser/main/browser_observer.h"
 #import "ios/chrome/browser/main/browser_web_state_list_delegate.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
+#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_delegate.h"
 
@@ -19,7 +21,8 @@
 #endif
 
 BrowserImpl::BrowserImpl(ios::ChromeBrowserState* browser_state)
-    : browser_state_(browser_state) {
+    : browser_state_(browser_state),
+      command_dispatcher_([[CommandDispatcher alloc] init]) {
   DCHECK(browser_state_);
 
   web_state_list_delegate_ = std::make_unique<BrowserWebStateListDelegate>();
@@ -60,6 +63,10 @@ WebStateList* BrowserImpl::GetWebStateList() const {
   return web_state_list_.get();
 }
 
+CommandDispatcher* BrowserImpl::GetCommandDispatcher() const {
+  return command_dispatcher_;
+}
+
 void BrowserImpl::AddObserver(BrowserObserver* observer) {
   observers_.AddObserver(observer);
 }
@@ -71,5 +78,8 @@ void BrowserImpl::RemoveObserver(BrowserObserver* observer) {
 // static
 std::unique_ptr<Browser> Browser::Create(
     ios::ChromeBrowserState* browser_state) {
-  return std::make_unique<BrowserImpl>(browser_state);
+  std::unique_ptr<Browser> browser =
+      std::make_unique<BrowserImpl>(browser_state);
+  AttachBrowserAgents(browser.get());
+  return browser;
 }

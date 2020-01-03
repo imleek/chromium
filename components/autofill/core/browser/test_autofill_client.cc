@@ -71,16 +71,26 @@ TestAutofillClient::GetSecurityLevelForUmaHistograms() {
   return security_level_;
 }
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+std::vector<std::string>
+TestAutofillClient::GetMerchantWhitelistForVirtualCards() {
+  return merchant_whitelist_;
+}
+
+std::vector<std::string>
+TestAutofillClient::GetBinRangeWhitelistForVirtualCards() {
+  return bin_range_whitelist_;
+}
+#endif
+
 void TestAutofillClient::ShowAutofillSettings(bool show_credit_card_settings) {}
 
 void TestAutofillClient::ShowUnmaskPrompt(
     const CreditCard& card,
     UnmaskCardReason reason,
-    base::WeakPtr<CardUnmaskDelegate> delegate) {
-}
+    base::WeakPtr<CardUnmaskDelegate> delegate) {}
 
-void TestAutofillClient::OnUnmaskVerificationResult(PaymentsRpcResult result) {
-}
+void TestAutofillClient::OnUnmaskVerificationResult(PaymentsRpcResult result) {}
 
 void TestAutofillClient::ShowLocalCardMigrationDialog(
     base::OnceClosure show_migration_dialog_closure) {
@@ -108,18 +118,26 @@ void TestAutofillClient::ShowLocalCardMigrationResults(
     MigrationDeleteCardCallback delete_local_card_callback) {}
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-void TestAutofillClient::ShowVerifyPendingDialog(
-    base::OnceClosure cancel_card_verification_callback) {}
-
-void TestAutofillClient::CloseVerifyPendingDialog() {}
-#endif
-
 void TestAutofillClient::ShowWebauthnOfferDialog(
-    WebauthnOfferDialogCallback callback) {}
+    WebauthnDialogCallback offer_dialog_callback) {}
 
-bool TestAutofillClient::CloseWebauthnOfferDialog() {
+void TestAutofillClient::ShowWebauthnVerifyPendingDialog(
+    WebauthnDialogCallback verify_pending_dialog_callback) {}
+
+void TestAutofillClient::UpdateWebauthnOfferDialogWithError() {}
+
+bool TestAutofillClient::CloseWebauthnDialog() {
   return true;
 }
+
+void TestAutofillClient::ConfirmSaveUpiIdLocally(
+    const std::string& upi_id,
+    base::OnceCallback<void(bool accept)> callback) {}
+
+void TestAutofillClient::OfferVirtualCardOptions(
+    const std::vector<CreditCard*>& candidates,
+    base::OnceCallback<void(const std::string&)> callback) {}
+#endif
 
 void TestAutofillClient::ConfirmSaveAutofillProfile(
     const AutofillProfile& profile,
@@ -179,9 +197,7 @@ bool TestAutofillClient::HasCreditCardScanFeature() {
   return false;
 }
 
-void TestAutofillClient::ScanCreditCard(
-    const CreditCardScanCallback& callback) {
-}
+void TestAutofillClient::ScanCreditCard(CreditCardScanCallback callback) {}
 
 void TestAutofillClient::ShowAutofillPopup(
     const gfx::RectF& element_bounds,
@@ -193,11 +209,9 @@ void TestAutofillClient::ShowAutofillPopup(
 
 void TestAutofillClient::UpdateAutofillPopupDataListValues(
     const std::vector<base::string16>& values,
-    const std::vector<base::string16>& labels) {
-}
+    const std::vector<base::string16>& labels) {}
 
-void TestAutofillClient::HideAutofillPopup() {
-}
+void TestAutofillClient::HideAutofillPopup() {}
 
 bool TestAutofillClient::IsAutocompleteEnabled() {
   return true;
@@ -205,13 +219,11 @@ bool TestAutofillClient::IsAutocompleteEnabled() {
 
 void TestAutofillClient::PropagateAutofillPredictions(
     content::RenderFrameHost* rfh,
-    const std::vector<FormStructure*>& forms) {
-}
+    const std::vector<FormStructure*>& forms) {}
 
 void TestAutofillClient::DidFillOrPreviewField(
     const base::string16& autofilled_value,
-    const base::string16& profile_full_name) {
-}
+    const base::string16& profile_full_name) {}
 
 bool TestAutofillClient::IsContextSecure() {
   // Simplified secure context check for tests.
@@ -246,6 +258,10 @@ void TestAutofillClient::set_form_origin(const GURL& url) {
 
 ukm::TestUkmRecorder* TestAutofillClient::GetTestUkmRecorder() {
   return &test_ukm_recorder_;
+}
+
+SmsClient* TestAutofillClient::GetSmsClient() {
+  return &mock_sms_client_;
 }
 
 }  // namespace autofill

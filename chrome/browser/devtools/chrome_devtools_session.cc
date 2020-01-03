@@ -20,60 +20,29 @@
 #include "chrome/browser/devtools/protocol/window_manager_handler.h"
 #endif
 
-namespace {
-// TODO(johannes): This is very similar to the code in
-// content/browser/devtools/devtools_protocol_encoding. Once we have
-// the error / status propagation story settled, move the common parts
-// into a content public API.
-
-// Platform allows us to inject the string<->double conversion
-// routines from base:: into the inspector_protocol JSON parser / serializer.
-class Platform : public crdtp::json::Platform {
- public:
-  bool StrToD(const char* str, double* result) const override {
-    return base::StringToDouble(str, result);
-  }
-
-  // Prints |value| in a format suitable for JSON.
-  std::unique_ptr<char[]> DToStr(double value) const override {
-    std::string str = base::NumberToString(value);
-    std::unique_ptr<char[]> result(new char[str.size() + 1]);
-    memcpy(result.get(), str.c_str(), str.size() + 1);
-    return result;
-  }
-};
-
-crdtp::Status ConvertCBORToJSON(crdtp::span<uint8_t> cbor, std::string* json) {
-  Platform platform;
-  return ConvertCBORToJSON(platform, cbor, json);
-}
-}  // namespace
-
 ChromeDevToolsSession::ChromeDevToolsSession(
     content::DevToolsAgentHost* agent_host,
     content::DevToolsAgentHostClient* client)
-    : agent_host_(agent_host),
-      client_(client),
-      dispatcher_(std::make_unique<protocol::UberDispatcher>(this)) {
+    : agent_host_(agent_host), client_(client), dispatcher_(this) {
   if (agent_host->GetWebContents() &&
       agent_host->GetType() == content::DevToolsAgentHost::kTypePage) {
     page_handler_ = std::make_unique<PageHandler>(agent_host->GetWebContents(),
-                                                  dispatcher_.get());
+                                                  &dispatcher_);
     security_handler_ = std::make_unique<SecurityHandler>(
-        agent_host->GetWebContents(), dispatcher_.get());
+        agent_host->GetWebContents(), &dispatcher_);
     if (client->MayAttachToBrowser()) {
       cast_handler_ = std::make_unique<CastHandler>(
-          agent_host->GetWebContents(), dispatcher_.get());
+          agent_host->GetWebContents(), &dispatcher_);
     }
   }
-  target_handler_ = std::make_unique<TargetHandler>(dispatcher_.get());
+  target_handler_ = std::make_unique<TargetHandler>(&dispatcher_);
   if (client->MayAttachToBrowser()) {
-    browser_handler_ = std::make_unique<BrowserHandler>(dispatcher_.get(),
-                                                        agent_host->GetId());
+    browser_handler_ =
+        std::make_unique<BrowserHandler>(&dispatcher_, agent_host->GetId());
   }
 #if defined(OS_CHROMEOS)
-  window_manager_protocl_handler_ =
-      std::make_unique<WindowManagerHandler>(dispatcher_.get());
+  window_manager_handler_ =
+      std::make_unique<WindowManagerHandler>(&dispatcher_);
 #endif
 }
 
@@ -81,9 +50,9 @@ ChromeDevToolsSession::~ChromeDevToolsSession() = default;
 
 void ChromeDevToolsSession::HandleCommand(
     const std::string& method,
-    const std::string& message,
+    base::span<const uint8_t> message,
     content::DevToolsManagerDelegate::NotHandledCallback callback) {
-  if (!dispatcher_->canDispatch(method)) {
+  if (!dispatcher_.canDispatch(method)) {
     std::move(callback).Run(message);
     return;
   }
@@ -91,12 +60,13 @@ void ChromeDevToolsSession::HandleCommand(
   int call_id;
   std::string unused;
   std::unique_ptr<protocol::DictionaryValue> value =
-      protocol::DictionaryValue::cast(
-          protocol::StringUtil::parseMessage(message, /*binary=*/true));
-  if (!dispatcher_->parseCommand(value.get(), &call_id, &unused))
+      protocol::DictionaryValue::cast(protocol::Value::parseBinary(
+          reinterpret_cast<const uint8_t*>(message.data()), message.size()));
+  if (!dispatcher_.parseCommand(value.get(), &call_id, &unused))
     return;
   pending_commands_[call_id] = std::move(callback);
-  dispatcher_->dispatch(call_id, method, std::move(value), message);
+  dispatcher_.dispatch(call_id, method, std::move(value),
+                       crdtp::SpanFrom(message));
 }
 
 // The following methods handle responses or notifications coming from
@@ -107,12 +77,12 @@ static void SendProtocolResponseOrNotification(
     std::unique_ptr<protocol::Serializable> message) {
   std::vector<uint8_t> cbor = std::move(*message).TakeSerialized();
   if (client->UsesBinaryProtocol()) {
-    client->DispatchProtocolMessage(agent_host,
-                                    std::string(cbor.begin(), cbor.end()));
+    client->DispatchProtocolMessage(agent_host, cbor);
     return;
   }
-  std::string json;
-  crdtp::Status status = ConvertCBORToJSON(crdtp::SpanFrom(cbor), &json);
+  std::vector<uint8_t> json;
+  crdtp::Status status =
+      crdtp::json::ConvertCBORToJSON(crdtp::SpanFrom(cbor), &json);
   LOG_IF(ERROR, !status.ok()) << status.ToASCIIString();
   client->DispatchProtocolMessage(agent_host, json);
 }
@@ -133,7 +103,7 @@ void ChromeDevToolsSession::flushProtocolNotifications() {}
 
 void ChromeDevToolsSession::fallThrough(int call_id,
                                         const std::string& method,
-                                        const std::string& message) {
+                                        crdtp::span<uint8_t> message) {
   auto callback = std::move(pending_commands_[call_id]);
   pending_commands_.erase(call_id);
   std::move(callback).Run(message);

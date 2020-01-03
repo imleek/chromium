@@ -143,6 +143,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
       TransformState&,
       VisualRectFlags = kDefaultVisualRectFlags) const override;
   PhysicalOffset OffsetForFixedPosition() const;
+  PhysicalOffset PixelSnappedOffsetForFixedPosition() const;
 
   void InvalidatePaintForViewAndCompositedLayers();
 
@@ -276,6 +277,10 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
     previous_background_rect_ = r;
   }
 
+  void MapAncestorToLocal(const LayoutBoxModelObject*,
+                          TransformState&,
+                          MapCoordinatesFlags) const override;
+
  private:
   void MapLocalToAncestor(const LayoutBoxModelObject* ancestor,
                           TransformState&,
@@ -284,10 +289,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   const LayoutObject* PushMappingToContainer(
       const LayoutBoxModelObject* ancestor_to_stop_at,
       LayoutGeometryMap&) const override;
-  void MapAncestorToLocal(const LayoutBoxModelObject*,
-                          TransformState&,
-                          MapCoordinatesFlags) const override;
-
   bool CanHaveChildren() const override;
 
   void UpdateBlockLayout(bool relayout_children) override;

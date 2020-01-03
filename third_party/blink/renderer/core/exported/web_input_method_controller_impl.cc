@@ -10,7 +10,6 @@
 #include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/public/web/web_range.h"
 #include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
@@ -85,8 +84,7 @@ bool WebInputMethodControllerImpl::SetComposition(
       return false;
   }
 
-  std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::NotifyUserActivation(GetFrame());
+  LocalFrame::NotifyUserActivation(GetFrame());
 
   GetInputMethodController().SetComposition(
       String(text), ImeTextSpanVectorBuilder::Build(ime_text_spans),
@@ -129,8 +127,7 @@ bool WebInputMethodControllerImpl::CommitText(
     const WebVector<WebImeTextSpan>& ime_text_spans,
     const WebRange& replacement_range,
     int relative_caret_position) {
-  std::unique_ptr<UserGestureIndicator> gesture_indicator =
-      LocalFrame::NotifyUserActivation(GetFrame());
+  LocalFrame::NotifyUserActivation(GetFrame());
 
   if (IsEditContextActive()) {
     return GetInputMethodController().GetActiveEditContext()->CommitText(
@@ -177,12 +174,21 @@ WebTextInputType WebInputMethodControllerImpl::TextInputType() {
   return GetFrame()->GetInputMethodController().TextInputType();
 }
 
-void WebInputMethodControllerImpl::GetLayoutBounds(WebRect& control_bounds,
-                                                   WebRect& selection_bounds) {
+void WebInputMethodControllerImpl::GetLayoutBounds(WebRect* control_bounds,
+                                                   WebRect* selection_bounds) {
   if (IsEditContextActive()) {
     return GetInputMethodController().GetActiveEditContext()->GetLayoutBounds(
         control_bounds, selection_bounds);
   }
+}
+
+bool WebInputMethodControllerImpl::IsInputPanelPolicyManual() const {
+  if (IsEditContextActive()) {
+    return GetInputMethodController()
+        .GetActiveEditContext()
+        ->IsInputPanelPolicyManual();
+  }
+  return false;  // Default should always be automatic.
 }
 
 WebRange WebInputMethodControllerImpl::CompositionRange() {

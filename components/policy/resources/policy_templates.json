@@ -662,6 +662,7 @@
         'DeviceLoginScreenStickyKeysEnabled',
         'DeviceLoginScreenKeyboardFocusHighlightEnabled',
         'DeviceLoginScreenScreenMagnifierType',
+        'DeviceLoginScreenShowOptionsInSystemTrayMenu',
       ],
     },
     {
@@ -847,6 +848,7 @@
         'ReportDeviceSessionStatus',
         'ReportDeviceOsUpdateStatus',
         'ReportDeviceBoardStatus',
+        'ReportDeviceCpuInfo',
         'ReportDevicePowerStatus',
         'ReportDeviceStorageStatus',
         'ReportUploadFrequency',
@@ -996,6 +998,7 @@
         'UserNativePrintersAllowed',
         'ExternalPrintServers',
         'ExternalPrintServersWhitelist',
+        'PrinterTypeDenyList',
       ]
     },
     {
@@ -1430,6 +1433,26 @@
       This policy is intended to give enterprises depending on the legacy behavior a chance to update their login procedures, and will be removed in the future.'''
     },
     {
+      'name': 'DNSInterceptionChecksEnabled',
+      'owners': ['krb', 'jdonnelly'],
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.*:80-', 'chrome_os:80-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False
+      },
+      'example_value': True,
+      'id': 654,
+      'caption': '''DNS interception checks enabled''',
+      'tags': [],
+      'desc': '''This policy configures a local switch that can be used to disable DNS interception checks. The checks attempt to discover whether the browser is behind a proxy that redirects unknown host names.
+
+      This detection may not be necessary in an enterprise environment where the network configuration is known, since it causes some amount of DNS and HTTP traffic on start-up and each DNS configuration change.
+
+      When this policy is not set, or is enabled, the DNS interception checks are performed. When explicitly disabled, they're not.'''
+    },
+    {
       'name': 'Http09OnNonDefaultPortsEnabled',
       'owners': ['file://components/policy/resources/OWNERS'],
       'type': 'main',
@@ -1613,6 +1636,29 @@
       If this policy is set to False, users will not be able to play the dinosaur easter egg game when device is offline. If this setting is set to True, users are allowed to play the dinosaur game. If this policy is not set, users are not allowed to play the dinosaur easter egg game on enrolled Chrome OS, but are allowed to play it under other circumstances.''',
     },
     {
+      'name': 'ForceLegacyDefaultReferrerPolicy',
+      'owners': ['davidvc@chromium.org', 'chrome-network-stack@chromium.org'],
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.*:80-', 'chrome_os:80-'],
+      'deprecated': True,
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': False,
+      'id': 648,
+      'caption': '''Use a default referrer policy of no-referrer-when-downgrade.''',
+      'tags': [],
+      'desc': '''This enterprise policy is for short-term adaptation and will be removed in M82.
+
+      Chrome's default referrer policy is being strengthened from its current value of no-referrer-when-downgrade to the more secure strict-origin-when-cross-origin through a gradual rollout targeting M80 stable.
+
+      Before the rollout, this enterprise policy will have no effect. After the rollout, when this enterprise policy is enabled, Chrome's default referrer policy will be set to its pre-M80 value of no-referrer-when-downgrade.
+
+      This enterprise policy is disabled by default.''',
+    },
+    {
       'name': 'RemoteAccessClientFirewallTraversal',
       'owners': ['jamiewalch@chromium.org', 'rkjnsn@chromium.org'],
       'type': 'main',
@@ -1771,11 +1817,12 @@
       'owners': ['jamiewalch@chromium.org', 'rkjnsn@chromium.org'],
       'type': 'string',
       'schema': { 'type': 'string' },
-      'supported_on': ['chrome.*:22-', 'chrome_os:41-'],
+      'supported_on': ['chrome.*:22-75', 'chrome_os:41-75'],
       'features': {
         'dynamic_refresh': True,
         'per_profile': False,
       },
+      'deprecated': True,
       'example_value': 'chromoting-host',
       'id': 156,
       'caption': '''Configure the TalkGadget prefix for remote access hosts''',
@@ -2206,7 +2253,7 @@
           'caption': '''Allow printing only without background graphics''',
         },
       ],
-      'supported_on': ['chrome_os:79-'],
+      'supported_on': ['chrome_os:79-', 'chrome.*:80-'],
       'features': {
         'can_be_recommended': False,
         'dynamic_refresh': True,
@@ -2387,7 +2434,7 @@
           'caption': '''Disable background graphics printing mode by default''',
         },
       ],
-      'supported_on': ['chrome_os:79-'],
+      'supported_on': ['chrome_os:79-', 'chrome.*:80-'],
       'features': {
         'can_be_recommended': False,
         'dynamic_refresh': True,
@@ -2699,9 +2746,9 @@
       'type': 'main',
       'schema': { 'type': 'boolean' },
       'supported_on': [
-        'chrome.*:78-',
-        'chrome_os:78-',
-        'android:78-',
+        'chrome.*:79-',
+        'chrome_os:79-',
+        'android:79-',
       ],
       'features': {
         'can_be_recommended': True,
@@ -2712,9 +2759,11 @@
       'id': 580,
       'caption': '''Enable leak detection for entered credentials''',
       'tags': ['google-sharing'],
-      'desc': '''If this setting is enabled, users can have <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> check whether the entered credentials were part of a leak.
+      'desc': '''This policy can be used to force enable or force disable credential leak checking in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.
 
-              If this policy is enabled or disabled, users cannot change or override it in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>. If this policy is unset, leak checking is allowed (but can be turned off by the user).''',
+          Note that even if this policy is set to True, the behavior will not trigger if Safe Browsing is disabled (either by policy or by the user). In order to force Safe Browsing on, use the <ph name="SAFE_BROWSING_ENABLED_POLICY_NAME">SafeBrowsingEnabled</ph> policy.
+
+          If this policy is enabled or disabled, users cannot change or override it in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>. If this policy is unset, credential leak checking is allowed (but can be turned off by the user).''',
     },
     {
       'name': 'AutoFillEnabled',
@@ -2951,6 +3000,27 @@
 
       This policy should not be enabled when <ph name="ROAMING_PROFILE_SUPPORT_ENABLED_POLICY_NAME">RoamingProfileSupportEnabled</ph> policy is set to enabled as that feature shares the same client side functionality. The Google-hosted synchronization is disabled in this case completely.''',
       'arc_support': 'Disabling Google Sync will cause Android Backup and Restore to not function properly.',
+    },
+    {
+      'name': 'SyncTypesListDisabled',
+      'owners': ['pastarmovj@chromium.org', 'mastiz@chromium.org'],
+      'type': 'list',
+      'schema': {
+        'type': 'array',
+        'items': {'type': 'string'},
+      },
+      'supported_on': ['chrome.*:79-','android:79-','chrome_os:79-'],
+      'features': {
+        'per_profile': True,
+        'dynamic_refresh': False,
+      },
+      'example_value': ['bookmarks'],
+      'id': 649,
+      'caption': '''List of types that should be excluded from synchronization''',
+      'tags': ['system-security'],
+      'desc': '''If this policy is set all specified data types will be excluded from syncronzation both for Google Sync as well as for roaming profile synchronization. This can be beneficial to reduce the size of the roaming profile or limit the type of data uploaded to the Google Sync Servers.
+
+      The current data types for this policy are: "bookmarks", "preferences", "passwords", "autofill", "themes", "typedUrls", "extensions", "apps", "tabs", "wifiConfiguration". Those names are case sensitive!''',
     },
     {
       'name': 'RoamingProfileSupportEnabled',
@@ -3980,7 +4050,7 @@
                 'type': 'array',
                 'items': {
                   'type': 'string',
-                  'pattern': '^[a-z][a-zA-Z.]*$',
+                  'pattern': '^[a-z][a-zA-Z0-9.]*$',
                 },
                 'id': 'ListOfPermissions',
               },
@@ -7022,7 +7092,9 @@
 
       If this setting is enabled or not configured, users can print to <ph name="CLOUD_PRINT_NAME">Google Cloud Print</ph> from the <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> print dialog.
 
-      If this setting is disabled, users cannot print to <ph name="CLOUD_PRINT_NAME">Google Cloud Print</ph> from the <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> print dialog''',
+      If this setting is disabled, users cannot print to <ph name="CLOUD_PRINT_NAME">Google Cloud Print</ph> from the <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> print dialog.
+
+      In order to keep <ph name="CLOUD_PRINT_NAME">Google Cloud Print</ph> destinations discoverable, this policy must be set to true and <ph name="POLICY_ENUM_PRINTERTYPEDENYLIST_CLOUD">cloud</ph> must not be included in the <ph name="POLICY_PRINTERTYPEDENYLIST">PrinterTypeDenyList</ph> policy.''',
     },
     {
       'name': 'EnterpriseWebStoreURL',
@@ -7666,6 +7738,28 @@
 
       If the policy is set to false or left unset, the statistics will not be reported.
       If set to true, statistics will be reported.''',
+      'arc_support': 'This policy has no effect on the logging done by Android.',
+    },
+    {
+      'name': 'ReportDeviceCpuInfo',
+      'owners': ['file://components/policy/resources/OWNERS'],
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome_os:81-'],
+      'supported_chrome_os_management': ['google_cloud'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True,
+      },
+      'example_value': False,
+      'id': 656,
+      'caption': '''Report CPU info''',
+      'tags': ['admin-sharing'],
+      'desc': '''Report information for a device's CPU(s).
+
+      If the policy is set to false or left unset, the information will not be reported.
+      If set to true, the CPU model name, architecture, and maximum clock speed will be
+      reported for each CPU.''',
       'arc_support': 'This policy has no effect on the logging done by Android.',
     },
     {
@@ -10104,7 +10198,32 @@
 
           If this policy is left unset, Accessibility options will not appear in the system tray menu, but the user can cause the Accessibility options to appear via the Settings page.
 
-          When accessiblity features are enabled by other means (e.g by a key combination), Accessibility options will always appear in system tray menu.'''
+          When accessibility features are enabled by other means (e.g by a key combination), Accessibility options will always appear in system tray menu.'''
+    },
+    {
+      'name': 'DeviceLoginScreenShowOptionsInSystemTrayMenu',
+      'owners': ['file://components/policy/resources/OWNERS'],
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome_os:80-'],
+      'features': {
+        'can_be_recommended': True,
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': True,
+      'id': 646,
+      'caption': '''Show accessibility options in system tray menu in the login screen''',
+      'tags': [],
+      'desc': '''If this policy is set to true, Accessibility options always appear in system tray menu.
+
+          If this policy is set to false, Accessibility options never appear in system tray menu.
+
+          If you set this policy, users cannot change or override it.
+
+          If this policy is left unset, Accessibility options will not appear in the system tray menu, but the user can cause the Accessibility options to appear via the Settings page.
+
+          When accessibility features are enabled by other means (e.g by a key combination), Accessibility options will always appear in system tray menu.'''
     },
     {
       'name': 'LargeCursorEnabled',
@@ -10681,6 +10800,56 @@
           If you set this policy, users cannot change or override it.
 
           If this policy is left unset, the virtual keyboard is disabled on the login screen initially but can be enabled by the user anytime.''',
+    },
+    {
+      'name': 'PrimaryMouseButtonSwitch',
+      'owners': ['amraboelkher@chromium.org', 'emaxx@chromium.org'],
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome_os:81-'],
+      'features': {
+        'can_be_recommended': True,
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': True,
+      'id': 655,
+      'caption': '''Switch the primary mouse button to the right button''',
+      'tags': [],
+      'desc': '''Switch the primary mouse button to the right button.
+
+          If this policy is set to enabled, the right button of the mouse will always be the primary key.
+
+          If this policy is set to disabled, the left button of the mouse will always be the primary key.
+
+          If you set this policy, users cannot change or override it.
+
+          If this policy is left unset, the left button of the mouse will be the primary key initially, but can be switched by the user anytime.'''
+    },
+    {
+      'name': 'DeviceLoginScreenPrimaryMouseButtonSwitch',
+      'owners': ['amraboelkher@chromium.org', 'emaxx@chromium.org'],
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome_os:81-'],
+      'features': {
+        'can_be_recommended': True,
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': True,
+      'id': 657,
+      'caption': '''Switch the primary mouse button to the right button on the login screen''',
+      'tags': [],
+      'desc': '''Switch the primary mouse button to the right button on the login screen.
+
+          If this policy is set to enabled, the right button of the mouse will always be the primary key on the login screen.
+
+          If this policy is set to disabled, the left button of the mouse will always be the primary key on the login screen.
+
+          If you set this policy, users cannot change or override it.
+
+          If this policy is left unset, the left button of the mouse will be the primary key on the login screen initially, but can be switched by the user anytime.'''
     },
     {
       'name': 'SharedClipboardEnabled',
@@ -13098,6 +13267,26 @@
       '''If this is set to true or not set, the New Tab page may show content suggestions based on the user's browsing history, interests, or location.
 
       If this is set to false, automatically-generated content suggestions are not shown on the New Tab page.''',
+    },
+    {
+      'name': 'NTPCustomBackgroundEnabled',
+      'owners': ['mahmadi@chromium.org', 'yyushkina@chromium.org'],
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.*:80-', 'chrome_os:80-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': True,
+      'id': 653,
+      'default_for_enterprise_users': True,
+      'caption': '''Allow users to customize the background on the New Tab page''',
+      'tags': [],
+      'desc':
+      '''If the policy is set to false, the New Tab page won't allow users to customize the background. Any existing custom background will be permanently removed even if the policy is set to true later.
+
+      If the policy is set to true or unset, users can customize the background on the New Tab page.''',
     },
     {
       'name': 'WebRtcUdpPortRange',
@@ -16338,9 +16527,9 @@
       'tags': ['admin-sharing', 'google-sharing'],
       'features': {
         'dynamic_refresh': True,
-        'per_profile': True,
+        'per_profile': False,
       },
-      'supported_on': ['chrome.*:72-'],
+      'supported_on': ['chrome.*:72-', 'chrome_os:81-'],
       'future': True,
       'caption': '''Enables <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> cloud reporting''',
       'example_value': True,
@@ -16350,9 +16539,8 @@
       When this policy is set to True, the data is collected and uploaded to Google Admin console.
       To control what data is uploaded, please use policies in the group Chrome Reporting Extension.
 
-      This policy is only effective when the machine is enrolled with <ph name="MACHINE_LEVEL_USER_CLOUD_POLICY_ENROLLMENT_TOKEN_POLICY_NAME">MachineLevelUserCloudPolicyEnrollmentToken</ph>.
-
-      This policy force installs <ph name="CHROME_REPORTING_EXTENSION_NAME">Chrome Reporting Extension</ph> for the reporting and overrides any extension policies related to that extension.'''
+      For <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>, this policy is only effective when the machine is enrolled with <ph name="CLOUD_MANAGEMENT_ENROLLMENT_TOKEN">CloudManagementEnrollmentToken</ph>.
+      For <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph>, this policy is always effective.'''
     },
     {
       'name': 'EnterpriseHardwarePlatformAPIEnabled',
@@ -17205,7 +17393,7 @@
 
       When the policy is set to disabled or not set, pages are not allowed to show popups while they are being unloaded, as per the spec (https://html.spec.whatwg.org/#apis-for-creating-and-navigating-browsing-contexts-by-name).
 
-      This policy will be removed in Chrome 82.
+      This policy will be removed in Chrome 88.
 
       See https://www.chromestatus.com/feature/5989473649164288 .''',
     },
@@ -17988,9 +18176,9 @@
       'caption': '''Allow the device to request powerwash''',
       'tags': [],
       'desc': '''
-      This policy when set to False, does not allow the device to trigger powerwash.
+      This policy when set to False, does not allow the device to trigger powerwash. An exception is if <ph name="TPM_FIRMWARE_UPDATE_SETTINGS_NAME">TPMFirmwareUpdateSettings</ph> policy is set to a value that allows the TPM firmware update and the TPM firmware was not updated yet.
       When set to True, it allows the device to trigger powerwash.
-      If left unset, it defaults to False, meaning it doesn't allow the device to powerwash.
+      If left unset, it defaults to True, meaning it allows the device to powerwash.
       '''
     },
     {
@@ -18058,27 +18246,6 @@
       If the policy is set to true or left unset, the user will be able to use VM management CLI.
       Otherwise, all of VM management CLI is disabled and hidden.
       ''',
-    },
-    {
-      'name': 'SafeBrowsingRealTimeLookupEnabled',
-      'owners': ['drubery@chromium.org', 'nparker@chromium.org'],
-      'type': 'main',
-      'schema': {
-        'type': 'boolean',
-      },
-      'example_value': True,
-      'features': {
-        'dynamic_refresh': True,
-        'per_profile': True,
-      },
-      'id': 578,
-      'supported_on': ['chrome.*:80-','chrome_os:80-'],
-      'future': True,
-      'caption': '''Check Safe Browsing status of visited URLs in real time''',
-      'tags': ['google-sharing'],
-      'desc': '''When this policy is set to enabled, all visited URLs will be checked with Safe Browsing in real time.
-
-      When this policy is set to disabled, or not set, the consumer Safe Browsing checks will be applied. Consumer Safe Browsing checks can still include real time lookups, depending on the "Make searches and browsing better" preference. To forcibly disable real time lookups, see the <ph name="URL_KEYED_ANONYMIZED_DATA_COLLECTION_ENABLED_POLICY">UrlKeyedAnonymizedDataCollectionEnabled</ph> policy.'''
     },
     {
       'name': 'CACertificateManagementAllowed',
@@ -18208,7 +18375,7 @@
         'per_profile': False,
       },
       'id': 585,
-      'supported_on': ['chrome.*:78-'],
+      'supported_on': ['chrome.*:78-', 'chrome_os:81-'],
       'future': True,
       'caption': '''Allows Chrome to report unsafe events to Google''',
       'tags': [],
@@ -18253,7 +18420,7 @@
         'per_profile': False,
       },
       'id': 586,
-      'supported_on': ['chrome.*:78-'],
+      'supported_on': ['chrome.*:78-', 'chrome_os:81-'],
       'future': True,
       'caption': '''Prevent user to transfer large files''',
       'tags': [],
@@ -18304,7 +18471,7 @@
         'per_profile': False,
       },
       'id': 587,
-      'supported_on': ['chrome.*:78-'],
+      'supported_on': ['chrome.*:78-', 'chrome_os:81-'],
       'future': True,
       'caption': '''Delay delivery of files until scanning verdicts are known''',
       'tags': [],
@@ -18355,7 +18522,7 @@
         'per_profile': False,
       },
       'id': 588,
-      'supported_on': ['chrome.*:78-'],
+      'supported_on': ['chrome.*:78-', 'chrome_os:81-'],
       'future': True,
       'caption': '''Allow users to upload or download password protected files''',
       'tags': [],
@@ -18406,7 +18573,7 @@
         'per_profile': False,
       },
       'id': 589,
-      'supported_on': ['chrome.*:78-'],
+      'supported_on': ['chrome.*:78-', 'chrome_os:81-'],
       'future': True,
       'caption': '''Send files for sensitive data protection rule violation inspection''',
       'tags': [],
@@ -18435,7 +18602,7 @@
         'per_profile': False,
       },
       'id': 590,
-      'supported_on': ['chrome.*:78-'],
+      'supported_on': ['chrome.*:78-', 'chrome_os:81-'],
       'future': True,
       'caption': '''URL patterns to check downloaded content against sensitive data protection rules''',
       'tags': [],
@@ -18460,7 +18627,7 @@
         'per_profile': False,
       },
       'id': 591,
-      'supported_on': ['chrome.*:78-'],
+      'supported_on': ['chrome.*:78-', 'chrome_os:81-'],
       'future': True,
       'caption': '''URL patterns to not check uploaded content against sensitive data protection rules''',
       'tags': [],
@@ -18558,7 +18725,7 @@
 
       When the policy is set to disabled or not set, pages are not allowed to send synchronous XHR requests during page dismissal.
 
-      This policy will be removed in Chrome 82.
+      This policy will be removed in Chrome 88.
 
       See https://www.chromestatus.com/feature/4664843055398912 .''',
     },
@@ -18571,7 +18738,6 @@
         'minimum': 1024,
       },
       'supported_on': ['chrome.win:79-', 'chrome.mac:79-'],
-      'future': True,
       'features': {
         'dynamic_refresh': True,
         'per_profile': False,
@@ -18607,13 +18773,11 @@
       'tags': ['system-security'],
       'desc': '''This policy controls a security feature in TLS 1.3 which protects connections against downgrade attacks. It is backwards-compatible and will not affect connections to compliant TLS 1.2 servers or proxies. However, older versions of some TLS-intercepting proxies have an implementation flaw which causes them to be incompatible.
 
-      If this policy is set to True, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will enable these security protections for all connections.
+      If this policy is set to True or not set, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will enable these security protections for all connections.
 
-      If this policy is set to False or not set, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will disable these security protections for connections authenticated with locally-installed CA certificates. These protections are always enabled for connections authenticated with publicly-trusted CA certificates.
+      If this policy is set to False, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will disable these security protections for connections authenticated with locally-installed CA certificates. These protections are always enabled for connections authenticated with publicly-trusted CA certificates.
 
-      This policy may be used to test for any affected proxies and upgrade them. Affected proxies are expected to fail connections with an error code of ERR_TLS13_DOWNGRADE_DETECTED. A later version of <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will enable this option by default.
-
-      After it is enabled by default, administrators who need more time to upgrade affected proxies may use this policy to temporarily disable this security feature. This policy will be removed after version 85.
+      The default value for this policy was changed in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> 81 from false to true. Affected proxies are expected to fail connections with an error code of ERR_TLS13_DOWNGRADE_DETECTED. Administrators who need more time to upgrade affected proxies may use this policy to temporarily disable this security feature. This policy will be removed after version 85.
       '''
     },
     {
@@ -18662,7 +18826,9 @@
 
       If this list is not set, both mitigations explained above are not applied.
 
-      For details on <ph name="CORS">CORS</ph>, visit: <ph name="CORS_HELP_URL">https://www.chromestatus.com/feature/5768642492891136</ph>.'''
+      For details on <ph name="CORS">CORS</ph>, visit: <ph name="CORS_HELP_URL">https://www.chromestatus.com/feature/5768642492891136</ph>.
+
+      Note that this policy will be removed in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> version 82.'''
     },
     {
       'name': 'CorsLegacyModeEnabled',
@@ -18686,7 +18852,9 @@
 
       This policy will be removed after a couple of milestones.
 
-      For details on <ph name="CORS">CORS</ph>, visit: <ph name="CORS_HELP_URL">https://www.chromestatus.com/feature/5768642492891136</ph>.'''
+      For details on <ph name="CORS">CORS</ph>, visit: <ph name="CORS_HELP_URL">https://www.chromestatus.com/feature/5768642492891136</ph>.
+
+      Note that this policy will be removed in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> version 82.'''
     },
     {
       'name': 'ExternalPrintServersWhitelist',
@@ -18768,7 +18936,7 @@
 
           This policy can be overridden for specific URL patterns using the 'InsecureContentAllowedForUrls' and 'InsecureContentBlockedForUrls' policies.
 
-          If this policy is left not set, users will be allowed to add exceptions to allow blockable mixed content.''',
+          If this policy is left not set, users will be allowed to add exceptions to allow blockable mixed content and disable autoupgrades for optionally blockable mixed content.''',
     },
     {
       'name': 'InsecureContentAllowedForUrls',
@@ -18787,9 +18955,9 @@
       'id': 634,
       'caption': '''Allow insecure content on these sites''',
       'tags': [],
-      'desc': '''Allows you to set a list of url patterns that specify sites which are allowed to display blockable (i.e. active) mixed content (i.e. HTTP content on HTTPS sites).
+      'desc': '''Allows you to set a list of url patterns that specify sites which are allowed to display blockable (i.e. active) mixed content (i.e. HTTP content on HTTPS sites) and for which optionally blockable mixed content upgrades will be disabled.
 
-          If this policy is left not set blockable mixed content will be blocked, but users will be allowed to set exceptions to allow it for specific sites.''',
+          If this policy is left not set blockable mixed content will be blocked and optionally blockable mixed content will be upgraded, and users will be allowed to set exceptions to allow it for specific sites.''',
     },
     {
       'name': 'InsecureContentBlockedForUrls',
@@ -18808,9 +18976,9 @@
       'id': 635,
       'caption': '''Block insecure content on these sites''',
       'tags': [],
-      'desc': '''Allows you to set a list of url patterns that specify sites which are not allowed to display blockable (i.e. active) mixed content (i.e. HTTP content on HTTPS sites).
+      'desc': '''Allows you to set a list of url patterns that specify sites which are not allowed to display blockable (i.e. active) mixed content (i.e. HTTP content on HTTPS sites), and for which optionally blockable (i.e. passive) mixed content will be upgraded.
 
-          If this policy is left not set blockable mixed content will be blocked, but users will be allowed to set exceptions to allow it for specific sites.''',
+          If this policy is left not set blockable mixed content will be blocked and optionally blockable mixed content will be upgraded, but users will be allowed to set exceptions to allow it for specific sites.''',
     },
     {
       'name': 'DeviceWebBasedAttestationAllowedUrls',
@@ -18834,7 +19002,9 @@
 
       Specifically, if a URL matches one of the patterns provided through this policy, it will be allowed to receive a HTTP header containing a response to a remote attestation challenge, attesting device identity and device state.
 
-      If this policy is not set or is set to an empty list, no URL is allowed to use remote attestation on the sign-in screen.'''
+      If this policy is not set or is set to an empty list, no URL is allowed to use remote attestation on the sign-in screen.
+
+      URLs must have HTTPS scheme, e.g. "https://example.com".'''
     },
     {
       'name': 'DeviceShowNumericKeyboardForPassword',
@@ -19021,7 +19191,166 @@
       If you set this policy, users cannot change or override it.
 
       If this policy is left unset, the Click to Call feature is enabled by default.''',
-    }
+    },
+    {
+      'name': 'PrinterTypeDenyList',
+      'owners': ['file://printing/OWNERS'],
+      'type': 'string-enum-list',
+      'schema': {
+        'type': 'array',
+        'items': {
+          'type': 'string',
+          'enum': [
+            'privet',
+            'extension',
+            'pdf',
+            'local',
+            'cloud',
+          ],
+        },
+      },
+      'items': [
+        {
+          'name': 'privet',
+          'value': 'privet',
+          'caption': '''Zeroconf-based (mDNS + DNS-SD) protocol destinations''',
+        },
+        {
+          'name': 'extension',
+          'value': 'extension',
+          'caption': '''Extension-based destinations''',
+        },
+        {
+          'name': 'pdf',
+          'value': 'pdf',
+          'caption': '''The 'Save as PDF' destination''',
+        },
+        {
+          'name': 'local',
+          'value': 'local',
+          'caption': '''Local printer destinations''',
+        },
+        {
+          'name': 'cloud',
+          'value': 'cloud',
+          'caption': '''<ph name="CLOUD_PRINT_NAME">Google Cloud Print</ph> and 'Save to Google Drive' destinations''',
+        },
+      ],
+      'supported_on': ['chrome_os:80-', 'chrome.*:80-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': ['cloud', 'privet'],
+      'id': 647,
+      'caption': '''Disable printer types on the deny list''',
+      'tags': [],
+      'desc': '''The printers of types placed on the deny list will be disabled from being discovered or having their capabilities fetched.
+
+      Placing all printer types on the deny list effectively disables printing, as there would be no available destinations to send a document for printing.
+
+      Including <ph name="POLICY_ENUM_PRINTERTYPEDENYLIST_CLOUD">cloud</ph> on the deny list has the same effect as setting the <ph name="POLICY_CLOUDPRINTSUBMITENABLED">CloudPrintSubmitEnabled</ph> policy to false. In order to keep <ph name="CLOUD_PRINT_NAME">Google Cloud Print</ph> destinations discoverable, the <ph name="POLICY_CLOUDPRINTSUBMITENABLED">CloudPrintSubmitEnabled</ph> policy must be set to true and <ph name="POLICY_ENUM_PRINTERTYPEDENYLIST_CLOUD">cloud</ph> must not be on the deny list.
+
+      If the policy is not set, or is set to an empty list, all printer types will be available for discovery.
+
+      Extension printers are also known as print provider destinations, and include any destination that belongs to a <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> extension.
+
+      Local printers are also known as native printing destinations, and include destinations available to the local machine and shared network printers.'''
+    },
+    {
+      'name': 'AmbientAuthenticationInPrivateModesEnabled',
+      'owners': ['rhalavati@chromium.org', 'roagarwal@chromium.org', 'chrome-privacy-core@google.com'],
+      'type': 'int-enum',
+      'schema': {
+        'type': 'integer',
+        'enum': [0,1,2,3],
+      },
+      'items': [
+        {
+          'name': 'RegularOnly',
+          'value': 0,
+          'caption': '''Enable ambient authentication in regular sessions only.''',
+        },
+        {
+          'name': 'IncognitoAndRegular',
+          'value': 1,
+          'caption': '''Enable ambient authentication in incognito and regular sessions.''',
+        },
+        {
+          'name': 'GuestAndRegular',
+          'value': 2,
+          'caption': '''Enable ambient authentication in guest and regular sessions.''',
+        },
+        {
+          'name': 'All',
+          'value': 3,
+          'caption': '''Enable ambient authentication in regular, incognito and guest sessions.''',
+        },
+      ],
+      'supported_on': ['chrome.*:80-', 'chrome_os:80-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': True,
+      'id': 650,
+      'caption': '''Enable Ambient Authentication for profile types.''',
+      'tags': [],
+      'desc': '''Configuring this policy will allow/disallow ambient authenticaiton for Incognito and Guest profiles in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.
+
+      Ambient Authentication is http authentication with default credentials if explicit credentials are not provided via NTLM/Kerberos/Negotiate challenge/response schemes.
+
+      Setting the <ph name="REGULAR_ONLY_OPTION_NAME">RegularOnly</ph> (value 0), allows ambient authentication for Regular sessions only. Incognito and Guest sessions wouldn't be allowed to ambiently authenticate.
+
+      Setting the <ph name="INCOGNITO_AND_REGULAR_OPTION_NAME">IncognitoAndRegular</ph> (value 1), allows ambient authentication for Incognito and Regular sessions. Guest sessions wouldn't be allowed to ambiently authenticate.
+
+      Setting the <ph name="GUEST_AND_REGULAR_OPTION_NAME">GuestAndRegular</ph> (value 2), allows ambient authentication for Guest and Regular sessions. Incognito sessions wouldn't be allowed to ambiently authenticate.
+
+      Setting the  <ph name="ALL_OPTION_NAME">All</ph> (value 3), allows ambient authentication for all sessions.
+
+      Note that, ambient authentication is always allowed on regular profiles.
+
+      If the policy is left not set, then the Incognito and Guest sessions will not be able to ambiently authenticate in the future releases of <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>, as they will be disallowed.'''
+    },
+    {
+      'name': 'PaymentMethodQueryEnabled',
+      'owners': ['file://components/payments/core/OWNERS'],
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.*:80-', 'chrome_os:80-', 'android:80-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': True,
+      'id': 651,
+      'caption': '''Allow websites to query for available payment methods.''',
+      'tags': [],
+      'desc': '''Allows you to set whether websites are allowed to check if the user has payment methods saved.
+
+      If this policy is set to disabled, websites that use PaymentRequest.canMakePayment or PaymentRequest.hasEnrolledInstrument API will be informed that no payment methods are available.
+
+      If the setting is enabled or not set then websites are allowed to check if the user has payment methods saved.'''
+    },
+    {
+      'name': 'StricterMixedContentTreatmentEnabled',
+      'owners': ['carlosil@chromium.org', 'estark@chromium.org'],
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.*:80-', 'chrome_os:80-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': True,
+      'id': 652,
+      'caption': '''Enable stricter treatment for mixed content''',
+      'tags': [],
+      'desc': '''This policy controls the treatment for mixed content (HTTP content in HTTPS sites) in the browser.
+       If the policy is set to true or unset, audio and video mixed content will be autoupgraded to HTTPS (i.e. the URL will be rewritten as HTTPS, without a fallback if the resource is not available over HTTPS) and a 'Not Secure' warning will be shown in the URL bar for image mixed content.
+       If the policy is set to false, autoupgrades will be disabled for audio and video, and no warning will be shown for images.
+       This policy does not affect other types of mixed content other than audio, video, and images.''',
+    },
   ],
 
   'messages': {
@@ -19319,6 +19648,7 @@ The recommended way to configure policy on Windows is via GPO, although provisio
     'DeviceAutoUpdateP2PEnabled': 'auto_update_settings.p2p_enabled',
     'DeviceLoginScreenDefaultLargeCursorEnabled': 'accessibility_settings.login_screen_default_large_cursor_enabled',
     'DeviceLoginScreenLargeCursorEnabled': 'accessibility_settings.login_screen_large_cursor_enabled',
+    'DeviceLoginScreenShowOptionsInSystemTrayMenu': 'accessibility_settings.login_screen_show_options_in_system_tray_menu_enabled',
     'DeviceLoginScreenSpokenFeedbackEnabled': 'accessibility_settings.login_screen_spoken_feedback_enabled',
     'DeviceLoginScreenDefaultSpokenFeedbackEnabled': 'accessibility_settings.login_screen_default_spoken_feedback_enabled',
     'DeviceLoginScreenDefaultHighContrastEnabled': 'accessibility_settings.login_screen_default_high_contrast_enabled',
@@ -19326,6 +19656,7 @@ The recommended way to configure policy on Windows is via GPO, although provisio
     'DeviceLoginScreenDefaultScreenMagnifierType': 'accessibility_settings.login_screen_default_screen_magnifier_type',
     'DeviceLoginScreenScreenMagnifierType': 'accessibility_settings.login_screen_screen_magnifier_type',
     'DeviceLoginScreenDefaultVirtualKeyboardEnabled': 'accessibility_settings.login_screen_default_virtual_keyboard_enabled',
+    'DeviceLoginScreenPrimaryMouseButtonSwitch': 'login_screen_primary_mouse_button_switch.value',
     'DeviceLoginScreenVirtualKeyboardEnabled': 'accessibility_settings.login_screen_virtual_keyboard_enabled',
     'DeviceLoginScreenDictationEnabled': 'accessibility_settings.login_screen_dictation_enabled',
     'DeviceLoginScreenSelectToSpeakEnabled': 'accessibility_settings.login_screen_select_to_speak_enabled',
@@ -19379,6 +19710,7 @@ The recommended way to configure policy on Windows is via GPO, although provisio
     'SupervisedUsersEnabled': 'supervised_users_settings.supervised_users_enabled',
     'DeviceStartUpFlags': 'start_up_flags.flags',
     'ReportDeviceBoardStatus': 'device_reporting.report_board_status',
+    'ReportDeviceCpuInfo': 'device_reporting.report_cpu_info',
     'ReportDeviceStorageStatus': 'device_reporting.report_storage_status',
     'ReportDevicePowerStatus': 'device_reporting.report_power_status',
     'DeviceOpenNetworkConfiguration': 'open_network_configuration.open_network_configuration',
@@ -19772,6 +20104,7 @@ The recommended way to configure policy on Windows is via GPO, although provisio
         'ReportDeviceSessionStatus',
         'ReportDeviceOsUpdateStatus',
         'ReportDeviceBoardStatus',
+        'ReportDeviceCpuInfo',
         'ReportDevicePowerStatus',
         'ReportDeviceStorageStatus',
         'ReportUploadFrequency',
@@ -19844,7 +20177,7 @@ The recommended way to configure policy on Windows is via GPO, although provisio
     },
   ],
   'placeholders': [],
-  'deleted_policy_ids': [412, 546, 562, 569],
-  'highest_id_currently_used': 645,
+  'deleted_policy_ids': [412, 546, 562, 569, 578],
+  'highest_id_currently_used': 657,
   'highest_atomic_group_id_currently_used': 38
 }

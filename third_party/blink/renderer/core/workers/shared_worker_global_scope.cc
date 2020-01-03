@@ -90,7 +90,7 @@ void SharedWorkerGlobalScope::Initialize(
   SetReferrerPolicy(response_referrer_policy);
 
   // https://wicg.github.io/cors-rfc1918/#integration-html
-  SetAddressSpace(response_address_space);
+  GetSecurityContext().SetAddressSpace(response_address_space);
 
   // Step 12.6. "Execute the Initialize a global object's CSP list algorithm
   // on worker global scope and response. [CSP]"
@@ -121,7 +121,9 @@ void SharedWorkerGlobalScope::FetchAndRunClassicScript(
 
   // Step 12. "Fetch a classic worker script given url, outside settings,
   // destination, and inside settings."
-  auto destination = mojom::RequestContextType::SHARED_WORKER;
+  auto context_type = mojom::RequestContextType::SHARED_WORKER;
+  network::mojom::RequestDestination destination =
+      network::mojom::RequestDestination::kSharedWorker;
 
   // Step 12.1. "Set request's reserved client to inside settings."
   // The browesr process takes care of this.
@@ -134,7 +136,8 @@ void SharedWorkerGlobalScope::FetchAndRunClassicScript(
       *this,
       CreateOutsideSettingsFetcher(outside_settings_object,
                                    outside_resource_timing_notifier),
-      script_url, destination, network::mojom::RequestMode::kSameOrigin,
+      script_url, context_type, destination,
+      network::mojom::RequestMode::kSameOrigin,
       network::mojom::CredentialsMode::kSameOrigin,
       WTF::Bind(&SharedWorkerGlobalScope::DidReceiveResponseForClassicScript,
                 WrapWeakPersistent(this),

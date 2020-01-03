@@ -137,7 +137,15 @@ class AppListPresenterDelegateZeroStateTest
   bool TestMouseEventParam() { return GetParam(); }
 
   gfx::Point GetPointOutsideSearchbox() {
-    return GetAppListView()->GetBoundsInScreen().origin();
+    // Ensures that the point satisfies the following conditions:
+    // (1) The point is within AppListView.
+    // (2) The point is outside of the search box.
+    // (3) The touch event on the point should not be consumed by the handler
+    // for back gesture.
+    return GetAppListView()
+        ->search_box_view()
+        ->GetBoundsInScreen()
+        .bottom_right();
   }
 
   gfx::Point GetPointInsideSearchbox() {
@@ -265,7 +273,7 @@ class PopulatedAppListWithVKEnabledTest : public PopulatedAppListTest {
 
 // Instantiate the Boolean which is used to toggle mouse and touch events in
 // the parameterized tests.
-INSTANTIATE_TEST_SUITE_P(, AppListPresenterDelegateTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, AppListPresenterDelegateTest, testing::Bool());
 
 // Verifies that context menu click should not activate the search box
 // (see https://crbug.com/941428).
@@ -308,7 +316,7 @@ TEST_F(AppListPresenterDelegateZeroStateTest,
        SideShelfAppListResetsSearchBoxActivationOnClose) {
   // Set the shelf to one side, then show the AppList and activate the
   // searchbox.
-  SetShelfAlignment(ShelfAlignment::SHELF_ALIGNMENT_RIGHT);
+  SetShelfAlignment(ShelfAlignment::kRight);
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
   GetEventGenerator()->GestureTapAt(GetPointInsideSearchbox());
   ASSERT_TRUE(GetAppListTestHelper()
@@ -680,7 +688,7 @@ TEST_F(AppListPresenterDelegateTest,
 
 // Tests that the app list is not draggable in side shelf alignment.
 TEST_F(AppListPresenterDelegateTest, SideShelfAlignmentDragDisabled) {
-  SetShelfAlignment(ShelfAlignment::SHELF_ALIGNMENT_RIGHT);
+  SetShelfAlignment(ShelfAlignment::kRight);
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
   const AppListView* app_list = GetAppListView();
   EXPECT_TRUE(app_list->is_fullscreen());
@@ -707,7 +715,7 @@ TEST_F(AppListPresenterDelegateTest, SideShelfAlignmentDragDisabled) {
 // and that the state transitions via text input act properly.
 TEST_F(AppListPresenterDelegateTest, SideShelfAlignmentTextStateTransitions) {
   // TODO(newcomer): Investigate mash failures crbug.com/726838
-  SetShelfAlignment(ShelfAlignment::SHELF_ALIGNMENT_LEFT);
+  SetShelfAlignment(ShelfAlignment::kLeft);
 
   // Open the app list with side shelf alignment, then check that it is in
   // fullscreen mode.
@@ -777,26 +785,26 @@ TEST_F(AppListPresenterDelegateTest, TabletModeTextStateTransitions) {
 TEST_F(AppListPresenterDelegateTest, AppListClosesWhenLeavingTabletMode) {
   EnableTabletMode(true);
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
-  GetAppListTestHelper()->CheckState(ash::AppListViewState::kFullscreenAllApps);
+  GetAppListTestHelper()->CheckState(AppListViewState::kFullscreenAllApps);
 
   EnableTabletMode(false);
   GetAppListTestHelper()->WaitUntilIdle();
-  GetAppListTestHelper()->CheckState(ash::AppListViewState::kClosed);
+  GetAppListTestHelper()->CheckState(AppListViewState::kClosed);
 
   EnableTabletMode(true);
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
-  GetAppListTestHelper()->CheckState(ash::AppListViewState::kFullscreenAllApps);
+  GetAppListTestHelper()->CheckState(AppListViewState::kFullscreenAllApps);
 
   // Enter text in the searchbox, the app list should transition to fullscreen
   // search.
   ui::test::EventGenerator* generator = GetEventGenerator();
   generator->PressKey(ui::KeyboardCode::VKEY_0, 0);
   GetAppListTestHelper()->WaitUntilIdle();
-  GetAppListTestHelper()->CheckState(ash::AppListViewState::kFullscreenSearch);
+  GetAppListTestHelper()->CheckState(AppListViewState::kFullscreenSearch);
 
   EnableTabletMode(false);
   GetAppListTestHelper()->WaitUntilIdle();
-  GetAppListTestHelper()->CheckState(ash::AppListViewState::kClosed);
+  GetAppListTestHelper()->CheckState(AppListViewState::kClosed);
 }
 
 // Tests that the app list state responds correctly to tablet mode being
@@ -894,7 +902,7 @@ TEST_F(AppListPresenterDelegateTest,
   ShelfLayoutManager* shelf_layout_manager =
       Shelf::ForWindow(Shell::GetRootWindowForDisplayId(GetPrimaryDisplayId()))
           ->shelf_layout_manager();
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_APP_LIST,
+  EXPECT_EQ(ShelfBackgroundType::kAppList,
             shelf_layout_manager->GetShelfBackgroundType());
 }
 
@@ -907,13 +915,13 @@ TEST_F(AppListPresenterDelegateTest, ShelfBackgroundWithHomeLauncher) {
   ShelfLayoutManager* shelf_layout_manager =
       Shelf::ForWindow(Shell::GetRootWindowForDisplayId(GetPrimaryDisplayId()))
           ->shelf_layout_manager();
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_HOME_LAUNCHER,
+  EXPECT_EQ(ShelfBackgroundType::kHomeLauncher,
             shelf_layout_manager->GetShelfBackgroundType());
 
-  // Add a window. It should be maximized because it is in tablet mode.
+  // Add a window. It should be in-app because it is in tablet mode.
   auto window = CreateTestWindow();
   wm::ActivateWindow(window.get());
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_MAXIMIZED,
+  EXPECT_EQ(ShelfBackgroundType::kInApp,
             shelf_layout_manager->GetShelfBackgroundType());
 }
 
@@ -932,7 +940,7 @@ TEST_F(AppListPresenterDelegateTest, AppListShownWhileClosing) {
           ->shelf_layout_manager();
 
   EXPECT_FALSE(GetAppListView()->shelf_has_rounded_corners());
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_MAXIMIZED_WITH_APP_LIST,
+  EXPECT_EQ(ShelfBackgroundType::kMaximizedWithAppList,
             shelf_layout_manager->GetShelfBackgroundType());
 
   // Enable animation to account for delay between app list starting to close
@@ -946,7 +954,7 @@ TEST_F(AppListPresenterDelegateTest, AppListShownWhileClosing) {
   GetAppListTestHelper()->Dismiss();
 
   EXPECT_FALSE(GetAppListView()->shelf_has_rounded_corners());
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_MAXIMIZED_WITH_APP_LIST,
+  EXPECT_EQ(ShelfBackgroundType::kMaximizedWithAppList,
             shelf_layout_manager->GetShelfBackgroundType());
 
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
@@ -957,13 +965,13 @@ TEST_F(AppListPresenterDelegateTest, AppListShownWhileClosing) {
   GetAppListView()->GetWidget()->GetLayer()->GetAnimator()->StopAnimating();
 
   EXPECT_FALSE(GetAppListView()->shelf_has_rounded_corners());
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_MAXIMIZED_WITH_APP_LIST,
+  EXPECT_EQ(ShelfBackgroundType::kMaximizedWithAppList,
             shelf_layout_manager->GetShelfBackgroundType());
 
   // Verify that the app list still picks up shelf changes.
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MINIMIZED);
   EXPECT_TRUE(GetAppListView()->shelf_has_rounded_corners());
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_APP_LIST,
+  EXPECT_EQ(ShelfBackgroundType::kAppList,
             shelf_layout_manager->GetShelfBackgroundType());
 }
 
@@ -982,7 +990,7 @@ TEST_F(AppListPresenterDelegateTest, AppListWithMaximizedShelf) {
           ->shelf_layout_manager();
 
   EXPECT_FALSE(GetAppListView()->shelf_has_rounded_corners());
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_MAXIMIZED_WITH_APP_LIST,
+  EXPECT_EQ(ShelfBackgroundType::kMaximizedWithAppList,
             shelf_layout_manager->GetShelfBackgroundType());
 
   // Enable animation to account for delay between app list starting to close
@@ -996,7 +1004,7 @@ TEST_F(AppListPresenterDelegateTest, AppListWithMaximizedShelf) {
   GetAppListTestHelper()->Dismiss();
 
   EXPECT_FALSE(GetAppListView()->shelf_has_rounded_corners());
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_MAXIMIZED_WITH_APP_LIST,
+  EXPECT_EQ(ShelfBackgroundType::kMaximizedWithAppList,
             shelf_layout_manager->GetShelfBackgroundType());
 
   // Minimize the window, and verify that the shelf state changed from a
@@ -1004,7 +1012,7 @@ TEST_F(AppListPresenterDelegateTest, AppListWithMaximizedShelf) {
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MINIMIZED);
 
   EXPECT_TRUE(GetAppListView()->shelf_has_rounded_corners());
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_APP_LIST,
+  EXPECT_EQ(ShelfBackgroundType::kAppList,
             shelf_layout_manager->GetShelfBackgroundType());
 
   // Stop app list hide animation.
@@ -1012,7 +1020,7 @@ TEST_F(AppListPresenterDelegateTest, AppListWithMaximizedShelf) {
       GetAppListView()->GetWidget()->GetLayer()->GetAnimator()->is_animating());
   GetAppListView()->GetWidget()->GetLayer()->GetAnimator()->StopAnimating();
 
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_DEFAULT,
+  EXPECT_EQ(ShelfBackgroundType::kDefaultBg,
             shelf_layout_manager->GetShelfBackgroundType());
 }
 
@@ -1030,18 +1038,18 @@ TEST_F(AppListPresenterDelegateTest, WindowMaximizedWithAppListShown) {
           ->shelf_layout_manager();
 
   EXPECT_TRUE(GetAppListView()->shelf_has_rounded_corners());
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_APP_LIST,
+  EXPECT_EQ(ShelfBackgroundType::kAppList,
             shelf_layout_manager->GetShelfBackgroundType());
 
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
 
   EXPECT_FALSE(GetAppListView()->shelf_has_rounded_corners());
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_MAXIMIZED_WITH_APP_LIST,
+  EXPECT_EQ(ShelfBackgroundType::kMaximizedWithAppList,
             shelf_layout_manager->GetShelfBackgroundType());
 
   GetAppListTestHelper()->Dismiss();
 
-  EXPECT_EQ(ShelfBackgroundType::SHELF_BACKGROUND_MAXIMIZED,
+  EXPECT_EQ(ShelfBackgroundType::kMaximized,
             shelf_layout_manager->GetShelfBackgroundType());
 }
 
@@ -1282,23 +1290,23 @@ TEST_P(AppListPresenterDelegateTest, TapAndClickEnablesSearchBox) {
 // alignment.
 TEST_F(AppListPresenterDelegateTest,
        ShelfBackgroundRespondsToAppListBeingShown) {
-  GetPrimaryShelf()->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+  GetPrimaryShelf()->SetAlignment(ShelfAlignment::kBottom);
 
   // Show the app list, the shelf background should be transparent.
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
   ShelfLayoutManager* shelf_layout_manager =
       GetPrimaryShelf()->shelf_layout_manager();
-  EXPECT_EQ(SHELF_BACKGROUND_APP_LIST,
+  EXPECT_EQ(ShelfBackgroundType::kAppList,
             shelf_layout_manager->GetShelfBackgroundType());
   GetAppListTestHelper()->DismissAndRunLoop();
 
   // Set the alignment to the side and show the app list. The background
   // should show.
-  GetPrimaryShelf()->SetAlignment(ShelfAlignment::SHELF_ALIGNMENT_LEFT);
+  GetPrimaryShelf()->SetAlignment(ShelfAlignment::kLeft);
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
   EXPECT_FALSE(GetPrimaryShelf()->IsHorizontalAlignment());
   EXPECT_EQ(
-      SHELF_BACKGROUND_APP_LIST,
+      ShelfBackgroundType::kAppList,
       GetPrimaryShelf()->shelf_layout_manager()->GetShelfBackgroundType());
 }
 
@@ -1698,7 +1706,7 @@ TEST_F(AppListPresenterDelegateTest, ShowInInvalidDisplay) {
 // app list but keep shelf visible.
 TEST_F(AppListPresenterDelegateTest, TapAutoHideShelfWithAppListOpened) {
   Shelf* shelf = GetPrimaryShelf();
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
 
   // Create a normal unmaximized window; the shelf should be hidden.
   std::unique_ptr<views::Widget> window = CreateTestWidget();
@@ -1949,11 +1957,11 @@ class AppListPresenterDelegateScalableAppListTest
     if (GetParam()) {
       scoped_feature_list_.InitWithFeatures(
           {app_list_features::kScalableAppList,
-           ash::features::kEnableBackgroundBlur},
+           features::kEnableBackgroundBlur},
           {});
     } else {
       scoped_feature_list_.InitWithFeatures(
-          {ash::features::kEnableBackgroundBlur},
+          {features::kEnableBackgroundBlur},
           {app_list_features::kScalableAppList});
     }
   }
@@ -2012,11 +2020,9 @@ class AppListPresenterDelegateScalableAppListTest
     // offset by the difference between search box bottom bounds in the apps and
     // search results page.
     const int search_box_diff =
+        contents_view()->GetSearchBoxBounds(AppListState::kStateApps).bottom() -
         contents_view()
-            ->GetSearchBoxBounds(ash::AppListState::kStateApps)
-            .bottom() -
-        contents_view()
-            ->GetSearchBoxBounds(ash::AppListState::kStateSearchResults)
+            ->GetSearchBoxBounds(AppListState::kStateSearchResults)
             .bottom();
     return top + search_box_diff +
            24 /*apps grid offset in fullscreen search state*/;
@@ -2538,7 +2544,7 @@ class AppListPresenterDelegateHomeLauncherTest
   DISALLOW_COPY_AND_ASSIGN(AppListPresenterDelegateHomeLauncherTest);
 };
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          AppListPresenterDelegateHomeLauncherTest,
                          testing::Bool());
 
@@ -3355,7 +3361,7 @@ class AppListPresenterDelegateVirtualKeyboardTest
 
 // Instantiate the Boolean which is used to toggle mouse and touch events in
 // the parameterized tests.
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          AppListPresenterDelegateVirtualKeyboardTest,
                          testing::Bool());
 

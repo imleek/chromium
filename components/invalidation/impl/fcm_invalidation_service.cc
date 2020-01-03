@@ -16,13 +16,13 @@ namespace invalidation {
 FCMInvalidationService::FCMInvalidationService(
     IdentityProvider* identity_provider,
     FCMNetworkHandlerCallback fcm_network_handler_callback,
-    PerUserTopicRegistrationManagerCallback
-        per_user_topic_registration_manager_callback,
+    PerUserTopicSubscriptionManagerCallback
+        per_user_topic_subscription_manager_callback,
     instance_id::InstanceIDDriver* instance_id_driver,
     PrefService* pref_service,
     const std::string& sender_id)
     : FCMInvalidationServiceBase(fcm_network_handler_callback,
-                                 per_user_topic_registration_manager_callback,
+                                 per_user_topic_subscription_manager_callback,
                                  instance_id_driver,
                                  pref_service,
                                  sender_id),
@@ -77,8 +77,9 @@ void FCMInvalidationService::OnActiveAccountLogin() {
 
 void FCMInvalidationService::OnActiveAccountRefreshTokenUpdated() {
   diagnostic_info_.active_account_token_updated = base::Time::Now();
-  if (!IsStarted() && IsReadyToStart())
+  if (!IsStarted() && IsReadyToStart()) {
     StartInvalidator();
+  }
 }
 
 void FCMInvalidationService::OnActiveAccountLogout() {
@@ -107,7 +108,7 @@ base::DictionaryValue FCMInvalidationService::CollectDebugData() const {
       "InvalidationService.Ready-to-start-on-active-account-login",
       diagnostic_info_.was_ready_to_start_on_login);
   status.SetString("InvalidationService.Active-account-id",
-                   diagnostic_info_.active_account_id.id);
+                   diagnostic_info_.active_account_id.ToString());
 
   return status;
 }

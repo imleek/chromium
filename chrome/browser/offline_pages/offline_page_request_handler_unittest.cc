@@ -45,6 +45,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/wait.h"
 #include "net/base/filename_util.h"
 #include "net/http/http_request_headers.h"
@@ -278,7 +279,7 @@ class OfflinePageURLLoaderBuilder : public TestURLLoaderClient::Observer {
   std::unique_ptr<OfflinePageURLLoader> url_loader_;
   std::unique_ptr<TestURLLoaderClient> client_;
   std::unique_ptr<mojo::SimpleWatcher> handle_watcher_;
-  network::mojom::URLLoaderPtr loader_;
+  mojo::Remote<network::mojom::URLLoader> loader_;
   std::string mime_type_;
   std::string body_;
 };
@@ -435,14 +436,10 @@ class OfflinePageRequestHandlerTest : public testing::Test {
 
 #if defined(OS_ANDROID)
   // OfflinePageTabHelper instantiates PrefetchService which in turn requests a
-  // fresh GCM token automatically. These two lines mock out InstanceID (the
-  // component which actually requests the token from play services). Without
-  // this, each test takes an extra 30s waiting on the token (because
-  // content::BrowserTaskEnvironment tries to finish all pending tasks before
-  // ending the test).
+  // fresh GCM token automatically. This causes the request to be done
+  // synchronously instead of with a posted task.
   instance_id::InstanceIDAndroid::ScopedBlockOnAsyncTasksForTesting
       block_async_;
-  instance_id::ScopedUseFakeInstanceIDAndroid use_fake_;
 #endif  // OS_ANDROID
 
   // These are not thread-safe. But they can be used in the pattern that
@@ -1020,8 +1017,10 @@ void OfflinePageURLLoaderBuilder::MaybeStartLoader(
   // and URLLoaderClient are alive.
   url_loader_.release();
 
+  loader_.reset();
   std::move(request_handler)
-      .Run(request, mojo::MakeRequest(&loader_), client_->CreateRemote());
+      .Run(request, loader_.BindNewPipeAndPassReceiver(),
+           client_->CreateRemote());
 }
 
 void OfflinePageURLLoaderBuilder::ReadBody() {

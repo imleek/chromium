@@ -12,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/containers/flat_set.h"
 #include "base/posix/safe_strerror.h"
 #include "base/process/launch.h"
 #include "base/strings/strcat.h"
@@ -29,7 +30,10 @@ namespace media {
 
 namespace {
 
-const base::TimeDelta kEventWaitTimeoutSecs = base::TimeDelta::FromSeconds(1);
+constexpr int32_t kDefaultFps = 30;
+
+constexpr base::TimeDelta kEventWaitTimeoutSecs =
+    base::TimeDelta::FromSeconds(1);
 
 class LocalCameraClientObserver : public CameraClientObserver {
  public:
@@ -81,6 +85,32 @@ void NotifyVideoCaptureDevicesChanged() {
     monitor->ProcessDevicesChanged(
         base::SystemMonitor::DeviceType::DEVTYPE_VIDEO_CAPTURE);
   }
+}
+
+base::flat_set<int32_t> GetAvailableFramerates(
+    const cros::mojom::CameraInfoPtr& camera_info) {
+  base::flat_set<int32_t> candidates;
+  auto available_fps_ranges = GetMetadataEntryAsSpan<int32_t>(
+      camera_info->static_camera_characteristics,
+      cros::mojom::CameraMetadataTag::
+          ANDROID_CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+  if (available_fps_ranges.empty()) {
+    // If there is no available target fps ranges listed in metadata, we set a
+    // default fps as candidate.
+    LOG(WARNING) << "No available fps ranges in metadata. Set default fps as "
+                    "candidate.";
+    candidates.insert(kDefaultFps);
+    return candidates;
+  }
+
+  // The available target fps ranges are stored as pairs int32s: (min, max) x n.
+  const size_t kRangeMaxOffset = 1;
+  const size_t kRangeSize = 2;
+
+  for (size_t i = 0; i < available_fps_ranges.size(); i += kRangeSize) {
+    candidates.insert(available_fps_ranges[i + kRangeMaxOffset]);
+  }
+  return candidates;
 }
 
 }  // namespace
@@ -178,6 +208,9 @@ void CameraHalDelegate::GetSupportedFormats(
   }
   const cros::mojom::CameraInfoPtr& camera_info = camera_info_[camera_id];
 
+  base::flat_set<int32_t> candidate_fps_set =
+      GetAvailableFramerates(camera_info);
+
   const cros::mojom::CameraMetadataEntryPtr* min_frame_durations =
       GetMetadataEntry(camera_info->static_camera_characteristics,
                        cros::mojom::CameraMetadataTag::
@@ -222,10 +255,17 @@ void CameraHalDelegate::GetSupportedFormats(
     if (cr_format.video_format == PIXEL_FORMAT_UNKNOWN) {
       continue;
     }
-    VLOG(1) << "Supported format: " << width << "x" << height
-            << " fps=" << max_fps << " format=" << cr_format.video_format;
-    supported_formats->emplace_back(gfx::Size(width, height), max_fps,
-                                    cr_format.video_format);
+
+    for (auto fps : candidate_fps_set) {
+      if (fps > max_fps) {
+        continue;
+      }
+
+      VLOG(1) << "Supported format: " << width << "x" << height
+              << " fps=" << fps << " format=" << cr_format.video_format;
+      supported_formats->emplace_back(gfx::Size(width, height), fps,
+                                      cr_format.video_format);
+    }
   }
 }
 

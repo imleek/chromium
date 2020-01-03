@@ -29,9 +29,7 @@ namespace viz {
 class BufferQueue;
 
 // An OutputSurface implementation that directly draws and swap to a GL
-// "buffer_queue" surface (aka one backed by a buffer managed explicitly in
-// mus/ozone. This class is adapted from
-// GpuBufferQueueBrowserCompositorOutputSurface.
+// "buffer_queue" surface (aka one backed by a buffer managed explicitly).
 class GLOutputSurfaceBufferQueue : public GLOutputSurface {
  public:
   GLOutputSurfaceBufferQueue(
@@ -41,8 +39,6 @@ class GLOutputSurfaceBufferQueue : public GLOutputSurface {
       gfx::BufferFormat buffer_format);
 
   ~GLOutputSurfaceBufferQueue() override;
-
-  // TODO(rjkroege): Implement the equivalent of Reflector.
 
  protected:
   // OutputSurface implementation.

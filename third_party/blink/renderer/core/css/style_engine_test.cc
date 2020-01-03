@@ -26,6 +26,7 @@
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/shadow_root_init.h"
+#include "third_party/blink/renderer/core/dom/slot_assignment_engine.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -1107,7 +1108,7 @@ TEST_F(StyleEngineTest, ScheduleInvalidationAfterSubtreeRecalc) {
   EXPECT_FALSE(t2->NeedsStyleInvalidation());
 }
 
-TEST_F(StyleEngineTest, NoScheduledRuleSetInvalidationsOnNewShadow) {
+TEST_F(StyleEngineTest, ScheduleRuleSetInvalidationsOnNewShadow) {
   GetDocument().body()->SetInnerHTMLFromString("<div id='host'></div>");
   Element* host = GetDocument().getElementById("host");
   ASSERT_TRUE(host);
@@ -1126,8 +1127,9 @@ TEST_F(StyleEngineTest, NoScheduledRuleSetInvalidationsOnNewShadow) {
   )HTML");
 
   GetStyleEngine().UpdateActiveStyle();
-  EXPECT_FALSE(GetDocument().ChildNeedsStyleInvalidation());
+  EXPECT_TRUE(GetDocument().ChildNeedsStyleInvalidation());
   EXPECT_FALSE(GetDocument().NeedsStyleInvalidation());
+  EXPECT_TRUE(shadow_root.NeedsStyleInvalidation());
 }
 
 TEST_F(StyleEngineTest, EmptyHttpEquivDefaultStyle) {
@@ -2143,6 +2145,7 @@ TEST_F(StyleEngineTest, ColorSchemeBaseBackgroundChange) {
 
 TEST_F(StyleEngineTest, ColorSchemeOverride) {
   ScopedCSSColorSchemeForTest enable_color_scheme(true);
+  ScopedCSSColorSchemeUARenderingForTest enable_color_scheme_ua(true);
 
   GetDocument().documentElement()->SetInlineStyleProperty(
       CSSPropertyID::kColorScheme, "light dark");
@@ -2185,15 +2188,17 @@ TEST_F(StyleEngineTest, InternalRootColor) {
   auto* dark = GetDocument().getElementById("dark");
 
   // Initial value of color-scheme is 'light'.
-  EXPECT_EQ(
-      WebColorScheme::kLight,
-      GetDocument().documentElement()->GetComputedStyle()->UsedColorScheme());
+  EXPECT_EQ(WebColorScheme::kLight, GetDocument()
+                                        .documentElement()
+                                        ->GetComputedStyle()
+                                        ->UsedColorSchemeForInitialColors());
   EXPECT_EQ(WebColorScheme::kDark,
-            container->GetComputedStyle()->UsedColorScheme());
+            container->GetComputedStyle()->UsedColorSchemeForInitialColors());
   // color-scheme:dark inherited from #container.
-  EXPECT_EQ(WebColorScheme::kDark, dark->GetComputedStyle()->UsedColorScheme());
+  EXPECT_EQ(WebColorScheme::kDark,
+            dark->GetComputedStyle()->UsedColorSchemeForInitialColors());
   EXPECT_EQ(WebColorScheme::kLight,
-            light->GetComputedStyle()->UsedColorScheme());
+            light->GetComputedStyle()->UsedColorSchemeForInitialColors());
 
   EXPECT_EQ(Color::kBlack, GetDocument()
                                .documentElement()
@@ -2369,7 +2374,7 @@ TEST_F(StyleEngineTest, GetComputedStyleOutsideFlatTree) {
             innermost_style->VisitedDependentColor(GetCSSPropertyColor()));
 }
 
-TEST_F(StyleEngineTest, MoveSlottedOutsideFlatTreeCrash) {
+TEST_F(StyleEngineTest, MoveSlottedOutsideFlatTree) {
   ScopedFlatTreeStyleRecalcForTest feature_scope(true);
 
   GetDocument().body()->SetInnerHTMLFromString(R"HTML(
@@ -2389,12 +2394,10 @@ TEST_F(StyleEngineTest, MoveSlottedOutsideFlatTreeCrash) {
   UpdateAllLifecyclePhases();
 
   host2->appendChild(span);
-  EXPECT_EQ(span, GetStyleRecalcRoot());
+  EXPECT_FALSE(GetStyleRecalcRoot());
 
-  // Removing the span will fall back to using the host parent as the new style
-  // recalc root.
   span->remove();
-  EXPECT_EQ(host2, GetStyleRecalcRoot());
+  EXPECT_FALSE(GetStyleRecalcRoot());
 }
 
 TEST_F(StyleEngineTest, StyleRecalcRootInShadowTree) {
@@ -2414,6 +2417,152 @@ TEST_F(StyleEngineTest, StyleRecalcRootInShadowTree) {
   span->SetInlineStyleProperty(CSSPropertyID::kColor, "blue");
 
   EXPECT_EQ(span, GetStyleRecalcRoot());
+}
+
+TEST_F(StyleEngineTest, StyleRecalcRootOutsideFlatTree) {
+  ScopedFlatTreeStyleRecalcForTest feature_scope(true);
+
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <div id="host"><div id="ensured"><span></span></div></div>
+    <div id="dirty"></div>
+  )HTML");
+
+  auto* host = GetDocument().getElementById("host");
+  auto* dirty = GetDocument().getElementById("dirty");
+  auto* ensured = GetDocument().getElementById("ensured");
+  auto* span = To<Element>(ensured->firstChild());
+
+  host->AttachShadowRootInternal(ShadowRootType::kOpen);
+
+  UpdateAllLifecyclePhases();
+
+  dirty->SetInlineStyleProperty(CSSPropertyID::kColor, "blue");
+  EXPECT_EQ(dirty, GetStyleRecalcRoot());
+
+  // Ensure a computed style for the span parent to try to trick us into
+  // incorrectly using the span as a recalc root.
+  ensured->EnsureComputedStyle();
+  span->SetInlineStyleProperty(CSSPropertyID::kColor, "pink");
+
+  // <span> is outside the flat tree, so it should not affect the style recalc
+  // root.
+  EXPECT_EQ(dirty, GetStyleRecalcRoot());
+
+  // Should not trigger any DCHECK failures.
+  UpdateAllLifecyclePhases();
+}
+
+TEST_F(StyleEngineTest, RemoveStyleRecalcRootFromFlatTree) {
+  ScopedFlatTreeStyleRecalcForTest scope(true);
+
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <div id=host><span></span></div>
+  )HTML");
+
+  auto* host = GetDocument().getElementById("host");
+  auto* span = To<Element>(host->firstChild());
+
+  ShadowRoot& shadow_root =
+      host->AttachShadowRootInternal(ShadowRootType::kOpen);
+  shadow_root.SetInnerHTMLFromString("<div><slot></slot></div>");
+
+  UpdateAllLifecyclePhases();
+
+  // Make the span style dirty.
+  span->setAttribute("style", "color:green");
+
+  EXPECT_TRUE(GetDocument().NeedsLayoutTreeUpdate());
+  EXPECT_EQ(span, GetStyleRecalcRoot());
+
+  auto* div = shadow_root.firstChild();
+  auto* slot = To<Element>(div->firstChild());
+
+  slot->setAttribute("name", "x");
+  GetDocument().GetSlotAssignmentEngine().RecalcSlotAssignments();
+
+  // Make sure shadow tree div and slot have their ChildNeedsStyleRecalc()
+  // cleared.
+  EXPECT_FALSE(div->ChildNeedsStyleRecalc());
+  EXPECT_FALSE(slot->ChildNeedsStyleRecalc());
+  EXPECT_FALSE(span->NeedsStyleRecalc());
+  EXPECT_FALSE(GetStyleRecalcRoot());
+}
+
+TEST_F(StyleEngineTest, SlottedWithEnsuredStyleOutsideFlatTree) {
+  ScopedFlatTreeStyleRecalcForTest scope(true);
+
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <div id="host"><span></span></div>
+  )HTML");
+
+  auto* host = GetDocument().getElementById("host");
+  auto* span = To<Element>(host->firstChild());
+
+  ShadowRoot& shadow_root =
+      host->AttachShadowRootInternal(ShadowRootType::kOpen);
+  shadow_root.SetInnerHTMLFromString(R"HTML(
+    <div><slot name="default"></slot></div>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+
+  // Ensure style outside the flat tree.
+  const ComputedStyle* style = span->EnsureComputedStyle();
+  ASSERT_TRUE(style);
+  EXPECT_TRUE(style->IsEnsuredOutsideFlatTree());
+
+  span->setAttribute("slot", "default");
+  GetDocument().GetSlotAssignmentEngine().RecalcSlotAssignments();
+  EXPECT_EQ(span, GetStyleRecalcRoot());
+  EXPECT_FALSE(span->GetComputedStyle());
+}
+
+TEST_F(StyleEngineTest, RecalcEnsuredStyleOutsideFlatTreeV0) {
+  ScopedFlatTreeStyleRecalcForTest scope(true);
+
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <div id="host"><span></span></div>
+  )HTML");
+
+  auto* host = GetDocument().getElementById("host");
+  auto* span = To<Element>(host->firstChild());
+
+  host->CreateV0ShadowRootForTesting();
+  UpdateAllLifecyclePhases();
+
+  EXPECT_FALSE(span->FlatTreeParentForChildDirty());
+
+  // Ensure style outside the flat tree.
+  const ComputedStyle* style = span->EnsureComputedStyle();
+  ASSERT_TRUE(style);
+  EXPECT_TRUE(style->IsEnsuredOutsideFlatTree());
+  EXPECT_EQ(EDisplay::kInline, style->Display());
+
+  span->SetInlineStyleProperty(CSSPropertyID::kDisplay, "block");
+  EXPECT_FALSE(GetStyleRecalcRoot());
+  EXPECT_FALSE(GetDocument().body()->ChildNeedsStyleRecalc());
+}
+
+TEST_F(StyleEngineTest, ForceReattachRecalcRootAttachShadow) {
+  ScopedFlatTreeStyleRecalcForTest scope(true);
+
+  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+    <div id="reattach"></div><div id="host"><span></span></div>
+  )HTML");
+
+  auto* reattach = GetDocument().getElementById("reattach");
+  auto* host = GetDocument().getElementById("host");
+
+  UpdateAllLifecyclePhases();
+
+  reattach->SetForceReattachLayoutTree();
+  EXPECT_FALSE(reattach->NeedsStyleRecalc());
+  EXPECT_EQ(reattach, GetStyleRecalcRoot());
+
+  // Attaching the shadow root will call RemovedFromFlatTree() on the span child
+  // of the host. The style recalc root should still be #reattach.
+  host->AttachShadowRootInternal(ShadowRootType::kOpen);
+  EXPECT_EQ(reattach, GetStyleRecalcRoot());
 }
 
 }  // namespace blink

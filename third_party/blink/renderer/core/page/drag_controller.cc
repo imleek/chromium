@@ -45,7 +45,6 @@
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/text.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/editing/commands/drag_and_drop_command.h"
 #include "third_party/blink/renderer/core/editing/drag_caret.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -64,6 +63,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
 #include "third_party/blink/renderer/core/html/html_plugin_element.h"
+#include "third_party/blink/renderer/core/html/plugin_document.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
@@ -238,9 +238,8 @@ void DragController::PerformDrag(DragData* drag_data, LocalFrame& local_root) {
   DCHECK(drag_data);
   document_under_mouse_ = local_root.DocumentAtPoint(
       PhysicalOffset::FromFloatPointRound(drag_data->ClientPosition()));
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(
-          document_under_mouse_ ? document_under_mouse_->GetFrame() : nullptr);
+  LocalFrame::NotifyUserActivation(
+      document_under_mouse_ ? document_under_mouse_->GetFrame() : nullptr);
   if ((drag_destination_action_ & kDragDestinationActionDHTML) &&
       document_is_handling_drag_) {
     bool prevented_default = false;
@@ -261,9 +260,10 @@ void DragController::PerformDrag(DragData* drag_data, LocalFrame& local_root) {
             PhysicalOffset::FromFloatPointRound(drag_data->ClientPosition())));
         const HitTestResult result =
             event_handler.HitTestResultAtLocation(location);
+        auto* html_plugin_element =
+            DynamicTo<HTMLPlugInElement>(result.InnerNode());
         prevented_default |=
-            IsHTMLPlugInElement(*result.InnerNode()) &&
-            ToHTMLPlugInElement(result.InnerNode())->CanProcessDrag();
+            html_plugin_element && html_plugin_element->CanProcessDrag();
       }
 
       // Invalidate clipboard here for security.
@@ -351,9 +351,10 @@ DragOperation DragController::DragEnteredOrUpdated(DragData* drag_data,
 static HTMLInputElement* AsFileInput(Node* node) {
   DCHECK(node);
   for (; node; node = node->OwnerShadowHost()) {
-    if (IsHTMLInputElement(*node) &&
-        ToHTMLInputElement(node)->type() == input_type_names::kFile)
-      return ToHTMLInputElement(node);
+    auto* html_input_element = DynamicTo<HTMLInputElement>(node);
+    if (html_input_element &&
+        html_input_element->type() == input_type_names::kFile)
+      return html_input_element;
   }
   return nullptr;
 }
@@ -467,8 +468,8 @@ DragOperation DragController::OperationForLoad(DragData* drag_data,
   Document* doc = local_root.DocumentAtPoint(
       PhysicalOffset::FromFloatPointRound(drag_data->ClientPosition()));
 
-  if (doc &&
-      (did_initiate_drag_ || doc->IsPluginDocument() || HasEditableStyle(*doc)))
+  if (doc && (did_initiate_drag_ || IsA<PluginDocument>(doc) ||
+              HasEditableStyle(*doc)))
     return kDragOperationNone;
   return GetDragOperation(drag_data);
 }
@@ -719,8 +720,7 @@ bool DragController::CanProcessDrag(DragData* drag_data,
   if (drag_data->ContainsFiles() && AsFileInput(result.InnerNode()))
     return true;
 
-  if (IsHTMLPlugInElement(*result.InnerNode())) {
-    HTMLPlugInElement* plugin = ToHTMLPlugInElement(result.InnerNode());
+  if (auto* plugin = DynamicTo<HTMLPlugInElement>(result.InnerNode())) {
     if (!plugin->CanProcessDrag() && !HasEditableStyle(*result.InnerNode()))
       return false;
   } else if (!HasEditableStyle(*result.InnerNode())) {
@@ -1165,7 +1165,7 @@ std::unique_ptr<DragImage> DragController::DragImageForSelection(
   PropertyTreeState property_tree_state =
       frame.View()->GetLayoutView()->FirstFragment().LocalBorderBoxProperties();
   return DataTransfer::CreateDragImageForFrame(
-      frame, opacity, kDoNotRespectImageOrientation, painting_rect.Size(),
+      frame, opacity, kRespectImageOrientation, painting_rect.Size(),
       painting_rect.Location(), builder, property_tree_state);
 }
 

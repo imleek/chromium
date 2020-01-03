@@ -11,18 +11,18 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
-#include "chrome/browser/safe_browsing/download_protection/binary_upload_service.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/download_protection/check_client_download_request_base.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "components/download/public/common/download_item.h"
 #include "components/safe_browsing/proto/webprotect.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
-
-class Profile;
 
 namespace safe_browsing {
 
@@ -37,7 +37,10 @@ class CheckClientDownloadRequest : public CheckClientDownloadRequestBase,
       scoped_refptr<BinaryFeatureExtractor> binary_feature_extractor);
   ~CheckClientDownloadRequest() override;
 
+  // download::DownloadItem::Observer:
   void OnDownloadDestroyed(download::DownloadItem* download) override;
+  void OnDownloadUpdated(download::DownloadItem* download) override;
+
   static bool IsSupportedDownload(const download::DownloadItem& item,
                                   const base::FilePath& target_path,
                                   DownloadCheckResultReason* reason,
@@ -92,6 +95,9 @@ class CheckClientDownloadRequest : public CheckClientDownloadRequestBase,
   download::DownloadItem* item_;
   CheckDownloadRepeatingCallback callback_;
 
+  // Upload start time used for UMA duration histograms.
+  base::TimeTicks upload_start_time_;
+
   // When uploading files for deep scanning, we need to preserve the original
   // result and reason from the server, just in case deep scanning fails.
   DownloadCheckResult saved_result_;
@@ -101,18 +107,6 @@ class CheckClientDownloadRequest : public CheckClientDownloadRequestBase,
 
   DISALLOW_COPY_AND_ASSIGN(CheckClientDownloadRequest);
 };
-
-// Helper function to examine a DeepScanningClientResponse and report the
-// appropriate events to the enterprise admin.
-void MaybeReportDeepScanningVerdict(Profile* profile,
-                                    const GURL& url,
-                                    const std::string& file_name,
-                                    const std::string& download_digest_sha256,
-                                    const std::string& mime_type,
-                                    const std::string& trigger,
-                                    const int64_t content_size,
-                                    BinaryUploadService::Result result,
-                                    DeepScanningClientResponse response);
 
 }  // namespace safe_browsing
 

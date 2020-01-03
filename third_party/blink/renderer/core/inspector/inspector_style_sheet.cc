@@ -729,8 +729,6 @@ InspectorStyle::InspectorStyle(CSSStyleDeclaration* style,
   DCHECK(style_);
 }
 
-InspectorStyle::~InspectorStyle() = default;
-
 std::unique_ptr<protocol::CSS::CSSStyle> InspectorStyle::BuildObjectForStyle() {
   std::unique_ptr<protocol::CSS::CSSStyle> result = StyleWithProperties();
   if (source_data_) {
@@ -945,18 +943,6 @@ bool InspectorStyleSheetBase::LineNumberAndColumnToOffset(
                         OrdinalNumber::FromZeroBasedInt(column_number));
   *offset = position.ToOffset(*endings).ZeroBasedInt();
   return true;
-}
-
-InspectorStyleSheet* InspectorStyleSheet::Create(
-    InspectorNetworkAgent* network_agent,
-    CSSStyleSheet* page_style_sheet,
-    const String& origin,
-    const String& document_url,
-    InspectorStyleSheetBase::Listener* listener,
-    InspectorResourceContainer* resource_container) {
-  return MakeGarbageCollected<InspectorStyleSheet>(
-      network_agent, page_style_sheet, origin, document_url, listener,
-      resource_container);
 }
 
 InspectorStyleSheet::InspectorStyleSheet(
@@ -1892,7 +1878,7 @@ Element* InspectorStyleSheet::OwnerStyleElement() {
     return nullptr;
 
   if (!IsA<HTMLStyleElement>(owner_element) &&
-      !IsSVGStyleElement(owner_element))
+      !IsA<SVGStyleElement>(owner_element))
     return nullptr;
   return owner_element;
 }
@@ -1920,13 +1906,6 @@ bool InspectorStyleSheet::InspectorStyleSheetText(String* result) {
   return true;
 }
 
-InspectorStyleSheetForInlineStyle* InspectorStyleSheetForInlineStyle::Create(
-    Element* element,
-    Listener* listener) {
-  return MakeGarbageCollected<InspectorStyleSheetForInlineStyle>(element,
-                                                                 listener);
-}
-
 InspectorStyleSheetForInlineStyle::InspectorStyleSheetForInlineStyle(
     Element* element,
     Listener* listener)
@@ -1950,7 +1929,7 @@ bool InspectorStyleSheetForInlineStyle::SetText(
 
   {
     InspectorCSSAgent::InlineStyleOverrideScope override_scope(
-        element_->ownerDocument());
+        &element_->ownerDocument()->GetSecurityContext());
     element_->setAttribute("style", AtomicString(text), exception_state);
   }
   if (!exception_state.HadException())

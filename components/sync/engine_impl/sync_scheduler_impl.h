@@ -46,7 +46,7 @@ class SyncSchedulerImpl : public SyncScheduler {
   ~SyncSchedulerImpl() override;
 
   void Start(Mode mode, base::Time last_poll_time) override;
-  void ScheduleConfiguration(const ConfigurationParams& params) override;
+  void ScheduleConfiguration(ConfigurationParams params) override;
   void Stop() override;
   void ScheduleLocalNudge(ModelTypeSet types,
                           const base::Location& nudge_location) override;
@@ -129,6 +129,8 @@ class SyncSchedulerImpl : public SyncScheduler {
 
   // Helper function for Do{Nudge,Configuration,Poll}SyncCycleJob.
   void HandleFailure(const ModelNeutralState& model_neutral_state);
+
+  void MaybeRecordNigoriOnlyConfigurationFailedHistograms();
 
   // Invoke the Syncer to perform a poll job.
   void DoPollSyncCycleJob();
@@ -280,6 +282,11 @@ class SyncSchedulerImpl : public SyncScheduler {
 
   // Used to prevent changing nudge delays by the server in integration tests.
   bool force_short_nudge_delay_for_test_ = false;
+
+  // Indicates whether HasInvalidAccessTokenWhenNigoriOnlyConfigurationFailed*
+  // histograms already recorded.
+  bool nigori_configuration_failed_recorded = false;
+  bool nigori_configuration_failed_with_5s_backoff_recorded = false;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

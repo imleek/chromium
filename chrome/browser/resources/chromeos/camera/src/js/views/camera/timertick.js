@@ -25,7 +25,7 @@ cca.views.camera.timertick = cca.views.camera.timertick || {};
 
 /**
  * Handler to cancel the active running timer-ticks.
- * @type {function()}
+ * @type {?function()}
  * @private
  */
 cca.views.camera.timertick.cancel_ = null;
@@ -36,12 +36,13 @@ cca.views.camera.timertick.cancel_ = null;
  */
 cca.views.camera.timertick.start = function() {
   cca.views.camera.timertick.cancel_ = null;
-  if (!cca.state.get('timer')) {
+  if (!cca.state.get(cca.state.State.TIMER)) {
     return Promise.resolve();
   }
   return new Promise((resolve, reject) => {
-    var tickTimeout = null;
-    var tickMsg = document.querySelector('#timer-tick-msg');
+    let tickTimeout = null;
+    const tickMsg = cca.assertInstanceof(
+        document.querySelector('#timer-tick-msg'), HTMLElement);
     cca.views.camera.timertick.cancel_ = () => {
       if (tickTimeout) {
         clearTimeout(tickTimeout);
@@ -51,7 +52,7 @@ cca.views.camera.timertick.start = function() {
       reject(new Error('cancel'));
     };
 
-    let tickCounter = cca.state.get('_10sec') ? 10 : 3;
+    let tickCounter = cca.state.get(cca.state.State.TIMER_10SEC) ? 10 : 3;
     const sounds = {
       1: '#sound-tick-final',
       2: '#sound-tick-inc',
@@ -59,7 +60,7 @@ cca.views.camera.timertick.start = function() {
       [tickCounter]: '#sound-tick-start',
     };
     var onTimerTick = () => {
-      if (tickCounter == 0) {
+      if (tickCounter === 0) {
         resolve();
       } else {
         if (sounds[tickCounter] !== undefined) {

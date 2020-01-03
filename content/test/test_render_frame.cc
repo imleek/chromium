@@ -26,7 +26,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/data_url.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_navigation_control.h"
@@ -44,9 +44,9 @@ class MockFrameHost : public mojom::FrameHost {
     return std::move(last_commit_params_);
   }
 
-  service_manager::mojom::InterfaceProviderRequest
-  TakeLastInterfaceProviderRequest() {
-    return std::move(last_interface_provider_request_);
+  mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
+  TakeLastInterfaceProviderReceiver() {
+    return std::move(last_interface_provider_receiver_);
   }
 
   mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
@@ -59,17 +59,17 @@ class MockFrameHost : public mojom::FrameHost {
     did_add_message_to_console_callback_ = std::move(callback);
   }
 
-  // Holds on to the request end of the InterfaceProvider interface whose client
-  // end is bound to the corresponding RenderFrame's |remote_interfaces_| to
-  // facilitate retrieving the most recent |interface_provider_request| in
+  // Holds on to the receiver end of the InterfaceProvider interface whose
+  // client end is bound to the corresponding RenderFrame's |remote_interfaces_|
+  // to facilitate retrieving the most recent |interface_provider_receiver| in
   // tests.
-  void PassLastInterfaceProviderRequest(
-      service_manager::mojom::InterfaceProviderRequest
-          interface_provider_request) {
-    last_interface_provider_request_ = std::move(interface_provider_request);
+  void PassLastInterfaceProviderReceiver(
+      mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
+          interface_provider_receiver) {
+    last_interface_provider_receiver_ = std::move(interface_provider_receiver);
   }
 
-  // Holds on to the request end of the BrowserInterfaceBroker interface whose
+  // Holds on to the receiver end of the BrowserInterfaceBroker interface whose
   // client end is bound to the corresponding RenderFrame's
   // |browser_interface_broker_proxy_| to facilitate retrieving the most recent
   // |browser_interface_broker_receiver| in tests.
@@ -86,8 +86,8 @@ class MockFrameHost : public mojom::FrameHost {
       override {
     last_commit_params_ = std::move(params);
     if (interface_params) {
-      last_interface_provider_request_ =
-          std::move(interface_params->interface_provider_request);
+      last_interface_provider_receiver_ =
+          std::move(interface_params->interface_provider_receiver);
       last_browser_interface_broker_receiver_ =
           std::move(interface_params->browser_interface_broker_receiver);
     }
@@ -130,8 +130,8 @@ class MockFrameHost : public mojom::FrameHost {
 
   void AdoptPortal(const base::UnguessableToken&,
                    AdoptPortalCallback callback) override {
-    std::move(callback).Run(MSG_ROUTING_NONE, FrameReplicationState(),
-                            base::UnguessableToken());
+    std::move(callback).Run(MSG_ROUTING_NONE, viz::FrameSinkId(),
+                            FrameReplicationState(), base::UnguessableToken());
   }
 
   void IssueKeepAliveHandle(
@@ -192,8 +192,8 @@ class MockFrameHost : public mojom::FrameHost {
  private:
   std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params>
       last_commit_params_;
-  service_manager::mojom::InterfaceProviderRequest
-      last_interface_provider_request_;
+  mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
+      last_interface_provider_receiver_;
   mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
       last_browser_interface_broker_receiver_;
 
@@ -214,7 +214,7 @@ TestRenderFrame::TestRenderFrame(RenderFrameImpl::CreateParams params)
       mock_frame_host_(std::make_unique<MockFrameHost>()) {
   MockRenderThread* mock_render_thread =
       static_cast<MockRenderThread*>(RenderThread::Get());
-  mock_frame_host_->PassLastInterfaceProviderRequest(
+  mock_frame_host_->PassLastInterfaceProviderReceiver(
       mock_render_thread->TakeInitialInterfaceProviderRequestForFrame(
           params.routing_id));
   mock_frame_host_->PassLastBrowserInterfaceBrokerReceiver(
@@ -240,7 +240,7 @@ void TestRenderFrame::Navigate(network::mojom::URLResponseHeadPtr head,
         std::move(common_params), std::move(commit_params), std::move(head),
         mojo::ScopedDataPipeConsumerHandle(),
         network::mojom::URLLoaderClientEndpointsPtr(),
-        std::make_unique<blink::URLLoaderFactoryBundleInfo>(), base::nullopt,
+        std::make_unique<blink::PendingURLLoaderFactoryBundle>(), base::nullopt,
         blink::mojom::ControllerServiceWorkerInfoPtr(),
         blink::mojom::ServiceWorkerProviderInfoForClientPtr(),
         mojo::NullRemote() /* prefetch_loader_factory */,
@@ -329,8 +329,8 @@ void TestRenderFrame::BeginNavigation(
     // BeginNavigation will be called from Blink and we should avoid
     // going through browser process in this case.
     GURL url = info->url_request.Url();
-    auto navigation_params = std::make_unique<blink::WebNavigationParams>();
-    navigation_params->url = url;
+    auto navigation_params =
+        blink::WebNavigationParams::CreateFromInfo(*info.get());
     if (!url.IsAboutBlank() && !url.IsAboutSrcdoc()) {
       std::string mime_type, charset, data;
       if (!net::DataURL::Parse(url, &mime_type, &charset, &data)) {
@@ -361,9 +361,9 @@ void TestRenderFrame::SetDidAddMessageToConsoleCallback(
   mock_frame_host_->SetDidAddMessageToConsoleCallback(std::move(callback));
 }
 
-service_manager::mojom::InterfaceProviderRequest
-TestRenderFrame::TakeLastInterfaceProviderRequest() {
-  return mock_frame_host_->TakeLastInterfaceProviderRequest();
+mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
+TestRenderFrame::TakeLastInterfaceProviderReceiver() {
+  return mock_frame_host_->TakeLastInterfaceProviderReceiver();
 }
 
 mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>

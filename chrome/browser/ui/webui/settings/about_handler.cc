@@ -22,6 +22,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -340,11 +341,11 @@ AboutHandler* AboutHandler::Create(content::WebUIDataSource* html_source,
                          os_with_linux_license);
   html_source->AddBoolean("aboutEnterpriseManaged", IsEnterpriseManaged());
 
-  html_source->AddString("endOfLifeMessage", l10n_util::GetStringFUTF16(
-                                                 IDS_EOL_NOTIFICATION_EOL,
-                                                 ui::GetChromeOSDeviceName()));
-  html_source->AddString("endOfLifeLearnMoreURL",
-                         base::ASCIIToUTF16(chrome::kEolNotificationURL));
+  html_source->AddString("endOfLifeMessage",
+                         l10n_util::GetStringFUTF16(
+                             IDS_SETTINGS_ABOUT_PAGE_LAST_UPDATE_MESSAGE,
+                             ui::GetChromeOSDeviceName(),
+                             base::ASCIIToUTF16(chrome::kEolNotificationURL)));
 #endif
 
   return new AboutHandler();
@@ -675,7 +676,8 @@ void AboutHandler::OnGetEndOfLifeInfo(
     response.SetStringKey("aboutPageEndOfLifeMessage",
                           l10n_util::GetStringFUTF16(
                               IDS_SETTINGS_ABOUT_PAGE_END_OF_LIFE_MESSAGE,
-                              base::TimeFormatMonthAndYear(eol_info.eol_date)));
+                              base::TimeFormatMonthAndYear(eol_info.eol_date),
+                              base::ASCIIToUTF16(chrome::kEolNotificationURL)));
   } else {
     response.SetBoolKey("hasEndOfLife", false);
     response.SetStringKey("aboutPageEndOfLifeMessage", "");

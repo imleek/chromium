@@ -25,7 +25,6 @@ class Shadow;
 }  // namespace ui
 
 namespace views {
-class ImageButton;
 class Widget;
 }  // namespace views
 
@@ -148,7 +147,7 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
   // by |new_grid_y|. Returns the settings object of the layer the caller should
   // observe.
   std::unique_ptr<ui::ScopedLayerAnimationSettings> UpdateYPositionAndOpacity(
-      int new_grid_y,
+      float new_grid_y,
       float opacity,
       OverviewSession::UpdateAnimationSettingsCallback callback);
 
@@ -172,7 +171,7 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
 
   // Sets the bounds of the window shadow. If |bounds_in_screen| is nullopt,
   // the shadow is hidden.
-  void SetShadowBounds(base::Optional<gfx::Rect> bounds_in_screen);
+  void SetShadowBounds(base::Optional<gfx::RectF> bounds_in_screen);
 
   // Updates the rounded corners and shadow on this overview window item.
   void UpdateRoundedCornersAndShadow();
@@ -260,9 +259,8 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
     unclipped_size_ = unclipped_size;
   }
 
-  views::ImageButton* GetCloseButtonForTesting();
-  float GetCloseButtonOpacityForTesting() const;
-  float GetTitlebarOpacityForTesting() const;
+  void set_activate_on_unminimized(bool val) { activate_on_unminimized_ = val; }
+
   gfx::Rect GetShadowBoundsForTesting();
   RoundedLabelWidget* cannot_snap_widget_for_testing() {
     return cannot_snap_widget_.get();
@@ -272,10 +270,8 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
   }
 
  private:
-  friend class OverviewSessionRoundedCornerTest;
   friend class OverviewSessionTest;
-  FRIEND_TEST_ALL_PREFIXES(SplitViewOverviewSessionTest,
-                           OverviewUnsnappableIndicatorVisibility);
+  FRIEND_TEST_ALL_PREFIXES(SplitViewOverviewSessionTest, Clipping);
 
   // Returns the target bounds of |window_|. Same as |target_bounds_|, with some
   // insets.
@@ -304,8 +300,8 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
                      OverviewAnimationType animation_type,
                      bool is_first_update);
 
-  // Creates the window label.
-  void CreateWindowLabel();
+  // Creates |item_widget_|, which holds |overview_item_view_|.
+  void CreateItemWidget();
 
   // Updates the |item_widget|'s bounds. Any change in bounds will be animated
   // from the current bounds to the new bounds as per the |animation_type|.
@@ -314,9 +310,6 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
   // Animates opacity of the |transform_window_| and its caption to |opacity|
   // using |animation_type|.
   void AnimateOpacity(float opacity, OverviewAnimationType animation_type);
-
-  // Allows a test to directly set animation state.
-  gfx::SlideAnimation* GetBackgroundViewAnimation();
 
   // Called before dragging. Scales up the window a little bit to indicate its
   // selection and stacks the window at the top of the Z order in order to keep
@@ -411,6 +404,13 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
 
   bool prepared_for_overview_ = false;
 
+  // If true, the next time |window_| is uniminimized, we will activate it (and
+  // end overview). Done this way because some windows (ARC app windows) have
+  // their window states changed async, so we need to wait until the window is
+  // fully unminimized before activation as opposed to having two consecutive
+  // calls.
+  bool activate_on_unminimized_ = false;
+
   // This has a value when there is a snapped window, or a window about to be
   // snapped (triggering a splitview preview area). This will be set when items
   // are positioned in OverviewGrid. The bounds delivered in |SetBounds| are the
@@ -423,14 +423,14 @@ class ASH_EXPORT OverviewItem : public views::ButtonListener,
   // Stores the last translations of the windows affected by |SetBounds|. Used
   // for ease of calculations when swiping away overview mode using home
   // launcher gesture.
-  base::flat_map<aura::Window*, int> translation_y_map_;
+  base::flat_map<aura::Window*, float> translation_y_map_;
 
   // The shadow around the overview window. Shadows the original window, not
   // |item_widget_|. Done here instead of on the original window because of the
   // rounded edges mask applied on entering overview window.
   std::unique_ptr<ui::Shadow> shadow_;
 
-  base::WeakPtrFactory<OverviewItem> weak_ptr_factory_;
+  base::WeakPtrFactory<OverviewItem> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(OverviewItem);
 };

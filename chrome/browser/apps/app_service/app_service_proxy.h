@@ -15,7 +15,6 @@
 #include "chrome/services/app_service/public/cpp/app_registry_cache.h"
 #include "chrome/services/app_service/public/cpp/icon_cache.h"
 #include "chrome/services/app_service/public/cpp/icon_coalescer.h"
-#include "chrome/services/app_service/public/cpp/instance_registry.h"
 #include "chrome/services/app_service/public/cpp/preferred_apps.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -28,8 +27,11 @@
 #include "chrome/browser/apps/app_service/built_in_chromeos_apps.h"
 #include "chrome/browser/apps/app_service/crostini_apps.h"
 #include "chrome/browser/apps/app_service/extension_apps.h"
+#include "chrome/browser/apps/app_service/web_apps.h"
+#include "chrome/services/app_service/public/cpp/instance_registry.h"
 #endif  // OS_CHROMEOS
 
+class PrefRegistrySimple;
 class Profile;
 
 namespace apps {
@@ -40,6 +42,7 @@ class UninstallDialog;
 struct PauseData {
   int hours;
   int minutes;
+  bool should_show_pause_dialog;
 };
 
 // Singleton (per Profile) proxy and cache of an App Service's apps.
@@ -58,6 +61,8 @@ class AppServiceProxy : public KeyedService,
 
   explicit AppServiceProxy(Profile* profile);
   ~AppServiceProxy() override;
+
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   void ReInitializeForTesting(Profile* profile);
 
@@ -214,6 +219,9 @@ class AppServiceProxy : public KeyedService,
   void Clone(mojo::PendingReceiver<apps::mojom::Subscriber> receiver) override;
   void OnPreferredAppSet(const std::string& app_id,
                          apps::mojom::IntentFilterPtr intent_filter) override;
+  void OnPreferredAppRemoved(
+      const std::string& app_id,
+      apps::mojom::IntentFilterPtr intent_filter) override;
   void InitializePreferredApps(base::Value preferred_apps) override;
 
   void LoadIconForPauseDialog(const apps::AppUpdate& update,
@@ -262,7 +270,10 @@ class AppServiceProxy : public KeyedService,
   std::unique_ptr<BuiltInChromeOsApps> built_in_chrome_os_apps_;
   std::unique_ptr<CrostiniApps> crostini_apps_;
   std::unique_ptr<ExtensionApps> extension_apps_;
+  // TODO(crbug.com/877898): Erase extension_web_apps_. One of these is always
+  // nullptr.
   std::unique_ptr<ExtensionApps> extension_web_apps_;
+  std::unique_ptr<WebApps> web_apps_;
 
   bool arc_is_registered_ = false;
 

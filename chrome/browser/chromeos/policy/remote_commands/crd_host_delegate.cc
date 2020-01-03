@@ -26,7 +26,6 @@
 #include "net/base/load_flags.h"
 #include "net/http/http_request_headers.h"
 #include "remoting/host/it2me/it2me_native_messaging_host_chromeos.h"
-#include "services/network/public/cpp/simple_url_loader.h"
 #include "ui/base/user_activity/user_activity_detector.h"
 
 namespace policy {
@@ -56,7 +55,8 @@ constexpr char kCRDConnectAuth[] = "authServiceWithToken";
 constexpr char kCRDConnectXMPPServer[] = "xmppServerAddress";
 constexpr char kCRDConnectXMPPTLS[] = "xmppServerUseTls";
 constexpr char kCRDConnectDirectoryBot[] = "directoryBotJid";
-constexpr char kCRDConnectNoDialogs[] = "noDialogs";
+constexpr char kCRDConnectSuppressUserDialogs[] = "suppressUserDialogs";
+constexpr char kCRDConnectSuppressNotifications[] = "suppressNotifications";
 constexpr char kCRDTerminateUponInput[] = "terminateUponInput";
 
 // Connect message parameter values:
@@ -79,58 +79,13 @@ constexpr char kCRDAccessCodeLifetimeKey[] = "accessCodeLifetime";
 
 constexpr char kCRDConnectClientKey[] = "client";
 
-constexpr char kICEConfigURL[] =
-    "https://www.googleapis.com/chromoting/v1/@me/iceconfig";
-
 // OAuth2 Token scopes
 constexpr char kCloudDevicesOAuth2Scope[] =
     "https://www.googleapis.com/auth/clouddevices";
-constexpr char kChromotingOAuth2Scope[] =
-    "https://www.googleapis.com/auth/chromoting";
 constexpr char kChromotingRemoteSupportOAuth2Scope[] =
     "https://www.googleapis.com/auth/chromoting.remote.support";
 constexpr char kTachyonOAuth2Scope[] =
     "https://www.googleapis.com/auth/tachyon";
-
-net::NetworkTrafficAnnotationTag CreateIceConfigRequestAnnotation() {
-  return net::DefineNetworkTrafficAnnotation("CRD_ice_config_request", R"(
-        semantics {
-          sender: "Chrome Remote Desktop"
-          description:
-            "Request is used by Chrome Remote Desktop to fetch ICE "
-            "configuration which contains list of STUN & TURN servers and TURN "
-            "credentials."
-          trigger:
-            "When a Chrome Remote Desktop session is being connected and "
-            "periodically while a session is active, as necessary. Currently "
-            "the API issues credentials that expire every 24 hours, so this "
-            "request will only be sent again while session is active more than "
-            "24 hours and it needs to renegotiate the ICE connection. The 24 "
-            "hour period is controlled by the server and may change. In some "
-            "cases, e.g. if direct connection is used, it will not trigger "
-            "periodically."
-          data: "None."
-          destination: GOOGLE_OWNED_SERVICE
-        }
-        policy {
-          cookies_allowed: NO
-          setting:
-            "This feature cannot be disabled by settings. You can block Chrome "
-            "Remote Desktop as specified here: "
-            "https://support.google.com/chrome/?p=remote_desktop"
-          chrome_policy {
-            RemoteAccessHostFirewallTraversal {
-              policy_options {mode: MANDATORY}
-              RemoteAccessHostFirewallTraversal: false
-            }
-          }
-        }
-        comments:
-          "Above specified policy is only applicable on the host side and "
-          "doesn't have effect in Android and iOS client apps. The product "
-          "is shipped separately from Chromium, except on Chrome OS."
-        )");
-}
 
 }  // namespace
 
@@ -205,10 +160,6 @@ void CRDHostDelegate::FetchOAuthToken(
     scopes.insert(kTachyonOAuth2Scope);
   }
 
-  // TODO(joedow): Remove these scopes once we migrate to FTL signaling.
-  scopes.insert(GaiaConstants::kGoogleTalkOAuth2Scope);
-  scopes.insert(kChromotingOAuth2Scope);
-
   oauth_success_callback_ = std::move(success_callback);
   error_callback_ = std::move(error_callback);
 
@@ -234,65 +185,8 @@ void CRDHostDelegate::OnGetTokenFailure(
            error.ToString());
 }
 
-void CRDHostDelegate::FetchICEConfig(
-    const std::string& oauth_token,
-    DeviceCommandStartCRDSessionJob::ICEConfigCallback success_callback,
-    DeviceCommandStartCRDSessionJob::ErrorCallback error_callback) {
-  DCHECK(!ice_success_callback_);
-  DCHECK(!error_callback_);
-
-  ice_success_callback_ = std::move(success_callback);
-  error_callback_ = std::move(error_callback);
-
-  auto ice_request = std::make_unique<network::ResourceRequest>();
-  ice_request->url = GURL(kICEConfigURL);
-  ice_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
-
-  ice_request->headers.SetHeader(net::HttpRequestHeaders::kAuthorization,
-                                 "Bearer " + oauth_token);
-  auto loader_factory =
-      content::BrowserContext::GetDefaultStoragePartition(GetKioskProfile())
-          ->GetURLLoaderFactoryForBrowserProcess();
-
-  ice_config_loader_ = network::SimpleURLLoader::Create(
-      std::move(ice_request), CreateIceConfigRequestAnnotation());
-  ice_config_loader_->DownloadToString(
-      loader_factory.get(),
-      base::BindOnce(&CRDHostDelegate::OnICEConfigurationLoaded,
-                     weak_factory_.GetWeakPtr()),
-      network::SimpleURLLoader::kMaxBoundedStringDownloadSize);
-}
-
-void CRDHostDelegate::OnICEConfigurationLoaded(
-    std::unique_ptr<std::string> response_body) {
-  ice_config_loader_.reset();
-  if (response_body) {
-    std::unique_ptr<base::Value> value =
-        base::JSONReader::ReadDeprecated(*response_body);
-    if (!value || !value->is_dict()) {
-      ice_success_callback_.Reset();
-      std::move(error_callback_)
-          .Run(DeviceCommandStartCRDSessionJob::FAILURE_NO_ICE_CONFIG,
-               "Could not parse config");
-      return;
-    }
-    auto* config = value->FindKeyOfType("data", base::Value::Type::DICTIONARY);
-    if (config) {
-      error_callback_.Reset();
-      std::move(ice_success_callback_).Run(std::move(*config));
-      return;
-    }
-  }
-
-  ice_success_callback_.Reset();
-  std::move(error_callback_)
-      .Run(DeviceCommandStartCRDSessionJob::FAILURE_NO_ICE_CONFIG,
-           std::string());
-}
-
 void CRDHostDelegate::StartCRDHostAndGetCode(
     const std::string& oauth_token,
-    base::Value unused_ice_config,
     bool terminate_upon_input,
     DeviceCommandStartCRDSessionJob::AccessCodeCallback success_callback,
     DeviceCommandStartCRDSessionJob::ErrorCallback error_callback) {
@@ -302,8 +196,12 @@ void CRDHostDelegate::StartCRDHostAndGetCode(
 
   // Store all parameters for future connect call.
   base::Value connect_params(base::Value::Type::DICTIONARY);
-  std::string username =
+  CoreAccountId account_id =
       chromeos::DeviceOAuth2TokenServiceFactory::Get()->GetRobotAccountId();
+
+  // TODO(msarda): This conversion will not be correct once account id is
+  // migrated to be the Gaia ID on ChromeOS. Fix it.
+  std::string username = account_id.ToString();
 
   connect_params.SetKey(kCRDConnectUserName, base::Value(username));
   connect_params.SetKey(kCRDConnectAuth, base::Value("oauth2:" + oauth_token));
@@ -312,7 +210,8 @@ void CRDHostDelegate::StartCRDHostAndGetCode(
   connect_params.SetKey(kCRDConnectXMPPTLS, base::Value(true));
   connect_params.SetKey(kCRDConnectDirectoryBot,
                         base::Value(kCRDConnectDirectoryBotValue));
-  connect_params.SetKey(kCRDConnectNoDialogs, base::Value(true));
+  connect_params.SetKey(kCRDConnectSuppressUserDialogs, base::Value(true));
+  connect_params.SetKey(kCRDConnectSuppressNotifications, base::Value(true));
   connect_params.SetKey(kCRDTerminateUponInput,
                         base::Value(terminate_upon_input));
   connect_params_ = std::move(connect_params);

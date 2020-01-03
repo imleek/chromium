@@ -204,6 +204,7 @@ class ImageTransferCacheEntryTest
   scoped_refptr<gl::GLShareGroup> share_group_;
   scoped_refptr<gl::GLContext> gl_context_;
   sk_sp<GrContext> gr_context_;
+  gl::DisableNullDrawGLBindings enable_pixel_output_;
 };
 
 TEST_P(ImageTransferCacheEntryTest, Deserialize) {
@@ -396,7 +397,7 @@ std::string TestParamToString(
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          ImageTransferCacheEntryTest,
                          ::testing::Values(YUVDecodeFormat::kYUV3,
                                            YUVDecodeFormat::kYVU3,

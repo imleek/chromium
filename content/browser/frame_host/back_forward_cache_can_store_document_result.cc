@@ -71,7 +71,11 @@ std::string BackForwardCacheCanStoreDocumentResult::NotRestoredReasonToString(
     case Reason::kBlocklistedFeatures:
       return "blocklisted features: " + DescribeFeatures(blocklisted_features_);
     case Reason::kDisableForRenderFrameHostCalled:
-      return "BackForwardCache::DisableForRenderFrameHost() was called";
+      return "BackForwardCache::DisableForRenderFrameHost() was called: " +
+             base::JoinString(
+                 std::vector<std::string>(disabled_reasons_.begin(),
+                                          disabled_reasons_.end()),
+                 ", ");
     case Reason::kDomainNotAllowed:
       return "This domain is not allowed to be stored in BackForwardCache";
     case Reason::kHTTPMethodNotGET:
@@ -88,8 +92,6 @@ std::string BackForwardCacheCanStoreDocumentResult::NotRestoredReasonToString(
       return "renderer process is killed";
     case Reason::kRendererProcessCrashed:
       return "renderer process crashed";
-    case Reason::kDialog:
-      return "dialog";
     case Reason::kGrantedMediaStreamAccess:
       return "granted media stream access";
     case Reason::kSchedulerTrackedFeatureUsed:
@@ -100,6 +102,20 @@ std::string BackForwardCacheCanStoreDocumentResult::NotRestoredReasonToString(
       return "cache flushed";
     case Reason::kServiceWorkerVersionActivation:
       return "service worker version is activated";
+    case Reason::kSessionRestored:
+      return "session restored";
+    case Reason::kUnknown:
+      return "unknown";
+    case Reason::kServiceWorkerPostMessage:
+      return "postMessage from service worker";
+    case Reason::kEnteredBackForwardCacheBeforeServiceWorkerHostAdded:
+      return "frame already in the cache when service worker host was added";
+    case Reason::kRenderFrameHostReused_SameSite:
+      return "RenderFrameHost is reused for a same-site navigation";
+    case Reason::kRenderFrameHostReused_CrossSite:
+      return "RenderFrameHost is reused for a cross-site navigation";
+    case Reason::kNotMostRecentNavigationEntry:
+      return "navigation entry is not the most recent one for this document";
   }
 }
 
@@ -113,6 +129,24 @@ void BackForwardCacheCanStoreDocumentResult::NoDueToFeatures(
   not_stored_reasons_.set(static_cast<size_t>(
       BackForwardCacheMetrics::NotRestoredReason::kBlocklistedFeatures));
   blocklisted_features_ |= features;
+}
+
+void BackForwardCacheCanStoreDocumentResult::NoDueToRelatedActiveContents(
+    base::Optional<ShouldSwapBrowsingInstance>
+        browsing_instance_not_swapped_reason) {
+  not_stored_reasons_.set(static_cast<size_t>(
+      BackForwardCacheMetrics::NotRestoredReason::kRelatedActiveContentsExist));
+  browsing_instance_not_swapped_reason_ = browsing_instance_not_swapped_reason;
+}
+
+void BackForwardCacheCanStoreDocumentResult::
+    NoDueToDisableForRenderFrameHostCalled(
+        const std::set<std::string>& reasons) {
+  not_stored_reasons_.set(
+      static_cast<size_t>(BackForwardCacheMetrics::NotRestoredReason::
+                              kDisableForRenderFrameHostCalled));
+  for (const std::string& reason : reasons)
+    disabled_reasons_.insert(reason);
 }
 
 BackForwardCacheCanStoreDocumentResult::

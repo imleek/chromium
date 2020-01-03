@@ -40,9 +40,6 @@ class PageActionIconView : public IconLabelBubbleView {
  public:
   class Delegate {
    public:
-    // Gets the color to use for the ink highlight.
-    virtual SkColor GetPageActionInkDropColor() const = 0;
-
     // Gets the opacity to use for the ink highlight.
     virtual float GetPageActionInkDropVisibleOpacity() const;
 
@@ -70,9 +67,8 @@ class PageActionIconView : public IconLabelBubbleView {
   // "call to action" color.
   void SetActive(bool active);
 
-  // Updates the visibility of the icon based on the associated model state,
-  // returns whether any change occurred.
-  virtual bool Update() = 0;
+  // Hide the icon on user input in progress and invokes UpdateImpl().
+  void Update();
 
   // Returns the bubble instance for the icon.
   virtual views::BubbleDialogDelegateView* GetBubble() const = 0;
@@ -97,6 +93,7 @@ class PageActionIconView : public IconLabelBubbleView {
 
   PageActionIconView(CommandUpdater* command_updater,
                      int command_id,
+                     IconLabelBubbleView::Delegate* parent_delegate,
                      Delegate* delegate,
                      const gfx::FontList& = gfx::FontList());
 
@@ -117,13 +114,11 @@ class PageActionIconView : public IconLabelBubbleView {
   virtual void OnPressed(bool activated) {}
 
   // views::IconLabelBubbleView:
-  SkColor GetTextColor() const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   base::string16 GetTooltipText(const gfx::Point& p) const override;
   void ViewHierarchyChanged(
       const views::ViewHierarchyChangedDetails& details) override;
   void OnThemeChanged() override;
-  SkColor GetInkDropBaseColor() const override;
   bool ShouldShowSeparator() const final;
   void NotifyClick(const ui::Event& event) override;
   bool IsTriggerableEvent(const ui::Event& event) override;
@@ -142,6 +137,7 @@ class PageActionIconView : public IconLabelBubbleView {
   // IconLabelBubbleView:
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   void OnTouchUiChanged() override;
+  const char* GetClassName() const override;
 
   // Updates the icon image after some state has changed.
   virtual void UpdateIconImage();
@@ -162,6 +158,10 @@ class PageActionIconView : public IconLabelBubbleView {
 
   // Delegate accessor for subclasses.
   Delegate* delegate() const { return delegate_; }
+
+  // Update the icon and sets visibility appropriate for the associated model
+  // state.
+  virtual void UpdateImpl() = 0;
 
  private:
   void UpdateBorder();

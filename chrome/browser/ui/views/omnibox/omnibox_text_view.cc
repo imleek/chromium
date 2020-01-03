@@ -205,8 +205,7 @@ void OmniboxTextView::SetText(const SuggestionAnswer::ImageLine& line,
   if (!line.text_fields().empty()) {
     constexpr int kMaxDisplayLines = 3;
     const SuggestionAnswer::TextField& first_field = line.text_fields().front();
-    if (first_field.has_num_lines() && first_field.num_lines() > 1 &&
-        render_text_->MultilineSupported()) {
+    if (first_field.has_num_lines() && first_field.num_lines() > 1) {
       render_text_->SetMultiline(true);
       render_text_->SetMaxLines(
           std::min(kMaxDisplayLines, first_field.num_lines()));
@@ -269,7 +268,8 @@ void OmniboxTextView::ReapplyStyling() {
 
 std::unique_ptr<gfx::RenderText> OmniboxTextView::CreateRenderText(
     const base::string16& text) const {
-  auto render_text = gfx::RenderText::CreateHarfBuzzInstance();
+  std::unique_ptr<gfx::RenderText> render_text =
+      gfx::RenderText::CreateRenderText();
   render_text->SetDisplayRect(gfx::Rect(gfx::Size(INT_MAX, 0)));
   render_text->SetCursorEnabled(false);
   render_text->SetElideBehavior(gfx::ELIDE_TAIL);

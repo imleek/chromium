@@ -38,6 +38,7 @@ namespace media {
 class AudioOutputRedirector;
 class InterleavedChannelMixer;
 class LoopbackHandler;
+enum class LoopbackInterruptReason;
 class MixerServiceReceiver;
 class MixerOutputStream;
 class PostProcessingPipelineFactory;
@@ -66,7 +67,8 @@ class PostProcessingPipelineFactory;
 //  * Otherwise, the output sample rate remains unchanged.
 class StreamMixer {
  public:
-  StreamMixer();
+  StreamMixer(
+      scoped_refptr<base::SequencedTaskRunner> io_task_runner = nullptr);
   ~StreamMixer();
 
   int num_output_channels() const { return num_output_channels_; }
@@ -116,9 +118,11 @@ class StreamMixer {
   void SetNumOutputChannels(int num_channels);
 
   // Test-only methods.
-  StreamMixer(std::unique_ptr<MixerOutputStream> output,
-              std::unique_ptr<base::Thread> mixer_thread,
-              scoped_refptr<base::SingleThreadTaskRunner> mixer_task_runner);
+  StreamMixer(
+      std::unique_ptr<MixerOutputStream> output,
+      std::unique_ptr<base::Thread> mixer_thread,
+      scoped_refptr<base::SingleThreadTaskRunner> mixer_task_runner,
+      scoped_refptr<base::SequencedTaskRunner> io_task_runner = nullptr);
   void ResetPostProcessorsForTest(
       std::unique_ptr<PostProcessingPipelineFactory> pipeline_factory,
       const std::string& pipeline_json);
@@ -157,7 +161,7 @@ class StreamMixer {
                             int expected_input_channels);
   void FinalizeOnMixerThread();
   void Start();
-  void Stop();
+  void Stop(LoopbackInterruptReason reason);
   void CheckChangeOutputParams(int num_input_channels,
                                int input_samples_per_second);
   void SignalError(MixerInput::Source::MixerError error);

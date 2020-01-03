@@ -23,9 +23,9 @@ import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabBuilder;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.ChromeTabCreator;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -120,8 +120,8 @@ public class StartupTabPreloader implements ProfileManager.Observer, Destroyable
      * {@link ChromeTabCreator}.
      */
     @Override
-    public void onProfileCreated(Profile profile) {
-        try (TraceEvent e = TraceEvent.scoped("StartupTabPreloader.onProfileCreated")) {
+    public void onProfileAdded(Profile profile) {
+        try (TraceEvent e = TraceEvent.scoped("StartupTabPreloader.onProfileAdded")) {
             // We only care about the first non-incognito profile that's created during startup.
             if (profile.isOffTheRecord()) return;
 

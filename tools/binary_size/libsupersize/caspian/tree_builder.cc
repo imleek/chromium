@@ -7,33 +7,15 @@
 #include <algorithm>
 #include <iostream>
 #include <map>
+#include <utility>
 
 namespace caspian {
 
 namespace {
 /** Name used by a directory created to hold symbols with no name. */
+constexpr const char kComponentSep = '>';
+constexpr const char kPathSep = '/';
 constexpr const char* kNoName = "(No path)";
-constexpr const char* kNoComponent = "(No component)";
-const char kPathSep = '/';
-const char kComponentSep = '>';
-
-size_t LastSeparatorIndex(std::string_view str, char sep, char othersep) {
-  size_t sep_idx = str.find_last_of(sep);
-  size_t path_idx = str.find_last_of(othersep);
-  if (sep_idx != std::string_view::npos && path_idx != std::string_view::npos) {
-    return std::max(sep_idx, path_idx);
-  } else if (sep_idx == std::string_view::npos) {
-    return path_idx;
-  } else {
-    return sep_idx;
-  }
-}
-
-std::string_view DirName(std::string_view path, char sep, char othersep) {
-  size_t sep_idx = LastSeparatorIndex(path, sep, othersep);
-  return sep_idx != std::string_view::npos ? path.substr(0, sep_idx)
-                                           : std::string_view();
-}
 }  // namespace
 
 TreeBuilder::TreeBuilder(SizeInfo* size_info) {
@@ -41,6 +23,7 @@ TreeBuilder::TreeBuilder(SizeInfo* size_info) {
   for (const Symbol& sym : size_info->raw_symbols) {
     symbols_.push_back(&sym);
   }
+  size_info_ = size_info;
 }
 
 TreeBuilder::TreeBuilder(DeltaSizeInfo* size_info) {
@@ -48,120 +31,166 @@ TreeBuilder::TreeBuilder(DeltaSizeInfo* size_info) {
   for (const DeltaSymbol& sym : size_info->delta_symbols) {
     symbols_.push_back(&sym);
   }
+  size_info_ = size_info;
 }
 
 TreeBuilder::~TreeBuilder() = default;
 
 void TreeBuilder::Build(
-    bool group_by_component,
+    std::unique_ptr<BaseLens> lens,
+    char separator,
     bool method_count_mode,
     std::vector<std::function<bool(const BaseSymbol&)>> filters) {
-  group_by_component_ = group_by_component;
+  lens_ = std::move(lens);
   method_count_mode_ = method_count_mode;
   filters_ = filters;
-  sep_ = group_by_component ? kComponentSep : kPathSep;
+  sep_ = separator;
 
   // Initialize tree root.
   root_.container_type = ContainerType::kDirectory;
-  owned_strings_.emplace_back(1, sep_);
-  root_.id_path = owned_strings_.back();
-  _parents[""] = &root_;
+  root_.id_path = GroupedPath{"", ""};
+  _parents[root_.id_path] = &root_;
 
-  std::unordered_map<std::string_view, std::vector<const BaseSymbol*>>
-      symbols_by_source_path;
+  std::unordered_map<GroupedPath, std::vector<const BaseSymbol*>>
+      symbols_by_grouped_path;
   for (const BaseSymbol* sym : symbols_) {
     if (ShouldIncludeSymbol(*sym)) {
-      std::string_view key = sym->SourcePath();
-      if (key == nullptr) {
-        key = sym->ObjectPath();
-      }
-      symbols_by_source_path[key].push_back(sym);
+      GroupedPath key = GroupedPath{
+          lens_->ParentName(*sym),
+          sym->SourcePath() ? sym->SourcePath() : sym->ObjectPath()};
+      symbols_by_grouped_path[key].push_back(sym);
     }
   }
-  for (const auto& pair : symbols_by_source_path) {
+  for (const auto& pair : symbols_by_grouped_path) {
     AddFileEntry(pair.first, pair.second);
   }
 }
 
 namespace {
 bool CompareAbsSize(const TreeNode* const& l, const TreeNode* const& r) {
+  // Sort nodes by size in descending order.
+  // Sort nodes with same size in alphabetically ascending order.
   float l_size = abs(l->size);
   float r_size = abs(r->size);
-  if (l_size == r_size) {
-    return l->id_path < r->id_path;
-  }
-  return abs(l->size) > abs(r->size);
+  return (l_size != r_size) ? abs(l->size) > abs(r->size)
+                            : l->id_path < r->id_path;
 }
 
 bool CompareCount(const TreeNode* const& l, const TreeNode* const& r) {
+  // Sort nodes by size in descending order.
+  // Sort nodes with same count in alphabetically ascending order.
+  // Particularly relevant for method count mode, where we get a lot of dex
+  // symbols with exactly the same size.
   int32_t l_count = l->node_stats.SumCount();
   int32_t r_count = r->node_stats.SumCount();
-  if (l_count == r_count) {
-    return l->id_path < r->id_path;
-  }
-  return l_count > r_count;
+  return (l_count != r_count) ? l_count > r_count : l->id_path < r->id_path;
 }
 }  // namespace
+
+TreeNode* TreeBuilder::Find(std::string_view path) {
+  std::vector<std::string_view> id_paths;
+  while (!path.empty()) {
+    size_t idx = (sep_ == kComponentSep) ? path.find_first_of("/>")
+                                         : path.find_first_of(kPathSep);
+
+    id_paths.push_back(path.substr(0, idx));
+    if (idx == std::string_view::npos) {
+      break;
+    }
+    path = path.substr(idx + 1);
+  }
+
+  TreeNode* node = &root_;
+  for (std::string_view id_path : id_paths) {
+    TreeNode* old_node = node;
+    node = nullptr;
+    for (auto* child : old_node->children) {
+      if (child->id_path.ShortName(sep_) == id_path) {
+        node = child;
+        break;
+      }
+    }
+    if (node == nullptr) {
+      return nullptr;
+    }
+  }
+  return node;
+}
 
 Json::Value TreeBuilder::Open(const char* path) {
   // Returns a string that can be parsed to a JS object.
   static std::string result;
-  const auto node = _parents.find(path);
 
   TreeNode::CompareFunc node_sort_func =
       method_count_mode_ ? &CompareCount : &CompareAbsSize;
 
-  if (node != _parents.end()) {
-    Json::Value v;
-    node->second->WriteIntoJson(&v, 1, node_sort_func);
-    return v;
-  } else {
+  TreeNode* node = Find(path);
+  if (node == nullptr) {
     std::cerr << "Tried to open nonexistent node with path: " << path
               << std::endl;
     exit(1);
   }
+  Json::Value v;
+  node->WriteIntoJson(1, node_sort_func, size_info_->IsSparse(), &v);
+  return v;
 }
 
-void TreeBuilder::AddFileEntry(const std::string_view source_path,
+void TreeBuilder::AddFileEntry(GroupedPath grouped_path,
                                const std::vector<const BaseSymbol*>& symbols) {
   // Creates a single file node with a child for each symbol in that file.
-  TreeNode* file_node = new TreeNode();
-  file_node->container_type = ContainerType::kFile;
 
-  if (source_path.empty()) {
-    file_node->id_path = kNoName;
-  } else {
-    file_node->id_path = source_path;
-  }
-  if (group_by_component_) {
-    std::string component;
-    if (symbols[0]->Component() && *symbols[0]->Component()) {
-      component = symbols[0]->Component();
-    } else {
-      component = kNoComponent;
-    }
-    owned_strings_.push_back(component + std::string(1, kComponentSep) +
-                             std::string(file_node->id_path));
-    file_node->id_path = owned_strings_.back();
-  }
+  // In legacy .size files, unattributed .dex symbols symbols aggregated and
+  // attributed to a path which is actually a directory. Therefore it's
+  // possible that a TreeNode has already been created for |grouped_path|. This
+  // is made slightly more complicated by the fact that _parents[""] is root,
+  // but we do want to create a a new (No path) file entry.
 
-  file_node->short_name_index =
-      LastSeparatorIndex(file_node->id_path, sep_, kPathSep) + 1;
-  _parents[file_node->id_path] = file_node;
-  // TODO: Initialize file type, source path, component
-
+  std::vector<TreeNode*> symbol_nodes;
   // Create symbol nodes.
+  NodeStats node_stats;
   for (const BaseSymbol* sym : symbols) {
+    if (sym->Pss() == 0.0f) {
+      // Even though unchanged symbols aren't displayed in the viewer, we need
+      // to aggregate counts of all symbol types in |node_stats.count| to know
+      // if all child symbols of a node have been added or removed, which is
+      // true if |count| == |added| or |count| == |removed|.
+      node_stats += NodeStats(*sym);
+      continue;
+    }
     TreeNode* symbol_node = new TreeNode();
     symbol_node->container_type = ContainerType::kSymbol;
-    symbol_node->id_path = sym->FullName();
+    symbol_node->id_path =
+        GroupedPath{"", sym->IsDex() ? sym->TemplateName() : sym->FullName()};
     symbol_node->size = sym->Pss();
-    symbol_node->node_stats = NodeStats(sym->Section(), 1, symbol_node->size);
+    symbol_node->node_stats = NodeStats(*sym);
     symbol_node->symbol = sym;
+    symbol_nodes.push_back(symbol_node);
+  }
+
+  if (symbol_nodes.empty()) {
+    return;
+  }
+
+  TreeNode* file_node = _parents[grouped_path];
+  if (file_node == nullptr || grouped_path.path.empty()) {
+    file_node = new TreeNode();
+    file_node->container_type = ContainerType::kFile;
+
+    file_node->id_path = grouped_path;
+    if (file_node->id_path.path.empty()) {
+      file_node->id_path.path = kNoName;
+    }
+
+    file_node->short_name_index =
+        file_node->id_path.size() - file_node->id_path.ShortName(sep_).size();
+    _parents[file_node->id_path] = file_node;
+    file_node->node_stats = node_stats;
+  }
+
+  for (TreeNode* symbol_node : symbol_nodes) {
     AttachToParent(symbol_node, file_node);
   }
 
-  // TODO: Only add if there are unfiltered symbols in this file.
   TreeNode* orphan_node = file_node;
   while (orphan_node != &root_) {
     orphan_node = GetOrMakeParentNode(orphan_node);
@@ -171,19 +200,14 @@ void TreeBuilder::AddFileEntry(const std::string_view source_path,
 }
 
 TreeNode* TreeBuilder::GetOrMakeParentNode(TreeNode* child_node) {
-  std::string_view parent_path;
-  if (child_node->id_path.empty()) {
-    parent_path = kNoName;
-  } else {
-    parent_path = DirName(child_node->id_path, sep_, kPathSep);
-  }
+  GroupedPath parent_path = child_node->id_path.Parent(sep_);
 
   TreeNode*& parent = _parents[parent_path];
   if (parent == nullptr) {
     parent = new TreeNode();
     parent->id_path = parent_path;
     parent->short_name_index =
-        LastSeparatorIndex(parent_path, sep_, kPathSep) + 1;
+        parent->id_path.size() - parent->id_path.ShortName(sep_).size();
     parent->container_type = ContainerTypeFromChild(child_node->id_path);
   }
   if (child_node->parent != parent) {
@@ -197,6 +221,7 @@ void TreeBuilder::AttachToParent(TreeNode* child, TreeNode* parent) {
     std::cerr << "Child " << child->id_path << " already attached to parent "
               << child->parent->id_path << std::endl;
     std::cerr << "Cannot be attached to " << parent->id_path << std::endl;
+    std::cerr << child->parent << " " << parent << std::endl;
     exit(1);
   }
 
@@ -213,17 +238,13 @@ void TreeBuilder::AttachToParent(TreeNode* child, TreeNode* parent) {
 }
 
 ContainerType TreeBuilder::ContainerTypeFromChild(
-    std::string_view child_id_path) const {
+    GroupedPath child_path) const {
   // When grouping by component, id paths use '>' separators for components and
   // '/' separators for the file tree - e.g. Blink>third_party/blink/common...
   // We know that Blink is a component because its children have the form
   // Blink>third_party rather than Blink/third_party.
-  size_t idx = LastSeparatorIndex(child_id_path, sep_, kPathSep);
-  if (idx == std::string_view::npos || child_id_path[idx] == kPathSep) {
-    return ContainerType::kDirectory;
-  } else {
-    return ContainerType::kComponent;
-  }
+  return child_path.IsTopLevelPath() ? ContainerType::kComponent
+                                     : ContainerType::kDirectory;
 }
 
 bool TreeBuilder::ShouldIncludeSymbol(const BaseSymbol& symbol) const {
@@ -240,10 +261,7 @@ void TreeBuilder::JoinDexMethodClasses(TreeNode* node) {
   const bool has_dex =
       node->node_stats.child_stats.count(SectionId::kDex) ||
       node->node_stats.child_stats.count(SectionId::kDexMethod);
-  // Don't try to merge dex symbols for catch-all symbols under (No path).
-  const bool is_no_path = node->id_path == kNoName;
-
-  if (!is_file_node || !has_dex || is_no_path || node->children.empty()) {
+  if (!is_file_node || !has_dex || node->children.empty()) {
     return;
   }
 
@@ -252,28 +270,25 @@ void TreeBuilder::JoinDexMethodClasses(TreeNode* node) {
 
   // Bucket dex symbols by their class.
   for (TreeNode* child : node->children) {
-    // Unlike in .ndjson fields, Java classes loaded from .size files are just
-    // the classname, such as "android.support.v7.widget.toolbar".
-    // Method names contain the classname followed by the method definition,
-    // like "android.support.v7.widget.toolbar void onMeasure(int, int)".
-    const size_t split_index = child->id_path.find_first_of(' ');
+    const size_t split_index = child->id_path.path.find_first_of('#');
     // No return type / field type means it's a class node.
     const bool is_class_node =
-        child->id_path.find_first_of(' ', child->short_name_index) ==
+        child->id_path.path.find_first_of(' ', child->short_name_index) ==
         std::string_view::npos;
     const bool has_class_prefix =
         is_class_node || split_index != std::string_view::npos;
 
-    if (has_class_prefix) {
+    const SectionId section =
+        child->symbol ? child->symbol->Section() : SectionId::kNone;
+    if (has_class_prefix &&
+        (section == SectionId::kDex || section == SectionId::kDexMethod)) {
       const std::string_view class_id_path =
-          split_index == std::string_view::npos
-              ? child->id_path
-              : child->id_path.substr(0, split_index);
+          child->id_path.path.substr(0, split_index);
 
       // Strip package from the node name for classes in .java files since the
       // directory tree already shows it.
       int short_name_index = child->short_name_index;
-      size_t java_idx = node->id_path.find(".java");
+      size_t java_idx = node->id_path.path.find(".java");
       if (java_idx != std::string_view::npos) {
         size_t dot_idx = class_id_path.find_last_of('.');
         short_name_index += dot_idx + 1;
@@ -281,11 +296,21 @@ void TreeBuilder::JoinDexMethodClasses(TreeNode* node) {
 
       TreeNode*& class_node = java_class_containers[class_id_path];
       if (class_node == nullptr) {
+        // We have to construct the class node id_path, because parent nodes
+        // need to have an id_path that describes how to reach them from root.
+        // Symbol (leaf) nodes typically store their full name in the id_path,
+        // which for class nodes would be as "org.x.y.ClassName" even if that
+        // node's parent is the file "a/b/c". So if we want an id_path of the
+        // form "a/b/c/ClassName$0", we have to create it.
         class_node = new TreeNode();
-        class_node->id_path = class_id_path;
+        owned_strings_.push_back(std::string(node->id_path.path) + "/" +
+                                 std::string(class_id_path));
+        class_node->id_path =
+            GroupedPath{node->id_path.group, owned_strings_.back()};
+        class_node->short_name_index =
+            short_name_index + node->id_path.size() + 1;
         class_node->src_path = node->src_path;
         class_node->component = node->component;
-        class_node->short_name_index = short_name_index;
         class_node->container_type = ContainerType::kJavaClass;
         _parents[class_node->id_path] = class_node;
       }

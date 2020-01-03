@@ -242,15 +242,17 @@ void LoopbackServer::Init() {
   if (LoadStateFromFile(persistent_file_))
     return;
 
+  store_birthday_ = base::Time::Now().ToJavaTime();
   keystore_keys_.push_back(GenerateNewKeystoreKey());
 
   const bool create_result = CreateDefaultPermanentItems();
   DCHECK(create_result) << "Permanent items were not created successfully.";
 }
 
-std::string LoopbackServer::GenerateNewKeystoreKey() const {
-  // TODO(pastarmovj): Check if true random bytes is ok or alpha-nums is needed?
-  return base::RandBytesAsString(kKeystoreKeyLength);
+std::vector<uint8_t> LoopbackServer::GenerateNewKeystoreKey() const {
+  std::vector<uint8_t> generated_key(kKeystoreKeyLength);
+  base::RandBytes(generated_key.data(), generated_key.size());
+  return generated_key;
 }
 
 bool LoopbackServer::CreatePermanentBookmarkFolder(
@@ -473,8 +475,8 @@ bool LoopbackServer::HandleGetUpdatesRequest(
 
   if (send_encryption_keys_based_on_nigori ||
       get_updates.need_encryption_key()) {
-    for (const string& key : keystore_keys_) {
-      response->add_encryption_keys(key);
+    for (const auto& key : keystore_keys_) {
+      response->add_encryption_keys(key.data(), key.size());
     }
   }
 
@@ -668,7 +670,7 @@ void LoopbackServer::ClearServerData() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   entities_.clear();
   keystore_keys_.clear();
-  ++store_birthday_;
+  store_birthday_ = base::Time::Now().ToJavaTime();
   base::DeleteFile(persistent_file_, false);
   Init();
 }
@@ -791,7 +793,7 @@ void LoopbackServer::SerializeState(sync_pb::LoopbackServerProto* proto) const {
   proto->set_store_birthday(store_birthday_);
   proto->set_last_version_assigned(version_);
   for (const auto& key : keystore_keys_)
-    proto->add_keystore_keys(key);
+    proto->add_keystore_keys(key.data(), key.size());
   for (const auto& entity : entities_) {
     auto* new_entity = proto->mutable_entities()->Add();
     entity.second->SerializeAsLoopbackServerEntity(new_entity);
@@ -805,8 +807,10 @@ bool LoopbackServer::DeSerializeState(
 
   store_birthday_ = proto.store_birthday();
   version_ = proto.last_version_assigned();
-  for (int i = 0; i < proto.keystore_keys_size(); ++i)
-    keystore_keys_.push_back(proto.keystore_keys(i));
+  for (int i = 0; i < proto.keystore_keys_size(); ++i) {
+    const auto& key = proto.keystore_keys(i);
+    keystore_keys_.emplace_back(key.begin(), key.end());
+  }
   for (int i = 0; i < proto.entities_size(); ++i) {
     std::unique_ptr<LoopbackServerEntity> entity =
         LoopbackServerEntity::CreateEntityFromProto(proto.entities(i));

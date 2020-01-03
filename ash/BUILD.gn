@@ -5,7 +5,6 @@
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
-import("//services/service_manager/public/cpp/service_executable.gni")
 import("//testing/test.gni")
 import("//tools/grit/repack.gni")
 import("//ui/base/ui_features.gni")
@@ -24,8 +23,7 @@ component("ash") {
   friend = [ ":*" ]
 
   public = [
-    # This is the only header that should be used externally.
-    "ash_service.h",
+    "public/ash_interfaces.h",
 
     # TODO: move the following to source. Do NOT add new files here.
     "accessibility/accessibility_controller_impl.h",
@@ -80,8 +78,8 @@ component("ash") {
     "wm/splitview/split_view_controller.h",
     "wm/tablet_mode/tablet_mode_browser_window_drag_delegate.h",
     "wm/tablet_mode/tablet_mode_controller.h",
-    "wm/tablet_mode/tablet_mode_window_drag_controller.h",
     "wm/tablet_mode/tablet_mode_window_drag_delegate.h",
+    "wm/tablet_mode/tablet_mode_window_resizer.h",
     "wm/window_positioner.h",
     "wm/window_positioning_utils.h",
     "wm/window_properties.h",
@@ -182,8 +180,8 @@ component("ash") {
     "app_list/app_list_presenter_delegate_impl.cc",
     "app_list/app_list_presenter_delegate_impl.h",
     "ash_export.h",
+    "ash_interfaces.cc",
     "ash_prefs.cc",
-    "ash_service.cc",
     "assistant/assistant_alarm_timer_controller.cc",
     "assistant/assistant_alarm_timer_controller.h",
     "assistant/assistant_controller.cc",
@@ -374,8 +372,8 @@ component("ash") {
     "host/root_window_transformer.h",
     "host/transformer_helper.cc",
     "host/transformer_helper.h",
-    "ime/ime_controller.cc",
-    "ime/ime_controller.h",
+    "ime/ime_controller_impl.cc",
+    "ime/ime_controller_impl.h",
     "ime/ime_mode_indicator_view.cc",
     "ime/ime_mode_indicator_view.h",
     "ime/ime_switch_type.h",
@@ -416,6 +414,8 @@ component("ash") {
     "login/ui/animation_frame.h",
     "login/ui/arrow_button_view.cc",
     "login/ui/arrow_button_view.h",
+    "login/ui/bottom_status_indicator.cc",
+    "login/ui/bottom_status_indicator.h",
     "login/ui/horizontal_image_sequence_animation_decoder.cc",
     "login/ui/horizontal_image_sequence_animation_decoder.h",
     "login/ui/hover_notifier.cc",
@@ -516,8 +516,6 @@ component("ash") {
     "metrics/user_metrics_action.h",
     "metrics/user_metrics_recorder.cc",
     "metrics/user_metrics_recorder.h",
-    "mojo_interface_factory.cc",
-    "mojo_interface_factory.h",
     "multi_device_setup/multi_device_notification_presenter.cc",
     "multi_device_setup/multi_device_notification_presenter.h",
     "multi_profile_uma.cc",
@@ -652,6 +650,7 @@ component("ash") {
     "shelf/window_preview.cc",
     "shelf/window_preview.h",
     "shell.cc",
+    "shell_delegate.cc",
     "shell_init_params.cc",
     "shell_state.cc",
     "shell_state.h",
@@ -1001,6 +1000,8 @@ component("ash") {
     "system/tray/tray_utils.h",
     "system/tray/tri_view.cc",
     "system/tray/tri_view.h",
+    "system/tray/unfocusable_label.cc",
+    "system/tray/unfocusable_label.h",
     "system/tray/view_click_listener.h",
     "system/unified/collapse_button.cc",
     "system/unified/collapse_button.h",
@@ -1089,6 +1090,7 @@ component("ash") {
     "wallpaper/wallpaper_base_view.h",
     "wallpaper/wallpaper_controller_impl.cc",
     "wallpaper/wallpaper_controller_impl.h",
+    "wallpaper/wallpaper_property.h",
     "wallpaper/wallpaper_utils/wallpaper_color_calculator.cc",
     "wallpaper/wallpaper_utils/wallpaper_color_calculator.h",
     "wallpaper/wallpaper_utils/wallpaper_color_calculator_observer.h",
@@ -1281,12 +1283,12 @@ component("ash") {
     "wm/tablet_mode/tablet_mode_controller.cc",
     "wm/tablet_mode/tablet_mode_event_handler.cc",
     "wm/tablet_mode/tablet_mode_event_handler.h",
-    "wm/tablet_mode/tablet_mode_window_drag_controller.cc",
     "wm/tablet_mode/tablet_mode_window_drag_delegate.cc",
     "wm/tablet_mode/tablet_mode_window_drag_metrics.cc",
     "wm/tablet_mode/tablet_mode_window_drag_metrics.h",
     "wm/tablet_mode/tablet_mode_window_manager.cc",
     "wm/tablet_mode/tablet_mode_window_manager.h",
+    "wm/tablet_mode/tablet_mode_window_resizer.cc",
     "wm/tablet_mode/tablet_mode_window_state.cc",
     "wm/tablet_mode/tablet_mode_window_state.h",
     "wm/toplevel_window_event_handler.cc",
@@ -1340,8 +1342,6 @@ component("ash") {
     "wm/workspace/multi_window_resize_controller.h",
     "wm/workspace/phantom_window_controller.cc",
     "wm/workspace/phantom_window_controller.h",
-    "wm/workspace/two_step_edge_cycler.cc",
-    "wm/workspace/two_step_edge_cycler.h",
     "wm/workspace/workspace_event_handler.cc",
     "wm/workspace/workspace_event_handler.h",
     "wm/workspace/workspace_layout_manager.cc",
@@ -1361,15 +1361,16 @@ component("ash") {
     "//ash/resources/vector_icons",
     "//ash/strings",
     "//ash/wayland",
+    "//chromeos/services/multidevice_setup/public/mojom",
     "//components/discardable_memory/public/mojom",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
+    "//services/content/public/mojom",
     "//services/data_decoder/public/mojom",
     "//services/device/public/cpp/bluetooth",
     "//services/device/public/mojom",
     "//services/media_session/public/cpp",
     "//services/media_session/public/mojom",
-    "//services/service_manager/public/cpp",
     "//skia",
     "//ui/aura",
     "//ui/events",
@@ -1461,7 +1462,6 @@ component("ash") {
     "//services/content/public/cpp",
     "//services/data_decoder/public/cpp",
     "//services/preferences/public/cpp",
-    "//services/service_manager/public/cpp",
 
     # TODO(msw): Remove this; ash should not depend on blink/webkit.
     "//third_party/blink/public:blink_headers",
@@ -1487,7 +1487,7 @@ component("ash") {
     "//ui/events:events_base",
     "//ui/events:gesture_detection",
     "//ui/events/devices",
-    "//ui/events/ozone:events_ozone",
+    "//ui/events/ozone",
     "//ui/message_center",
     "//ui/native_theme",
     "//ui/ozone",
@@ -1508,11 +1508,11 @@ component("ash") {
     # Ash should not depend upon cryptohome_client or components that depend
     # on it. TODO(stevenjb): Assert on //chromeos/dbus/cryptohome_client once it
     # is extracted from //chromeos/dbus. https://crbug.com/647367.
-    "//components/arc",
     "//chromeos/attestation",
     "//chromeos/cryptohome",
     "//chromeos/login/auth",
     "//chromeos/tpm",
+    "//components/arc",
 
     # Ash should not depend upon content at all.
     "//content/public/browser",
@@ -1601,8 +1601,6 @@ static_library("ash_shell_lib_with_content") {
     ":test_support",
     "//ash/components/shortcut_viewer",
     "//ash/public/cpp",
-    "//ash/public/cpp:manifest",
-    "//ash/public/cpp:manifest_for_tests",
     "//base:i18n",
     "//chrome:packed_resources",
 
@@ -1643,9 +1641,9 @@ static_library("ash_shell_lib_with_content") {
     ":ash_shell_lib",
   ]
   data_deps = [
-    "//ash/strings:ash_test_strings",
-    "//ash/resources:ash_test_resources_with_content_100_percent",
     "//ash/resources:ash_test_resources_200_percent",
+    "//ash/resources:ash_test_resources_with_content_100_percent",
+    "//ash/strings:ash_test_strings",
   ]
 }
 
@@ -1752,11 +1750,13 @@ test("ash_unittests") {
     "frame/non_client_frame_view_ash_unittest.cc",
     "highlighter/highlighter_controller_unittest.cc",
     "highlighter/highlighter_gesture_util_unittest.cc",
+    "home_screen/drag_window_from_shelf_controller_test_api.cc",
+    "home_screen/drag_window_from_shelf_controller_test_api.h",
     "home_screen/drag_window_from_shelf_controller_unittest.cc",
     "home_screen/home_launcher_gesture_handler_unittest.cc",
     "home_screen/home_screen_controller_unittest.cc",
     "home_screen/swipe_home_to_overview_controller_unittest.cc",
-    "ime/ime_controller_unittest.cc",
+    "ime/ime_controller_impl_unittest.cc",
     "keyboard/arc/arc_input_method_surface_manager_unittest.cc",
     "keyboard/keyboard_controller_impl_unittest.cc",
     "keyboard/virtual_keyboard_controller_unittest.cc",
@@ -1999,6 +1999,7 @@ test("ash_unittests") {
     "wm/window_state_unittest.cc",
     "wm/window_transient_descendant_iterator_unittest.cc",
     "wm/window_util_unittest.cc",
+    "wm/work_area_insets_unittest.cc",
     "wm/workspace/magnetism_matcher_unittest.cc",
     "wm/workspace/multi_window_resize_controller_unittest.cc",
     "wm/workspace/workspace_event_handler_unittest.cc",
@@ -2028,8 +2029,6 @@ test("ash_unittests") {
     "//ash/keyboard/ui",
     "//ash/keyboard/ui:test_support",
     "//ash/public/cpp",
-    "//ash/public/cpp:manifest",
-    "//ash/public/cpp:manifest_for_tests",
     "//ash/public/cpp:test_support",
     "//ash/public/cpp:unit_tests",
     "//ash/public/cpp/vector_icons",
@@ -2271,8 +2270,6 @@ static_library("test_support") {
     "metrics/task_switch_time_tracker_test_api.h",
     "metrics/user_metrics_recorder_test_api.cc",
     "metrics/user_metrics_recorder_test_api.h",
-    "mojo_test_interface_factory.cc",
-    "mojo_test_interface_factory.h",
     "public/cpp/shelf_test_api.cc",
     "public/cpp/test/shell_test_api.h",
     "rotator/screen_rotation_animator_test_api.cc",
@@ -2306,8 +2303,6 @@ static_library("test_support") {
     "system/power/power_button_test_base.h",
     "system/power/power_event_observer_test_api.cc",
     "system/power/power_event_observer_test_api.h",
-    "system/status_area_widget_test_api.cc",
-    "system/status_area_widget_test_api.h",
     "system/status_area_widget_test_helper.cc",
     "system/status_area_widget_test_helper.h",
     "system/unified/unified_system_tray_test_api.cc",
@@ -2364,7 +2359,6 @@ static_library("test_support") {
     "//chromeos/services/assistant/public/mojom",
     "//chromeos/services/network_config/public/cpp:test_support",
     "//dbus",
-    "//services/service_manager/public/cpp/test:test_support",
     "//testing/gtest",
     "//third_party/blink/public:blink_headers",
     "//ui/display:display_manager_test_api",
@@ -2379,7 +2373,6 @@ static_library("test_support") {
     "//ash/components/fast_ink",
     "//ash/public/cpp",
     "//ash/public/cpp:test_support",
-    "//ash/public/mojom:test_interfaces",
     "//base",
     "//base:i18n",
     "//base/test:test_support",
@@ -2431,8 +2424,8 @@ static_library("test_support") {
   ]
 
   data_deps = [
-    "//ash/strings:ash_test_strings",
     "//ash/resources:ash_test_resources_100_percent",
     "//ash/resources:ash_test_resources_200_percent",
+    "//ash/strings:ash_test_strings",
   ]
 }

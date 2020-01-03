@@ -20,6 +20,8 @@
 #include "chrome/browser/chromeos/guest_os/guest_os_pref_names.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/test/base/scoped_testing_local_state.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -200,7 +202,9 @@ class GuestOsSharePathTest : public testing::Test {
                         expected_failure_reason, success, failure_reason);
   }
 
-  GuestOsSharePathTest() {
+  GuestOsSharePathTest()
+      : local_state_(std::make_unique<ScopedTestingLocalState>(
+            TestingBrowserProcess::GetGlobal())) {
     chromeos::DBusThreadManager::Initialize();
     fake_concierge_client_ = static_cast<chromeos::FakeConciergeClient*>(
         chromeos::DBusThreadManager::Get()->GetConciergeClient());
@@ -254,9 +258,13 @@ class GuestOsSharePathTest : public testing::Test {
     // Create 'vm-running' VM instance which is running.
     crostini::CrostiniManager::GetForProfile(profile())->AddRunningVmForTesting(
         "vm-running");
+
+    g_browser_process->platform_part()
+        ->InitializeSchedulerConfigurationManager();
   }
 
   void TearDown() override {
+    g_browser_process->platform_part()->ShutdownSchedulerConfigurationManager();
     // Shutdown GuestOsSharePath to schedule FilePathWatchers to be destroyed,
     // then run thread bundle to ensure they are.
     guest_os_share_path_->Shutdown();
@@ -293,6 +301,8 @@ class GuestOsSharePathTest : public testing::Test {
   AccountId account_id_;
 
  private:
+  std::unique_ptr<ScopedTestingLocalState> local_state_;
+
   DISALLOW_COPY_AND_ASSIGN(GuestOsSharePathTest);
 };
 
@@ -747,29 +757,6 @@ TEST_F(GuestOsSharePathTest, UnsharePathInvalidPath) {
   run_loop()->Run();
 }
 
-TEST_F(GuestOsSharePathTest, MigratePersistedPathsToMultiVM) {
-  SetUpVolume();
-  base::ListValue shared_paths = base::ListValue();
-  base::FilePath downloads_file = profile()->GetPath().Append("Downloads/file");
-  shared_paths.AppendString(downloads_file.value());
-  base::FilePath not_downloads("/not/downloads");
-  shared_paths.AppendString(not_downloads.value());
-  profile()->GetPrefs()->Set(prefs::kCrostiniSharedPaths, shared_paths);
-  GuestOsSharePath::MigratePersistedPathsToMultiVM(profile()->GetPrefs());
-  EXPECT_EQ(
-      profile()->GetPrefs()->GetList(prefs::kCrostiniSharedPaths)->GetSize(),
-      0U);
-  const base::DictionaryValue* prefs =
-      profile()->GetPrefs()->GetDictionary(prefs::kGuestOSPathsSharedToVms);
-  EXPECT_EQ(prefs->size(), 2U);
-  EXPECT_EQ(prefs->FindKey(downloads_file.value())->GetList().size(), 1U);
-  EXPECT_EQ(prefs->FindKey(downloads_file.value())->GetList()[0].GetString(),
-            "termina");
-  EXPECT_EQ(prefs->FindKey(not_downloads.value())->GetList().size(), 1U);
-  EXPECT_EQ(prefs->FindKey(not_downloads.value())->GetList()[0].GetString(),
-            "termina");
-}
-
 TEST_F(GuestOsSharePathTest, GetPersistedSharedPaths) {
   SetUpVolume();
   // path1:['vm1'], path2:['vm2'], path3:['vm3'], path12:['vm1','vm2']
@@ -930,6 +917,21 @@ TEST_F(GuestOsSharePathTest, UnshareOnDeleteMountRemoved) {
       base::Unretained(this), "ignore-delete-before-unmount", shared_path_,
       Persist::YES, SeneschalClientCalled::NO, "MyFiles/already-shared",
       Success::YES, ""));
+  run_loop()->Run();
+}
+
+TEST_F(GuestOsSharePathTest, RegisterPathThenUnshare) {
+  SetUpVolume();
+  crostini::CrostiniManager::GetForProfile(profile())->AddRunningVmForTesting(
+      crostini::kCrostiniDefaultVmName);
+  guest_os_share_path_->RegisterSharedPath(crostini::kCrostiniDefaultVmName,
+                                           share_path_);
+  guest_os_share_path_->UnsharePath(
+      crostini::kCrostiniDefaultVmName, share_path_, true,
+      base::BindOnce(&GuestOsSharePathTest::UnsharePathCallback,
+                     base::Unretained(this), share_path_, Persist::NO,
+                     SeneschalClientCalled::YES, "MyFiles/path-to-share",
+                     Success::YES, ""));
   run_loop()->Run();
 }
 

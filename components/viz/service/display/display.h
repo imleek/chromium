@@ -81,7 +81,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
           const RendererSettings& settings,
           const FrameSinkId& frame_sink_id,
           std::unique_ptr<OutputSurface> output_surface,
-          std::unique_ptr<DisplayScheduler> scheduler,
+          std::unique_ptr<DisplaySchedulerBase> scheduler,
           scoped_refptr<base::SingleThreadTaskRunner> current_task_runner);
 
   ~Display() override;
@@ -132,11 +132,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   const SurfaceId& CurrentSurfaceId();
 
   // DisplaySchedulerClient implementation.
-  bool DrawAndSwap() override;
-  bool SurfaceHasUnackedFrame(const SurfaceId& surface_id) const override;
-  bool SurfaceDamaged(const SurfaceId& surface_id,
-                      const BeginFrameAck& ack) override;
-  void SurfaceDestroyed(const SurfaceId& surface_id) override;
+  bool DrawAndSwap(base::TimeTicks expected_display_time) override;
   void DidFinishFrame(const BeginFrameAck& ack) override;
 
   // OutputSurfaceClient implementation.
@@ -149,8 +145,6 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void DidSwapWithSize(const gfx::Size& pixel_size) override;
   void DidReceivePresentationFeedback(
       const gfx::PresentationFeedback& feedback) override;
-  void DidFinishLatencyInfo(
-      const std::vector<ui::LatencyInfo>& latency_info) override;
 
   // LatestLocalSurfaceIdLookupDelegate implementation.
   LocalSurfaceId GetSurfaceAtAggregation(
@@ -173,7 +167,6 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void RemoveOverdrawQuads(CompositorFrame* frame);
 
   void SetSupportedFrameIntervals(std::vector<base::TimeDelta> intervals);
-  void SetDisplayTransformHint(gfx::OverlayTransform transform);
 
   base::ScopedClosureRunner GetCacheBackBufferCb();
 
@@ -213,8 +206,6 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   // TODO(cblume, crbug.com/900973): |enable_shared_images| is a temporary
   // solution that unblocks us until SharedImages are threadsafe in WebView.
   void InitializeRenderer(bool enable_shared_images = true);
-  void UpdateRootFrameMissing();
-  void RunDrawCallbacks();
 
   // ContextLostObserver implementation.
   void OnContextLost() override;
@@ -241,7 +232,8 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
 #endif
   std::unique_ptr<OutputSurface> output_surface_;
   SkiaOutputSurface* const skia_output_surface_;
-  std::unique_ptr<DisplayScheduler> scheduler_;
+  std::unique_ptr<DisplayDamageTracker> damage_tracker_;
+  std::unique_ptr<DisplaySchedulerBase> scheduler_;
   std::unique_ptr<DisplayResourceProvider> resource_provider_;
   std::unique_ptr<SurfaceAggregator> aggregator_;
   std::unique_ptr<FrameRateDecider> frame_rate_decider_;
@@ -250,7 +242,6 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   std::unique_ptr<DirectRenderer> renderer_;
   SoftwareRenderer* software_renderer_ = nullptr;
   std::vector<ui::LatencyInfo> stored_latency_info_;
-  std::vector<SurfaceId> surfaces_to_ack_on_next_draw_;
 
   // |pending_presentation_group_timings_| stores a
   // Display::PresentationGroupTiming for each group currently waiting for
@@ -264,9 +255,10 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   int64_t swapped_trace_id_ = 0;
   int64_t last_swap_ack_trace_id_ = 0;
   int64_t last_presented_trace_id_ = 0;
+  int pending_swaps_ = 0;
 
-  gfx::OverlayTransform last_display_transform_swapped_ =
-      gfx::OVERLAY_TRANSFORM_NONE;
+  // The height of the top-controls in the previously drawn frame.
+  float last_top_controls_visible_height_ = 0.f;
 
   DISALLOW_COPY_AND_ASSIGN(Display);
 };

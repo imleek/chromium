@@ -17,6 +17,7 @@
 #include "chrome/services/app_service/public/cpp/intent_util.h"
 #include "chrome/services/app_service/public/cpp/preferred_apps.h"
 #include "chrome/services/app_service/public/mojom/types.mojom.h"
+#include "components/prefs/testing_pref_service.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
@@ -162,6 +163,12 @@ class FakeSubscriber : public apps::mojom::Subscriber {
     preferred_apps_.AddPreferredApp(app_id, intent_filter);
   }
 
+  void OnPreferredAppRemoved(
+      const std::string& app_id,
+      apps::mojom::IntentFilterPtr intent_filter) override {
+    preferred_apps_.DeletePreferredApp(app_id, intent_filter);
+  }
+
   void InitializePreferredApps(base::Value preferred_apps) override {
     preferred_apps_.Init(
         std::make_unique<base::Value>(std::move(preferred_apps)));
@@ -173,14 +180,16 @@ class FakeSubscriber : public apps::mojom::Subscriber {
 };
 
 class AppServiceImplTest : public testing::Test {
- private:
+ protected:
   base::test::SingleThreadTaskEnvironment task_environment_;
+  TestingPrefServiceSimple pref_service_;
 };
 
 TEST_F(AppServiceImplTest, PubSub) {
   const int size_hint_in_dip = 64;
 
-  AppServiceImpl impl(nullptr);
+  AppServiceImpl::RegisterProfilePrefs(pref_service_.registry());
+  AppServiceImpl impl(&pref_service_);
 
   // Start with one subscriber.
   FakeSubscriber sub0(&impl);
@@ -271,7 +280,8 @@ TEST_F(AppServiceImplTest, PubSub) {
 
 TEST_F(AppServiceImplTest, PreferredApps) {
   // Test Initialize.
-  AppServiceImpl impl(nullptr);
+  AppServiceImpl::RegisterProfilePrefs(pref_service_.registry());
+  AppServiceImpl impl(&pref_service_);
   impl.GetPreferredAppsForTesting().Init(nullptr);
 
   // TODO(crbug.com/853604): Update this test after reading from disk done.
@@ -302,28 +312,78 @@ TEST_F(AppServiceImplTest, PreferredApps) {
 
   // Test sync preferred app to all subscribers.
   filter_url = GURL("https://www.abc.com/");
+  GURL another_filter_url = GURL("https://www.test.com/");
   intent_filter = apps_util::CreateIntentFilterForUrlScope(filter_url);
+  auto another_intent_filter =
+      apps_util::CreateIntentFilterForUrlScope(another_filter_url);
 
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(base::nullopt,
             sub0.PreferredApps().FindPreferredAppForUrl(filter_url));
   EXPECT_EQ(base::nullopt,
             sub1.PreferredApps().FindPreferredAppForUrl(filter_url));
+  EXPECT_EQ(base::nullopt,
+            sub0.PreferredApps().FindPreferredAppForUrl(another_filter_url));
+  EXPECT_EQ(base::nullopt,
+            sub1.PreferredApps().FindPreferredAppForUrl(another_filter_url));
 
+  impl.AddPreferredApp(
+      apps::mojom::AppType::kUnknown, kAppId2, intent_filter->Clone(),
+      apps_util::CreateIntentFromUrl(filter_url), /*from_publisher=*/true);
   impl.AddPreferredApp(apps::mojom::AppType::kUnknown, kAppId2,
-                       std::move(intent_filter),
-                       apps_util::CreateIntentFromUrl(filter_url));
+                       another_intent_filter->Clone(),
+                       apps_util::CreateIntentFromUrl(another_filter_url),
+                       /*from_publisher=*/true);
 
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(kAppId2, sub0.PreferredApps().FindPreferredAppForUrl(filter_url));
   EXPECT_EQ(kAppId2, sub1.PreferredApps().FindPreferredAppForUrl(filter_url));
+  EXPECT_EQ(kAppId2,
+            sub0.PreferredApps().FindPreferredAppForUrl(another_filter_url));
+  EXPECT_EQ(kAppId2,
+            sub1.PreferredApps().FindPreferredAppForUrl(another_filter_url));
 
+  // Test that uninstall removes all the settings for the app.
   pub0.UninstallApps(std::vector<std::string>{kAppId2}, &impl);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(base::nullopt,
             sub0.PreferredApps().FindPreferredAppForUrl(filter_url));
   EXPECT_EQ(base::nullopt,
             sub1.PreferredApps().FindPreferredAppForUrl(filter_url));
+  EXPECT_EQ(base::nullopt,
+            sub0.PreferredApps().FindPreferredAppForUrl(another_filter_url));
+  EXPECT_EQ(base::nullopt,
+            sub1.PreferredApps().FindPreferredAppForUrl(another_filter_url));
+
+  impl.AddPreferredApp(
+      apps::mojom::AppType::kUnknown, kAppId2, intent_filter->Clone(),
+      apps_util::CreateIntentFromUrl(filter_url), /*from_publisher=*/true);
+  impl.AddPreferredApp(apps::mojom::AppType::kUnknown, kAppId2,
+                       another_intent_filter->Clone(),
+                       apps_util::CreateIntentFromUrl(another_filter_url),
+                       /*from_publisher=*/true);
+
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(kAppId2, sub0.PreferredApps().FindPreferredAppForUrl(filter_url));
+  EXPECT_EQ(kAppId2, sub1.PreferredApps().FindPreferredAppForUrl(filter_url));
+  EXPECT_EQ(kAppId2,
+            sub0.PreferredApps().FindPreferredAppForUrl(another_filter_url));
+  EXPECT_EQ(kAppId2,
+            sub1.PreferredApps().FindPreferredAppForUrl(another_filter_url));
+
+  // Test that remove setting for one filter.
+  impl.RemovePreferredAppForFilter(apps::mojom::AppType::kUnknown, kAppId2,
+                                   intent_filter->Clone());
+
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(base::nullopt,
+            sub0.PreferredApps().FindPreferredAppForUrl(filter_url));
+  EXPECT_EQ(base::nullopt,
+            sub1.PreferredApps().FindPreferredAppForUrl(filter_url));
+  EXPECT_EQ(kAppId2,
+            sub0.PreferredApps().FindPreferredAppForUrl(another_filter_url));
+  EXPECT_EQ(kAppId2,
+            sub1.PreferredApps().FindPreferredAppForUrl(another_filter_url));
 }
 
 }  // namespace apps

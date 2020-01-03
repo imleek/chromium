@@ -568,7 +568,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void MarkLayerComposited() override;
 
   sk_sp<SkData> PaintRenderingResultsToDataArray(SourceDrawingBuffer) override;
-  void ProvideBackBufferToResourceProvider() const override;
 
   unsigned MaxVertexAttribs() const { return max_vertex_attribs_; }
 
@@ -606,15 +605,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void getHTMLOrOffscreenCanvas(HTMLCanvasElementOrOffscreenCanvas&) const;
 
   void commit();
-
-  // For use by WebVR which doesn't use the normal compositing path.
-  // This clears the backbuffer if preserveDrawingBuffer is false.
-  void MarkCompositedAndClearBackbufferIfNeeded();
-
-  // For use by WebVR, commits the current canvas content similar
-  // to the "commit" JS API.
-  scoped_refptr<StaticBitmapImage> GetStaticBitmapImage(
-      std::unique_ptr<viz::SingleReleaseCallback>* out_release_callback);
 
   ScriptPromise makeXRCompatible(ScriptState*);
   bool IsXRCompatible();
@@ -665,7 +655,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   bool IsAccelerated() const override { return true; }
   bool UsingSwapChain() const override;
   bool IsOriginTopLeft() const override;
-  void SetIsHidden(bool) override;
+  void SetIsInHiddenPage(bool) override;
+  void SetIsBeingDisplayed(bool) override {}
   bool PaintRenderingResultsToCanvas(SourceDrawingBuffer) override;
   cc::Layer* CcLayer() const override;
   void Stop() override;
@@ -896,13 +887,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   template <typename T>
   class TypedExtensionTracker final : public ExtensionTracker {
    public:
-    static TypedExtensionTracker<T>* Create(Member<T>& extension_field,
-                                            ExtensionFlags flags,
-                                            const char* const* prefixes) {
-      return MakeGarbageCollected<TypedExtensionTracker<T>>(extension_field,
-                                                            flags, prefixes);
-    }
-
     TypedExtensionTracker(Member<T>& extension_field,
                           ExtensionFlags flags,
                           const char* const* prefixes)
@@ -911,7 +895,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
 
     WebGLExtension* GetExtension(WebGLRenderingContextBase* context) override {
       if (!extension_) {
-        extension_ = T::Create(context);
+        extension_ = MakeGarbageCollected<T>(context);
         extension_field_ = extension_;
       }
 
@@ -957,8 +941,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void RegisterExtension(Member<T>& extension_ptr,
                          ExtensionFlags flags = kApprovedExtension,
                          const char* const* prefixes = nullptr) {
-    extensions_.push_back(
-        TypedExtensionTracker<T>::Create(extension_ptr, flags, prefixes));
+    extensions_.push_back(MakeGarbageCollected<TypedExtensionTracker<T>>(
+        extension_ptr, flags, prefixes));
   }
 
   bool ExtensionSupportedAndAllowed(const ExtensionTracker*);
@@ -1435,12 +1419,12 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                        DOMFloat32Array*,
                                        GLsizei mod,
                                        GLuint src_offset,
-                                       GLuint src_length);
+                                       size_t src_length);
   bool ValidateUniformMatrixParameters(const char* function_name,
                                        const WebGLUniformLocation*,
                                        GLboolean transpose,
                                        void*,
-                                       GLsizei,
+                                       size_t size,
                                        GLsizei mod,
                                        GLuint src_offset,
                                        GLuint src_length);
@@ -1452,14 +1436,26 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
       const TypedFlexibleArrayBufferView<WTFTypedArray>& v,
       GLsizei required_min_size,
       GLuint src_offset,
-      GLuint src_length) {
+      size_t src_length) {
+    GLuint length;
+    if (!base::CheckedNumeric<GLuint>(src_length).AssignIfValid(&length)) {
+      SynthesizeGLError(GL_INVALID_VALUE, function_name,
+                        "src_length is too big");
+      return false;
+    }
+    GLuint array_length;
+    if (!base::CheckedNumeric<GLuint>(v.lengthAsSizeT())
+             .AssignIfValid(&array_length)) {
+      SynthesizeGLError(GL_INVALID_VALUE, function_name, "array is too big");
+      return false;
+    }
     if (!v.DataMaybeOnStack()) {
       SynthesizeGLError(GL_INVALID_VALUE, function_name, "no array");
       return false;
     }
     return ValidateUniformMatrixParameters(
-        function_name, location, false, v.DataMaybeOnStack(), v.length(),
-        required_min_size, src_offset, src_length);
+        function_name, location, false, v.DataMaybeOnStack(), array_length,
+        required_min_size, src_offset, length);
   }
 
   // Helper function to validate the target for bufferData and

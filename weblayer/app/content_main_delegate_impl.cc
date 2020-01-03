@@ -9,6 +9,7 @@
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/cpu.h"
+#include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/path_service.h"
@@ -23,11 +24,13 @@
 #include "weblayer/browser/content_browser_client_impl.h"
 #include "weblayer/common/content_client_impl.h"
 #include "weblayer/common/weblayer_paths.h"
+#include "weblayer/public/common/switches.h"
 #include "weblayer/renderer/content_renderer_client_impl.h"
 #include "weblayer/utility/content_utility_client_impl.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/apk_assets.h"
+#include "base/android/bundle_utils.h"
 #include "base/android/locale_utils.h"
 #include "base/i18n/rtl.h"
 #include "base/posix/global_descriptors.h"
@@ -134,8 +137,6 @@ bool ContentMainDelegateImpl::BasicStartupComplete(int* exit_code) {
 
   InitLogging(&params_);
 
-  content_client_ = std::make_unique<ContentClientImpl>();
-  SetContentClient(content_client_.get());
   RegisterPathProvider();
 
   return false;
@@ -148,12 +149,31 @@ void ContentMainDelegateImpl::PreSandboxStartup() {
   base::CPU cpu_info;
 #endif
 
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  bool is_browser_process =
+      command_line.GetSwitchValueASCII(switches::kProcessType).empty();
+  if (is_browser_process &&
+      command_line.HasSwitch(switches::kWebLayerUserDataDir)) {
+    base::FilePath path =
+        command_line.GetSwitchValuePath(switches::kWebLayerUserDataDir);
+    if (base::DirectoryExists(path) || base::CreateDirectory(path)) {
+      // Profile needs an absolute path, which we would normally get via
+      // PathService. In this case, manually ensure the path is absolute.
+      if (!path.IsAbsolute())
+        path = base::MakeAbsoluteFilePath(path);
+    } else {
+      LOG(ERROR) << "Unable to create data-path directory: " << path.value();
+    }
+    CHECK(base::PathService::OverrideAndCreateIfNeeded(
+        weblayer::DIR_USER_DATA, path, true /* is_absolute */,
+        false /* create */));
+  }
+
   InitializeResourceBundle();
 
 #if defined(OS_ANDROID)
-  EnableCrashReporter(
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kProcessType));
+  EnableCrashReporter(command_line.GetSwitchValueASCII(switches::kProcessType));
   SetWebLayerCrashKeys();
 #endif
 }
@@ -197,7 +217,13 @@ void ContentMainDelegateImpl::InitializeResourceBundle() {
   bool is_browser_process =
       command_line.GetSwitchValueASCII(switches::kProcessType).empty();
   if (is_browser_process) {
-    ui::SetLocalePaksStoredInApk(true);
+    // If we're not being loaded from a bundle, locales will be loaded from the
+    // webview stored-locales directory. Otherwise, we are in Monochrome, and
+    // we load both chrome and webview's locale assets.
+    if (base::android::BundleUtils::IsBundle())
+      ui::SetLoadSecondaryLocalePaks(true);
+    else
+      ui::SetLocalePaksStoredInApk(true);
     // Passing an empty |pref_locale| yields the system default locale.
     std::string locale = ui::ResourceBundle::InitSharedInstanceWithLocale(
         {} /*pref_locale*/, nullptr, ui::ResourceBundle::LOAD_COMMON_RESOURCES);
@@ -213,15 +239,19 @@ void ContentMainDelegateImpl::InitializeResourceBundle() {
     pak_file_path = pak_file_path.AppendASCII("resources.pak");
     ui::LoadMainAndroidPackFile("assets/resources.pak", pak_file_path);
 
-    constexpr char kWebLayerLocalePath[] =
-        "assets/stored-locales/weblayer/en-US.pak";
-    base::MemoryMappedFile::Region region;
-    int fd = base::android::OpenApkAsset(kWebLayerLocalePath, &region);
-    CHECK_GE(fd, 0) << "Could not find " << kWebLayerLocalePath << " in APK.";
-    ui::ResourceBundle::GetSharedInstance().AddDataPackFromFileRegion(
-        base::File(fd), region, ui::SCALE_FACTOR_NONE);
-    base::GlobalDescriptors::GetInstance()->Set(
-        kWebLayerSecondaryLocalePakDescriptor, fd, region);
+    // The English-only workaround is not needed for bundles, since bundles will
+    // contain assets for all locales.
+    if (!base::android::BundleUtils::IsBundle()) {
+      constexpr char kWebLayerLocalePath[] =
+          "assets/stored-locales/weblayer/en-US.pak";
+      base::MemoryMappedFile::Region region;
+      int fd = base::android::OpenApkAsset(kWebLayerLocalePath, &region);
+      CHECK_GE(fd, 0) << "Could not find " << kWebLayerLocalePath << " in APK.";
+      ui::ResourceBundle::GetSharedInstance()
+          .LoadSecondaryLocaleDataWithPakFileRegion(base::File(fd), region);
+      base::GlobalDescriptors::GetInstance()->Set(
+          kWebLayerSecondaryLocalePakDescriptor, fd, region);
+    }
   } else {
     base::i18n::SetICUDefaultLocale(
         command_line.GetSwitchValueASCII(switches::kLang));
@@ -233,9 +263,15 @@ void ContentMainDelegateImpl::InitializeResourceBundle() {
     ui::ResourceBundle::InitSharedInstanceWithPakFileRegion(base::File(pak_fd),
                                                             pak_region);
 
-    std::pair<int, ui::ScaleFactor> extra_paks[] = {
+    pak_fd = global_descriptors->Get(kWebLayerSecondaryLocalePakDescriptor);
+    pak_region =
+        global_descriptors->GetRegion(kWebLayerSecondaryLocalePakDescriptor);
+    ui::ResourceBundle::GetSharedInstance()
+        .LoadSecondaryLocaleDataWithPakFileRegion(base::File(pak_fd),
+                                                  pak_region);
+
+    std::vector<std::pair<int, ui::ScaleFactor>> extra_paks = {
         {kWebLayerMainPakDescriptor, ui::SCALE_FACTOR_NONE},
-        {kWebLayerSecondaryLocalePakDescriptor, ui::SCALE_FACTOR_NONE},
         {kWebLayer100PercentPakDescriptor, ui::SCALE_FACTOR_100P}};
 
     for (const auto& pak_info : extra_paks) {
@@ -252,6 +288,11 @@ void ContentMainDelegateImpl::InitializeResourceBundle() {
   pak_file = pak_file.AppendASCII(params_.pak_name);
   ui::ResourceBundle::InitSharedInstanceWithPakPath(pak_file);
 #endif
+}
+
+content::ContentClient* ContentMainDelegateImpl::CreateContentClient() {
+  content_client_ = std::make_unique<ContentClientImpl>();
+  return content_client_.get();
 }
 
 content::ContentBrowserClient*

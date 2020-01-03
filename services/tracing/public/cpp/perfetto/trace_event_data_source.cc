@@ -33,9 +33,10 @@
 #include "base/trace_event/trace_log.h"
 #include "build/build_config.h"
 #include "components/tracing/common/tracing_switches.h"
+#include "services/tracing/public/cpp/perfetto/macros.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_producer.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
-#include "services/tracing/public/cpp/perfetto/thread_local_event_sink.h"
+#include "services/tracing/public/cpp/perfetto/trace_time.h"
 #include "services/tracing/public/cpp/perfetto/traced_value_proto_writer.h"
 #include "services/tracing/public/cpp/perfetto/track_event_thread_local_event_sink.h"
 #include "services/tracing/public/cpp/trace_event_args_whitelist.h"
@@ -47,8 +48,8 @@
 #include "third_party/perfetto/include/perfetto/ext/tracing/core/trace_writer.h"
 #include "third_party/perfetto/protos/perfetto/trace/chrome/chrome_metadata.pbzero.h"
 #include "third_party/perfetto/protos/perfetto/trace/chrome/chrome_trace_event.pbzero.h"
-#include "third_party/perfetto/protos/perfetto/trace/clock_snapshot.pbzero.h"
 #include "third_party/perfetto/protos/perfetto/trace/trace_packet.pbzero.h"
+#include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_histogram_sample.pbzero.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/process_descriptor.pbzero.h"
 
 #if defined(OS_ANDROID)
@@ -102,18 +103,24 @@ void WriteMetadataProto(ChromeMetadataPacket* metadata_proto,
 #endif  // defined(OS_ANDROID) && defined(OFFICIAL_BUILD)
 }
 
-#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_FUCHSIA)
-// Linux, Android, and Fuchsia all use CLOCK_MONOTONIC. See crbug.com/166153
-// about efforts to unify base::TimeTicks across all platforms.
-constexpr perfetto::protos::pbzero::ClockSnapshot::Clock::BuiltinClocks
-    kTraceClockId = perfetto::protos::pbzero::ClockSnapshot::Clock::MONOTONIC;
-#else
-// Mac and Windows TimeTicks advance when sleeping, so are closest to BOOTTIME
-// in behavior.
-// TODO(eseckler): Support specifying Mac/Win platform clocks in BuiltinClocks.
-constexpr perfetto::protos::pbzero::ClockSnapshot::Clock::BuiltinClocks
-    kTraceClockId = perfetto::protos::pbzero::ClockSnapshot::Clock::BOOTTIME;
-#endif
+static_assert(
+    sizeof(TraceEventDataSource::SessionFlags) <= sizeof(uint64_t),
+    "SessionFlags should remain small to ensure lock-free atomic operations");
+
+// Helper class used to ensure no tasks are posted while
+// TraceEventDataSource::lock_ is held.
+class AutoLockWithDeferredTaskPosting {
+ public:
+  explicit AutoLockWithDeferredTaskPosting(base::Lock& lock)
+      : autolock_(lock) {}
+
+ private:
+  // The ordering is important: |defer_task_posting_| must be destroyed
+  // after |autolock_| to ensure the lock is not held when any deferred
+  // tasks are posted..
+  base::ScopedDeferTaskPosting defer_task_posting_;
+  base::AutoLock autolock_;
+};
 
 }  // namespace
 
@@ -181,7 +188,7 @@ void TraceEventMetadataSource::GenerateMetadataFromGenerator(
   DCHECK(origin_task_runner_->RunsTasksInCurrentSequence());
   perfetto::TraceWriter::TracePacketHandle trace_packet;
   {
-    base::AutoLock lock(lock_);
+    AutoLockWithDeferredTaskPosting lock(lock_);
     if (!emit_metadata_at_start_ || !trace_writer_) {
       return;
     }
@@ -201,7 +208,7 @@ void TraceEventMetadataSource::GenerateJsonMetadataFromGenerator(
   perfetto::TraceWriter::TracePacketHandle trace_packet;
   if (!event_bundle) {
     {
-      base::AutoLock lock(lock_);
+      AutoLockWithDeferredTaskPosting lock(lock_);
       if (!emit_metadata_at_start_ || !trace_writer_) {
         return;
       }
@@ -276,7 +283,7 @@ void TraceEventMetadataSource::GenerateMetadata(
   TracePacketHandle trace_packet;
   bool privacy_filtering_enabled;
   {
-    base::AutoLock lock(lock_);
+    AutoLockWithDeferredTaskPosting lock(lock_);
     trace_packet = trace_writer_->NewTracePacket();
     privacy_filtering_enabled = privacy_filtering_enabled_;
   }
@@ -308,7 +315,7 @@ void TraceEventMetadataSource::StartTracing(
   auto proto_generators =
       std::make_unique<std::vector<MetadataGeneratorFunction>>();
   {
-    base::AutoLock lock(lock_);
+    AutoLockWithDeferredTaskPosting lock(lock_);
     privacy_filtering_enabled_ =
         data_source_config.chrome_config().privacy_filtering_enabled();
     chrome_config_ = data_source_config.chrome_config().trace_config();
@@ -343,7 +350,7 @@ void TraceEventMetadataSource::StopTracing(
     base::OnceClosure stop_complete_callback) {
   base::OnceClosure maybe_generate_task = base::DoNothing();
   {
-    base::AutoLock lock(lock_);
+    AutoLockWithDeferredTaskPosting lock(lock_);
     if (!emit_metadata_at_start_ && trace_writer_) {
       // Write metadata at the end of tracing if not emitted at start (in ring
       // buffer mode), to make it less likely that it is overwritten by other
@@ -367,7 +374,7 @@ void TraceEventMetadataSource::StopTracing(
           [](TraceEventMetadataSource* ds,
              base::OnceClosure stop_complete_callback) {
             {
-              base::AutoLock lock(ds->lock_);
+              AutoLockWithDeferredTaskPosting lock(ds->lock_);
               ds->producer_ = nullptr;
               ds->trace_writer_.reset();
               ds->chrome_config_ = std::string();
@@ -399,7 +406,7 @@ base::ThreadLocalStorage::Slot* ThreadLocalEventSinkSlot() {
       thread_local_event_sink_tls([](void* event_sink) {
         AutoThreadLocalBoolean thread_is_in_trace_event(
             TraceEventDataSource::GetThreadIsInTraceEventTLS());
-        delete static_cast<ThreadLocalEventSink*>(event_sink);
+        delete static_cast<TrackEventThreadLocalEventSink*>(event_sink);
       });
 
   return thread_local_event_sink_tls.get();
@@ -438,14 +445,20 @@ TraceEventDataSource::TraceEventDataSource()
     : DataSourceBase(mojom::kTraceEventDataSourceName),
       disable_interning_(base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kPerfettoDisableInterning)) {
+  DCHECK(session_flags_.is_lock_free())
+      << "SessionFlags are not atomic! We rely on efficient lock-free look-up "
+         "of the session flags when emitting a trace event.";
   g_trace_event_data_source_for_testing = this;
   DETACH_FROM_SEQUENCE(perfetto_sequence_checker_);
 }
 
 TraceEventDataSource::~TraceEventDataSource() = default;
 
+void TraceEventDataSource::RegisterStartupHooks() {
+  RegisterTracedValueProtoWriter();
+}
+
 void TraceEventDataSource::RegisterWithTraceLog() {
-  RegisterTracedValueProtoWriter(true);
   TraceLog::GetInstance()->SetAddTraceEventOverrides(
       &TraceEventDataSource::OnAddTraceEvent,
       &TraceEventDataSource::FlushCurrentThread,
@@ -455,12 +468,58 @@ void TraceEventDataSource::RegisterWithTraceLog() {
 }
 
 void TraceEventDataSource::UnregisterFromTraceLog() {
-  RegisterTracedValueProtoWriter(false);
   TraceLog::GetInstance()->SetAddTraceEventOverrides(nullptr, nullptr, nullptr);
   base::AutoLock l(lock_);
   is_enabled_ = false;
   flushing_trace_log_ = false;
   DCHECK(!flush_complete_task_);
+}
+
+// static
+TrackEventThreadLocalEventSink* TraceEventDataSource::GetOrPrepareEventSink(
+    bool thread_will_flush) {
+  // Avoid re-entrancy, which can happen during PostTasks (the taskqueue can
+  // emit trace events). We discard the events in this case, as any PostTasking
+  // to deal with these events later would break the event ordering that the
+  // JSON traces rely on to merge 'A'/'B' events, as well as having to deal with
+  // updating duration of 'X' events which haven't been added yet.
+  if (GetThreadIsInTraceEventTLS()->Get()) {
+    return nullptr;
+  }
+
+  AutoThreadLocalBoolean thread_is_in_trace_event(GetThreadIsInTraceEventTLS());
+
+  auto* thread_local_event_sink = static_cast<TrackEventThreadLocalEventSink*>(
+      ThreadLocalEventSinkSlot()->Get());
+
+  // Make sure the sink was reset since the last tracing session. Normally, it
+  // is reset on Flush after the session is disabled. However, it may not have
+  // been reset if the current thread doesn't support flushing. In that case, we
+  // need to check here that it writes to the right buffer.
+  //
+  // Because we want to avoid locking for each event, we access |session_flags_|
+  // racily. It's OK if we don't see it change to the session immediately. In
+  // that case, the first few trace events may get lost, but we will eventually
+  // notice that we are writing to the wrong buffer once the change to
+  // |session_flags_| has propagated, and reset the sink. Note we will still
+  // acquire the |lock_| to safely recreate the sink in
+  // CreateThreadLocalEventSink().
+  if (thread_local_event_sink) {
+    SessionFlags new_session_flags =
+        GetInstance()->session_flags_.load(std::memory_order_relaxed);
+    if (new_session_flags.session_id != thread_local_event_sink->session_id()) {
+      delete thread_local_event_sink;
+      thread_local_event_sink = nullptr;
+    }
+  }
+
+  if (!thread_local_event_sink) {
+    thread_local_event_sink =
+        GetInstance()->CreateThreadLocalEventSink(thread_will_flush);
+    ThreadLocalEventSinkSlot()->Set(thread_local_event_sink);
+  }
+
+  return thread_local_event_sink;
 }
 
 bool TraceEventDataSource::IsEnabled() {
@@ -470,7 +529,7 @@ bool TraceEventDataSource::IsEnabled() {
 
 void TraceEventDataSource::SetupStartupTracing(bool privacy_filtering_enabled) {
   {
-    base::AutoLock lock(lock_);
+    AutoLockWithDeferredTaskPosting lock(lock_);
     // Do not enable startup registry if trace log is being flushed. The
     // previous tracing session has not ended yet.
     if (flushing_trace_log_) {
@@ -486,6 +545,7 @@ void TraceEventDataSource::SetupStartupTracing(bool privacy_filtering_enabled) {
     privacy_filtering_enabled_ = privacy_filtering_enabled;
     startup_writer_registry_ =
         std::make_unique<perfetto::StartupTraceWriterRegistry>();
+    SetStartupTracingFlagsWhileLocked();
 
     DCHECK(!trace_writer_);
     trace_writer_ = CreateTraceWriterLocked();
@@ -524,7 +584,7 @@ void TraceEventDataSource::StartupTracingTimeoutFired() {
   std::unique_ptr<perfetto::StartupTraceWriterRegistry> registry;
   std::unique_ptr<perfetto::StartupTraceWriter> trace_writer;
   {
-    base::AutoLock lock(lock_);
+    AutoLockWithDeferredTaskPosting lock(lock_);
     if (!startup_writer_registry_) {
       return;
     }
@@ -544,6 +604,34 @@ void TraceEventDataSource::StartupTracingTimeoutFired() {
                    /*use_worker_thread=*/false);
 }
 
+void TraceEventDataSource::IncrementSessionIdOrClearStartupFlagWhileLocked() {
+  // Protected by |lock_| for CreateThreadLocalEventSink() and
+  // SetStartupTracingFlagsWhileLocked().
+  lock_.AssertAcquired();
+  SessionFlags flags = session_flags_.load(std::memory_order_relaxed);
+  if (flags.is_startup_tracing) {
+    // Don't increment the session ID if startup tracing was active for this
+    // session. This way, the sinks that were created while startup tracing for
+    // the current session won't be cleared away (resetting such sinks could
+    // otherwise cause data buffered in their potentially still unbound
+    // StartupTraceWriters to be lost).
+    flags.is_startup_tracing = false;
+  } else {
+    flags.session_id++;
+  }
+  session_flags_.store(flags, std::memory_order_relaxed);
+}
+
+void TraceEventDataSource::SetStartupTracingFlagsWhileLocked() {
+  // Protected by |lock_| for CreateThreadLocalEventSink() and
+  // IncrementSessionIdOrClearStartupFlagWhileLocked().
+  lock_.AssertAcquired();
+  SessionFlags flags = session_flags_.load(std::memory_order_relaxed);
+  flags.is_startup_tracing = true;
+  flags.session_id++;
+  session_flags_.store(flags, std::memory_order_relaxed);
+}
+
 void TraceEventDataSource::OnFlushFinished(
     const scoped_refptr<base::RefCountedString>&,
     bool has_more_events) {
@@ -551,20 +639,20 @@ void TraceEventDataSource::OnFlushFinished(
     return;
   }
 
-  // Increment the session id to make sure that once tracing starts the events
-  // are added to a new trace writer that comes from perfetto producer, instead
-  // of holding on to the startup registry's writers.
-  session_id_.fetch_add(1u, std::memory_order_relaxed);
-
   // Clear the pending task on the tracing service thread.
   DCHECK_CALLED_ON_VALID_SEQUENCE(perfetto_sequence_checker_);
   base::OnceClosure task;
   {
-    base::AutoLock l(lock_);
+    AutoLockWithDeferredTaskPosting l(lock_);
     // Run any pending start or stop tracing
     // task.
     task = std::move(flush_complete_task_);
     flushing_trace_log_ = false;
+
+    // Increment the session id to make sure that once tracing starts the events
+    // are added to a new trace writer that comes from perfetto producer,
+    // instead of holding on to the startup registry's writers.
+    IncrementSessionIdOrClearStartupFlagWhileLocked();
   }
   if (task) {
     std::move(task).Run();
@@ -575,7 +663,7 @@ void TraceEventDataSource::StartTracing(
     PerfettoProducer* producer,
     const perfetto::DataSourceConfig& data_source_config) {
   {
-    base::AutoLock l(lock_);
+    AutoLockWithDeferredTaskPosting l(lock_);
     if (flushing_trace_log_) {
       DCHECK(!flush_complete_task_);
       // Delay start tracing until flush is finished.
@@ -596,7 +684,7 @@ void TraceEventDataSource::StartTracingInternal(
   DCHECK_CALLED_ON_VALID_SEQUENCE(perfetto_sequence_checker_);
   std::unique_ptr<perfetto::StartupTraceWriterRegistry> unbound_writer_registry;
   {
-    base::AutoLock lock(lock_);
+    AutoLockWithDeferredTaskPosting lock(lock_);
     bool should_enable_filtering =
         data_source_config.chrome_config().privacy_filtering_enabled();
     if (should_enable_filtering) {
@@ -611,8 +699,7 @@ void TraceEventDataSource::StartTracingInternal(
     // Reduce lock contention by binding the registry without holding the lock.
     unbound_writer_registry = std::move(startup_writer_registry_);
 
-    // Protected by |lock_| for CreateThreadLocalEventSink().
-    session_id_.fetch_add(1u, std::memory_order_relaxed);
+    IncrementSessionIdOrClearStartupFlagWhileLocked();
 
     if (!trace_writer_) {
       trace_writer_ = CreateTraceWriterLocked();
@@ -635,6 +722,12 @@ void TraceEventDataSource::StartTracingInternal(
       TraceConfig(data_source_config.chrome_config().trace_config());
   TraceLog::GetInstance()->SetEnabled(trace_config, TraceLog::RECORDING_MODE);
   ResetHistograms(trace_config);
+
+  if (trace_config.IsCategoryGroupEnabled(
+          TRACE_DISABLED_BY_DEFAULT("histogram_samples"))) {
+    base::StatisticsRecorder::SetGlobalSampleCallback(
+        &TraceEventDataSource::OnMetricsSampleCallback);
+  }
 }
 
 void TraceEventDataSource::StopTracing(
@@ -665,7 +758,7 @@ void TraceEventDataSource::StopTracing(
 
   std::unique_ptr<perfetto::StartupTraceWriter> trace_writer;
   {
-    base::AutoLock lock(lock_);
+    AutoLockWithDeferredTaskPosting lock(lock_);
     if (flush_complete_task_) {
       DCHECK(!producer_);
       // Skip start tracing task at this point if we still have not flushed
@@ -706,6 +799,8 @@ void TraceEventDataSource::StopTracing(
     on_tracing_stopped_callback(this, scoped_refptr<base::RefCountedString>(),
                                 false);
   }
+
+  base::StatisticsRecorder::SetGlobalSampleCallback(nullptr);
 }
 
 void TraceEventDataSource::LogHistogram(base::HistogramBase* histogram) {
@@ -761,12 +856,6 @@ void TraceEventDataSource::ClearIncrementalState() {
 std::unique_ptr<perfetto::StartupTraceWriter>
 TraceEventDataSource::CreateTraceWriterLocked() {
   lock_.AssertAcquired();
-
-  // The call to CreateTraceWriter() below posts a task which is not allowed
-  // while holding |lock_|. Since we have to call it while holding |lock_|, we
-  // defer the task posting until after the lock is released.
-  base::ScopedDeferTaskPosting defer_task_posting;
-
   // |startup_writer_registry_| only exists during startup tracing before we
   // connect to the service. |producer_| is reset when tracing is
   // stopped.
@@ -787,10 +876,11 @@ TraceEventDataSource::CreateTraceWriterLocked() {
   return trace_writer;
 }
 
-ThreadLocalEventSink* TraceEventDataSource::CreateThreadLocalEventSink(
-    bool thread_will_flush) {
-  base::AutoLock lock(lock_);
-  uint32_t session_id = session_id_.load(std::memory_order_relaxed);
+TrackEventThreadLocalEventSink*
+TraceEventDataSource::CreateThreadLocalEventSink(bool thread_will_flush) {
+  AutoLockWithDeferredTaskPosting lock(lock_);
+  uint32_t session_id =
+      session_flags_.load(std::memory_order_relaxed).session_id;
 
   auto trace_writer = CreateTraceWriterLocked();
   if (!trace_writer) {
@@ -807,63 +897,17 @@ void TraceEventDataSource::OnAddTraceEvent(
     TraceEvent* trace_event,
     bool thread_will_flush,
     base::trace_event::TraceEventHandle* handle) {
-  // Avoid re-entrancy, which can happen during PostTasks (the taskqueue can
-  // emit trace events). We discard the events in this case, as any PostTasking
-  // to deal with these events later would break the event ordering that the
-  // JSON traces rely on to merge 'A'/'B' events, as well as having to deal with
-  // updating duration of 'X' events which haven't been added yet.
-  if (GetThreadIsInTraceEventTLS()->Get()) {
-    return;
-  }
-
-  AutoThreadLocalBoolean thread_is_in_trace_event(GetThreadIsInTraceEventTLS());
-
-  auto* thread_local_event_sink =
-      static_cast<ThreadLocalEventSink*>(ThreadLocalEventSinkSlot()->Get());
-
-  // Make sure the sink was reset since the last tracing session. Normally, it
-  // is reset on Flush after the session is disabled. However, it may not have
-  // been reset if the current thread doesn't support flushing. In that case, we
-  // need to check here that it writes to the right buffer.
-  //
-  // Because we want to avoid locking for each event, we access |session_id_|
-  // racily. It's OK if we don't see it change to the session immediately. In
-  // that case, the first few trace events may get lost, but we will eventually
-  // notice that we are writing to the wrong buffer once the change to
-  // |session_id_| has propagated, and reset the sink. Note we will still
-  // acquire the |lock_| to safely recreate the sink in
-  // CreateThreadLocalEventSink().
-  if (!thread_will_flush && thread_local_event_sink) {
-    uint32_t new_session_id =
-        GetInstance()->session_id_.load(std::memory_order_relaxed);
-    // Ignore the first session to avoid resetting the sink during startup
-    // tracing, where the sink is created with kInvalidSessionID. Resetting the
-    // sink during startup might cause data buffered in its potentially still
-    // unbound StartupTraceWriter to be lost.
-    // NOTE: If the trace event we're adding disallows PostTasks (meaning
-    // events emitted while the taskqueue is locked), we can't reset the
-    // sink as the TraceWriter deletion is done through PostTask.
-    if (new_session_id > kFirstSessionID &&
-        new_session_id != thread_local_event_sink->session_id()) {
-      delete thread_local_event_sink;
-      thread_local_event_sink = nullptr;
-    }
-  }
-
-  if (!thread_local_event_sink) {
-    thread_local_event_sink =
-        GetInstance()->CreateThreadLocalEventSink(thread_will_flush);
-    ThreadLocalEventSinkSlot()->Set(thread_local_event_sink);
-  }
-
-  if (thread_local_event_sink) {
-    thread_local_event_sink->AddTraceEvent(trace_event, handle);
-  }
+  OnAddTraceEvent(trace_event, thread_will_flush, handle,
+                  [](perfetto::EventContext) {});
 }
 
 // static
 void TraceEventDataSource::OnUpdateDuration(
+    const unsigned char* category_group_enabled,
+    const char* name,
     base::trace_event::TraceEventHandle handle,
+    int thread_id,
+    bool explicit_timestamps,
     const base::TimeTicks& now,
     const base::ThreadTicks& thread_now,
     base::trace_event::ThreadInstructionCount thread_instruction_now) {
@@ -873,18 +917,19 @@ void TraceEventDataSource::OnUpdateDuration(
 
   AutoThreadLocalBoolean thread_is_in_trace_event(GetThreadIsInTraceEventTLS());
 
-  auto* thread_local_event_sink =
-      static_cast<ThreadLocalEventSink*>(ThreadLocalEventSinkSlot()->Get());
+  auto* thread_local_event_sink = static_cast<TrackEventThreadLocalEventSink*>(
+      ThreadLocalEventSinkSlot()->Get());
   if (thread_local_event_sink) {
-    thread_local_event_sink->UpdateDuration(handle, now, thread_now,
-                                            thread_instruction_now);
+    thread_local_event_sink->UpdateDuration(
+        category_group_enabled, name, handle, thread_id, explicit_timestamps,
+        now, thread_now, thread_instruction_now);
   }
 }
 
 // static
 void TraceEventDataSource::FlushCurrentThread() {
-  auto* thread_local_event_sink =
-      static_cast<ThreadLocalEventSink*>(ThreadLocalEventSinkSlot()->Get());
+  auto* thread_local_event_sink = static_cast<TrackEventThreadLocalEventSink*>(
+      ThreadLocalEventSinkSlot()->Get());
   if (thread_local_event_sink) {
     // Prevent any events from being emitted while we're deleting
     // the sink (like from the TraceWriter being PostTask'ed for deletion).
@@ -899,11 +944,27 @@ void TraceEventDataSource::FlushCurrentThread() {
   }
 }
 
+// static
+void TraceEventDataSource::OnMetricsSampleCallback(
+    const char* histogram_name,
+    uint64_t name_hash,
+    base::HistogramBase::Sample sample) {
+  // TODO(oysteine): Write an interned histogram name during local dev tracing
+  // when we're less space constrained.
+  TRACE_EVENT(TRACE_DISABLED_BY_DEFAULT("histogram_samples"), "HistogramSample",
+              [&](perfetto::EventContext ctx) {
+                perfetto::protos::pbzero::ChromeHistogramSample* new_sample =
+                    ctx.event()->set_chrome_histogram_sample();
+                new_sample->set_name_hash(name_hash);
+                new_sample->set_sample(sample);
+              });
+}
+
 void TraceEventDataSource::ReturnTraceWriter(
     std::unique_ptr<perfetto::StartupTraceWriter> trace_writer) {
   {
     // Prevent concurrent binding of the registry.
-    base::AutoLock lock(lock_);
+    AutoLockWithDeferredTaskPosting lock(lock_);
 
     // If we don't have a task runner yet, we must be attempting to return a
     // writer before the (very first) registry was bound. We cannot create the
@@ -961,13 +1022,14 @@ void TraceEventDataSource::EmitProcessDescriptor() {
 
   TracePacketHandle trace_packet;
   {
-    base::AutoLock lock(lock_);
+    AutoLockWithDeferredTaskPosting lock(lock_);
     if (!trace_writer_) {
       return;
     }
     trace_packet = trace_writer_->NewTracePacket();
   }
-  trace_packet->set_incremental_state_cleared(true);
+  trace_packet->set_sequence_flags(
+      perfetto::protos::pbzero::TracePacket::SEQ_INCREMENTAL_STATE_CLEARED);
   trace_packet->set_timestamp(
       TRACE_TIME_TICKS_NOW().since_origin().InNanoseconds());
   trace_packet->set_timestamp_clock_id(kTraceClockId);

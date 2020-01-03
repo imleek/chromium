@@ -34,11 +34,12 @@ IndexedDBFakeBackingStore::IndexedDBFakeBackingStore()
                             std::unique_ptr<TransactionalLevelDBDatabase>(),
                             BlobFilesCleanedCallback(),
                             ReportOutstandingBlobsCallback(),
-                            base::SequencedTaskRunnerHandle::Get().get()) {}
+                            base::SequencedTaskRunnerHandle::Get(),
+                            base::SequencedTaskRunnerHandle::Get()) {}
 IndexedDBFakeBackingStore::IndexedDBFakeBackingStore(
     BlobFilesCleanedCallback blob_files_cleaned,
     ReportOutstandingBlobsCallback report_outstanding_blobs,
-    base::SequencedTaskRunner* task_runner)
+    scoped_refptr<base::SequencedTaskRunner> task_runner)
     : IndexedDBBackingStore(IndexedDBBackingStore::Mode::kOnDisk,
                             GetTransactionalLevelDBFactory(),
                             url::Origin::Create(GURL("http://localhost:81")),
@@ -46,6 +47,7 @@ IndexedDBFakeBackingStore::IndexedDBFakeBackingStore(
                             std::unique_ptr<TransactionalLevelDBDatabase>(),
                             std::move(blob_files_cleaned),
                             std::move(report_outstanding_blobs),
+                            task_runner,
                             task_runner) {}
 IndexedDBFakeBackingStore::~IndexedDBFakeBackingStore() {}
 
@@ -121,7 +123,7 @@ leveldb::Status IndexedDBFakeBackingStore::PutIndexDataForRecord(
 }
 
 void IndexedDBFakeBackingStore::ReportBlobUnused(int64_t database_id,
-                                                 int64_t blob_key) {}
+                                                 int64_t blob_number) {}
 
 std::unique_ptr<IndexedDBBackingStore::Cursor>
 IndexedDBFakeBackingStore::OpenObjectStoreKeyCursor(
@@ -168,16 +170,20 @@ IndexedDBFakeBackingStore::OpenIndexCursor(
 
 IndexedDBFakeBackingStore::FakeTransaction::FakeTransaction(
     leveldb::Status result)
+    : FakeTransaction(result, blink::mojom::IDBTransactionMode::ReadWrite) {}
+IndexedDBFakeBackingStore::FakeTransaction::FakeTransaction(
+    leveldb::Status result,
+    blink::mojom::IDBTransactionMode mode)
     : IndexedDBBackingStore::Transaction(
           nullptr,
-          blink::mojom::IDBTransactionDurability::Relaxed),
+          blink::mojom::IDBTransactionDurability::Relaxed,
+          mode),
       result_(result) {}
 void IndexedDBFakeBackingStore::FakeTransaction::Begin(
     std::vector<ScopeLock> locks) {}
 leveldb::Status IndexedDBFakeBackingStore::FakeTransaction::CommitPhaseOne(
     BlobWriteCallback callback) {
-  return std::move(callback).Run(
-      IndexedDBBackingStore::BlobWriteResult::kRunPhaseTwoAndReturnResult);
+  return std::move(callback).Run(BlobWriteResult::kRunPhaseTwoAndReturnResult);
 }
 leveldb::Status IndexedDBFakeBackingStore::FakeTransaction::CommitPhaseTwo() {
   return result_;
@@ -191,8 +197,9 @@ leveldb::Status IndexedDBFakeBackingStore::FakeTransaction::Rollback() {
 
 std::unique_ptr<IndexedDBBackingStore::Transaction>
 IndexedDBFakeBackingStore::CreateTransaction(
-    blink::mojom::IDBTransactionDurability durability) {
-  return std::make_unique<FakeTransaction>(leveldb::Status::OK());
+    blink::mojom::IDBTransactionDurability durability,
+    blink::mojom::IDBTransactionMode mode) {
+  return std::make_unique<FakeTransaction>(leveldb::Status::OK(), mode);
 }
 
 }  // namespace content

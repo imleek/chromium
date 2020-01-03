@@ -8,8 +8,8 @@
 #include "base/run_loop.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkSurface.h"
-#include "ui/ozone/common/linux/gbm_buffer.h"
-#include "ui/ozone/common/linux/gbm_device.h"
+#include "ui/gfx/linux/gbm_buffer.h"
+#include "ui/gfx/linux/gbm_device.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_buffer_manager_gpu.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_surface_factory.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
@@ -204,9 +204,9 @@ TEST_P(WaylandSurfaceFactoryTest, CreateSurfaceCheckGbm) {
   EXPECT_FALSE(gl_surface);
 }
 
-INSTANTIATE_TEST_SUITE_P(XdgVersionV5Test,
+INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
                          WaylandSurfaceFactoryTest,
-                         ::testing::Values(kXdgShellV5));
+                         ::testing::Values(kXdgShellStable));
 INSTANTIATE_TEST_SUITE_P(XdgVersionV6Test,
                          WaylandSurfaceFactoryTest,
                          ::testing::Values(kXdgShellV6));

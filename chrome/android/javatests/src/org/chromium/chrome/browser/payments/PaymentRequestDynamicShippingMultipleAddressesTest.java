@@ -23,7 +23,7 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.ui.DisableAnimationsTestRule;
+import org.chromium.ui.test.util.DisableAnimationsTestRule;
 
 import java.util.ArrayList;
 import java.util.concurrent.TimeoutException;
@@ -369,7 +369,7 @@ public class PaymentRequestDynamicShippingMultipleAddressesTest
     @Test
     @MediumTest
     @Feature({"Payments"})
-    @CommandLineFlags.Add("disable-features=NoCreditCardAbort")
+    @CommandLineFlags.Add("disable-features=StrictHasEnrolledAutofillInstrument")
     public void testAllMissingFieldsRecorded() throws TimeoutException {
         // Don't add any profiles
         mProfilesToAdd = new AutofillProfile[] {};

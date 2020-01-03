@@ -18,7 +18,6 @@
 #include "chrome/common/search/ntp_logging_events.h"
 #include "components/ntp_tiles/ntp_tile_impression.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
-#include "content/public/browser/web_contents_binding_set.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 
@@ -164,8 +163,16 @@ class SearchIPCRouter : public content::WebContentsObserver,
 
     virtual void BlocklistPromo(const std::string& promo_id) = 0;
 
+    virtual void OpenExtensionsPage(double button,
+                                    bool alt_key,
+                                    bool ctrl_key,
+                                    bool meta_key,
+                                    bool shift_key) = 0;
+
     virtual void OpenAutocompleteMatch(uint8_t line,
                                        const GURL& url,
+                                       bool are_matches_showing,
+                                       double time_elapsed_since_last_focus,
                                        double button,
                                        bool alt_key,
                                        bool ctrl_key,
@@ -215,6 +222,7 @@ class SearchIPCRouter : public content::WebContentsObserver,
     virtual bool ShouldProcessQueryAutocomplete(bool is_active_tab) = 0;
     virtual bool ShouldProcessStopAutocomplete() = 0;
     virtual bool ShouldProcessBlocklistPromo() = 0;
+    virtual bool ShouldProcessOpenExtensionsPage() = 0;
     virtual bool ShouldProcessOpenAutocompleteMatch(bool is_active_tab) = 0;
     virtual bool ShouldProcessDeleteAutocompleteMatch() = 0;
   };
@@ -329,8 +337,15 @@ class SearchIPCRouter : public content::WebContentsObserver,
                          bool prevent_inline_autocomplete) override;
   void StopAutocomplete(bool clear_result) override;
   void BlocklistPromo(const std::string& promo_id) override;
+  void OpenExtensionsPage(double button,
+                          bool alt_key,
+                          bool ctrl_key,
+                          bool meta_key,
+                          bool shift_key) override;
   void OpenAutocompleteMatch(uint8_t line,
                              const GURL& url,
+                             bool are_matches_showing,
+                             double time_elapsed_since_last_focus,
                              double button,
                              bool alt_key,
                              bool ctrl_key,

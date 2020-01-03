@@ -52,6 +52,7 @@ MEDIA_EXPORT extern const char kWaveOutBuffers[];
 #if defined(OS_FUCHSIA)
 MEDIA_EXPORT extern const char kEnableProtectedVideoBuffers[];
 MEDIA_EXPORT extern const char kForceProtectedVideoOutputBuffers[];
+MEDIA_EXPORT extern const char kEnableFuchsiaAudioConsumer[];
 #endif
 
 #if defined(USE_CRAS)
@@ -82,8 +83,6 @@ MEDIA_EXPORT extern const char kMSEVideoBufferSizeLimitMb[];
 MEDIA_EXPORT extern const char kClearKeyCdmPathForTesting[];
 MEDIA_EXPORT extern const char kOverrideEnabledCdmInterfaceVersion[];
 MEDIA_EXPORT extern const char kOverrideHardwareSecureCodecsForTesting[];
-
-MEDIA_EXPORT extern const char kVideoCaptureUseGpuMemoryBuffer[];
 
 namespace autoplay {
 
@@ -125,6 +124,7 @@ MEDIA_EXPORT extern const base::Feature kGlobalMediaControlsOverlayControls;
 MEDIA_EXPORT extern const base::Feature kHardwareMediaKeyHandling;
 MEDIA_EXPORT extern const base::Feature kHardwareSecureDecryption;
 MEDIA_EXPORT extern const base::Feature kInternalMediaSession;
+MEDIA_EXPORT extern const base::Feature kLiveCaption;
 MEDIA_EXPORT extern const base::Feature kLowDelayVideoRenderingOnLiveStream;
 MEDIA_EXPORT extern const base::Feature kMediaCapabilitiesWithParameters;
 MEDIA_EXPORT extern const base::Feature kMediaCastOverlayButton;
@@ -154,7 +154,6 @@ MEDIA_EXPORT extern const base::Feature kUseFakeDeviceForMediaStream;
 MEDIA_EXPORT extern const base::Feature kUseMediaHistoryStore;
 MEDIA_EXPORT extern const base::Feature kUseNewMediaCache;
 MEDIA_EXPORT extern const base::Feature kUseR16Texture;
-MEDIA_EXPORT extern const base::Feature kUseSurfaceLayerForVideo;
 MEDIA_EXPORT extern const base::Feature kVaapiH264AMDEncoder;
 MEDIA_EXPORT extern const base::Feature kVaapiLowPowerEncoder;
 MEDIA_EXPORT extern const base::Feature kVaapiVP8Encoder;

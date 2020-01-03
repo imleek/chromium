@@ -3,7 +3,11 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
+import 'chrome://resources/mojo/url/mojom/url.mojom-lite.js';
+
+import './skcolor.mojom-lite.js';
 import './new_tab_page.mojom-lite.js';
+
 import {addSingletonGetter} from 'chrome://resources/js/cr.m.js';
 
 export class BrowserProxy {
@@ -14,7 +18,8 @@ export class BrowserProxy {
     /** @type {newTabPage.mojom.PageHandlerRemote} */
     this.handler = new newTabPage.mojom.PageHandlerRemote();
 
-    const factory = newTabPage.mojom.PageHandlerFactory.getRemote();
+    const factory = newTabPage.mojom.PageHandlerFactory.getRemote(
+        /*useBrowserInterfaceBroker=*/ true);
     factory.createPageHandler(
         this.callbackRouter.$.bindNewPipeAndPassRemote(),
         this.handler.$.bindNewPipeAndPassReceiver());

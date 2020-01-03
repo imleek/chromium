@@ -28,6 +28,8 @@
 #include "components/download/public/common/download_url_parameters.h"
 #include "components/download/public/common/resume_mode.h"
 #include "components/download/public/common/url_loader_factory_provider.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -52,6 +54,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
                 const GURL& tab_url,
                 const GURL& tab_referrer_url,
                 const base::Optional<url::Origin>& request_initiator,
+                const net::NetworkIsolationKey& network_isolation_key,
                 const std::string& suggested_filename,
                 const base::FilePath& forced_file_path,
                 ui::PageTransition transition_type,
@@ -60,7 +63,8 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
                 base::Time start_time);
     RequestInfo();
     explicit RequestInfo(const RequestInfo& other);
-    explicit RequestInfo(const GURL& url);
+    explicit RequestInfo(const GURL& url,
+                         const net::NetworkIsolationKey& network_isolation_key);
     ~RequestInfo();
 
     // The chain of redirects that leading up to and including the final URL.
@@ -80,6 +84,10 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
 
     // The origin of the requester that originally initiated the download.
     base::Optional<url::Origin> request_initiator;
+
+    // The key used to isolate requests from different contexts in accessing
+    // shared network resources like the cache.
+    net::NetworkIsolationKey network_isolation_key;
 
     // Filename suggestion from DownloadSaveInfo. It could, among others, be the
     // suggested filename in 'download' attribute of an anchor. Details:
@@ -208,6 +216,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
                    const base::FilePath& path,
                    const GURL& url,
                    const std::string& mime_type,
+                   const net::NetworkIsolationKey& network_isolation_key,
                    DownloadJob::CancelRequestCallback cancel_request_callback);
 
   ~DownloadItemImpl() override;
@@ -246,6 +255,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   const GURL& GetTabUrl() const override;
   const GURL& GetTabReferrerUrl() const override;
   const base::Optional<url::Origin>& GetRequestInitiator() const override;
+  const net::NetworkIsolationKey& GetNetworkIsolationKey() const override;
   std::string GetSuggestedFilename() const override;
   const scoped_refptr<const net::HttpResponseHeaders>& GetResponseHeaders()
       const override;
@@ -258,6 +268,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   const std::string& GetLastModifiedTime() const override;
   const std::string& GetETag() const override;
   bool IsSavePackageDownload() const override;
+  DownloadSource GetDownloadSource() const override;
   const base::FilePath& GetFullPath() const override;
   const base::FilePath& GetTargetFilePath() const override;
   const base::FilePath& GetForcedFilePath() const override;
@@ -266,7 +277,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   TargetDisposition GetTargetDisposition() const override;
   const std::string& GetHash() const override;
   bool GetFileExternallyRemoved() const override;
-  void DeleteFile(const base::Callback<void(bool)>& callback) override;
+  void DeleteFile(base::OnceCallback<void(bool)> callback) override;
   DownloadFile* GetDownloadFile() override;
   bool IsDangerous() const override;
   DownloadDangerType GetDangerType() const override;
@@ -364,8 +375,6 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   }
 
   bool fetch_error_body() const { return fetch_error_body_; }
-
-  DownloadSource download_source() const { return download_source_; }
 
   uint64_t ukm_download_id() const { return ukm_download_id_; }
 
@@ -649,6 +658,10 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
 
   // Whether strong validators are present.
   bool HasStrongValidators() const;
+
+  // Binds a device.mojom.WakeLockProvider receiver for any job that needs one.
+  void BindWakeLockProvider(
+      mojo::PendingReceiver<device::mojom::WakeLockProvider> receiver);
 
   DownloadItem::DownloadRenameResult RenameDownloadedFile(
       const std::string& name);

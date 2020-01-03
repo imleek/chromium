@@ -24,6 +24,7 @@ source_set("time_zone_monitor") {
 
   deps = [
     "//base",
+    "//build:chromecast_buildflags",
     "//mojo/public/cpp/bindings",
     "//third_party/icu",
   ]
@@ -51,10 +52,6 @@ source_set("time_zone_monitor") {
   if (is_fuchsia) {
     sources += [ "time_zone_monitor_fuchsia.cc" ]
   }
-
-  if (is_chromecast) {
-    defines = [ "IS_CHROMECAST" ]
-  }
 }
 
 if (is_android) {
@@ -70,7 +67,9 @@ if (is_android) {
     # However, various generated targets also need to see this target as a
     # result of //services/device:java depending on it.
     visibility = [ "//services/device:*" ]
-    java_files = [ "android/java/src/org/chromium/device/time_zone_monitor/TimeZoneMonitor.java" ]
+    sources = [
+      "android/java/src/org/chromium/device/time_zone_monitor/TimeZoneMonitor.java",
+    ]
     deps = [
       "//base:base_java",
       "//base:jni_java",

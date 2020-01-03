@@ -14,10 +14,6 @@ class CORE_EXPORT CSSTransition : public Animation {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static CSSTransition* Create(AnimationEffect*,
-                               AnimationTimeline*,
-                               const PropertyHandle&);
-
   CSSTransition(ExecutionContext*,
                 AnimationTimeline*,
                 AnimationEffect*,
@@ -34,11 +30,12 @@ class CORE_EXPORT CSSTransition : public Animation {
   PropertyHandle transition_property_;
 };
 
-DEFINE_TYPE_CASTS(CSSTransition,
-                  Animation,
-                  animation,
-                  animation->IsCSSTransition(),
-                  animation.IsCSSTransition());
+template <>
+struct DowncastTraits<CSSTransition> {
+  static bool AllowFrom(const Animation& animation) {
+    return animation.IsCSSTransition();
+  }
+};
 
 }  // namespace blink
 

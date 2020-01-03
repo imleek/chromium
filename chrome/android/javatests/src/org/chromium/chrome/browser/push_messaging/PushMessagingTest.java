@@ -6,9 +6,7 @@ package org.chromium.chrome.browser.push_messaging;
 
 import android.annotation.SuppressLint;
 import android.app.Notification;
-import android.content.Context;
 import android.os.Bundle;
-import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.LargeTest;
 import android.support.test.filters.MediumTest;
 import android.util.Pair;
@@ -30,7 +28,7 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.infobar.InfoBar;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.notifications.NotificationTestRule;
-import org.chromium.chrome.browser.preferences.website.ContentSettingValues;
+import org.chromium.chrome.browser.settings.website.ContentSettingValues;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.InfoBarUtil;
@@ -310,15 +308,11 @@ public class PushMessagingTest implements PushMessagingServiceObserver.Listener 
         final String appId = appIdAndSenderId.first;
         final String senderId = appIdAndSenderId.second;
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Context context = InstrumentationRegistry.getInstrumentation()
-                                      .getTargetContext()
-                                      .getApplicationContext();
-
             Bundle extras = new Bundle();
             extras.putString("subtype", appId);
 
             GCMMessage message = new GCMMessage(senderId, extras);
-            ChromeBrowserInitializer.getInstance(context).handleSynchronousStartup();
+            ChromeBrowserInitializer.getInstance().handleSynchronousStartup();
             GCMDriver.dispatchMessage(message);
         });
         mMessageHandledHelper.waitForCallback(mMessageHandledHelper.getCallCount());

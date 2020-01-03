@@ -450,10 +450,6 @@ void FragmentShader::Init(GLES2Interface* context,
       uniforms.push_back("color");
       break;
   }
-  if (color_conversion_mode_ == COLOR_CONVERSION_MODE_LUT) {
-    uniforms.push_back("lut_texture");
-    uniforms.push_back("lut_size");
-  }
   if (has_output_color_matrix_)
     uniforms.emplace_back("output_color_matrix");
 
@@ -515,10 +511,6 @@ void FragmentShader::Init(GLES2Interface* context,
     case INPUT_COLOR_SOURCE_UNIFORM:
       color_location_ = locations[index++];
       break;
-  }
-  if (color_conversion_mode_ == COLOR_CONVERSION_MODE_LUT) {
-    lut_texture_location_ = locations[index++];
-    lut_size_location_ = locations[index++];
   }
 
   if (has_output_color_matrix_)
@@ -612,8 +604,10 @@ void FragmentShader::SetRoundedCornerFunctions(
           if (r == 0.0)
             return src;
 
-          // Vector to the corner's center this frag is in.
-          vec2 cornerCenter = GetCenter(isCorner, r);
+          // Vector to the corner's center this fragment is in.
+          // Due to precision errors on android, this variable requires a highp.
+          // See https://crbug.com/1009322
+          RoundedCornerPrecision vec2 cornerCenter = GetCenter(isCorner, r);
 
           // Vector from the center of the corner to the current fragment center
           vec2 cxy = rcCoord - cornerCenter;
@@ -630,6 +624,12 @@ void FragmentShader::SetRoundedCornerFunctions(
   std::string shader;
   shader.reserve(shader_string->size() + 2048);
   shader += "precision mediump float;";
+  shader +=
+      "\n#ifdef GL_FRAGMENT_PRECISION_HIGH\n"
+      "  #define RoundedCornerPrecision highp\n"
+      "#else\n"
+      "  #define RoundedCornerPrecision mediump\n"
+      "#endif\n";
   kUniforms.AppendToString(&shader);
   kFunctionRcUtility.AppendToString(&shader);
   kFunctionApplyRoundedCorner.AppendToString(&shader);
@@ -1030,29 +1030,6 @@ std::string FragmentShader::GetShaderSource() const {
 
   // Apply color conversion.
   switch (color_conversion_mode_) {
-    case COLOR_CONVERSION_MODE_LUT:
-      HDR("uniform sampler2D lut_texture;");
-      HDR("uniform float lut_size;");
-      HDR("vec4 LUT(sampler2D sampler, vec3 pos, float size) {");
-      HDR("  pos *= size - 1.0;");
-      HDR("  // Select layer");
-      HDR("  float layer = min(floor(pos.z), size - 2.0);");
-      HDR("  // Compress the xy coordinates so they stay within");
-      HDR("  // [0.5 .. 31.5] / N (assuming a LUT size of 17^3)");
-      HDR("  pos.xy = (pos.xy + vec2(0.5)) / size;");
-      HDR("  pos.y = (pos.y + layer) / size;");
-      HDR("  return mix(LutLookup(sampler, pos.xy),");
-      HDR("             LutLookup(sampler, pos.xy + vec2(0, 1.0 / size)),");
-      HDR("             pos.z - layer);");
-      HDR("}");
-      // Un-premultiply by alpha.
-      if (premultiply_alpha_mode_ != NON_PREMULTIPLIED_ALPHA) {
-        SRC("// un-premultiply alpha");
-        SRC("if (texColor.a > 0.0) texColor.rgb /= texColor.a;");
-      }
-      SRC("texColor.rgb = LUT(lut_texture, texColor.xyz, lut_size).xyz;");
-      SRC("texColor.rgb *= texColor.a;");
-      break;
     case COLOR_CONVERSION_MODE_SHADER:
       header += color_transform_->GetShaderSource();
       // Un-premultiply by alpha.

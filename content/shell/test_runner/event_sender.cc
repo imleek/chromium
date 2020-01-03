@@ -33,21 +33,20 @@
 #include "gin/object_template_builder.h"
 #include "gin/wrappable.h"
 #include "net/base/filename_util.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
+#include "third_party/blink/public/common/input/web_pointer_properties.h"
+#include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_keyboard_event.h"
-#include "third_party/blink/public/platform/web_pointer_properties.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/platform/web_touch_event.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_context_menu_data.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_page_popup.h"
-#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
@@ -57,7 +56,6 @@
 using blink::WebContextMenuData;
 using blink::WebDragData;
 using blink::WebDragOperationsMask;
-using blink::WebFloatPoint;
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
 using blink::WebInputEventResult;
@@ -1336,7 +1334,7 @@ void EventSender::Reset() {
   touch_points_.clear();
   last_context_menu_data_.reset();
   weak_factory_.InvalidateWeakPtrs();
-  current_gesture_location_ = WebFloatPoint(0, 0);
+  current_gesture_location_ = gfx::PointF();
   mouse_event_queue_.clear();
 
   time_offset_ = base::TimeDelta();
@@ -1943,7 +1941,7 @@ void EventSender::DumpFilenameBeingDragged() {
 }
 
 void EventSender::GestureScrollFirstPoint(float x, float y) {
-  current_gesture_location_ = WebFloatPoint(x, y);
+  current_gesture_location_ = gfx::PointF(x, y);
 }
 
 void EventSender::TouchStart(gin::Arguments* args) {
@@ -2017,8 +2015,8 @@ void EventSender::BeginDragWithItems(
   web_widget_test_proxy_->ConvertWindowToViewport(&rect);
   float scale_to_blink_coords = rect.width;
 
-  WebFloatPoint last_pos_for_blink(last_pos.x * scale_to_blink_coords,
-                                   last_pos.y * scale_to_blink_coords);
+  gfx::PointF last_pos_for_blink(last_pos.x * scale_to_blink_coords,
+                                 last_pos.y * scale_to_blink_coords);
 
   // Provide a drag source.
   mainFrameWidget()->DragTargetDragEnter(current_drag_data_, last_pos_for_blink,
@@ -2232,8 +2230,7 @@ void EventSender::ScheduleAsynchronousKeyDown(const std::string& code_str,
 }
 
 void EventSender::ConsumeUserActivation() {
-  blink::WebUserGestureIndicator::ConsumeUserGesture(
-      view()->MainFrame()->ToWebLocalFrame());
+  view()->MainFrame()->ToWebLocalFrame()->ConsumeTransientUserActivation();
 }
 
 base::TimeTicks EventSender::GetCurrentEventTime() const {
@@ -2344,14 +2341,12 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
       event.data.scroll_update.delta_x = static_cast<float>(x);
       event.data.scroll_update.delta_y = static_cast<float>(y);
       event.SetPositionInWidget(current_gesture_location_);
-      current_gesture_location_.x =
-          current_gesture_location_.x + event.data.scroll_update.delta_x;
-      current_gesture_location_.y =
-          current_gesture_location_.y + event.data.scroll_update.delta_y;
+      current_gesture_location_.Offset(event.data.scroll_update.delta_x,
+                                       event.data.scroll_update.delta_y);
       break;
     }
     case WebInputEvent::kGestureScrollBegin:
-      current_gesture_location_ = WebFloatPoint(x, y);
+      current_gesture_location_ = gfx::PointF(x, y);
       event.SetPositionInWidget(current_gesture_location_);
       break;
     case WebInputEvent::kGestureScrollEnd:
@@ -2383,7 +2378,7 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
       event.data.tap.tap_count = tap_count;
       event.data.tap.width = width;
       event.data.tap.height = height;
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       break;
     }
     case WebInputEvent::kGestureTapUnconfirmed:
@@ -2397,7 +2392,7 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
       } else {
         event.data.tap.tap_count = 1;
       }
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       break;
     case WebInputEvent::kGestureTapDown: {
       float width = 30;
@@ -2414,7 +2409,7 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
           return;
         }
       }
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       event.data.tap_down.width = width;
       event.data.tap_down.height = height;
       break;
@@ -2434,17 +2429,17 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
           }
         }
       }
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       event.data.show_press.width = width;
       event.data.show_press.height = height;
       break;
     }
     case WebInputEvent::kGestureTapCancel:
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       break;
     case WebInputEvent::kGestureLongPress:
     case WebInputEvent::kGestureLongTap:
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       if (!args->PeekNext().IsEmpty()) {
         float width;
         if (!args->GetNext(&width)) {
@@ -2463,7 +2458,7 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
       }
       break;
     case WebInputEvent::kGestureTwoFingerTap:
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       if (!args->PeekNext().IsEmpty()) {
         float first_finger_width;
         if (!args->GetNext(&first_finger_width)) {
@@ -2662,8 +2657,7 @@ void EventSender::FinishDragAndDrop(const WebMouseEvent& raw_event,
         current_drag_data_, event->PositionInWidget(),
         event->PositionInScreen(), event->GetModifiers());
   } else {
-    mainFrameWidget()->DragTargetDragLeave(blink::WebFloatPoint(),
-                                           blink::WebFloatPoint());
+    mainFrameWidget()->DragTargetDragLeave(gfx::PointF(), gfx::PointF());
   }
   current_drag_data_.Reset();
   mainFrameWidget()->DragSourceEndedAt(event->PositionInWidget(),
@@ -2731,8 +2725,8 @@ void EventSender::ReplaySavedEvents() {
             current_pointer_state_[kRawMousePointerId].pressed_button_,
             current_pointer_state_[kRawMousePointerId].current_buttons_, e.pos,
             click_count_, &event);
-        current_pointer_state_[kRawMousePointerId].last_pos_ =
-            WebPoint(event.PositionInWidget().x, event.PositionInWidget().y);
+        current_pointer_state_[kRawMousePointerId].last_pos_ = blink::WebPoint(
+            event.PositionInWidget().x(), event.PositionInWidget().y());
         HandleInputEventOnViewOrPopup(event);
         DoDragAfterMouseMove(event);
         break;

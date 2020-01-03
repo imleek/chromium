@@ -69,13 +69,13 @@ ResourceRequest::ResourceRequest(const KURL& url)
       requestor_id_(0),
       previews_state_(WebURLRequest::kPreviewsUnspecified),
       request_context_(mojom::RequestContextType::UNSPECIFIED),
+      destination_(network::mojom::RequestDestination::kEmpty),
       mode_(network::mojom::RequestMode::kNoCors),
       fetch_importance_mode_(mojom::FetchImportanceMode::kImportanceAuto),
       credentials_mode_(network::mojom::CredentialsMode::kInclude),
       redirect_mode_(network::mojom::RedirectMode::kFollow),
       referrer_string_(Referrer::ClientReferrerString()),
       referrer_policy_(network::mojom::ReferrerPolicy::kDefault),
-      did_set_http_referrer_(false),
       is_external_request_(false),
       cors_preflight_policy_(
           network::mojom::CorsPreflightPolicy::kConsiderPreflight),
@@ -97,13 +97,13 @@ std::unique_ptr<ResourceRequest> ResourceRequest::CreateRedirectRequest(
   std::unique_ptr<ResourceRequest> request =
       std::make_unique<ResourceRequest>(new_url);
   request->SetRequestorOrigin(RequestorOrigin());
+  request->SetIsolatedWorldOrigin(IsolatedWorldOrigin());
   request->SetHttpMethod(new_method);
   request->SetSiteForCookies(new_site_for_cookies);
   String referrer =
       new_referrer.IsEmpty() ? Referrer::NoReferrer() : String(new_referrer);
-  // TODO(domfarolino): Stop storing ResourceRequest's generated referrer as a
-  // header and instead use a separate member. See https://crbug.com/850813.
-  request->SetHttpReferrer(Referrer(referrer, new_referrer_policy));
+  request->SetReferrerString(referrer);
+  request->SetReferrerPolicy(new_referrer_policy);
   request->SetSkipServiceWorker(skip_service_worker);
   request->SetRedirectStatus(RedirectStatus::kFollowedRedirect);
 
@@ -221,21 +221,6 @@ void ResourceRequest::SetHttpHeaderField(const AtomicString& name,
   http_header_fields_.Set(name, value);
 }
 
-void ResourceRequest::SetHttpReferrer(const Referrer& referrer) {
-  if (referrer.referrer.IsEmpty())
-    http_header_fields_.Remove(http_names::kReferer);
-  else
-    SetHttpHeaderField(http_names::kReferer, referrer.referrer);
-  referrer_policy_ = referrer.referrer_policy;
-  did_set_http_referrer_ = true;
-}
-
-void ResourceRequest::ClearHTTPReferrer() {
-  http_header_fields_.Remove(http_names::kReferer);
-  referrer_policy_ = network::mojom::ReferrerPolicy::kDefault;
-  did_set_http_referrer_ = false;
-}
-
 void ResourceRequest::SetHTTPOrigin(const SecurityOrigin* origin) {
   SetHttpHeaderField(http_names::kOrigin, origin->ToAtomicString());
 }
@@ -251,9 +236,7 @@ void ResourceRequest::SetHttpOriginIfNeeded(const SecurityOrigin* origin) {
 
 void ResourceRequest::SetHTTPOriginToMatchReferrerIfNeeded() {
   if (NeedsHTTPOrigin()) {
-    SetHTTPOrigin(
-        SecurityOrigin::CreateFromString(HttpHeaderField(http_names::kReferer))
-            .get());
+    SetHTTPOrigin(SecurityOrigin::CreateFromString(ReferrerString()).get());
   }
 }
 

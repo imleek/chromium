@@ -216,7 +216,7 @@ class MCSProbe {
   std::unique_ptr<network::TestNetworkConnectionTracker>
       network_connection_tracker_;
   std::unique_ptr<net::URLRequestContext> url_request_context_;
-  net::NetLog net_log_;
+  net::NetLog* net_log_;
   std::unique_ptr<net::FileNetLogObserver> logger_;
   MCSProbeAuthPreferences http_auth_preferences_;
 
@@ -231,7 +231,7 @@ class MCSProbe {
 
   std::unique_ptr<network::NetworkContext> network_context_;
   mojo::Remote<network::mojom::NetworkContext> network_context_remote_;
-  network::mojom::URLLoaderFactoryPtr url_loader_factory_;
+  mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
 
   std::unique_ptr<base::RunLoop> run_loop_;
@@ -245,6 +245,7 @@ MCSProbe::MCSProbe(const base::CommandLine& command_line)
       server_port_(0),
       network_connection_tracker_(
           network::TestNetworkConnectionTracker::CreateInstance()),
+      net_log_(net::NetLog::Get()),
       file_thread_("FileThread") {
   network_connection_tracker_->SetConnectionType(
       network::mojom::ConnectionType::CONNECTION_ETHERNET);
@@ -290,16 +291,15 @@ void MCSProbe::Start() {
       base::ThreadTaskRunnerHandle::Get(), &recorder_,
       network_connection_tracker_.get());
   gcm_store_ = std::make_unique<GCMStoreImpl>(
-      gcm_store_path_, file_thread_.task_runner(),
-      std::make_unique<FakeEncryptor>());
+      gcm_store_path_, /*remove_account_mappings_with_email_key=*/true,
+      file_thread_.task_runner(), std::make_unique<FakeEncryptor>());
 
   mcs_client_ = std::make_unique<MCSClient>(
       "probe", &clock_, connection_factory_.get(), gcm_store_.get(),
       base::ThreadTaskRunnerHandle::Get(), &recorder_);
   run_loop_ = std::make_unique<base::RunLoop>();
   gcm_store_->Load(GCMStore::CREATE_IF_MISSING,
-                   base::Bind(&MCSProbe::LoadCallback,
-                              base::Unretained(this)));
+                   base::Bind(&MCSProbe::LoadCallback, base::Unretained(this)));
   run_loop_->Run();
 }
 
@@ -341,13 +341,13 @@ void MCSProbe::InitializeNetworkState() {
     logger_ = net::FileNetLogObserver::CreateUnbounded(log_path, nullptr);
     net::NetLogCaptureMode capture_mode =
         net::NetLogCaptureMode::kIncludeSensitive;
-    logger_->StartObserving(&net_log_, capture_mode);
+    logger_->StartObserving(net_log_, capture_mode);
   }
 
   net::URLRequestContextBuilder builder;
-  builder.set_net_log(&net_log_);
+  builder.set_net_log(net_log_);
   builder.set_host_resolver(
-      net::HostResolver::CreateStandaloneResolver(&net_log_));
+      net::HostResolver::CreateStandaloneResolver(net_log_));
   builder.SetHttpAuthHandlerFactory(net::HttpAuthHandlerRegistryFactory::Create(
       &http_auth_preferences_,
       std::vector<std::string>{net::kBasicAuthScheme}));
@@ -370,7 +370,7 @@ void MCSProbe::InitializeNetworkState() {
   url_loader_factory_params->process_id = network::mojom::kBrowserProcessId;
   url_loader_factory_params->is_corb_enabled = false;
   network_context_->CreateURLLoaderFactory(
-      mojo::MakeRequest(&url_loader_factory_),
+      url_loader_factory_.BindNewPipeAndPassReceiver(),
       std::move(url_loader_factory_params));
   shared_url_loader_factory_ =
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(

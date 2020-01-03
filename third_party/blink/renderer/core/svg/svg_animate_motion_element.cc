@@ -39,20 +39,20 @@ namespace {
 bool TargetCanHaveMotionTransform(const SVGElement& target) {
   // We don't have a special attribute name to verify the animation type. Check
   // the element name instead.
-  if (!target.IsSVGGraphicsElement())
+  if (!IsA<SVGGraphicsElement>(target))
     return false;
   // Spec: SVG 1.1 section 19.2.15
   // FIXME: svgTag is missing. Needs to be checked, if transforming <svg> could
   // cause problems.
-  return IsSVGGElement(target) || IsSVGDefsElement(target) ||
-         IsSVGUseElement(target) || IsSVGImageElement(target) ||
-         IsSVGSwitchElement(target) || IsSVGPathElement(target) ||
-         IsSVGRectElement(target) || IsSVGCircleElement(target) ||
-         IsSVGEllipseElement(target) || IsSVGLineElement(target) ||
-         IsSVGPolylineElement(target) || IsSVGPolygonElement(target) ||
-         IsSVGTextElement(target) || IsSVGClipPathElement(target) ||
-         IsSVGMaskElement(target) || IsSVGAElement(target) ||
-         IsSVGForeignObjectElement(target);
+  return IsA<SVGGElement>(target) || IsA<SVGDefsElement>(target) ||
+         IsA<SVGUseElement>(target) || IsA<SVGImageElement>(target) ||
+         IsA<SVGSwitchElement>(target) || IsA<SVGPathElement>(target) ||
+         IsA<SVGRectElement>(target) || IsA<SVGCircleElement>(target) ||
+         IsA<SVGEllipseElement>(target) || IsA<SVGLineElement>(target) ||
+         IsA<SVGPolylineElement>(target) || IsA<SVGPolygonElement>(target) ||
+         IsA<SVGTextElement>(target) || IsA<SVGClipPathElement>(target) ||
+         IsA<SVGMaskElement>(target) || IsA<SVGAElement>(target) ||
+         IsA<SVGForeignObjectElement>(target);
 }
 }
 
@@ -64,9 +64,20 @@ SVGAnimateMotionElement::SVGAnimateMotionElement(Document& document)
 
 SVGAnimateMotionElement::~SVGAnimateMotionElement() = default;
 
-bool SVGAnimateMotionElement::HasValidTarget() const {
-  return SVGAnimationElement::HasValidTarget() &&
-         TargetCanHaveMotionTransform(*targetElement());
+bool SVGAnimateMotionElement::HasValidAnimation() const {
+  return TargetCanHaveMotionTransform(*targetElement());
+}
+
+void SVGAnimateMotionElement::WillChangeAnimationTarget() {
+  SVGAnimationElement::WillChangeAnimationTarget();
+  UnregisterAnimation(svg_names::kAnimateMotionTag);
+}
+
+void SVGAnimateMotionElement::DidChangeAnimationTarget() {
+  // Use our QName as the key to RegisterAnimation to get a separate sandwich
+  // for animateMotion.
+  RegisterAnimation(svg_names::kAnimateMotionTag);
+  SVGAnimationElement::DidChangeAnimationTarget();
 }
 
 void SVGAnimateMotionElement::ParseAttribute(

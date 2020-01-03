@@ -17,6 +17,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 
+import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
@@ -37,9 +38,10 @@ import org.chromium.chrome.browser.flags.FeatureUtilities;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
-import org.chromium.chrome.browser.preferences.ManagedPreferencesUtils;
+import org.chromium.chrome.browser.settings.ManagedPreferencesUtils;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.translate.TranslateUtils;
@@ -73,6 +75,15 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     private @Nullable Callback<OverviewModeBehavior> mOverviewModeSupplierCallback;
     private Callback<BookmarkBridge> mBookmarkBridgeSupplierCallback;
     private boolean mUpdateMenuItemVisible;
+    @IntDef({MenuGroup.INVALID, MenuGroup.PAGE_MENU, MenuGroup.OVERVIEW_MODE_MENU,
+            MenuGroup.START_SURFACE_MODE_MENU, MenuGroup.TABLET_EMPTY_MODE_MENU})
+    private @interface MenuGroup {
+        int INVALID = -1;
+        int PAGE_MENU = 0;
+        int OVERVIEW_MODE_MENU = 1;
+        int START_SURFACE_MODE_MENU = 2;
+        int TABLET_EMPTY_MODE_MENU = 3;
+    }
 
     protected @Nullable OverviewModeBehavior mOverviewModeBehavior;
     protected BookmarkBridge mBookmarkBridge;
@@ -156,34 +167,36 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
     @Override
     public void prepareMenu(Menu menu, AppMenuHandler handler) {
-        // Exactly one of these will be true, depending on the type of menu showing.
-        boolean isPageMenu = shouldShowPageMenu();
-        boolean isOverviewMenu;
-        boolean isTabletEmptyModeMenu;
+        // Determine which menu to show.
+        @MenuGroup
+        int menuGroup = MenuGroup.INVALID;
+        if (shouldShowPageMenu()) menuGroup = MenuGroup.PAGE_MENU;
 
         boolean isOverview =
                 mOverviewModeBehavior != null && mOverviewModeBehavior.overviewVisible();
-        boolean isIncognito = mTabModelSelector.getCurrentModel().isIncognito();
-        Tab currentTab = mActivityTabProvider.get();
-
-        // Determine which menu to show.
         if (mIsTablet) {
             boolean hasTabs = mTabModelSelector.getCurrentModel().getCount() != 0;
-            isOverviewMenu = hasTabs && isOverview;
-            isTabletEmptyModeMenu = !hasTabs;
-        } else {
-            isOverviewMenu = isOverview;
-            isTabletEmptyModeMenu = false;
+            if (hasTabs && isOverview) {
+                menuGroup = MenuGroup.OVERVIEW_MODE_MENU;
+            } else if (!hasTabs) {
+                menuGroup = MenuGroup.TABLET_EMPTY_MODE_MENU;
+            }
+        } else if (isOverview) {
+            menuGroup = FeatureUtilities.isStartSurfaceEnabled() ? MenuGroup.START_SURFACE_MODE_MENU
+                                                                 : MenuGroup.OVERVIEW_MODE_MENU;
         }
-        int visibleMenus =
-                (isPageMenu ? 1 : 0) + (isOverviewMenu ? 1 : 0) + (isTabletEmptyModeMenu ? 1 : 0);
-        assert visibleMenus == 1;
+        assert menuGroup != MenuGroup.INVALID;
 
-        menu.setGroupVisible(R.id.PAGE_MENU, isPageMenu);
-        menu.setGroupVisible(R.id.OVERVIEW_MODE_MENU, isOverviewMenu);
-        menu.setGroupVisible(R.id.TABLET_EMPTY_MODE_MENU, isTabletEmptyModeMenu);
+        menu.setGroupVisible(R.id.PAGE_MENU, menuGroup == MenuGroup.PAGE_MENU);
+        menu.setGroupVisible(R.id.OVERVIEW_MODE_MENU, menuGroup == MenuGroup.OVERVIEW_MODE_MENU);
+        menu.setGroupVisible(
+                R.id.START_SURFACE_MODE_MENU, menuGroup == MenuGroup.START_SURFACE_MODE_MENU);
+        menu.setGroupVisible(
+                R.id.TABLET_EMPTY_MODE_MENU, menuGroup == MenuGroup.TABLET_EMPTY_MODE_MENU);
 
-        if (isPageMenu && currentTab != null) {
+        boolean isIncognito = mTabModelSelector.getCurrentModel().isIncognito();
+        Tab currentTab = mActivityTabProvider.get();
+        if (menuGroup == MenuGroup.PAGE_MENU && currentTab != null) {
             String url = currentTab.getUrl();
             boolean isChromeScheme = url.startsWith(UrlConstants.CHROME_URL_PREFIX)
                     || url.startsWith(UrlConstants.CHROME_NATIVE_URL_PREFIX);
@@ -234,16 +247,10 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                     .setVisible(mMultiWindowModeStateDispatcher.isOpenInOtherWindowSupported()
                             && hasMoreThanOneTab);
 
-            MenuItem recentTabsMenuItem = menu.findItem(R.id.recent_tabs_menu_id);
-            recentTabsMenuItem.setVisible(!isIncognito);
-            recentTabsMenuItem.setTitle(R.string.menu_recent_tabs);
-
-            MenuItem allBookmarksMenuItem = menu.findItem(R.id.all_bookmarks_menu_id);
-            allBookmarksMenuItem.setTitle(mContext.getString(R.string.menu_bookmarks));
-
             // Don't allow either "chrome://" pages or interstitial pages to be shared.
             menu.findItem(R.id.share_row_menu_id)
-                    .setVisible(!isChromeScheme && !currentTab.isShowingInterstitialPage());
+                    .setVisible(
+                            !isChromeScheme && !((TabImpl) currentTab).isShowingInterstitialPage());
 
             ShareHelper.configureDirectShareMenuItem(
                     mContext, menu.findItem(R.id.direct_share_menu_id));
@@ -282,40 +289,42 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                             ChromeSwitches.ENABLE_VR_SHELL_DEV));
         }
 
-        if (isOverviewMenu) {
-            if (isIncognito) {
-                // Hide normal close all tabs item.
-                menu.findItem(R.id.close_all_tabs_menu_id).setVisible(false);
-                // Enable close incognito tabs only if there are incognito tabs.
-                menu.findItem(R.id.close_all_incognito_tabs_menu_id).setEnabled(true);
-            } else {
-                // Hide close incognito tabs item.
-                menu.findItem(R.id.close_all_incognito_tabs_menu_id).setVisible(false);
-                // Enable close all tabs if there are normal tabs or incognito tabs.
-                menu.findItem(R.id.close_all_tabs_menu_id)
-                        .setEnabled(mTabModelSelector.getTotalTabCount() > 0);
-            }
-            if (!FeatureUtilities.isTabGroupsAndroidUiImprovementsEnabled()
-                    || DeviceClassManager.enableAccessibilityLayout()) {
-                menu.findItem(R.id.menu_group_tabs).setVisible(false);
-            } else {
-                boolean shouldEnabled = mTabModelSelector.getTabModelFilterProvider()
-                                                .getCurrentTabModelFilter()
-                                                .getTabsWithNoOtherRelatedTabs()
-                                                .size()
-                        > 1;
-                menu.findItem(R.id.menu_group_tabs).setEnabled(shouldEnabled);
-            }
-        }
-
         // We have to iterate all menu items since same menu item ID may be associated with more
         // than one menu items.
+        boolean isMenuGroupTabsVisible = FeatureUtilities.isTabGroupsAndroidUiImprovementsEnabled()
+                && !DeviceClassManager.enableAccessibilityLayout();
+        boolean isMenuGroupTabsEnabled = mTabModelSelector.getTabModelFilterProvider()
+                                                 .getCurrentTabModelFilter()
+                                                 .getTabsWithNoOtherRelatedTabs()
+                                                 .size()
+                > 1;
+        boolean hasTabs = mTabModelSelector.getTotalTabCount() > 0;
+        boolean hasIncognitoTabs = mTabModelSelector.getModel(true).getCount() > 0;
         for (int i = 0; i < menu.size(); ++i) {
             MenuItem item = menu.getItem(i);
-            if (item.getItemId() == R.id.new_incognito_tab_menu_id) {
-                item.setTitle(R.string.menu_new_incognito_tab);
-            } else if (item.getItemId() == R.id.close_all_incognito_tabs_menu_id) {
-                item.setTitle(R.string.menu_close_all_incognito_tabs);
+            int itemGroupId = item.getGroupId();
+            if (!(menuGroup == MenuGroup.START_SURFACE_MODE_MENU
+                                && itemGroupId == R.id.START_SURFACE_MODE_MENU
+                        || menuGroup == MenuGroup.OVERVIEW_MODE_MENU
+                                && itemGroupId == R.id.OVERVIEW_MODE_MENU
+                        || menuGroup == MenuGroup.PAGE_MENU && itemGroupId == R.id.PAGE_MENU)) {
+                continue;
+            }
+
+            if (item.getItemId() == R.id.recent_tabs_menu_id) {
+                item.setVisible(!isIncognito);
+            }
+            if (item.getItemId() == R.id.menu_group_tabs) {
+                item.setVisible(isMenuGroupTabsVisible);
+                item.setEnabled(isMenuGroupTabsEnabled);
+            }
+            if (item.getItemId() == R.id.close_all_tabs_menu_id) {
+                item.setVisible(!isIncognito);
+                item.setEnabled(hasTabs);
+            }
+            if (item.getItemId() == R.id.close_all_incognito_tabs_menu_id) {
+                item.setVisible(isIncognito);
+                item.setEnabled(hasIncognitoTabs);
             }
         }
 
@@ -453,7 +462,20 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      * @param currentTab        Current tab being displayed.
      */
     protected void updateBookmarkMenuItem(MenuItem bookmarkMenuItem, Tab currentTab) {
-        bookmarkMenuItem.setEnabled(mBookmarkBridge.isEditBookmarksEnabled());
+        // If this method is called before the {@link #mBookmarkBridgeSupplierCallback} has been
+        // called, try to retrieve the bridge directly from the supplier.
+        if (mBookmarkBridge == null && mBookmarkBridgeSupplier != null) {
+            mBookmarkBridge = mBookmarkBridgeSupplier.get();
+        }
+
+        if (mBookmarkBridge == null) {
+            // If the BookmarkBridge still isn't available, assume the bookmark menu item is not
+            // editable.
+            bookmarkMenuItem.setEnabled(false);
+        } else {
+            bookmarkMenuItem.setEnabled(mBookmarkBridge.isEditBookmarksEnabled());
+        }
+
         if (BookmarkBridge.hasBookmarkIdForTab(currentTab)) {
             bookmarkMenuItem.setIcon(R.drawable.btn_star_filled);
             bookmarkMenuItem.setChecked(true);
@@ -472,7 +494,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      * @param currentTab      Current tab being displayed.
      */
     protected void updateRequestDesktopSiteMenuItem(
-            Menu menu, Tab currentTab, boolean canShowRequestDekstopSite) {
+            Menu menu, Tab currentTab, boolean canShowRequestDesktopSite) {
         MenuItem requestMenuRow = menu.findItem(R.id.request_desktop_site_row_menu_id);
         MenuItem requestMenuLabel = menu.findItem(R.id.request_desktop_site_id);
         MenuItem requestMenuCheck = menu.findItem(R.id.request_desktop_site_check_id);
@@ -484,7 +506,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         // Also hide request desktop site on Reader Mode.
         boolean isDistilledPage = DomDistillerUrlUtils.isDistilledPage(url);
 
-        boolean itemVisible = canShowRequestDekstopSite
+        boolean itemVisible = canShowRequestDesktopSite
                 && (!isChromeScheme || currentTab.isNativePage()) && !isDistilledPage;
         requestMenuRow.setVisible(itemVisible);
         if (!itemVisible) return;

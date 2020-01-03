@@ -1,6 +1,8 @@
 luci.list_view(
     name = 'tryserver.chromium.android',
     entries = [
+        'try/android-asan',
+        'try/android-bfcache-debug',
         'try/android-opus-kitkat-arm-rel',
         'try/android_archive_rel_ng',
         'try/android-binary-size',
@@ -8,7 +10,6 @@ luci.list_view(
         'try/android_cfi_rel_ng',
         'try/android_clang_dbg_recipe',
         'try/android_compile_dbg',
-        'try/android_compile_rel',
         'try/android_compile_x64_dbg',
         'try/android_compile_x86_dbg',
         'try/android_cronet',

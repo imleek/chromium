@@ -166,6 +166,14 @@ static_library("util") {
     "stdlib/strnlen.cc",
     "stdlib/strnlen.h",
     "stdlib/thread_safe_vector.h",
+    "stream/base94_output_stream.cc",
+    "stream/base94_output_stream.h",
+    "stream/file_encoder.cc",
+    "stream/file_encoder.h",
+    "stream/file_output_stream.cc",
+    "stream/file_output_stream.h",
+    "stream/log_output_stream.cc",
+    "stream/log_output_stream.h",
     "stream/output_stream_interface.h",
     "stream/zlib_output_stream.cc",
     "stream/zlib_output_stream.h",
@@ -371,6 +379,8 @@ static_library("util") {
       "win/handle.h",
       "win/initial_client_data.cc",
       "win/initial_client_data.h",
+      "win/loader_lock.cc",
+      "win/loader_lock.h",
       "win/module_version.cc",
       "win/module_version.h",
       "win/nt_internals.cc",
@@ -586,6 +596,9 @@ source_set("util_test") {
     "stdlib/strlcpy_test.cc",
     "stdlib/strnlen_test.cc",
     "stdlib/thread_safe_vector_test.cc",
+    "stream/base94_output_stream_test.cc",
+    "stream/file_encoder_test.cc",
+    "stream/log_output_stream_test.cc",
     "stream/test_output_stream.cc",
     "stream/test_output_stream.h",
     "stream/zlib_output_stream_test.cc",
@@ -666,6 +679,7 @@ source_set("util_test") {
       "win/get_function_test.cc",
       "win/handle_test.cc",
       "win/initial_client_data_test.cc",
+      "win/loader_lock_test.cc",
       "win/process_info_test.cc",
       "win/registration_protocol_win_test.cc",
       "win/safe_terminate_process_test.cc",
@@ -718,6 +732,7 @@ source_set("util_test") {
       "dbghelp.lib",
     ]
     data_deps += [
+      ":crashpad_util_test_loader_lock_test",
       ":crashpad_util_test_process_info_test_child",
       ":crashpad_util_test_safe_terminate_process_test_child",
     ]
@@ -736,6 +751,16 @@ if (crashpad_is_win) {
     testonly = true
     sources = [
       "win/safe_terminate_process_test_child.cc",
+    ]
+  }
+
+  crashpad_loadable_module("crashpad_util_test_loader_lock_test") {
+    testonly = true
+    sources = [
+      "win/loader_lock_test_dll.cc",
+    ]
+    deps = [
+      ":util",
     ]
   }
 }

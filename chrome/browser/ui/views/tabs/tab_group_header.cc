@@ -9,7 +9,6 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/layout_constants.h"
-#include "chrome/browser/ui/tabs/tab_group_visual_data.h"
 #include "chrome/browser/ui/tabs/tab_style.h"
 #include "chrome/browser/ui/views/tabs/tab_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_group_editor_bubble_view.h"
@@ -19,6 +18,9 @@
 #include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_layout.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
+#include "components/tab_groups/tab_group_color.h"
+#include "components/tab_groups/tab_group_id.h"
+#include "components/tab_groups/tab_group_visual_data.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/gfx/canvas.h"
@@ -34,7 +36,8 @@
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
 
-TabGroupHeader::TabGroupHeader(TabStrip* tab_strip, TabGroupId group)
+TabGroupHeader::TabGroupHeader(TabStrip* tab_strip,
+                               tab_groups::TabGroupId group)
     : tab_strip_(tab_strip) {
   DCHECK(tab_strip);
 
@@ -82,7 +85,18 @@ void TabGroupHeader::OnMouseReleased(const ui::MouseEvent& event) {
   tab_strip_->EndDrag(END_DRAG_COMPLETE);
 }
 
+void TabGroupHeader::OnMouseEntered(const ui::MouseEvent& event) {
+  // Hide the hover card, since there currently isn't anything to display
+  // for a group.
+  tab_strip_->UpdateHoverCard(nullptr);
+}
+
+void TabGroupHeader::OnThemeChanged() {
+  VisualsChanged();
+}
+
 void TabGroupHeader::OnGestureEvent(ui::GestureEvent* event) {
+  tab_strip_->UpdateHoverCard(nullptr);
   switch (event->type()) {
     case ui::ET_GESTURE_TAP_DOWN: {
       if (!editor_bubble_tracker_.is_open()) {
@@ -139,18 +153,21 @@ int TabGroupHeader::CalculateWidth() const {
   // both should look nestled against the group stroke of the tab to the right.
   // This requires a +/- 2px adjustment to the width, which causes the tab to
   // the right to be positioned in the right spot.
-  const TabGroupVisualData* data =
-      tab_strip_->controller()->GetVisualDataForGroup(group().value());
-  const int right_adjust = data->title().empty() ? 2 : -2;
+  const base::string16 title =
+      tab_strip_->controller()->GetGroupTitle(group().value());
+  const int right_adjust = title.empty() ? 2 : -2;
 
   return overlap_margin + title_chip_->width() + right_adjust;
 }
 
 void TabGroupHeader::VisualsChanged() {
-  const TabGroupVisualData* data =
-      tab_strip_->controller()->GetVisualDataForGroup(group().value());
+  const base::string16 title =
+      tab_strip_->controller()->GetGroupTitle(group().value());
+  const tab_groups::TabGroupColorId color_id =
+      tab_strip_->controller()->GetGroupColorId(group().value());
+  const SkColor color = tab_strip_->GetPaintedGroupColor(color_id);
 
-  if (data->title().empty()) {
+  if (title.empty()) {
     // If the title is empty, the chip is just a circle.
     title_->SetVisible(false);
 
@@ -160,14 +177,13 @@ void TabGroupHeader::VisualsChanged() {
     title_chip_->SetBounds(TabGroupUnderline::GetStrokeInset(), y,
                            kEmptyChipSize, kEmptyChipSize);
     title_chip_->SetBackground(
-        views::CreateRoundedRectBackground(data->color(), kEmptyChipSize / 2));
+        views::CreateRoundedRectBackground(color, kEmptyChipSize / 2));
   } else {
     // If the title is set, the chip is a rounded rect that matches the active
     // tab shape, particularly the tab's corner radius.
     title_->SetVisible(true);
-    title_->SetEnabledColor(
-        color_utils::GetColorWithMaxContrast(data->color()));
-    title_->SetText(data->title());
+    title_->SetEnabledColor(color_utils::GetColorWithMaxContrast(color));
+    title_->SetText(title);
 
     // Set the radius such that the chip nestles snugly against the tab corner
     // radius, taking into account the group underline stroke.
@@ -191,7 +207,7 @@ void TabGroupHeader::VisualsChanged() {
                            text_width + 2 * text_horizontal_inset,
                            text_height + 2 * text_vertical_inset);
     title_chip_->SetBackground(
-        views::CreateRoundedRectBackground(data->color(), corner_radius));
+        views::CreateRoundedRectBackground(color, corner_radius));
 
     title_->SetBounds(text_horizontal_inset, text_vertical_inset, text_width,
                       text_height);
@@ -202,9 +218,17 @@ void TabGroupHeader::RemoveObserverFromWidget(views::Widget* widget) {
   widget->RemoveObserver(&editor_bubble_tracker_);
 }
 
+TabGroupHeader::EditorBubbleTracker::~EditorBubbleTracker() {
+  if (is_open_) {
+    widget_->RemoveObserver(this);
+    widget_->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
+  }
+}
+
 void TabGroupHeader::EditorBubbleTracker::Opened(views::Widget* bubble_widget) {
   DCHECK(bubble_widget);
   DCHECK(!is_open_);
+  widget_ = bubble_widget;
   is_open_ = true;
   bubble_widget->AddObserver(this);
 }

@@ -10,10 +10,10 @@
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "services/data_decoder/public/mojom/bundled_exchanges_parser.mojom.h"
 #include "services/data_decoder/public/mojom/data_decoder_service.mojom.h"
 #include "services/data_decoder/public/mojom/image_decoder.mojom.h"
 #include "services/data_decoder/public/mojom/json_parser.mojom.h"
+#include "services/data_decoder/public/mojom/web_bundle_parser.mojom.h"
 #include "services/data_decoder/public/mojom/xml_parser.mojom.h"
 
 #ifdef OS_CHROMEOS
@@ -45,6 +45,15 @@ class DataDecoderService : public mojom::DataDecoderService {
     drop_json_parsers_ = drop;
   }
 
+  // Configures the service to use |binder| to bind
+  // WebBundleParserFactory in subsequent
+  // BindWebBundleParserFactory() calls.
+  void SetWebBundleParserFactoryBinderForTesting(
+      base::RepeatingCallback<
+          void(mojo::PendingReceiver<mojom::WebBundleParserFactory>)> binder) {
+    web_bundle_parser_factory_binder_ = binder;
+  }
+
  private:
   // mojom::DataDecoderService implementation:
   void BindImageDecoder(
@@ -52,9 +61,8 @@ class DataDecoderService : public mojom::DataDecoderService {
   void BindJsonParser(
       mojo::PendingReceiver<mojom::JsonParser> receiver) override;
   void BindXmlParser(mojo::PendingReceiver<mojom::XmlParser> receiver) override;
-  void BindBundledExchangesParserFactory(
-      mojo::PendingReceiver<mojom::BundledExchangesParserFactory> receiver)
-      override;
+  void BindWebBundleParserFactory(
+      mojo::PendingReceiver<mojom::WebBundleParserFactory> receiver) override;
 
 #ifdef OS_CHROMEOS
   void BindBleScanParser(
@@ -67,6 +75,9 @@ class DataDecoderService : public mojom::DataDecoderService {
 
   bool drop_image_decoders_ = false;
   bool drop_json_parsers_ = false;
+  base::RepeatingCallback<void(
+      mojo::PendingReceiver<mojom::WebBundleParserFactory>)>
+      web_bundle_parser_factory_binder_;
 
   DISALLOW_COPY_AND_ASSIGN(DataDecoderService);
 };

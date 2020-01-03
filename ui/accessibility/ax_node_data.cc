@@ -17,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/ax_text_utils.h"
 #include "ui/gfx/transform.h"
 
@@ -161,6 +162,7 @@ bool IsNodeIdIntAttribute(ax::mojom::IntAttribute attr) {
     case ax::mojom::IntAttribute::kAriaCellRowSpan:
     case ax::mojom::IntAttribute::kImageAnnotationStatus:
     case ax::mojom::IntAttribute::kDropeffect:
+    case ax::mojom::IntAttribute::kDOMNodeId:
       return false;
   }
 
@@ -652,8 +654,10 @@ ax::mojom::Action AXNodeData::AddAction(ax::mojom::Action action_enum) {
       ax::mojom::Action excluded_action =
           (action_enum == ax::mojom::Action::kBlur) ? ax::mojom::Action::kFocus
                                                     : ax::mojom::Action::kBlur;
-      DCHECK(HasAction(excluded_action));
-    } break;
+      DCHECK(!HasAction(excluded_action)) << excluded_action;
+      break;
+    }
+
     case ax::mojom::Action::kClearAccessibilityFocus:
     case ax::mojom::Action::kCustomAction:
     case ax::mojom::Action::kDecrement:
@@ -870,6 +874,44 @@ void AXNodeData::SetTextDirection(ax::mojom::TextDirection text_direction) {
   }
 }
 
+bool AXNodeData::IsClickable() const {
+  // If it has a custom default action verb except for
+  // ax::mojom::DefaultActionVerb::kClickAncestor, it's definitely clickable.
+  // ax::mojom::DefaultActionVerb::kClickAncestor is used when an element with a
+  // click listener is present in its ancestry chain.
+  if (HasIntAttribute(ax::mojom::IntAttribute::kDefaultActionVerb) &&
+      (GetDefaultActionVerb() != ax::mojom::DefaultActionVerb::kClickAncestor))
+    return true;
+
+  return ui::IsClickable(role);
+}
+
+bool AXNodeData::IsIgnored() const {
+  if (HasState(ax::mojom::State::kIgnored) || role == ax::mojom::Role::kIgnored)
+    return true;
+  return false;
+}
+
+bool AXNodeData::IsInvocable() const {
+  // A control is "invocable" if it initiates an action when activated but
+  // does not maintain any state. A control that maintains state when activated
+  // would be considered a toggle or expand-collapse element - these elements
+  // are "clickable" but not "invocable".
+  return IsClickable() && !SupportsExpandCollapse() &&
+         !ui::SupportsToggle(role);
+}
+
+bool AXNodeData::IsPlainTextField() const {
+  // We need to check both the role and editable state, because some ARIA text
+  // fields may in fact not be editable, whilst some editable fields might not
+  // have the role.
+  return !HasState(ax::mojom::State::kRichlyEditable) &&
+         (role == ax::mojom::Role::kTextField ||
+          role == ax::mojom::Role::kTextFieldWithComboBox ||
+          role == ax::mojom::Role::kSearchBox ||
+          GetBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot));
+}
+
 bool AXNodeData::IsReadOnlyOrDisabled() const {
   switch (GetRestriction()) {
     case ax::mojom::Restriction::kReadOnly:
@@ -879,6 +921,50 @@ bool AXNodeData::IsReadOnlyOrDisabled() const {
       return false;
   }
   return false;
+}
+
+bool AXNodeData::IsRangeValueSupported() const {
+  // https://www.w3.org/TR/wai-aria-1.1/#aria-valuenow
+  // https://www.w3.org/TR/wai-aria-1.1/#aria-valuetext
+  // Roles that support aria-valuetext / aria-valuenow
+  switch (role) {
+    case ax::mojom::Role::kMeter:
+    case ax::mojom::Role::kProgressIndicator:
+    case ax::mojom::Role::kScrollBar:
+    case ax::mojom::Role::kSlider:
+    case ax::mojom::Role::kSpinButton:
+      return true;
+    case ax::mojom::Role::kSplitter:
+      // According to the ARIA spec, role="separator" acts as a splitter only
+      // when focusable, and supports a range only in that case.
+      return HasState(ax::mojom::State::kFocusable);
+    default:
+      return false;
+  }
+}
+
+bool AXNodeData::SupportsExpandCollapse() const {
+  if (GetHasPopup() != ax::mojom::HasPopup::kFalse ||
+      HasState(ax::mojom::State::kExpanded) ||
+      HasState(ax::mojom::State::kCollapsed))
+    return true;
+
+  return ui::SupportsExpandCollapse(role);
+}
+
+bool AXNodeData::IsContainedInActiveLiveRegion() const {
+  if (!HasStringAttribute(ax::mojom::StringAttribute::kContainerLiveStatus))
+    return false;
+
+  if (base::CompareCaseInsensitiveASCII(
+          GetStringAttribute(ax::mojom::StringAttribute::kContainerLiveStatus),
+          "off") == 0)
+    return false;
+
+  if (GetBoolAttribute(ax::mojom::BoolAttribute::kContainerLiveBusy))
+    return false;
+
+  return true;
 }
 
 std::string AXNodeData::ToString() const {
@@ -1243,6 +1329,9 @@ std::string AXNodeData::ToString() const {
       case ax::mojom::IntAttribute::kDropeffect:
         result += " dropeffect=" + value;
         break;
+      case ax::mojom::IntAttribute::kDOMNodeId:
+        result += " dom_node_id=" + value;
+        break;
       case ax::mojom::IntAttribute::kNone:
         break;
     }
@@ -1415,6 +1504,9 @@ std::string AXNodeData::ToString() const {
         break;
       case ax::mojom::BoolAttribute::kIsPageBreakingObject:
         result += " is_page_breaking_object=" + value;
+        break;
+      case ax::mojom::BoolAttribute::kHasAriaAttribute:
+        result += " has_aria_attribute=" + value;
         break;
       case ax::mojom::BoolAttribute::kNone:
         break;

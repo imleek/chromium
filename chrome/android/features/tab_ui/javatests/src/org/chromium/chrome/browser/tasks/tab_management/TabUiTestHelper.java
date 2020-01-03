@@ -6,10 +6,15 @@ package org.chromium.chrome.browser.tasks.tab_management;
 
 import static android.support.test.espresso.Espresso.onView;
 import static android.support.test.espresso.action.ViewActions.click;
+import static android.support.test.espresso.assertion.ViewAssertions.matches;
+import static android.support.test.espresso.matcher.RootMatchers.withDecorView;
+import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static android.support.test.espresso.matcher.ViewMatchers.withId;
 import static android.support.test.espresso.matcher.ViewMatchers.withParent;
 
 import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -24,19 +29,25 @@ import android.os.Build;
 import android.provider.Settings;
 import android.support.annotation.Nullable;
 import android.support.test.InstrumentationRegistry;
+import android.support.test.espresso.NoMatchingRootException;
 import android.support.test.espresso.NoMatchingViewException;
+import android.support.test.espresso.UiController;
+import android.support.test.espresso.ViewAction;
 import android.support.test.espresso.ViewAssertion;
 import android.support.test.espresso.contrib.RecyclerViewActions;
 import android.support.v7.widget.RecyclerView;
 import android.view.View;
 
+import org.hamcrest.Matcher;
+
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
+import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
@@ -46,6 +57,7 @@ import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -104,6 +116,115 @@ public class TabUiTestHelper {
     }
 
     /**
+     * Click the first tab in tab grid dialog to open a tab page.
+     * @param cta  The current running activity.
+     */
+    static void clickFirstTabInDialog(ChromeTabbedActivity cta) {
+        clickNthTabInDialog(cta, 0);
+    }
+
+    /**
+     * Click the Nth tab in tab grid dialog to open a tab page.
+     * @param cta  The current running activity.
+     * @param index The index of the target tab.
+     */
+    static void clickNthTabInDialog(ChromeTabbedActivity cta, int index) {
+        OverviewModeBehaviorWatcher hideWatcher = createOverviewHideWatcher(cta);
+        onView(withId(R.id.tab_list_view))
+                .inRoot(withDecorView(not(cta.getWindow().getDecorView())))
+                .perform(RecyclerViewActions.actionOnItemAtPosition(index, click()));
+        hideWatcher.waitForBehavior();
+    }
+
+    /**
+     * Close the first tab in tab gri dialog.
+     * @param cta  The current running activity.
+     */
+    static void closeFirstTabInDialog(ChromeTabbedActivity cta) {
+        closeNthTabInDialog(cta, 0);
+    }
+
+    /**
+     * Close the Nth tab in tab gri dialog.
+     * @param cta  The current running activity.
+     * @param index The index of the target tab to close.
+     */
+    static void closeNthTabInDialog(ChromeTabbedActivity cta, int index) {
+        onView(withId(R.id.tab_list_view))
+                .inRoot(withDecorView(not(cta.getWindow().getDecorView())))
+                .perform(new ViewAction() {
+                    @Override
+                    public Matcher<View> getConstraints() {
+                        return isDisplayed();
+                    }
+
+                    @Override
+                    public String getDescription() {
+                        return "close first tab";
+                    }
+
+                    @Override
+                    public void perform(UiController uiController, View view) {
+                        RecyclerView recyclerView = (RecyclerView) view;
+                        RecyclerView.ViewHolder viewHolder =
+                                recyclerView.findViewHolderForAdapterPosition(index);
+                        assert viewHolder != null;
+                        viewHolder.itemView.findViewById(R.id.action_button).performClick();
+                    }
+                });
+    }
+
+    /**
+     * Check whether there is a tab list showing in a {@link android.widget.PopupWindow}. This can
+     * be used for tab grid dialog and tab group popup UI.
+     * @param cta  The current running activity.
+     * @return Whether there is a tab list showing in a popup component.
+     */
+    static boolean isShowingPopupTabList(ChromeTabbedActivity cta) {
+        boolean isShowing = true;
+        try {
+            onView(withId(R.id.tab_list_view))
+                    .inRoot(withDecorView(not(cta.getWindow().getDecorView())))
+                    .check(matches(isDisplayed()));
+        } catch (NoMatchingRootException e) {
+            isShowing = false;
+        } catch (Exception e) {
+            assert false : "error when inspecting pop up tab list.";
+        }
+        return isShowing;
+    }
+
+    /**
+     * Verify the number of tabs in the tab list showing in a popup component.
+     * @param cta   The current running activity.
+     * @param count The count of the tabs in the tab list.
+     */
+    static void verifyShowingPopupTabList(ChromeTabbedActivity cta, int count) {
+        onView(withId(R.id.tab_list_view))
+                .inRoot(withDecorView(not(cta.getWindow().getDecorView())))
+                .check(ChildrenCountAssertion.havingTabCount(count));
+    }
+
+    /**
+     * Merge all normal tabs into a single tab group.
+     * @param cta   The current running activity.
+     */
+    static void mergeAllNormalTabsToAGroup(ChromeTabbedActivity cta) {
+        List<Tab> tabGroup = new ArrayList<>();
+        TabModel tabModel = cta.getTabModelSelector().getModel(false);
+        for (int i = 0; i < tabModel.getCount(); i++) {
+            tabGroup.add(tabModel.getTabAt(i));
+        }
+        createTabGroup(cta, false, tabGroup);
+        assertTrue(cta.getTabModelSelector().getTabModelFilterProvider().getCurrentTabModelFilter()
+                           instanceof TabGroupModelFilter);
+        TabGroupModelFilter filter = (TabGroupModelFilter) cta.getTabModelSelector()
+                                             .getTabModelFilterProvider()
+                                             .getCurrentTabModelFilter();
+        assertEquals(1, filter.getCount());
+    }
+
+    /**
      * Verify that current tab models hold correct number of tabs.
      * @param cta            The current running activity.
      * @param normalTabs     The correct number of normal tabs.
@@ -122,11 +243,22 @@ public class TabUiTestHelper {
      * @param cta       The current running activity.
      * @param count     The correct number of cards in tab switcher.
      */
-    static void verifyTabSwitcherCardCount(ChromeTabbedActivity cta, int count) {
+    public static void verifyTabSwitcherCardCount(ChromeTabbedActivity cta, int count) {
         assertTrue(cta.getLayoutManager().overviewVisible());
         onView(allOf(withParent(withId(org.chromium.chrome.R.id.compositor_view_holder)),
                        withId(R.id.tab_list_view)))
-                .check(CardCountAssertion.havingTabCount(count));
+                .check(ChildrenCountAssertion.havingTabCount(count));
+    }
+
+    /**
+     * Verify there are correct number of favicons in tab strip.
+     * @param cta       The current running activity.
+     * @param count     The correct number of favicons in tab strip.
+     */
+    static void verifyTabStripFaviconCount(ChromeTabbedActivity cta, int count) {
+        assertFalse(cta.getLayoutManager().overviewVisible());
+        onView(allOf(withParent(withId(R.id.toolbar_container_view)), withId(R.id.tab_list_view)))
+                .check(ChildrenCountAssertion.havingTabCount(count));
     }
 
     /**
@@ -171,7 +303,7 @@ public class TabUiTestHelper {
      * @param cta             The current running activity.
      * @param orientation     The target orientation we want the screen to rotate to.
      */
-    static void rotateDeviceToOrientation(ChromeTabbedActivity cta, int orientation) {
+    public static void rotateDeviceToOrientation(ChromeTabbedActivity cta, int orientation) {
         if (cta.getResources().getConfiguration().orientation == orientation) return;
         assertTrue(orientation == Configuration.ORIENTATION_LANDSCAPE
                 || orientation == Configuration.ORIENTATION_PORTRAIT);
@@ -325,17 +457,44 @@ public class TabUiTestHelper {
     }
 
     /**
+     * Exit the PopupWindow dialog by clicking the outer ScrimView.
+     * @param cta  The current running activity.
+     */
+    static void clickScrimToExitDialog(ChromeTabbedActivity cta) {
+        onView(instanceOf(ScrimView.class))
+                .inRoot(withDecorView(not(cta.getWindow().getDecorView())))
+                .perform(new ViewAction() {
+                    @Override
+                    public Matcher<View> getConstraints() {
+                        return isDisplayed();
+                    }
+
+                    @Override
+                    public String getDescription() {
+                        return "click on ScrimView";
+                    }
+
+                    @Override
+                    public void perform(UiController uiController, View view) {
+                        assertTrue(view instanceof ScrimView);
+                        ScrimView scrimView = (ScrimView) view;
+                        scrimView.performClick();
+                    }
+                });
+    }
+
+    /**
      * Implementation of {@link ViewAssertion} to verify the {@link RecyclerView} has correct number
      * of children, and children are showing correctly.
      */
-    public static class CardCountAssertion implements ViewAssertion {
+    public static class ChildrenCountAssertion implements ViewAssertion {
         private int mExpectedCount;
 
-        public static CardCountAssertion havingTabCount(int tabCount) {
-            return new CardCountAssertion(tabCount);
+        public static ChildrenCountAssertion havingTabCount(int tabCount) {
+            return new ChildrenCountAssertion(tabCount);
         }
 
-        public CardCountAssertion(int expectedCount) {
+        public ChildrenCountAssertion(int expectedCount) {
             mExpectedCount = expectedCount;
         }
 

@@ -84,8 +84,7 @@ class CONTENT_EXPORT RenderThread : virtual public ChildThread {
   virtual void RegisterExtension(std::unique_ptr<v8::Extension> extension) = 0;
 
   // Post task to all worker threads. Returns number of workers.
-  virtual int PostTaskToAllWebWorkers(
-      const base::RepeatingClosure& closure) = 0;
+  virtual int PostTaskToAllWebWorkers(base::RepeatingClosure closure) = 0;
 
   // Resolve the proxy servers to use for a given url. On success true is
   // returned and |proxy_list| is set to a PAC string containing a list of
@@ -109,6 +108,9 @@ class CONTENT_EXPORT RenderThread : virtual public ChildThread {
   // Returns the user-agent string.
   virtual blink::WebString GetUserAgent() = 0;
   virtual const blink::UserAgentMetadata& GetUserAgentMetadata() = 0;
+
+  // Returns whether or not the use-zoom-for-dsf flag is enabled.
+  virtual bool IsUseZoomForDSF() = 0;
 };
 
 }  // namespace content

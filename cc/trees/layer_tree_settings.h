@@ -154,14 +154,6 @@ class CC_EXPORT LayerTreeSettings {
   // the device scale factor.
   bool use_painted_device_scale_factor = false;
 
-  // Whether a HitTestRegionList should be built from the active layer tree when
-  // submitting a CompositorFrame.
-  bool build_hit_test_data = false;
-
-  // When false, sync tokens are expected to be present, and are verified,
-  // before transfering gpu resources to the display compositor.
-  bool delegated_sync_points_required = true;
-
   // When true, LayerTreeHostImplClient will be posting a task to call
   // DidReceiveCompositorFrameAck, used by the Compositor but not the
   // LayerTreeView.
@@ -179,6 +171,11 @@ class CC_EXPORT LayerTreeSettings {
 
   // Whether experimental de-jelly effect is allowed.
   bool allow_de_jelly_effect = false;
+
+#if DCHECK_IS_ON()
+  // Whether to check if any double blur exists.
+  bool log_on_ui_double_background_blur = false;
+#endif
 };
 
 class CC_EXPORT LayerListSettings : public LayerTreeSettings {

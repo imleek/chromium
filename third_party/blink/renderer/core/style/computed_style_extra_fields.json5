@@ -72,7 +72,7 @@
         "table-row", "table-column-group", "table-column", "table-cell",
         "table-caption", "-webkit-box", "-webkit-inline-box", "flex",
         "inline-flex", "grid", "inline-grid", "contents", "flow-root", "none",
-        "layout-custom", "inline-layout-custom",
+        "layout-custom", "inline-layout-custom", "math", "inline-math"
       ],
       default_value: "inline",
     },
@@ -102,7 +102,7 @@
         "table-row", "table-column-group", "table-column", "table-cell",
         "table-caption", "-webkit-box", "-webkit-inline-box", "flex",
         "inline-flex", "grid", "inline-grid", "contents", "flow-root", "none",
-        "layout-custom", "inline-layout-custom",
+        "layout-custom", "inline-layout-custom", "math", "inline-math"
       ],
       default_value: "inline",
     },
@@ -501,7 +501,7 @@
       include_paths: ["third_party/blink/renderer/platform/graphics/touch_action.h"],
       type_name: "TouchAction",
       field_size: 6,
-      default_value: "TouchAction::kTouchActionAuto",
+      default_value: "TouchAction::kAuto",
       field_group: "*",
       computed_style_custom_functions: ["getter", "setter"],
     },
@@ -1031,6 +1031,13 @@
     },
     {
       name: "IsEnsuredOutsideFlatTree",
+      field_template: "monotonic_flag",
+      default_value: "false",
+      custom_compare: true,
+      inherited: true,
+    },
+    {
+      name: "IsInsideListElement",
       field_template: "monotonic_flag",
       default_value: "false",
       custom_compare: true,

@@ -46,9 +46,10 @@ class ContentSettingImageModel {
     MIDI_SYSEX = 12,
     SOUND = 13,
     FRAMEBUST = 14,
-    CLIPBOARD_READ = 15,
+    // CLIPBOARD_READ = 15, // Replaced by CLIPBOARD_READ_WRITE in M81.
     SENSORS = 16,
     NOTIFICATIONS_QUIET_PROMPT = 17,
+    CLIPBOARD_READ_WRITE = 18,
 
     NUM_IMAGE_TYPES
   };
@@ -111,6 +112,9 @@ class ContentSettingImageModel {
   bool ShouldNotifyAccessibility(content::WebContents* contents) const;
   void AccessibilityWasNotified(content::WebContents* contents);
 
+  bool ShouldShowPromo(content::WebContents* contents);
+  virtual void SetPromoWasShown(content::WebContents* contents);
+
  protected:
   explicit ContentSettingImageModel(
       ImageType type,
@@ -135,6 +139,9 @@ class ContentSettingImageModel {
   void set_should_auto_open_bubble(const bool should_auto_open_bubble) {
     should_auto_open_bubble_ = should_auto_open_bubble;
   }
+  void set_should_show_promo(const bool should_show_promo) {
+    should_show_promo_ = should_show_promo;
+  }
 
  private:
   bool is_visible_ = false;
@@ -146,6 +153,7 @@ class ContentSettingImageModel {
   const ImageType image_type_;
   const bool image_type_should_notify_accessibility_;
   bool should_auto_open_bubble_ = false;
+  bool should_show_promo_ = false;
   DISALLOW_COPY_AND_ASSIGN(ContentSettingImageModel);
 };
 

@@ -17,15 +17,18 @@
 #include "ui/gfx/paint_vector_icon.h"
 
 CookieControlsIconView::CookieControlsIconView(
-    PageActionIconView::Delegate* delegate)
-    : PageActionIconView(nullptr, 0, delegate) {
+    IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+    PageActionIconView::Delegate* page_action_icon_delegate)
+    : PageActionIconView(nullptr,
+                         0,
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate) {
   SetVisible(false);
 }
 
 CookieControlsIconView::~CookieControlsIconView() = default;
 
-bool CookieControlsIconView::Update() {
-  bool was_visible = GetVisible();
+void CookieControlsIconView::UpdateImpl() {
   auto* web_contents = delegate()->GetWebContentsForPageActionIconView();
   if (web_contents) {
     if (!controller_) {
@@ -35,8 +38,6 @@ bool CookieControlsIconView::Update() {
     controller_->Update(web_contents);
   }
   SetVisible(ShouldBeVisible());
-
-  return GetVisible() != was_visible;
 }
 
 void CookieControlsIconView::OnStatusChanged(
@@ -106,6 +107,10 @@ const gfx::VectorIcon& CookieControlsIconView::GetVectorIcon() const {
   if (status_ == CookieControlsController::Status::kDisabledForSite)
     return kEyeIcon;
   return kEyeCrossedIcon;
+}
+
+const char* CookieControlsIconView::GetClassName() const {
+  return "CookieControlsIconView";
 }
 
 base::string16 CookieControlsIconView::GetTextForTooltipAndAccessibleName()

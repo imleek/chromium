@@ -58,6 +58,7 @@ const CGFloat kOmniboxIconSize = 16;
 
 - (void)setConsumer:(id<OmniboxConsumer>)consumer {
   _consumer = consumer;
+
   [self updateConsumerEmptyTextImage];
 }
 
@@ -117,6 +118,20 @@ const CGFloat kOmniboxIconSize = 16;
                         [weakSelf.consumer updateAutocompleteIcon:image];
                       }];
     }
+  }
+}
+
+- (void)setDefaultLeftImage {
+  UIImage* image = GetOmniboxSuggestionIconForAutocompleteMatchType(
+      AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED, /* is_starred */ false);
+  [self.consumer updateAutocompleteIcon:image];
+
+  __weak OmniboxMediator* weakSelf = self;
+  if (base::FeatureList::IsEnabled(kOmniboxUseDefaultSearchEngineFavicon)) {
+    // Show Default Search Engine favicon.
+    [self loadDefaultSearchEngineFaviconWithCompletion:^(UIImage* image) {
+      [weakSelf.consumer updateAutocompleteIcon:image];
+    }];
   }
 }
 

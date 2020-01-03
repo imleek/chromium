@@ -52,14 +52,8 @@ namespace {
 void RecordSharedWorkerUsage(Document* document) {
   UseCounter::Count(document, WebFeature::kSharedWorkerStart);
 
-  // Don't record the use counter if the frame is same-origin to the top frame,
-  // or if we can't tell whether the frame was ever cross-origin or not.
-  if (!document->TopFrameOrigin() ||
-      document->TopFrameOrigin()->CanAccess(document->GetSecurityOrigin())) {
-    return;
-  }
-
-  UseCounter::Count(document, WebFeature::kThirdPartySharedWorker);
+  if (document->IsCrossSiteSubframe())
+    UseCounter::Count(document, WebFeature::kThirdPartySharedWorker);
 }
 
 }  // namespace
@@ -70,6 +64,12 @@ SharedWorker::SharedWorker(ExecutionContext* context)
       feature_handle_for_scheduler_(context->GetScheduler()->RegisterFeature(
           SchedulingPolicy::Feature::kSharedWorker,
           {SchedulingPolicy::RecordMetricsForBackForwardCache()})) {}
+
+SharedWorker* SharedWorker::Create(ExecutionContext* context,
+                                   const String& url,
+                                   ExceptionState& exception_state) {
+  return SharedWorker::Create(context, url, /*name=*/String(), exception_state);
+}
 
 SharedWorker* SharedWorker::Create(ExecutionContext* context,
                                    const String& url,

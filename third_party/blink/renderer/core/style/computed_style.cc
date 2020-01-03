@@ -121,11 +121,11 @@ struct SameSizeAsComputedStyle : public SameSizeAsComputedStyleBase,
 ASSERT_SIZE(ComputedStyle, SameSizeAsComputedStyle);
 
 scoped_refptr<ComputedStyle> ComputedStyle::Create() {
-  return base::AdoptRef(new ComputedStyle(InitialStyle()));
+  return base::AdoptRef(new ComputedStyle(PassKey(), InitialStyle()));
 }
 
 scoped_refptr<ComputedStyle> ComputedStyle::CreateInitialStyle() {
-  return base::AdoptRef(new ComputedStyle());
+  return base::AdoptRef(new ComputedStyle(PassKey()));
 }
 
 ComputedStyle& ComputedStyle::MutableInitialStyle() {
@@ -161,7 +161,7 @@ ComputedStyle::CreateInheritedDisplayContentsStyleIfNeeded(
 }
 
 scoped_refptr<ComputedStyle> ComputedStyle::Clone(const ComputedStyle& other) {
-  return base::AdoptRef(new ComputedStyle(other));
+  return base::AdoptRef(new ComputedStyle(PassKey(), other));
 }
 
 ALWAYS_INLINE ComputedStyle::ComputedStyle()
@@ -173,6 +173,11 @@ ALWAYS_INLINE ComputedStyle::ComputedStyle(const ComputedStyle& o)
     : ComputedStyleBase(o),
       RefCounted<ComputedStyle>(),
       svg_style_(o.svg_style_) {}
+
+ALWAYS_INLINE ComputedStyle::ComputedStyle(PassKey key) : ComputedStyle() {}
+
+ALWAYS_INLINE ComputedStyle::ComputedStyle(PassKey key, const ComputedStyle& o)
+    : ComputedStyle(o) {}
 
 static bool PseudoElementStylesEqual(const ComputedStyle& old_style,
                                      const ComputedStyle& new_style) {
@@ -215,12 +220,9 @@ bool ComputedStyle::NeedsReattachLayoutTree(const ComputedStyle* old_style,
   // line-clamping is currently only handled by LayoutDeprecatedFlexibleBox,
   // so that if line-clamping changes then the LayoutObject needs to be
   // recreated.
-  if (RuntimeEnabledFeatures::WebkitBoxLayoutUsesFlexLayoutEnabled() &&
-      (new_style->IsDeprecatedWebkitBox()) &&
-      (old_style->HasLineClamp() != new_style->HasLineClamp() &&
-       new_style->BoxOrient() == EBoxOrient::kVertical)) {
+  if (old_style->IsDeprecatedFlexboxUsingFlexLayout() !=
+      new_style->IsDeprecatedFlexboxUsingFlexLayout())
     return true;
-  }
   // We need to perform a reattach if a "display: layout(foo)" has changed to a
   // "display: layout(bar)". This is because one custom layout could be
   // registered and the other may not, affecting the box-tree construction.
@@ -901,8 +903,9 @@ void ComputedStyle::UpdatePropertySpecificDifferences(
     diff.SetFilterChanged();
 
   if (ComputedStyleBase::
-          UpdatePropertySpecificDifferencesNeedsRecomputeOverflow(*this, other))
-    diff.SetNeedsRecomputeOverflow();
+          UpdatePropertySpecificDifferencesNeedsRecomputeVisualOverflow(*this,
+                                                                        other))
+    diff.SetNeedsRecomputeVisualOverflow();
 
   if (ComputedStyleBase::UpdatePropertySpecificDifferencesBackdropFilter(*this,
                                                                          other))
@@ -1015,6 +1018,7 @@ static bool HasPropertyThatCreatesStackingContext(
       case CSSPropertyID::kPosition:
       case CSSPropertyID::kMixBlendMode:
       case CSSPropertyID::kIsolation:
+      case CSSPropertyID::kContain:
         return true;
       default:
         break;

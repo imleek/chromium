@@ -14,6 +14,7 @@ import android.util.Pair;
 
 import androidx.annotation.IntDef;
 
+import org.chromium.base.MathUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
@@ -29,7 +30,6 @@ import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackAnimation
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.ui.base.LocalizationUtils;
 
 import java.lang.annotation.Retention;
@@ -825,7 +825,8 @@ public abstract class Stack {
      * @param amountY The number of pixels dragged in the y direction since the last event.
      */
     public void drag(long time, float x, float y, float amountX, float amountY) {
-        float scrollDrag, discardDrag;
+        float scrollDrag;
+        float discardDrag;
         if (mCurrentMode == Orientation.PORTRAIT) {
             discardDrag = amountX;
             scrollDrag = amountY;

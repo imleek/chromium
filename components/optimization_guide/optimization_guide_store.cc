@@ -88,6 +88,12 @@ bool DatabasePrefixFilter(const std::string& key_prefix,
   return base::StartsWith(key, key_prefix, base::CompareCase::SENSITIVE);
 }
 
+// Returns true if |key| is in |keys_to_remove|.
+bool ExpiredKeyFilter(const base::flat_set<std::string>& keys_to_remove,
+                      const std::string& key) {
+  return keys_to_remove.find(key) != keys_to_remove.end();
+}
+
 }  // namespace
 
 OptimizationGuideStore::OptimizationGuideStore(
@@ -258,39 +264,49 @@ void OptimizationGuideStore::UpdateFetchedHints(
 void OptimizationGuideStore::PurgeExpiredFetchedHints() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!IsAvailable()) {
+  if (!IsAvailable())
     return;
-  }
 
   // Load all the fetched hints to check their expiry times.
   database_->LoadKeysAndEntriesWithFilter(
       base::BindRepeating(&DatabasePrefixFilter,
                           GetFetchedHintEntryKeyPrefix()),
-      base::BindOnce(&OptimizationGuideStore::OnLoadFetchedHintsToPurgeExpired,
+      base::BindOnce(&OptimizationGuideStore::OnLoadEntriesToPurgeExpired,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void OptimizationGuideStore::OnLoadFetchedHintsToPurgeExpired(
-    bool success,
-    std::unique_ptr<EntryMap> fetched_entries) {
+void OptimizationGuideStore::PurgeExpiredHostModelFeatures() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!success) {
+  if (!IsAvailable())
     return;
-  }
 
-  auto keys_to_remove = std::make_unique<EntryKeySet>();
+  // Load all the host model features to check their expiry times.
+  database_->LoadKeysAndEntriesWithFilter(
+      base::BindRepeating(&DatabasePrefixFilter,
+                          GetHostModelFeaturesEntryKeyPrefix()),
+      base::BindOnce(&OptimizationGuideStore::OnLoadEntriesToPurgeExpired,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void OptimizationGuideStore::OnLoadEntriesToPurgeExpired(
+    bool success,
+    std::unique_ptr<EntryMap> entries) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (!success)
+    return;
+
+  EntryKeySet expired_keys_to_remove;
   int64_t now_since_epoch =
       base::Time::Now().ToDeltaSinceWindowsEpoch().InSeconds();
 
-  for (const auto& entry : *fetched_entries) {
-    if (entry.second.expiry_time_secs() <= now_since_epoch) {
-      keys_to_remove->insert(entry.first);
+  for (const auto& entry : *entries) {
+    if (entry.second.has_expiry_time_secs() &&
+        entry.second.expiry_time_secs() <= now_since_epoch) {
+      expired_keys_to_remove.insert(entry.first);
     }
   }
-
-  // TODO(mcrouse): Record the number of hints that will be expired from the
-  // store.
 
   data_update_in_flight_ = true;
   entry_keys_.reset();
@@ -299,11 +315,7 @@ void OptimizationGuideStore::OnLoadFetchedHintsToPurgeExpired(
 
   database_->UpdateEntriesWithRemoveFilter(
       std::move(empty_entries),
-      base::BindRepeating(
-          [](EntryKeySet* keys_to_remove, const std::string& key) {
-            return keys_to_remove->find(key) != keys_to_remove->end();
-          },
-          keys_to_remove.get()),
+      base::BindRepeating(&ExpiredKeyFilter, std::move(expired_keys_to_remove)),
       base::BindOnce(&OptimizationGuideStore::OnUpdateStore,
                      weak_ptr_factory_.GetWeakPtr(), base::DoNothing::Once()));
 }
@@ -524,9 +536,10 @@ void OptimizationGuideStore::ClearFetchedHintsFromDatabase() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!data_update_in_flight_);
 
-  if (!IsAvailable()) {
+  base::UmaHistogramBoolean(
+      "OptimizationGuide.ClearFetchedHints.StoreAvailable", IsAvailable());
+  if (!IsAvailable())
     return;
-  }
 
   data_update_in_flight_ = true;
   auto entries_to_save = std::make_unique<EntryVector>();
@@ -1059,6 +1072,31 @@ void OptimizationGuideStore::OnLoadAllHostModelFeatures(
     loaded_host_model_features->emplace_back(entry.host_model_features());
   }
   std::move(callback).Run(std::move(loaded_host_model_features));
+}
+
+void OptimizationGuideStore::ClearHostModelFeaturesFromDatabase() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!data_update_in_flight_);
+
+  base::UmaHistogramBoolean(
+      "OptimizationGuide.ClearHostModelFeatures.StoreAvailable", IsAvailable());
+  if (!IsAvailable())
+    return;
+
+  data_update_in_flight_ = true;
+  auto entries_to_save = std::make_unique<EntryVector>();
+
+  entry_keys_.reset();
+
+  // Removes all |kHostModelFeatures| store entries. OnUpdateStore will handle
+  // updating status and re-filling entry_keys with the entries still in the
+  // store.
+  database_->UpdateEntriesWithRemoveFilter(
+      std::move(entries_to_save),  // this should be empty.
+      base::BindRepeating(&DatabasePrefixFilter,
+                          GetHostModelFeaturesEntryKeyPrefix()),
+      base::BindOnce(&OptimizationGuideStore::OnUpdateStore,
+                     weak_ptr_factory_.GetWeakPtr(), base::DoNothing::Once()));
 }
 
 }  // namespace optimization_guide

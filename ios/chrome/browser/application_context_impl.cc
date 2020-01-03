@@ -104,8 +104,6 @@ ApplicationContextImpl::ApplicationContextImpl(
   DCHECK(!GetApplicationContext());
   SetApplicationContext(this);
 
-  net_log_ = std::make_unique<net::NetLog>();
-
   SetApplicationLocale(locale);
 
   update_client::UpdateQueryParams::SetDelegate(
@@ -296,7 +294,7 @@ rappor::RapporServiceImpl* ApplicationContextImpl::GetRapporServiceImpl() {
 
 net::NetLog* ApplicationContextImpl::GetNetLog() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return net_log_.get();
+  return net::NetLog::Get();
 }
 
 net_log::NetExportFileWriter* ApplicationContextImpl::GetNetExportFileWriter() {
@@ -414,6 +412,7 @@ void ApplicationContextImpl::CreateGCMDriver() {
 
   gcm_driver_ = gcm::CreateGCMDriverDesktop(
       base::WrapUnique(new gcm::GCMClientFactory), GetLocalState(), store_path,
+      /*remove_account_mappings_with_email_key=*/true,
       // Because ApplicationContextImpl is destroyed after all WebThreads have
       // been shut down, base::Unretained() is safe here.
       base::BindRepeating(&RequestProxyResolvingSocketFactory,

@@ -32,7 +32,6 @@ class PermissionPromptAndroid : public PermissionPrompt,
 
   // PermissionPrompt:
   void UpdateAnchorPosition() override;
-  gfx::NativeWindow GetNativeWindow() override;
   TabSwitchingBehavior GetTabSwitchingBehavior() override;
 
   void Closing();
@@ -46,6 +45,8 @@ class PermissionPromptAndroid : public PermissionPrompt,
   int GetIconId() const;
   base::string16 GetTitleText() const;
   base::string16 GetMessageText() const;
+
+  const content::WebContents* web_contents() { return web_contents_; }
 
   // InfoBar::Manager:
   void OnInfoBarRemoved(infobars::InfoBar* infobar, bool animate) override;

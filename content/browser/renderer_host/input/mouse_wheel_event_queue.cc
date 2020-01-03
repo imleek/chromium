@@ -4,6 +4,7 @@
 
 #include "content/browser/renderer_host/input/mouse_wheel_event_queue.h"
 
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "content/common/input/input_event_dispatch_type.h"
@@ -78,12 +79,6 @@ bool MouseWheelEventQueue::CanGenerateGestureScroll(
     return false;
   }
 
-  if (event_sent_for_gesture_ack_->event.resending_plugin_id != -1) {
-    TRACE_EVENT_INSTANT0("input", "Wheel Event Resending Plugin Id Is Not -1",
-                         TRACE_EVENT_SCOPE_THREAD);
-    return false;
-  }
-
   if (scrolling_device_ != blink::WebGestureDevice::kUninitialized &&
       scrolling_device_ != blink::WebGestureDevice::kTouchpad) {
     TRACE_EVENT_INSTANT0("input",
@@ -105,20 +100,11 @@ bool MouseWheelEventQueue::CanGenerateGestureScroll(
 }
 
 void MouseWheelEventQueue::ProcessMouseWheelAck(
+    const MouseWheelEventWithLatencyInfo& ack_event,
     InputEventAckSource ack_source,
-    InputEventAckState ack_result,
-    const MouseWheelEventWithLatencyInfo& ack_event) {
+    InputEventAckState ack_result) {
   TRACE_EVENT0("input", "MouseWheelEventQueue::ProcessMouseWheelAck");
   if (!event_sent_for_gesture_ack_)
-    return;
-
-  // |ack_event.event| should be the same as
-  // |event_sent_for_gesture_ack_->event|. If they aren't, then don't continue
-  // processing the ack. The two events can potentially be different because
-  // TouchpadPinchEventQueue also dispatches wheel events, and any wheel event
-  // ack that is received is sent to both *EventQueue::ProcessMouseWheelAck
-  // methods.
-  if (ack_event.event != event_sent_for_gesture_ack_->event)
     return;
 
   event_sent_for_gesture_ack_->latency.AddNewLatencyFrom(ack_event.latency);
@@ -136,7 +122,6 @@ void MouseWheelEventQueue::ProcessMouseWheelAck(
         event_sent_for_gesture_ack_->event.PositionInWidget());
     scroll_update.SetPositionInScreen(
         event_sent_for_gesture_ack_->event.PositionInScreen());
-    scroll_update.resending_plugin_id = -1;
 
 #if !defined(OS_MACOSX)
     // Swap X & Y if Shift is down and when there is no horizontal movement.
@@ -291,7 +276,10 @@ void MouseWheelEventQueue::TryForwardNextEventToRenderer() {
         WebInputEvent::kEventNonBlocking;
   }
 
-  client_->SendMouseWheelEventImmediately(*event_sent_for_gesture_ack_);
+  client_->SendMouseWheelEventImmediately(
+      *event_sent_for_gesture_ack_,
+      base::BindOnce(&MouseWheelEventQueue::ProcessMouseWheelAck,
+                     base::Unretained(this)));
 }
 
 void MouseWheelEventQueue::SendScrollEnd(WebGestureEvent update_event,
@@ -301,7 +289,6 @@ void MouseWheelEventQueue::SendScrollEnd(WebGestureEvent update_event,
   WebGestureEvent scroll_end(update_event);
   scroll_end.SetTimeStamp(ui::EventTimeForNow());
   scroll_end.SetType(WebInputEvent::kGestureScrollEnd);
-  scroll_end.resending_plugin_id = -1;
   scroll_end.data.scroll_end.synthetic = synthetic;
   scroll_end.data.scroll_end.inertial_phase =
       update_event.data.scroll_update.inertial_phase;

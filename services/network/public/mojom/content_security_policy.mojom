@@ -4,8 +4,6 @@
 
 module network.mojom;
 
-import "url/mojom/url.mojom";
-
 // The HTTP Content-Security-Policy-Report-Only response header allows web
 // developers to experiment with policies by monitoring (but not enforcing)
 // their effects. These violation reports consist of JSON documents sent via an
@@ -13,6 +11,19 @@ import "url/mojom/url.mojom";
 enum ContentSecurityPolicyType {
   kReport,
   kEnforce
+};
+
+// The source from which the CSP header is coming from.
+enum ContentSecurityPolicySource {
+  // From the HTTP response's headers.
+  kHTTP,
+
+  // From the <meta> HTML tag with the "http-equiv" attribute.
+  kMeta,
+
+  // From an origin-policy file.
+  // Origin Policy spec: https://wicg.github.io/origin-policy/
+  kOriginPolicy
 };
 
 // A CSPSource represents an expression that matches a set of urls.
@@ -42,14 +53,36 @@ struct CSPSourceList {
   bool allow_star = false;
 };
 
+struct CSPDirective {
+  enum Name {
+    DefaultSrc,
+    ChildSrc,
+    FrameSrc,
+    FormAction,
+    UpgradeInsecureRequests,
+    NavigateTo,
+    FrameAncestors,
+
+    Unknown,
+  };
+
+  Name name;
+  CSPSourceList source_list;
+};
+
 struct ContentSecurityPolicy {
-  // List of sources specified in the frame-ancestors directive.
-  CSPSourceList? frame_ancestors;
+  array<CSPDirective> directives;
+
+  // When set to kReport, this CSP will not enforce the directives, just report
+  // the violations.
+  ContentSecurityPolicyType type = kEnforce;
+
+  ContentSecurityPolicySource source = kHTTP;
 
   // Whether this CSP policy uses the new reporting API.
   // https://w3c.github.io/reporting/
   bool use_reporting_api = false;
 
   // Set of reporting endpoints to which violation reports are sent.
-  array<url.mojom.Url> report_endpoints;
+  array<string> report_endpoints;
 };

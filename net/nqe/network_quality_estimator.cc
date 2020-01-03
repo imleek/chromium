@@ -387,8 +387,8 @@ void NetworkQualityEstimator::NotifyBytesRead(
   throughput_analyzer_->NotifyBytesRead(request);
 }
 
-void NetworkQualityEstimator::NotifyRequestCompleted(const URLRequest& request,
-                                                     int net_error) {
+void NetworkQualityEstimator::NotifyRequestCompleted(
+    const URLRequest& request) {
   TRACE_EVENT0(NetTracingCategory(),
                "NetworkQualityEstimator::NotifyRequestCompleted");
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -695,9 +695,6 @@ void NetworkQualityEstimator::RecordMetricsOnMainFrameRequest() const {
     UMA_HISTOGRAM_TIMES("NQE.MainFrame.RTT.Percentile50",
                         estimated_quality_at_last_main_frame_.http_rtt());
   }
-  UMA_HISTOGRAM_BOOLEAN("NQE.EstimateAvailable.MainFrame.RTT",
-                        estimated_quality_at_last_main_frame_.http_rtt() !=
-                            nqe::internal::InvalidRTT());
 
   if (estimated_quality_at_last_main_frame_.transport_rtt() !=
       nqe::internal::InvalidRTT()) {
@@ -705,9 +702,6 @@ void NetworkQualityEstimator::RecordMetricsOnMainFrameRequest() const {
     UMA_HISTOGRAM_TIMES("NQE.MainFrame.TransportRTT.Percentile50",
                         estimated_quality_at_last_main_frame_.transport_rtt());
   }
-  UMA_HISTOGRAM_BOOLEAN("NQE.EstimateAvailable.MainFrame.TransportRTT",
-                        estimated_quality_at_last_main_frame_.transport_rtt() !=
-                            nqe::internal::InvalidRTT());
 
   if (estimated_quality_at_last_main_frame_.downstream_throughput_kbps() !=
       nqe::internal::INVALID_RTT_THROUGHPUT) {
@@ -716,10 +710,6 @@ void NetworkQualityEstimator::RecordMetricsOnMainFrameRequest() const {
         "NQE.MainFrame.Kbps.Percentile50",
         estimated_quality_at_last_main_frame_.downstream_throughput_kbps());
   }
-  UMA_HISTOGRAM_BOOLEAN(
-      "NQE.EstimateAvailable.MainFrame.Kbps",
-      estimated_quality_at_last_main_frame_.downstream_throughput_kbps() !=
-          nqe::internal::INVALID_RTT_THROUGHPUT);
 
   UMA_HISTOGRAM_ENUMERATION("NQE.MainFrame.EffectiveConnectionType",
                             effective_connection_type_at_last_main_frame_,
@@ -1427,13 +1417,6 @@ void NetworkQualityEstimator::AddAndNotifyObserversOfRTT(
   UMA_HISTOGRAM_ENUMERATION("NQE.RTT.ObservationSource", observation.source(),
                             NETWORK_QUALITY_OBSERVATION_SOURCE_MAX);
 
-  base::HistogramBase* raw_observation_histogram = base::Histogram::FactoryGet(
-      std::string("NQE.RTT.RawObservation.") +
-          nqe::internal::GetNameForObservationSource(observation.source()),
-      1, 10 * 1000, 50, base::HistogramBase::kUmaTargetedHistogramFlag);
-  if (raw_observation_histogram)
-    raw_observation_histogram->Add(observation.value());
-
   // Maybe recompute the effective connection type since a new RTT observation
   // is available.
   if (observation.source() !=
@@ -1467,13 +1450,6 @@ void NetworkQualityEstimator::AddAndNotifyObserversOfThroughput(
 
   UMA_HISTOGRAM_ENUMERATION("NQE.Kbps.ObservationSource", observation.source(),
                             NETWORK_QUALITY_OBSERVATION_SOURCE_MAX);
-
-  base::HistogramBase* raw_observation_histogram = base::Histogram::FactoryGet(
-      std::string("NQE.Kbps.RawObservation.") +
-          nqe::internal::GetNameForObservationSource(observation.source()),
-      1, 10 * 1000, 50, base::HistogramBase::kUmaTargetedHistogramFlag);
-  if (raw_observation_histogram)
-    raw_observation_histogram->Add(observation.value());
 
   // Maybe recompute the effective connection type since a new throughput
   // observation is available.

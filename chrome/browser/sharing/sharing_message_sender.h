@@ -22,11 +22,13 @@ class SharingMessage;
 }  // namespace chrome_browser_sharing
 
 namespace syncer {
+class DeviceInfo;
 class LocalDeviceInfoProvider;
 }  // namespace syncer
 
 class SharingFCMSender;
 class SharingSyncPreference;
+enum class SharingDevicePlatform;
 enum class SharingSendMessageResult;
 
 class SharingMessageSender {
@@ -42,7 +44,7 @@ class SharingMessageSender {
   virtual ~SharingMessageSender();
 
   virtual void SendMessageToDevice(
-      const std::string& device_guid,
+      const syncer::DeviceInfo& device,
       base::TimeDelta response_timeout,
       chrome_browser_sharing::SharingMessage message,
       ResponseCallback callback);
@@ -75,6 +77,8 @@ class SharingMessageSender {
   std::map<std::string, base::TimeTicks> send_message_times_;
   // Map of FCM message_id to random GUID.
   std::map<std::string, std::string> message_guids_;
+  // Map of random message guid to platform of receiver device for metrics.
+  std::map<std::string, SharingDevicePlatform> receiver_device_platform_;
 
   base::WeakPtrFactory<SharingMessageSender> weak_ptr_factory_{this};
 

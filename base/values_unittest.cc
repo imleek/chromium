@@ -527,10 +527,7 @@ TEST(ValuesTest, Append) {
 TEST(ValuesTest, Insert) {
   ListValue value;
   auto GetList = [&value]() -> decltype(auto) { return value.GetList(); };
-  auto GetConstList = [&value] {
-    const ListValue& const_value = value;
-    return const_value.GetList();
-  };
+  auto GetConstList = [&value] { return as_const(value).GetList(); };
 
   auto storage_iter = value.Insert(GetList().end(), Value(true));
   EXPECT_TRUE(GetList().begin() == storage_iter);
@@ -600,6 +597,21 @@ TEST(ValuesTest, EraseListValueIf) {
   EXPECT_TRUE(value.GetList().empty());
 
   EXPECT_EQ(0u, value.EraseListValueIf([](const auto& val) { return true; }));
+}
+
+TEST(ValuesTest, ClearList) {
+  ListValue value;
+  value.Append(1);
+  value.Append(2);
+  value.Append(3);
+  EXPECT_EQ(3u, value.GetList().size());
+
+  value.ClearList();
+  EXPECT_TRUE(value.GetList().empty());
+
+  // ClearList() should be idempotent.
+  value.ClearList();
+  EXPECT_TRUE(value.GetList().empty());
 }
 
 TEST(ValuesTest, FindKey) {

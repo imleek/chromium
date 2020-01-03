@@ -62,7 +62,7 @@ bool AreHoverCardImagesEnabled() {
 base::TimeDelta GetMinimumTriggerDelay() {
   int delay_group = base::GetFieldTrialParamByFeatureAsInt(
       features::kTabHoverCards, features::kTabHoverCardsFeatureParameterName,
-      2);
+      1);
   switch (delay_group) {
     case 2:
       return base::TimeDelta::FromMilliseconds(150);
@@ -77,7 +77,7 @@ base::TimeDelta GetMinimumTriggerDelay() {
 base::TimeDelta GetMaximumTriggerDelay() {
   int delay_group = base::GetFieldTrialParamByFeatureAsInt(
       features::kTabHoverCards, features::kTabHoverCardsFeatureParameterName,
-      2);
+      1);
   switch (delay_group) {
     case 2:
       return base::TimeDelta::FromMilliseconds(500);
@@ -796,6 +796,15 @@ gfx::Size TabHoverCardBubbleView::CalculatePreferredSize() const {
   preferred_size.set_width(TabStyle::GetPreviewImageSize().width());
   DCHECK(!preferred_size.IsEmpty());
   return preferred_size;
+}
+
+void TabHoverCardBubbleView::OnThemeChanged() {
+  BubbleDialogDelegateView::OnThemeChanged();
+
+  // Update fade labels' background color to match that of the the original
+  // label since these child views are ignored by layout.
+  title_fade_label_->SetBackgroundColor(title_label_->GetBackgroundColor());
+  domain_fade_label_->SetBackgroundColor(domain_label_->GetBackgroundColor());
 }
 
 void TabHoverCardBubbleView::RecordTimeSinceLastSeenMetric(

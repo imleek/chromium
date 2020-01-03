@@ -31,7 +31,9 @@ import android.support.v7.widget.RecyclerView;
 import android.text.TextUtils;
 import android.view.View;
 
+import org.junit.After;
 import org.junit.Before;
+import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
@@ -59,16 +61,18 @@ import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
+import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.OverviewModeBehaviorWatcher;
-import org.chromium.chrome.test.util.RenderTestRule;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.WebContentsUtils;
 import org.chromium.net.test.EmbeddedTestServer;
+import org.chromium.ui.base.PageTransition;
+import org.chromium.ui.test.util.DisableAnimationsTestRule;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.IOException;
@@ -90,6 +94,11 @@ public class StartSurfaceLayoutTest {
             + "Study.Group:soft-cleanup-delay/0/cleanup-delay/0/skip-slow-zooming/false"
             + "/zooming-min-sdk-version/19/zooming-min-memory-mb/512";
 
+    // Tests need animation on.
+    @ClassRule
+    public static DisableAnimationsTestRule sEnableAnimationsRule =
+            new DisableAnimationsTestRule(true);
+
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
@@ -97,7 +106,7 @@ public class StartSurfaceLayoutTest {
     public TestRule mProcessor = new Features.InstrumentationProcessor();
 
     @Rule
-    public RenderTestRule mRenderTestRule = new RenderTestRule();
+    public ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
 
     private StartSurfaceLayout mStartSurfaceLayout;
     private String mUrl;
@@ -120,7 +129,7 @@ public class StartSurfaceLayoutTest {
         assertTrue(layout instanceof StartSurfaceLayout);
         mStartSurfaceLayout = (StartSurfaceLayout) layout;
         mUrl = testServer.getURL("/chrome/test/data/android/navigate/simple.html");
-        mRepeat = 3;
+        mRepeat = 1;
 
         mTabListDelegate = mStartSurfaceLayout.getStartSurfaceForTesting().getTabListDelegate();
         mTabListDelegate.setBitmapCallbackForTesting(mBitmapListener);
@@ -136,6 +145,12 @@ public class StartSurfaceLayoutTest {
                         .getCurrentTabModelFilter()::isTabModelRestored));
 
         assertEquals(0, mTabListDelegate.getBitmapFetchCountForTesting());
+    }
+
+    @After
+    public void tearDown() {
+        FeatureUtilities.setGridTabSwitcherEnabledForTesting(null);
+        FeatureUtilities.setTabGroupsAndroidEnabledForTesting(null);
     }
 
     @Test
@@ -535,7 +550,6 @@ public class StartSurfaceLayoutTest {
     public void testInvisibleTabsDontFetchWarm() throws InterruptedException {
         // Get the GTS in the warm state.
         prepareTabs(2, 0, NTP_URL);
-        mRepeat = 2;
         testTabToGrid(NTP_URL);
 
         Thread.sleep(1000);
@@ -559,7 +573,6 @@ public class StartSurfaceLayoutTest {
     public void testInvisibleTabsDontFetchSoft() throws InterruptedException {
         // Get the GTS in the soft cleaned up state.
         prepareTabs(2, 0, NTP_URL);
-        mRepeat = 2;
         testTabToGrid(NTP_URL);
 
         Thread.sleep(1000);
@@ -584,6 +597,7 @@ public class StartSurfaceLayoutTest {
     @DisabledTest(message = "http://crbug/1005865 - Test was previously flaky but only on bots."
             + "Was not locally reproducible. Disabling until verified that it's deflaked on bots.")
     public void testIncognitoEnterGts() throws InterruptedException {
+        // clang-format on
         prepareTabs(1, 1, null);
         enterGTSWithThumbnailChecking();
         onView(withId(R.id.tab_list_view))
@@ -654,6 +668,32 @@ public class StartSurfaceLayoutTest {
             oldFetchCount = currentFetchCount;
         }
         leaveGTSAndVerifyThumbnailsAreReleased();
+    }
+
+    @Test
+    @MediumTest
+    // clang-format off
+    @CommandLineFlags.Add({BASE_PARAMS})
+    @Features.EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID,
+                    ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID})
+    public void testUrlUpdatedForUndoableClosedTabNotCrashing() throws Exception {
+        // clang-format on
+        FeatureUtilities.setTabGroupsAndroidEnabledForTesting(true);
+
+        // Restart Chrome to have Group.
+        ApplicationTestUtils.finishActivity(mActivityTestRule.getActivity());
+        mActivityTestRule.startMainActivityFromLauncher();
+        mActivityTestRule.getActivity().getSnackbarManager().disableForTesting();
+        prepareTabs(2, 0, null);
+        enterGTSWithThumbnailChecking();
+
+        Tab tab = mActivityTestRule.getActivity().getTabModelSelector().getCurrentTab();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mActivityTestRule.getActivity().getTabModelSelector().getCurrentModel().closeTab(
+                    tab, false, false, true);
+        });
+        mActivityTestRule.loadUrlInTab(
+                mUrl, PageTransition.TYPED | PageTransition.FROM_ADDRESS_BAR, tab);
     }
 
     private static class TabCountAssertion implements ViewAssertion {

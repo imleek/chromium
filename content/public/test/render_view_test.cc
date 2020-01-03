@@ -22,7 +22,6 @@
 #include "content/common/widget_messages.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/native_web_keyboard_event.h"
-#include "content/public/common/bind_interface_helpers.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/previews_state.h"
@@ -45,12 +44,12 @@
 #include "net/base/escape.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/mojom/leak_detector/leak_detector.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
 #include "third_party/blink/public/platform/web_url_loader_client.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/web/blink.h"
@@ -423,10 +422,10 @@ void RenderViewTest::SetUp() {
   view_params->main_frame_routing_id = render_thread_->GetNextRoutingID();
   view_params->main_frame_interface_bundle =
       mojom::DocumentScopedInterfaceBundle::New();
-  render_thread_->PassInitialInterfaceProviderRequestForFrame(
+  render_thread_->PassInitialInterfaceProviderReceiverForFrame(
       view_params->main_frame_routing_id,
-      mojo::MakeRequest(
-          &view_params->main_frame_interface_bundle->interface_provider));
+      view_params->main_frame_interface_bundle->interface_provider
+          .InitWithNewPipeAndPassReceiver());
 
   mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
       browser_interface_broker;
@@ -669,8 +668,7 @@ void RenderViewTest::Reload(const GURL& url) {
       base::TimeTicks::Now(), "GET", nullptr, base::Optional<SourceLocation>(),
       false /* started_from_context_menu */, false /* has_user_gesture */,
       InitiatorCSPInfo(), std::vector<int>(), std::string(),
-      false /* is_history_navigation_in_new_child_frame */, base::TimeTicks(),
-      base::nullopt /* frame_policy */);
+      false /* is_history_navigation_in_new_child_frame */, base::TimeTicks());
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   TestRenderFrame* frame =
       static_cast<TestRenderFrame*>(impl->GetMainRenderFrame());
@@ -690,8 +688,6 @@ void RenderViewTest::Resize(gfx::Size new_size,
   visual_properties.screen_info = ScreenInfo();
   visual_properties.new_size = new_size;
   visual_properties.compositor_viewport_pixel_rect = gfx::Rect(new_size);
-  visual_properties.top_controls_height = 0.f;
-  visual_properties.browser_controls_shrink_blink_size = false;
   visual_properties.is_fullscreen_granted = is_fullscreen_granted;
   visual_properties.display_mode = blink::mojom::DisplayMode::kBrowser;
 
@@ -769,6 +765,10 @@ void RenderViewTest::OnSameDocumentNavigation(blink::WebLocalFrame* frame,
       false /* content_initiated */);
 }
 
+void RenderViewTest::SetUseZoomForDSFEnabled(bool enabled) {
+  render_thread_->SetUseZoomForDSFEnabled(enabled);
+}
+
 blink::WebWidget* RenderViewTest::GetWebWidget() {
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   return impl->GetWidget()->GetWebWidget();
@@ -816,8 +816,7 @@ void RenderViewTest::GoToOffset(int offset,
       base::TimeTicks::Now(), "GET", nullptr, base::Optional<SourceLocation>(),
       false /* started_from_context_menu */, false /* has_user_gesture */,
       InitiatorCSPInfo(), std::vector<int>(), std::string(),
-      false /* is_history_navigation_in_new_child_frame */, base::TimeTicks(),
-      base::nullopt /* frame policy */);
+      false /* is_history_navigation_in_new_child_frame */, base::TimeTicks());
   auto commit_params = CreateCommitNavigationParams();
   commit_params->page_state = state;
   commit_params->nav_entry_id = pending_offset + 1;

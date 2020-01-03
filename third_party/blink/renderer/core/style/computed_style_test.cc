@@ -31,8 +31,8 @@
 namespace blink {
 
 TEST(ComputedStyleTest, ShapeOutsideBoxEqual) {
-  ShapeValue* shape1 = ShapeValue::CreateBoxShapeValue(CSSBoxType::kContent);
-  ShapeValue* shape2 = ShapeValue::CreateBoxShapeValue(CSSBoxType::kContent);
+  auto* shape1 = MakeGarbageCollected<ShapeValue>(CSSBoxType::kContent);
+  auto* shape2 = MakeGarbageCollected<ShapeValue>(CSSBoxType::kContent);
   scoped_refptr<ComputedStyle> style1 = ComputedStyle::Create();
   scoped_refptr<ComputedStyle> style2 = ComputedStyle::Create();
   style1->SetShapeOutside(shape1);
@@ -43,10 +43,10 @@ TEST(ComputedStyleTest, ShapeOutsideBoxEqual) {
 TEST(ComputedStyleTest, ShapeOutsideCircleEqual) {
   scoped_refptr<BasicShapeCircle> circle1 = BasicShapeCircle::Create();
   scoped_refptr<BasicShapeCircle> circle2 = BasicShapeCircle::Create();
-  ShapeValue* shape1 =
-      ShapeValue::CreateShapeValue(circle1, CSSBoxType::kContent);
-  ShapeValue* shape2 =
-      ShapeValue::CreateShapeValue(circle2, CSSBoxType::kContent);
+  auto* shape1 = MakeGarbageCollected<ShapeValue>(std::move(circle1),
+                                                  CSSBoxType::kContent);
+  auto* shape2 = MakeGarbageCollected<ShapeValue>(std::move(circle2),
+                                                  CSSBoxType::kContent);
   scoped_refptr<ComputedStyle> style1 = ComputedStyle::Create();
   scoped_refptr<ComputedStyle> style2 = ComputedStyle::Create();
   style1->SetShapeOutside(shape1);
@@ -508,6 +508,7 @@ TEST(ComputedStyleTest, CustomPropertiesEqual_Data) {
 
 TEST(ComputedStyleTest, ApplyColorSchemeLightOnDark) {
   ScopedCSSColorSchemeForTest scoped_property_enabled(true);
+  ScopedCSSColorSchemeUARenderingForTest scoped_ua_enabled(true);
 
   std::unique_ptr<DummyPageHolder> dummy_page_holder_ =
       std::make_unique<DummyPageHolder>(IntSize(0, 0), nullptr);
@@ -540,6 +541,7 @@ TEST(ComputedStyleTest, ApplyColorSchemeLightOnDark) {
 
 TEST(ComputedStyleTest, ApplyInternalLightDarkColor) {
   ScopedCSSColorSchemeForTest scoped_property_enabled(true);
+  ScopedCSSColorSchemeUARenderingForTest scoped_ua_enabled(true);
 
   std::unique_ptr<DummyPageHolder> dummy_page_holder_ =
       std::make_unique<DummyPageHolder>(IntSize(0, 0), nullptr);
@@ -570,22 +572,41 @@ TEST(ComputedStyleTest, ApplyInternalLightDarkColor) {
   CSSValueList* light_value = CSSValueList::CreateSpaceSeparated();
   light_value->Append(*CSSIdentifierValue::Create(CSSValueID::kLight));
 
-  CSSPropertyRef scheme_property("color-scheme", state.GetDocument());
-  CSSPropertyRef color_property("color", state.GetDocument());
+  auto origin = StyleCascade::Origin::kUserAgent;
 
-  To<Longhand>(color_property.GetProperty())
-      .ApplyValue(state, *internal_light_dark);
-  To<Longhand>(scheme_property.GetProperty()).ApplyValue(state, *dark_value);
-  if (!RuntimeEnabledFeatures::CSSCascadeEnabled())
-    resolver.ApplyCascadedColorValue(state);
-  EXPECT_EQ(Color::kWhite, style->VisitedDependentColor(GetCSSPropertyColor()));
+  {
+    ScopedCSSCascadeForTest scoped_cascade_enabled(false);
 
-  To<Longhand>(color_property.GetProperty())
-      .ApplyValue(state, *internal_light_dark);
-  To<Longhand>(scheme_property.GetProperty()).ApplyValue(state, *light_value);
-  if (!RuntimeEnabledFeatures::CSSCascadeEnabled())
+    To<Longhand>(GetCSSPropertyColor()).ApplyValue(state, *internal_light_dark);
+    To<Longhand>(GetCSSPropertyColorScheme()).ApplyValue(state, *dark_value);
     resolver.ApplyCascadedColorValue(state);
-  EXPECT_EQ(Color::kBlack, style->VisitedDependentColor(GetCSSPropertyColor()));
+    EXPECT_EQ(Color::kWhite,
+              style->VisitedDependentColor(GetCSSPropertyColor()));
+
+    To<Longhand>(GetCSSPropertyColor()).ApplyValue(state, *internal_light_dark);
+    To<Longhand>(GetCSSPropertyColorScheme()).ApplyValue(state, *light_value);
+    resolver.ApplyCascadedColorValue(state);
+    EXPECT_EQ(Color::kBlack,
+              style->VisitedDependentColor(GetCSSPropertyColor()));
+  }
+
+  {
+    ScopedCSSCascadeForTest scoped_cascade_enabled(true);
+
+    StyleCascade cascade1(state);
+    cascade1.Add(*CSSPropertyName::From("color"), internal_light_dark, origin);
+    cascade1.Add(*CSSPropertyName::From("color-scheme"), dark_value, origin);
+    cascade1.Apply();
+    EXPECT_EQ(Color::kWhite,
+              style->VisitedDependentColor(GetCSSPropertyColor()));
+
+    StyleCascade cascade2(state);
+    cascade2.Add(*CSSPropertyName::From("color"), internal_light_dark, origin);
+    cascade2.Add(*CSSPropertyName::From("color-scheme"), light_value, origin);
+    cascade2.Apply();
+    EXPECT_EQ(Color::kBlack,
+              style->VisitedDependentColor(GetCSSPropertyColor()));
+  }
 }
 
 }  // namespace blink

@@ -10,11 +10,6 @@
     "args": ["--enable-accelerated-2d-canvas"]
   },
   {
-    "prefix": "disable-deferred-rendering",
-    "bases": ["fast/canvas"],
-    "args": ["--disable-features=CanvasAlwaysDeferral"]
-  },
-  {
     "prefix": "isolated_world_csp",
     "bases": ["http/tests/security/isolatedWorld"],
     "args": ["--enable-blink-features=IsolatedWorldCSP"]
@@ -29,7 +24,9 @@
               "external/wpt/feature-policy/experimental-features",
               "external/wpt/offscreen-canvas/convert-to-blob",
               "external/wpt/requestidlecallback",
+              "external/wpt/web-animations/timing-model/animations",
               "fast/events/pointerevents/pinch",
+              "fast/scroll-snap",
               "lifecycle",
               "http/tests/devtools/tracing",
               "http/tests/worklet",
@@ -43,7 +40,10 @@
     "bases": ["external/wpt/css/css-paint-api",
               "http/tests/csspaint"],
     "args": ["--enable-threaded-compositing",
-             "--enable-blink-features=OffMainThreadCSSPaint"]
+             "--enable-blink-features=OffMainThreadCSSPaint",
+	     "--enable-gpu-rasterization",
+	     "--enable-oop-rasterization",
+	     "--enable-accelerated-2d-canvas"]
   },
   {
     "prefix": "prefer_compositing_to_lcd_text",
@@ -84,7 +84,8 @@
   },
   {
     "prefix": "stable",
-    "bases": ["fast/css3-text/css3-text-decoration/stable",
+    "bases": ["external/wpt/html/cross-origin-embedder-policy",
+              "fast/css3-text/css3-text-decoration/stable",
               "fast/dom/Window",
               "http/tests/streams/transferable/enabled",
               "http/tests/navigation",
@@ -186,7 +187,8 @@
   },
   {
     "prefix": "layout_ng_block_frag",
-    "bases": ["external/wpt/css/css-multicol",
+    "bases": ["external/wpt/css/css-break",
+              "external/wpt/css/css-multicol",
               "fast/multicol",
               "fragmentation",
               "printing"],
@@ -291,6 +293,14 @@
              "--disable-smooth-scrolling"]
   },
   {
+    "prefix": "smooth_compositor_threaded_scrollbar_scrolling",
+    "bases": ["fast/scrolling/scrollbars/scroll-chaining-for-gesture-based-scrolling.html"],
+    "args": ["--enable-features=CompositorThreadedScrollbarScrolling",
+             "--enable-threaded-compositing",
+             "--enable-prefer-compositing-to-lcd-text",
+             "--enable-smooth-scrolling"]
+  },
+  {
     "prefix": "hidpi",
     "bases": ["fast/scrolling/scrollbars/dsf-ready"],
     "args": ["--disable-smooth-scrolling",
@@ -388,20 +398,6 @@
   {
     "prefix" : "autoupgrade-optionally-blockable-mixed-content",
     "bases": ["http/tests/mixed-autoupgrade/optionally"],
-    "args": ["--enable-features=AutoupgradeMixedContent<AU",
-             "--force-fieldtrials=AU/G1",
-             "--force-fieldtrial-params=AU.G1:mode/optionally-blockable"]
-  },
-  {
-    "prefix" : "autoupgrade-blockable-mixed-content",
-    "bases": ["http/tests/mixed-autoupgrade/blockable"],
-    "args": ["--enable-features=AutoupgradeMixedContent<AU",
-             "--force-fieldtrials=AU/G1",
-             "--force-fieldtrial-params=AU.G1:mode/blockable"]
-  },
-  {
-    "prefix" : "autoupgrade-all-mixed-content",
-    "bases": ["http/tests/mixed-autoupgrade/all"],
     "args": ["--enable-features=AutoupgradeMixedContent"]
   },
   {
@@ -418,7 +414,7 @@
   {
     "prefix": "wasm-site-isolated-code-cache",
     "bases": ["http/tests/devtools/wasm-isolated-code-cache"],
-    "args": ["--enable-features=IsolatedCodeCache,WasmCodeCache",
+    "args": ["--enable-features=IsolatedCodeCache",
              "--disable-features=WebAssemblyBaseline",
              "--site-per-process"]
   },
@@ -543,8 +539,52 @@
               "external/wpt/css/css-scoping",
               "external/wpt/css/css-typed-om",
               "external/wpt/css/css-variables",
-              "fast/css/variables"],
+              "fast/css/variables",
+              "fast/forms/select/select-autofilled.html",
+              "fast/forms/001.html",
+              "fast/forms/button-style-color.html",
+              "fast/forms/calendar-picker/calendar-picker-appearance-zoom125.html",
+              "fast/forms/color/color-suggestion-picker-appearance.html",
+              "fast/forms/date/date-appearance-basic.html",
+              "fast/forms/datetimelocal/datetimelocal-appearance-basic.html",
+              "fast/forms/fieldset/fieldset-align.html",
+              "fast/forms/month/month-appearance-basic.html",
+              "fast/forms/select/basic-selects.html",
+              "fast/forms/select-popup/popup-menu-appearance-zoom090.html",
+              "fast/forms/select-popup/popup-menu-appearance-zoom110.html",
+              "fast/forms/submit/submit-appearance-basic.html",
+              "fast/forms/text/text-appearance-basic.html",
+              "fast/forms/textarea/textarea-appearance-basic.html",
+              "external/wpt/css/css-writing-modes/block-flow-direction-vlr-022.xht",
+              "external/wpt/css/css-writing-modes/block-flow-direction-vrl-021.xht",
+              "external/wpt/css/css-logical/cascading-001.html",
+              "external/wpt/css/css-logical/inheritance.html",
+              "external/wpt/css/css-logical/logical-box-border-color.html",
+              "external/wpt/css/css-logical/logical-box-border-shorthands.html",
+              "external/wpt/css/css-logical/logical-box-border-style.html",
+              "external/wpt/css/css-logical/logical-box-border-width.html",
+              "external/wpt/css/css-logical/logical-box-inset.html",
+              "external/wpt/css/css-logical/logical-box-margin.html",
+              "external/wpt/css/css-logical/logical-box-padding.html",
+              "external/wpt/css/css-logical/logical-box-size.html",
+              "external/wpt/css/css-logical/logicalprops-block-size-vlr.html",
+              "external/wpt/css/css-logical/logicalprops-block-size.html",
+              "external/wpt/css/css-logical/logicalprops-inline-size-vlr.html",
+              "external/wpt/css/css-logical/logicalprops-inline-size.html",
+              "fast/borders/border-image-outset-in-shorthand.html",
+              "fast/borders/border-image-repeat-round.html",
+              "fast/borders/border-image-repeat.html",
+              "fast/borders/border-image-slices.html",
+              "fast/borders/border-image-source.html",
+              "fast/backgrounds/mask-composite.html",
+              "fast/css/acid2.html"],
     "args": ["--enable-blink-features=CSSCascade"]
+  },
+  {
+    "prefix": "forced-high-contrast-cascade",
+    "bases": ["external/wpt/forced-colors-mode"],
+    "args": ["--force-high-contrast",
+             "--enable-blink-features=CSSCascade,ForcedColors"]
   },
   {
     "prefix": "at-property",
@@ -580,24 +620,24 @@
     "args": ["--enable-features=AudioServiceOutOfProcess,AudioServiceSandbox,WebRtcApmInAudioService"]
   },
   {
-    "prefix": "scheduler",
-    "bases": ["wpt_internal/scheduler"],
-    "args": ["--enable-features=BlinkSchedulerDisableAntiStarvationForPriorities"]
-  },
-  {
-    "prefix": "cross-origin-isolation",
-    "bases": ["external/wpt/html/cross-origin-embedder-policy"],
-    "args": ["--enable-features=CrossOriginIsolation"]
-  },
-  {
     "prefix": "json-modules",
     "bases": ["external/wpt/html/semantics/scripting-1/the-script-element/json-module"],
-    "args": ["--enable-blink-features=JSONModules"]
+    "args": ["--enable-features=JSONModules"]
+  },
+  {
+    "prefix": "css-modules",
+    "bases": ["external/wpt/html/semantics/scripting-1/the-script-element/css-module"],
+    "args": ["--enable-blink-features=CSSModules"]
   },
   {
     "prefix": "out-of-blink-frame-ancestors",
-    "bases": ["external/wpt/content-security-policy/frame-ancestors"],
+    "bases": ["external/wpt/content-security-policy/frame-ancestors", "external/wpt/portals/csp"],
     "args": ["--enable-features=OutOfBlinkFrameAncestors"]
+  },
+  {
+    "prefix": "import-maps-disabled",
+    "bases": ["external/wpt/import-maps/core/not-as-classic-script.html"],
+    "args": ["--disable-blink-features=ExperimentalProductivityFeatures"]
   },
   {
     "prefix": "import-maps-without-builtin-modules",
@@ -639,5 +679,35 @@
     "prefix": "not-split-http-cache",
     "bases": ["external/wpt/fetch/http-cache"],
     "args": ["--disable-features=SplitCacheByNetworkIsolationKey"]
+  },
+  {
+    "prefix": "document-policy",
+    "bases": ["external/wpt/document-policy"],
+    "args": ["--enable-features=DocumentPolicy"]
+  },
+  {
+    "prefix": "web-components-v0-disabled",
+    "bases": ["external/wpt/dom",
+              "external/wpt/shadow-dom",
+              "external/wpt/html/dom",
+              "external/wpt/html/semantics",
+              "dom",
+              "shadow-dom",
+              "html",
+              "fast/dom",
+              "fast/html",
+              "fast/parser"],
+    "args": ["--disable-blink-features=ShadowDOMV0,CustomElementsV0,HTMLImports"]
+  },
+  {
+    "prefix": "form-controls-refresh-disabled",
+    "bases": ["fast/forms/"],
+    "args": ["--disable-features=FormControlsRefresh"]
+  },
+  {
+    "prefix": "raw-clipboard",
+    "bases": ["clipboard/async-clipboard",
+              "external/wpt/clipboard-apis/clipboard-item.https.html"],
+    "args": ["--enable-features=RawClipboard"]
   }
 ]

@@ -124,8 +124,8 @@ SerializerMarkupAccumulator::SerializerMarkupAccumulator(
     FrameSerializerResourceDelegate& resource_delegate,
     Document& document)
     : MarkupAccumulator(kResolveAllURLs,
-                        document.IsHTMLDocument() ? SerializationType::kHTML
-                                                  : SerializationType::kXML),
+                        IsA<HTMLDocument>(document) ? SerializationType::kHTML
+                                                    : SerializationType::kXML),
       delegate_(delegate),
       resource_delegate_(resource_delegate),
       document_(&document) {}
@@ -238,7 +238,7 @@ void SerializerMarkupAccumulator::AppendAttribute(const Element& element,
                                                   const Attribute& attribute) {
   // Check if link rewriting can affect the attribute.
   bool is_link_attribute = element.HasLegalLinkAttribute(attribute.GetName());
-  bool is_src_doc_attribute = IsHTMLFrameElementBase(element) &&
+  bool is_src_doc_attribute = IsA<HTMLFrameElementBase>(element) &&
                               attribute.GetName() == html_names::kSrcdocAttr;
   if (is_link_attribute || is_src_doc_attribute) {
     // Check if the delegate wants to do link rewriting for the element.
@@ -273,7 +273,7 @@ std::pair<Node*, Element*> SerializerMarkupAccumulator::GetAuxiliaryDOMTree(
 void SerializerMarkupAccumulator::AppendAttributeValue(
     const String& attribute_value) {
   MarkupFormatter::AppendAttributeValue(markup_, attribute_value,
-                                        document_->IsHTMLDocument());
+                                        IsA<HTMLDocument>(document_.Get()));
 }
 
 void SerializerMarkupAccumulator::AppendRewrittenAttribute(
@@ -319,9 +319,8 @@ void FrameSerializer::SerializeFrame(const LocalFrame& frame) {
   KURL url = document.Url();
 
   // If frame is an image document, add the image and don't continue
-  if (document.IsImageDocument()) {
-    ImageDocument& image_document = ToImageDocument(document);
-    AddImageToResources(image_document.CachedImage(), url);
+  if (auto* image_document = DynamicTo<ImageDocument>(document)) {
+    AddImageToResources(image_document->CachedImage(), url);
     return;
   }
 
@@ -383,7 +382,7 @@ void FrameSerializer::AddResourceForElement(Document& document,
         const_cast<Element&>(element).PresentationAttributeStyle(), document);
   }
 
-  if (const auto* image = ToHTMLImageElementOrNull(element)) {
+  if (const auto* image = DynamicTo<HTMLImageElement>(element)) {
     AtomicString image_url_value;
     const Element* parent = element.parentElement();
     if (parent && IsA<HTMLPictureElement>(parent)) {
@@ -398,13 +397,13 @@ void FrameSerializer::AddResourceForElement(Document& document,
     }
     ImageResourceContent* cached_image = image->CachedImage();
     AddImageToResources(cached_image, document.CompleteURL(image_url_value));
-  } else if (const auto* input = ToHTMLInputElementOrNull(element)) {
+  } else if (const auto* input = DynamicTo<HTMLInputElement>(element)) {
     if (input->type() == input_type_names::kImage && input->ImageLoader()) {
       KURL image_url = input->Src();
       ImageResourceContent* cached_image = input->ImageLoader()->GetContent();
       AddImageToResources(cached_image, image_url);
     }
-  } else if (const auto* link = ToHTMLLinkElementOrNull(element)) {
+  } else if (const auto* link = DynamicTo<HTMLLinkElement>(element)) {
     if (CSSStyleSheet* sheet = link->sheet()) {
       KURL sheet_url =
           document.CompleteURL(link->FastGetAttribute(html_names::kHrefAttr));
@@ -413,8 +412,7 @@ void FrameSerializer::AddResourceForElement(Document& document,
   } else if (const auto* style = DynamicTo<HTMLStyleElement>(element)) {
     if (CSSStyleSheet* sheet = style->sheet())
       SerializeCSSStyleSheet(*sheet, NullURL());
-  } else if (IsHTMLPlugInElement(element)) {
-    const auto* plugin = ToHTMLPlugInElement(&element);
+  } else if (const auto* plugin = DynamicTo<HTMLPlugInElement>(&element)) {
     if (plugin->IsImageType() && plugin->ImageLoader()) {
       KURL image_url = document.CompleteURL(plugin->Url());
       ImageResourceContent* cached_image = plugin->ImageLoader()->GetContent();
@@ -633,7 +631,8 @@ void FrameSerializer::RetrieveResourcesForCSSValue(const CSSValue& css_value,
       return;
 
     if (base::FeatureList::IsEnabled(
-            features::kHtmlImportsRequestInitiatorLock)) {
+            features::kHtmlImportsRequestInitiatorLock) &&
+        document.ImportsController()) {
       if (Document* context_document = document.ContextDocument()) {
         // For @imports from HTML imported Documents, we use the
         // context document for getting origin and ResourceFetcher to use the

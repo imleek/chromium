@@ -37,6 +37,7 @@
 #include "services/network/public/mojom/referrer_policy.mojom-blink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/isolated_world_csp.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
@@ -382,8 +383,10 @@ TEST_F(DocumentTest, DomTreeVersionForRemoval) {
   Document& doc = GetDocument();
   {
     DocumentFragment* fragment = DocumentFragment::Create(doc);
-    fragment->appendChild(Element::Create(html_names::kDivTag, &doc));
-    fragment->appendChild(Element::Create(html_names::kSpanTag, &doc));
+    fragment->appendChild(
+        MakeGarbageCollected<Element>(html_names::kDivTag, &doc));
+    fragment->appendChild(
+        MakeGarbageCollected<Element>(html_names::kSpanTag, &doc));
     uint64_t original_version = doc.DomTreeVersion();
     fragment->RemoveChildren();
     EXPECT_EQ(original_version + 1, doc.DomTreeVersion())
@@ -392,8 +395,9 @@ TEST_F(DocumentTest, DomTreeVersionForRemoval) {
 
   {
     DocumentFragment* fragment = DocumentFragment::Create(doc);
-    Node* child = Element::Create(html_names::kDivTag, &doc);
-    child->appendChild(Element::Create(html_names::kSpanTag, &doc));
+    Node* child = MakeGarbageCollected<Element>(html_names::kDivTag, &doc);
+    child->appendChild(
+        MakeGarbageCollected<Element>(html_names::kSpanTag, &doc));
     fragment->appendChild(child);
     uint64_t original_version = doc.DomTreeVersion();
     fragment->removeChild(child);
@@ -876,8 +880,7 @@ TEST_F(DocumentTest, ValidationMessageCleanup) {
       "window.onunload = function() {"
       "document.querySelector('input').reportValidity(); };");
   GetDocument().body()->AppendChild(script);
-  HTMLInputElement* input =
-      ToHTMLInputElement(GetDocument().body()->firstChild());
+  auto* input = To<HTMLInputElement>(GetDocument().body()->firstChild());
   DVLOG(0) << GetDocument().body()->OuterHTMLAsString();
 
   // Sanity check.
@@ -1065,7 +1068,9 @@ TEST_P(IsolatedWorldCSPTest, CSPForWorld) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(, IsolatedWorldCSPTest, testing::Values(true, false));
+INSTANTIATE_TEST_SUITE_P(All,
+                         IsolatedWorldCSPTest,
+                         testing::Values(true, false));
 
 TEST_F(DocumentTest, CanExecuteScriptsWithSandboxAndIsolatedWorld) {
   NavigateTo(KURL("https://www.example.com/"), "", "sandbox");
@@ -1196,6 +1201,8 @@ TEST_F(DocumentTest, PrefersColorSchemeChanged) {
 TEST_F(DocumentTest, DocumentPolicyFeaturePolicyCoexist) {
   blink::ScopedDocumentPolicyForTest sdp(true);
   const auto test_feature = blink::mojom::FeaturePolicyFeature::kFontDisplay;
+  const auto unsupported_feature =
+      blink::mojom::FeaturePolicyFeature::kSyncScript;
   const auto report_option = blink::ReportOptions::kReportOnFailure;
 
   // When document_policy is not initialized, feature_policy should
@@ -1211,25 +1218,40 @@ TEST_F(DocumentTest, DocumentPolicyFeaturePolicyCoexist) {
   // document_policy need to return true for the feature to be
   // enabled.
   NavigateTo(KURL("https://www.example.com/"), "font-display-late-swap *", "");
-  GetDocument().SetDocumentPolicyForTesting(
+  GetDocument().GetSecurityContext().SetDocumentPolicyForTesting(
       DocumentPolicy::CreateWithRequiredPolicy(
           {{test_feature, blink::PolicyValue(true)}}));
   EXPECT_TRUE(GetDocument().IsFeatureEnabled(test_feature, report_option));
-  GetDocument().SetDocumentPolicyForTesting(
+  GetDocument().GetSecurityContext().SetDocumentPolicyForTesting(
       DocumentPolicy::CreateWithRequiredPolicy(
           {{test_feature, blink::PolicyValue(false)}}));
   EXPECT_FALSE(GetDocument().IsFeatureEnabled(test_feature, report_option));
 
   NavigateTo(KURL("https://www.example.com/"), "font-display-late-swap 'none'",
              "");
-  GetDocument().SetDocumentPolicyForTesting(
+  GetDocument().GetSecurityContext().SetDocumentPolicyForTesting(
       DocumentPolicy::CreateWithRequiredPolicy(
           {{test_feature, blink::PolicyValue(true)}}));
   EXPECT_FALSE(GetDocument().IsFeatureEnabled(test_feature, report_option));
-  GetDocument().SetDocumentPolicyForTesting(
+  GetDocument().GetSecurityContext().SetDocumentPolicyForTesting(
       DocumentPolicy::CreateWithRequiredPolicy(
           {{test_feature, blink::PolicyValue(false)}}));
   EXPECT_FALSE(GetDocument().IsFeatureEnabled(test_feature, report_option));
+
+  // When document policy does not handle a particular feature, it must not
+  // block it.
+  NavigateTo(KURL("https://www.example.com/"), "sync-script *", "");
+  EXPECT_TRUE(
+      GetDocument().IsFeatureEnabled(unsupported_feature, report_option));
+  GetDocument().GetSecurityContext().SetDocumentPolicyForTesting(
+      DocumentPolicy::CreateWithRequiredPolicy(
+          {{test_feature, blink::PolicyValue(true)}}));
+  ASSERT_FALSE(GetDocument()
+                   .GetSecurityContext()
+                   .GetDocumentPolicy()
+                   ->IsFeatureSupported(unsupported_feature));
+  EXPECT_TRUE(
+      GetDocument().IsFeatureEnabled(unsupported_feature, report_option));
 }
 
 /**

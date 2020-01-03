@@ -6,6 +6,7 @@
 
 #include "base/strings/string_util.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_manager.h"
 #include "chrome/browser/ui/web_applications/web_app_ui_manager_impl.h"
 #include "chrome/browser/web_applications/components/app_icon_manager.h"
@@ -22,7 +23,9 @@ namespace web_app {
 WebAppBrowserController::WebAppBrowserController(Browser* browser)
     : AppBrowserController(browser,
                            GetAppIdFromApplicationName(browser->app_name())),
-      provider_(*WebAppProvider::Get(browser->profile())) {}
+      provider_(*WebAppProvider::Get(browser->profile())) {
+  registrar_observer_.Add(&provider_.registrar());
+}
 
 WebAppBrowserController::~WebAppBrowserController() = default;
 
@@ -39,6 +42,15 @@ bool WebAppBrowserController::IsHostedApp() const {
   return true;
 }
 
+void WebAppBrowserController::OnWebAppWillBeUninstalled(const AppId& app_id) {
+  if (HasAppId() && app_id == GetAppId())
+    chrome::CloseWindow(browser());
+}
+
+void WebAppBrowserController::OnAppRegistrarDestroyed() {
+  registrar_observer_.RemoveAll();
+}
+
 void WebAppBrowserController::SetReadIconCallbackForTesting(
     base::OnceClosure callback) {
   callback_for_testing_ = std::move(callback);
@@ -49,10 +61,12 @@ gfx::ImageSkia WebAppBrowserController::GetWindowAppIcon() const {
     return *app_icon_;
   app_icon_ = GetFallbackAppIcon();
 
-  provider_.icon_manager().ReadSmallestIcon(
-      GetAppId(), gfx::kFaviconSize,
-      base::BindOnce(&WebAppBrowserController::OnReadIcon,
-                     weak_ptr_factory_.GetWeakPtr()));
+  if (provider_.icon_manager().HasSmallestIcon(GetAppId(), gfx::kFaviconSize)) {
+    provider_.icon_manager().ReadSmallestIcon(
+        GetAppId(), gfx::kFaviconSize,
+        base::BindOnce(&WebAppBrowserController::OnReadIcon,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
 
   return *app_icon_;
 }
@@ -124,14 +138,15 @@ const AppRegistrar& WebAppBrowserController::registrar() const {
   return provider_.registrar();
 }
 
-void WebAppBrowserController::OnReadIcon(SkBitmap bitmap) {
+void WebAppBrowserController::OnReadIcon(const SkBitmap& bitmap) {
   if (bitmap.empty()) {
     DLOG(ERROR) << "Failed to read icon for web app";
     return;
   }
 
   app_icon_ = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
-  web_contents()->NotifyNavigationStateChanged(content::INVALIDATE_TYPE_TAB);
+  if (auto* contents = web_contents())
+    contents->NotifyNavigationStateChanged(content::INVALIDATE_TYPE_TAB);
   if (callback_for_testing_)
     std::move(callback_for_testing_).Run();
 }

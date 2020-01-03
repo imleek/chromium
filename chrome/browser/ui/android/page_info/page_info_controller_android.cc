@@ -62,6 +62,9 @@ PageInfoControllerAndroid::PageInfoControllerAndroid(
       SecurityStateTabHelper::FromWebContents(web_contents);
   DCHECK(helper);
 
+  // When |web_contents| is not from a Tab, |web_contents| does not have a
+  // |TabSpecificContentSettings| and need to create one; otherwise, noop.
+  TabSpecificContentSettings::CreateForWebContents(web_contents);
   presenter_ = std::make_unique<PageInfo>(
       this, Profile::FromBrowserContext(web_contents->GetBrowserContext()),
       TabSpecificContentSettings::FromWebContents(web_contents), web_contents,
@@ -125,7 +128,6 @@ void PageInfoControllerAndroid::SetPermissionInfo(
   permissions_to_display.push_back(ContentSettingsType::ADS);
   permissions_to_display.push_back(
       ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER);
-  permissions_to_display.push_back(ContentSettingsType::AUTOPLAY);
   permissions_to_display.push_back(ContentSettingsType::SOUND);
   if (base::FeatureList::IsEnabled(features::kWebNfc))
     permissions_to_display.push_back(ContentSettingsType::NFC);

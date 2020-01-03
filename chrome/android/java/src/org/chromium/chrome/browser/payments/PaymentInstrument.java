@@ -9,13 +9,14 @@ import android.graphics.drawable.Drawable;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.task.PostTask;
-import org.chromium.chrome.browser.widget.prefeditor.EditableOption;
+import org.chromium.chrome.browser.autofill.prefeditor.EditableOption;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentItem;
-import org.chromium.payments.mojom.PaymentMethodChangeResponse;
 import org.chromium.payments.mojom.PaymentMethodData;
+import org.chromium.payments.mojom.PaymentOptions;
 import org.chromium.payments.mojom.PaymentRequestDetailsUpdate;
+import org.chromium.payments.mojom.PaymentShippingOption;
 
 import java.util.List;
 import java.util.Map;
@@ -52,8 +53,10 @@ public abstract class PaymentInstrument extends EditableOption {
          *
          * @param methodName         Method name. For example, "visa".
          * @param stringifiedDetails JSON-serialized object. For example, {"card": "123"}.
+         * @param payerData          Payer's shipping address and contact information.
          */
-        void onInstrumentDetailsReady(String methodName, String stringifiedDetails);
+        void onInstrumentDetailsReady(
+                String methodName, String stringifiedDetails, PayerData payerData);
 
         /**
          * Called if unable to retrieve instrument details.
@@ -217,13 +220,15 @@ public abstract class PaymentInstrument extends EditableOption {
      * @param total            The total amount.
      * @param displayItems     The shopping cart items.
      * @param modifiers        The relevant payment details modifiers.
+     * @param paymentOptions   The payment options of the PaymentRequest.
+     * @param shippingOptions  The shipping options of the PaymentRequest.
      * @param callback         The object that will receive the instrument details.
      */
-    public abstract void invokePaymentApp(String id, String merchantName, String origin,
-            String iframeOrigin, @Nullable byte[][] certificateChain,
-            Map<String, PaymentMethodData> methodDataMap, PaymentItem total,
-            List<PaymentItem> displayItems, Map<String, PaymentDetailsModifier> modifiers,
-            InstrumentDetailsCallback callback);
+    public void invokePaymentApp(String id, String merchantName, String origin, String iframeOrigin,
+            @Nullable byte[][] certificateChain, Map<String, PaymentMethodData> methodDataMap,
+            PaymentItem total, List<PaymentItem> displayItems,
+            Map<String, PaymentDetailsModifier> modifiers, PaymentOptions paymentOptions,
+            List<PaymentShippingOption> shippingOptions, InstrumentDetailsCallback callback) {}
 
     /**
      * Update the payment information in response to payment method, shipping address, or shipping
@@ -234,17 +239,18 @@ public abstract class PaymentInstrument extends EditableOption {
      */
     public void updateWith(PaymentRequestDetailsUpdate response) {}
 
-    // TODO(sahel): Remove this stub after updating clank code. crbug.com/984694
-    public void updateWith(PaymentMethodChangeResponse response) {}
-
-    /** Called when the merchant ignored the payment method change event. */
-    public void noUpdatedPaymentDetails() {}
+    /**
+     * Called when the merchant ignored the payment method, shipping address or shipping option
+     * change event.
+     */
+    public void onPaymentDetailsNotUpdated() {}
 
     /**
-     * @return True after changePaymentMethodFromInvokedApp(), before update updateWith() or
-     * noUpdatedPaymentDetails().
+     * @return True after changePaymentMethodFromInvokedApp(), changeShippingOptionFromInvokedApp(),
+     *         or changeShippingAddressFromInvokedApp() and before update updateWith() or
+     *         onPaymentDetailsNotUpdated().
      */
-    public boolean isChangingPaymentMethod() {
+    public boolean isWaitingForPaymentDetailsUpdate() {
         return false;
     }
 

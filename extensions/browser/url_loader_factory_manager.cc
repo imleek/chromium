@@ -308,20 +308,9 @@ bool IsSpecialURLLoaderFactoryRequired(const Extension& extension,
   }
 }
 
-mojo::PendingRemote<network::mojom::URLLoaderFactory> CreateURLLoaderFactory(
-    content::RenderProcessHost* process,
-    network::mojom::NetworkContext* network_context,
-    mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
-        header_client,
-    const Extension& extension,
-    const url::Origin& main_world_origin,
-    const base::Optional<net::NetworkIsolationKey>& network_isolation_key) {
-  // Compute relaxed CORB config to be used by |extension|.
-  network::mojom::URLLoaderFactoryParamsPtr params =
-      network::mojom::URLLoaderFactoryParams::New();
-
-  params->network_isolation_key = network_isolation_key;
-
+void OverrideFactoryParams(const Extension& extension,
+                           FactoryUser factory_user,
+                           network::mojom::URLLoaderFactoryParams* params) {
   // Setup factory bound allow list that overwrites per-profile common list
   // to allow tab specific permissions only for this newly created factory.
   params->factory_bound_access_patterns =
@@ -333,19 +322,12 @@ mojo::PendingRemote<network::mojom::URLLoaderFactory> CreateURLLoaderFactory(
           extension,
           PermissionsData::EffectiveHostPermissionsMode::kIncludeTabSpecific);
 
-  if (header_client)
-    params->header_client = std::move(*header_client);
-  params->process_id = process->GetID();
   // TODO(lukasza): https://crbug.com/1016904: Use more granular CORB
   // enforcement based on the specific |extension|'s permissions.
   params->is_corb_enabled = false;
-  params->request_initiator_site_lock = main_world_origin;
 
-  // Create the URLLoaderFactory.
-  mojo::PendingRemote<network::mojom::URLLoaderFactory> factory_remote;
-  network_context->CreateURLLoaderFactory(
-      factory_remote.InitWithNewPipeAndPassReceiver(), std::move(params));
-  return factory_remote;
+  if (factory_user == FactoryUser::kExtensionProcess)
+    params->unsafe_non_webby_initiator = true;
 }
 
 void MarkIsolatedWorldsAsRequiringSeparateURLLoaderFactory(
@@ -523,16 +505,11 @@ void URLLoaderFactoryManager::WillExecuteCode(content::RenderFrameHost* frame,
 }
 
 // static
-mojo::PendingRemote<network::mojom::URLLoaderFactory>
-URLLoaderFactoryManager::CreateFactory(
-    content::RenderProcessHost* process,
-    network::mojom::NetworkContext* network_context,
-    mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
-        header_client,
+void URLLoaderFactoryManager::OverrideURLLoaderFactoryParams(
+    content::BrowserContext* browser_context,
     const url::Origin& origin,
-    const url::Origin& main_world_origin,
-    const base::Optional<net::NetworkIsolationKey>& network_isolation_key) {
-  content::BrowserContext* browser_context = process->GetBrowserContext();
+    bool is_for_isolated_world,
+    network::mojom::URLLoaderFactoryParams* factory_params) {
   const ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context);
   DCHECK(registry);  // CreateFactory shouldn't happen during shutdown.
 
@@ -542,9 +519,9 @@ URLLoaderFactoryManager::CreateFactory(
   url::SchemeHostPort precursor_origin =
       origin.GetTupleOrPrecursorTupleIfOpaque();
 
-  // Don't create a factory for something that is not an extension.
+  // Don't change factory params for something that is not an extension.
   if (precursor_origin.scheme() != kExtensionScheme)
-    return mojo::NullRemote();
+    return;
 
   // Find the |extension| associated with |initiator_origin|.
   const Extension* extension =
@@ -553,23 +530,18 @@ URLLoaderFactoryManager::CreateFactory(
     // This may happen if an extension gets disabled between the time
     // RenderFrameHost::MarkIsolatedWorldAsRequiringSeparateURLLoaderFactory is
     // called and the time
-    // ContentBrowserClient::CreateURLLoaderFactory is called.
-    return mojo::NullRemote();
+    // ContentBrowserClient::OverrideURLLoaderFactoryParams is called.
+    return;
   }
 
-  // Figure out if the factory is needed for content scripts VS extension
-  // renderer.
-  FactoryUser factory_user = FactoryUser::kContentScript;
-  ProcessMap* process_map = ProcessMap::Get(browser_context);
-  if (process_map->Contains(extension->id(), process->GetID()))
-    factory_user = FactoryUser::kExtensionProcess;
-
-  // Create the factory (but only if really needed).
+  // Don't change |factory_params| unless required.
+  FactoryUser factory_user = is_for_isolated_world
+                                 ? FactoryUser::kContentScript
+                                 : FactoryUser::kExtensionProcess;
   if (!IsSpecialURLLoaderFactoryRequired(*extension, factory_user))
-    return mojo::NullRemote();
-  return CreateURLLoaderFactory(process, network_context, header_client,
-                                *extension, main_world_origin,
-                                network_isolation_key);
+    return;
+
+  OverrideFactoryParams(*extension, factory_user, factory_params);
 }
 
 // static

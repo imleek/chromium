@@ -5,7 +5,6 @@
 
 Неке функције су можда недоступне и промене подешавања неће бити сачуване.</translation>
 <translation id="1104942323762546749">Chromium жели да извезе лозинке. Унесите лозинку за Windows да бисте то омогућили.</translation>
-<translation id="1115445892567829615">Chromium не може да синхронизује податке. Ажурирајте приступну фразу за Синхронизацију.</translation>
 <translation id="113122355610423240">Chromium је подразумевани прегледач</translation>
 <translation id="1185134272377778587">О Chromium-у</translation>
 <translation id="1396446129537741364">Chromium покушава да прикаже лозинке.</translation>
@@ -22,7 +21,7 @@
 <translation id="1929939181775079593">Chromium не реагује. Желите ли да га одмах поново покренете?</translation>
 <translation id="1966382378801805537">Chromium не може да одреди ни да подеси подразумевани прегледач</translation>
 <translation id="2008474315282236005">Овим ћете избрисати 1 ставку са овог уређаја. Да бисте касније вратили податке, пријавите се у Chromium као <ph name="USER_EMAIL" />.</translation>
-<translation id="2119636228670142020">О &amp;Chromium ОС-у</translation>
+<translation id="2147976119693222405">Chromium ОС није успео да синхронизује податке. Решите проблем.</translation>
 <translation id="2241627712206172106">Ако делите рачунар, пријатељи и породица могу засебно да прегледају и да подесе Chromium баш онако како желе.</translation>
 <translation id="2347108572062610441">Овај додатак је променио страницу која се приказује када покренете Chromium.</translation>
 <translation id="2396765026452590966">Додатак „<ph name="EXTENSION_NAME" />“ је променио страницу која се приказује када покренете Chromium.</translation>
@@ -38,6 +37,7 @@
 <translation id="2718390899429598676">Chromium ће шифровати податке ради додатне сигурности.</translation>
 <translation id="2770231113462710648">Промени подразумевани прегледач у:</translation>
 <translation id="2799223571221894425">Поново покрени</translation>
+<translation id="2805036593126168338">Chromium ОС није успео да синхронизује лозинке. Решите проблем.</translation>
 <translation id="2838154144102149890">Chromium треба да престане са радом на овом рачунару да бисте га ажурирали. Због тога ће други корисници пријављени на овом рачунару можда изгубити несачуване промене.</translation>
 <translation id="2847479871509788944">Уклони из Chromium-а...</translation>
 <translation id="2886012850691518054">Опционално: Помозите да побољшамо Chromium тако што ћете Google-у аутоматски слати статистику коришћења и извештаје о отказивању.</translation>
@@ -109,7 +109,6 @@
 <translation id="5631814766731275228">Назив и слика Chromium профила</translation>
 <translation id="5634636535844844681">За Chromium је потребан Windows 7 или новија верзија.</translation>
 <translation id="5653831366781983928">Рестартујте Chromium</translation>
-<translation id="5680901439334282664">пријавите се на Chromium</translation>
 <translation id="5698481217667032250">Приказуј Chromium на овом језику</translation>
 <translation id="5820394555380036790">Chromium ОС</translation>
 <translation id="5862307444128926510">Добро дошли у Chromium</translation>

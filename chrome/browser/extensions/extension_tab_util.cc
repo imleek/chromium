@@ -300,6 +300,14 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(ExtensionFunction* function,
   navigate_params.tabstrip_add_types = add_types;
   Navigate(&navigate_params);
 
+  // This happens in locked fullscreen mode.
+  if (!navigate_params.navigated_or_inserted_contents) {
+    if (error) {
+      *error = tabs_constants::kLockedFullscreenModeNewTabError;
+    }
+    return nullptr;
+  }
+
   // The tab may have been created in a different window, so make sure we look
   // at the right tab strip.
   TabStripModel* tab_strip = navigate_params.browser->tab_strip_model();
@@ -378,9 +386,10 @@ std::string ExtensionTabUtil::GetBrowserWindowTypeText(const Browser& browser) {
   if (browser.is_type_devtools())
     return tabs_constants::kWindowTypeValueDevTools;
   // TODO(crbug.com/990158): We return 'popup' for both popup and app since
-  // chrome.tabs.create({type: 'popup'}) uses
+  // chrome.windows.create({type: 'popup'}) uses
   // Browser::CreateParams::CreateForApp.
-  if (browser.is_type_popup() || browser.is_type_app())
+  if (browser.is_type_popup() || browser.is_type_app() ||
+      browser.is_type_app_popup())
     return tabs_constants::kWindowTypeValuePopup;
   return tabs_constants::kWindowTypeValueNormal;
 }
@@ -541,9 +550,6 @@ std::unique_ptr<api::tabs::MutedInfo> ExtensionTabUtil::CreateMutedInfo(
     case TabMutedReason::CONTENT_SETTING_CHROME:
     case TabMutedReason::CONTEXT_MENU:
       info->reason = api::tabs::MUTED_INFO_REASON_USER;
-      break;
-    case TabMutedReason::MEDIA_CAPTURE:
-      info->reason = api::tabs::MUTED_INFO_REASON_CAPTURE;
       break;
     case TabMutedReason::EXTENSION:
       info->reason = api::tabs::MUTED_INFO_REASON_EXTENSION;

@@ -1625,6 +1625,28 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
   }
 }
 
+class NavigationRequestHostResolutionFailureTest : public ContentBrowserTest {
+ protected:
+  void SetUpOnMainThread() override {
+    host_resolver()->AddSimulatedTimeoutFailure("*");
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(NavigationRequestHostResolutionFailureTest,
+                       HostResolutionFailure) {
+  GURL url(embedded_test_server()->GetURL("example.com", "/title1.html"));
+
+  NavigationHandleObserver observer(shell()->web_contents(), url);
+
+  EXPECT_FALSE(NavigateToURL(shell(), url));
+
+  EXPECT_TRUE(observer.has_committed());
+  EXPECT_TRUE(observer.is_error());
+  EXPECT_EQ(net::ERR_DNS_TIMED_OUT, observer.net_error_code());
+  EXPECT_EQ(net::ERR_DNS_TIMED_OUT, observer.resolve_error_info().error);
+}
+
 // Record and list the navigations that are started and finished.
 class NavigationLogger : public WebContentsObserver {
  public:
@@ -2526,7 +2548,7 @@ IN_PROC_BROWSER_TEST_P(NavigationRequestThrottleResultWithErrorPageBrowserTest,
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     NavigationRequestThrottleResultWithErrorPageBrowserTest,
     testing::Range(NavigationThrottle::ThrottleAction::FIRST,
                    NavigationThrottle::ThrottleAction::LAST));
@@ -2825,6 +2847,57 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest, AuthChallengeInfo) {
   EXPECT_EQ("Basic realm=\"testrealm\"",
             observer.auth_challenge_info()->challenge);
   EXPECT_EQ("/auth-basic", observer.auth_challenge_info()->path);
+}
+
+class TestMixedContentWebContentsDelegate : public WebContentsDelegate {
+ public:
+  TestMixedContentWebContentsDelegate() {}
+  TestMixedContentWebContentsDelegate(
+      const TestMixedContentWebContentsDelegate&) = delete;
+  TestMixedContentWebContentsDelegate& operator=(
+      const TestMixedContentWebContentsDelegate&) = delete;
+
+  bool passive_insecure_content_found() {
+    return passive_insecure_content_found_;
+  }
+
+  // WebContentsDelegate:
+  void PassiveInsecureContentFound(const GURL& resource_url) override {
+    passive_insecure_content_found_ = true;
+  }
+
+ private:
+  bool passive_insecure_content_found_ = false;
+};
+
+// Tests that an iframe with a non-webby scheme is not treated as mixed
+// content. See https://crbug.com/621131.
+IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
+                       NonWebbyIframeIsNotMixedContent) {
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_server.ServeFilesFromSourceDirectory(GetTestDataFilePath());
+  ASSERT_TRUE(https_server.Start());
+
+  GURL url(https_server.GetURL("/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), url));
+
+  // Inject a test delegate to observe when mixed content is detected.
+  WebContents* contents = shell()->web_contents();
+  TestMixedContentWebContentsDelegate test_delegate;
+  contents->SetDelegate(&test_delegate);
+
+  // Insert an iframe and navigate it to a non-webby scheme. It shouldn't be
+  // treated as mixed content.
+  GURL non_webby_url("foo://bar");
+  TestNavigationObserver observer(contents);
+  ASSERT_NE(false,
+            EvalJs(contents,
+                   JsReplace("var iframe = document.createElement('iframe');"
+                             "iframe.src = $1;"
+                             "document.body.appendChild(iframe);",
+                             non_webby_url)));
+  observer.Wait();
+  EXPECT_FALSE(test_delegate.passive_insecure_content_found());
 }
 
 }  // namespace content

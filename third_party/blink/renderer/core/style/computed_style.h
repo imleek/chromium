@@ -27,6 +27,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_STYLE_COMPUTED_STYLE_H_
 
 #include <memory>
+#include "base/util/type_safety/pass_key.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
@@ -105,6 +106,11 @@ class ColumnRuleColor;
 class Fill;
 class Float;
 class FloodColor;
+class InternalUaBackgroundColor;
+class InternalUaBorderBottomColor;
+class InternalUaBorderLeftColor;
+class InternalUaBorderRightColor;
+class InternalUaBorderTopColor;
 class InternalVisitedBackgroundColor;
 class InternalVisitedBorderBottomColor;
 class InternalVisitedBorderLeftColor;
@@ -210,6 +216,11 @@ class ComputedStyle : public ComputedStyleBase,
   friend class css_longhand::Fill;
   friend class css_longhand::Float;
   friend class css_longhand::FloodColor;
+  friend class css_longhand::InternalUaBackgroundColor;
+  friend class css_longhand::InternalUaBorderBottomColor;
+  friend class css_longhand::InternalUaBorderLeftColor;
+  friend class css_longhand::InternalUaBorderRightColor;
+  friend class css_longhand::InternalUaBorderTopColor;
   friend class css_longhand::InternalVisitedBackgroundColor;
   friend class css_longhand::InternalVisitedBorderBottomColor;
   friend class css_longhand::InternalVisitedBorderLeftColor;
@@ -236,6 +247,7 @@ class ComputedStyle : public ComputedStyleBase,
   // Access to private Appearance() and HasAppearance().
   friend class LayoutTheme;
   friend class StyleAdjuster;
+  friend class StyleCascade;
   friend class css_longhand::WebkitAppearance;
   // Editing has to only reveal unvisited info.
   friend class ApplyStyleCommand;
@@ -247,6 +259,7 @@ class ComputedStyle : public ComputedStyleBase,
   friend class StyleBuilderFunctions;
   // Saves Border/Background information for later comparison.
   friend class CachedUAStyle;
+  friend class UAStyle;
   // Accesses visited and unvisited colors.
   friend class ColorPropertyFunctions;
   // Edits the background for media controls.
@@ -294,6 +307,11 @@ class ComputedStyle : public ComputedStyleBase,
   CORE_EXPORT static ComputedStyle& MutableInitialStyle();
 
  public:
+  using PassKey = util::PassKey<ComputedStyle>;
+
+  ALWAYS_INLINE ComputedStyle(PassKey, const ComputedStyle&);
+  ALWAYS_INLINE explicit ComputedStyle(PassKey);
+
   CORE_EXPORT static scoped_refptr<ComputedStyle> Create();
   static scoped_refptr<ComputedStyle> CreateAnonymousStyleWithDisplay(
       const ComputedStyle& parent_style,
@@ -1205,7 +1223,6 @@ class ComputedStyle : public ComputedStyleBase,
   }
   bool IsDeprecatedFlexboxUsingFlexLayout() const {
     return IsDeprecatedWebkitBox() &&
-           RuntimeEnabledFeatures::WebkitBoxLayoutUsesFlexLayoutEnabled() &&
            (!HasLineClamp() || BoxOrient() == EBoxOrient::kHorizontal);
   }
 
@@ -2108,8 +2125,11 @@ class ComputedStyle : public ComputedStyleBase,
 
   bool IsDisplayTableType() const { return IsDisplayTableType(Display()); }
 
+  bool IsDisplayMathType() const { return IsDisplayMathBox(Display()); }
+
   bool BlockifiesChildren() const {
-    return IsDisplayFlexibleOrGridBox() || IsDisplayLayoutCustomBox() ||
+    return IsDisplayFlexibleOrGridBox() || IsDisplayMathType() ||
+           IsDisplayLayoutCustomBox() ||
            (Display() == EDisplay::kContents && IsInBlockifyingDisplay());
   }
 
@@ -2510,6 +2530,8 @@ class ComputedStyle : public ComputedStyleBase,
       return false;
     if (IsEnsuredInDisplayNone())
       return false;
+    if (pseudo == kPseudoIdMarker)
+      return Display() == EDisplay::kListItem;
     if (Display() != EDisplay::kContents)
       return true;
     // For display: contents elements, we still need to generate ::before and
@@ -2522,6 +2544,13 @@ class ComputedStyle : public ComputedStyleBase,
   void LoadDeferredImages(Document&) const;
 
   enum WebColorScheme UsedColorScheme() const {
+    return DarkColorScheme() &&
+                   RuntimeEnabledFeatures::CSSColorSchemeUARenderingEnabled()
+               ? WebColorScheme::kDark
+               : WebColorScheme::kLight;
+  }
+
+  enum WebColorScheme UsedColorSchemeForInitialColors() const {
     return DarkColorScheme() ? WebColorScheme::kDark : WebColorScheme::kLight;
   }
 
@@ -2610,6 +2639,10 @@ class ComputedStyle : public ComputedStyleBase,
 
   static bool IsDisplayGridBox(EDisplay display) {
     return display == EDisplay::kGrid || display == EDisplay::kInlineGrid;
+  }
+
+  static bool IsDisplayMathBox(EDisplay display) {
+    return display == EDisplay::kMath || display == EDisplay::kInlineMath;
   }
 
   static bool IsDisplayLayoutCustomBox(EDisplay display) {

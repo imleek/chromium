@@ -7,6 +7,7 @@
 #include <stack>
 #include <string>
 
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/chromeos/arc/accessibility/accessibility_node_info_data_wrapper.h"
 #include "chrome/browser/chromeos/arc/accessibility/accessibility_window_info_data_wrapper.h"
@@ -14,6 +15,7 @@
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "extensions/browser/api/automation_internal/automation_event_router.h"
 #include "extensions/common/extension_messages.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/platform/ax_android_constants.h"
 #include "ui/aura/window.h"
 #include "ui/views/view.h"
@@ -28,8 +30,23 @@ using AXEventType = mojom::AccessibilityEventType;
 using AXIntListProperty = mojom::AccessibilityIntListProperty;
 using AXNodeInfoData = mojom::AccessibilityNodeInfoData;
 using AXNodeInfoDataPtr = mojom::AccessibilityNodeInfoDataPtr;
+using AXStringProperty = mojom::AccessibilityStringProperty;
 using AXWindowInfoData = mojom::AccessibilityWindowInfoData;
 using AXWindowIntListProperty = mojom::AccessibilityWindowIntListProperty;
+
+namespace {
+bool IsDrawerLayout(AXNodeInfoData* node) {
+  if (!node || !node->string_properties)
+    return false;
+
+  auto it = node->string_properties->find(AXStringProperty::CLASS_NAME);
+  if (it == node->string_properties->end())
+    return false;
+
+  return it->second == "androidx.drawerlayout.widget.DrawerLayout" ||
+         it->second == "android.support.v4.widget.DrawerLayout";
+}
+}  // namespace
 
 AXTreeSourceArc::AXTreeSourceArc(Delegate* delegate)
     : current_tree_serializer_(new AXTreeArcSerializer(this)),
@@ -98,9 +115,6 @@ void AXTreeSourceArc::NotifyAccessibilityEvent(AXEventData* event_data) {
         ComputeIsClickableLeaf(i, event_data->node_data, node_data_index_map);
     tree_map_[id] = std::make_unique<AccessibilityNodeInfoDataWrapper>(
         this, node, is_clickable_leaf);
-
-    if (tree_map_[id]->IsFocused())
-      focused_id_ = id;
   }
 
   // Assuming |nodeData| is in pre-order, compute cached bounds in post-order to
@@ -116,41 +130,67 @@ void AXTreeSourceArc::NotifyAccessibilityEvent(AXEventData* event_data) {
   }
 
   // Calculate the focused ID.
+  if (event_data->event_type == AXEventType::VIEW_FOCUSED) {
+    AccessibilityInfoDataWrapper* focused_node =
+        GetFromId(event_data->source_id);
+    if (focused_node) {
+      // Sometimes Android sets focus on unfocusable node, e.g. ListView.
+      AccessibilityInfoDataWrapper* adjusted_node =
+          FindFirstFocusableNode(focused_node);
+      focused_id_ = IsValid(adjusted_node) ? adjusted_node->GetId()
+                                           : event_data->source_id;
+    }
+  } else if (event_data->event_type == AXEventType::WINDOW_STATE_CHANGED) {
+    // When accessibility window changed, a11y event of WINDOW_CONTENT_CHANGED
+    // is fired from Android multiple times.
+    // The event of WINDOW_STATE_CHANGED is fired only once for each window
+    // change and use it as a trigger to move the a11y focus to the first node.
+    AccessibilityInfoDataWrapper* focused_node =
+        GetFromId(event_data->source_id);
+    AccessibilityInfoDataWrapper* new_focus =
+        FindFirstFocusableNode(focused_node);
+    if (IsValid(new_focus))
+      focused_id_ = new_focus->GetId();
+
+    if (event_data->eventText)
+      UpdateAXNameCache(focused_node, *event_data->eventText);
+  }
   if (!focused_id_.has_value()) {
-    if (root_id_.has_value()) {
-      AccessibilityInfoDataWrapper* root = GetRoot();
-      // TODO (sarakato): Add proper fix once cause of invalid node is known.
-      if (!IsValid(root)) {
-        return;
-      } else if (root->IsNode()) {
-        focused_id_ = root_id_;
-      } else {
-        std::vector<AccessibilityInfoDataWrapper*> children;
-        root->GetChildren(&children);
-        if (!children.empty()) {
-          for (size_t i = 0; i < children.size(); ++i) {
-            if (children[i]->IsNode()) {
-              focused_id_ = children[i]->GetId();
-              break;
-            }
+    AccessibilityInfoDataWrapper* root = GetRoot();
+    // TODO (sarakato): Add proper fix once cause of invalid node is known.
+    if (!IsValid(root)) {
+      return;
+    } else if (root->IsNode()) {
+      focused_id_ = root_id_;
+    } else {
+      std::vector<AccessibilityInfoDataWrapper*> children;
+      root->GetChildren(&children);
+      if (!children.empty()) {
+        for (size_t i = 0; i < children.size(); ++i) {
+          if (children[i]->IsNode()) {
+            focused_id_ = children[i]->GetId();
+            break;
           }
         }
       }
     }
   }
 
+  ApplyCachedProperties();
+
   ExtensionMsg_AccessibilityEventBundleParams event_bundle;
   event_bundle.tree_id = ax_tree_id();
 
   event_bundle.events.emplace_back();
   ui::AXEvent& event = event_bundle.events.back();
+
   // When the focused node exists, give it as a hint to decide a Chrome
   // automation event type.
-  AXNodeInfoData* opt_focused_node = nullptr;
+  AXNodeInfoData* focused_node = nullptr;
   if (focused_id_.has_value() &&
       tree_map_.find(*focused_id_) != tree_map_.end())
-    opt_focused_node = tree_map_[*focused_id_]->GetNode();
-  event.event_type = ToAXEvent(event_data->event_type, opt_focused_node);
+    focused_node = tree_map_[*focused_id_]->GetNode();
+  event.event_type = ToAXEvent(event_data->event_type, focused_node);
   event.id = event_data->source_id;
 
   event_bundle.updates.emplace_back();
@@ -241,11 +281,6 @@ bool AXTreeSourceArc::IsRootOfNodeTree(int32_t id) const {
   const auto& parent_tree_it = tree_map_.find(parent_it->second);
   CHECK(parent_tree_it != tree_map_.end());
   return !parent_tree_it->second->IsNode();
-}
-
-int32_t AXTreeSourceArc::GetWindowId() const {
-  CHECK(window_id_.has_value());
-  return *window_id_;
 }
 
 bool AXTreeSourceArc::GetTreeData(ui::AXTreeData* data) const {
@@ -355,12 +390,79 @@ bool AXTreeSourceArc::ComputeIsClickableLeaf(
   return true;
 }
 
+AccessibilityInfoDataWrapper* AXTreeSourceArc::FindFirstFocusableNode(
+    AccessibilityInfoDataWrapper* info_data) const {
+  if (!IsValid(info_data))
+    return nullptr;
+
+  if (info_data->IsVisibleToUser() && info_data->CanBeAccessibilityFocused())
+    return info_data;
+
+  std::vector<AccessibilityInfoDataWrapper*> children;
+  GetChildren(info_data, &children);
+  for (AccessibilityInfoDataWrapper* child : children) {
+    AccessibilityInfoDataWrapper* candidate = FindFirstFocusableNode(child);
+    if (candidate)
+      return candidate;
+  }
+
+  return nullptr;
+}
+
+void AXTreeSourceArc::UpdateAXNameCache(
+    AccessibilityInfoDataWrapper* focused_node,
+    const std::vector<std::string>& event_text) {
+  if (IsDrawerLayout(focused_node->GetNode())) {
+    // When drawer menu opened, make the menu title announced.
+    // When focus is changed, ChromeVox computes the diff in ancestry between
+    // the previously focused and new focused node.
+    // As the DrawerLayout is LCA of them, set the new title to be the first
+    // visible child node (which is usually drawer menu).
+    std::vector<AccessibilityInfoDataWrapper*> children;
+    focused_node->GetChildren(&children);
+    for (auto* child : children) {
+      if (child->IsNode() && child->IsVisibleToUser() &&
+          GetBooleanProperty(child->GetNode(), AXBooleanProperty::IMPORTANCE)) {
+        cached_roles_[child->GetId()] = ax::mojom::Role::kMenu;
+        if (!event_text.empty())
+          cached_names_[child->GetId()] = base::JoinString(event_text, " ");
+        return;
+      }
+    }
+  }
+}
+
+void AXTreeSourceArc::ApplyCachedProperties() {
+  for (auto it = cached_names_.begin(); it != cached_names_.end();) {
+    AccessibilityInfoDataWrapper* node = GetFromId(it->first);
+    if (node) {
+      static_cast<AccessibilityNodeInfoDataWrapper*>(node)->set_cached_name(
+          it->second);
+      it++;
+    } else {
+      it = cached_names_.erase(it);
+    }
+  }
+
+  for (auto it = cached_roles_.begin(); it != cached_roles_.end();) {
+    AccessibilityInfoDataWrapper* node = GetFromId(it->first);
+    if (node) {
+      static_cast<AccessibilityNodeInfoDataWrapper*>(node)->set_role(
+          it->second);
+      it++;
+    } else {
+      it = cached_roles_.erase(it);
+    }
+  }
+}
+
 void AXTreeSourceArc::Reset() {
   tree_map_.clear();
   parent_map_.clear();
   cached_computed_bounds_.clear();
   current_tree_serializer_.reset(new AXTreeArcSerializer(this));
   root_id_.reset();
+  window_id_.reset();
   focused_id_.reset();
   extensions::AutomationEventRouterInterface* router =
       GetAutomationEventRouter();

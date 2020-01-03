@@ -85,7 +85,7 @@ Widget::InitParams DialogDelegate::GetDialogWidgetInitParams(
     dialog->params_.custom_frame &= CanSupportCustomFrame(parent);
 
   if (!dialog || dialog->use_custom_frame()) {
-    params.opacity = Widget::InitParams::TRANSLUCENT_WINDOW;
+    params.opacity = Widget::InitParams::WindowOpacity::kTranslucent;
     params.remove_standard_frame = true;
 #if !defined(OS_MACOSX)
     // Except on Mac, the bubble frame includes its own shadow; remove any
@@ -138,10 +138,6 @@ base::string16 DialogDelegate::GetDialogButtonLabel(
 
 bool DialogDelegate::IsDialogButtonEnabled(ui::DialogButton button) const {
   return true;
-}
-
-std::unique_ptr<View> DialogDelegate::CreateFootnoteView() {
-  return std::move(footnote_view_);
 }
 
 bool DialogDelegate::Cancel() {
@@ -217,7 +213,7 @@ NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
               ? provider->GetCornerRadiusMetric(views::EMPHASIS_HIGH)
               : 2);
     }
-    frame->SetFootnoteView(delegate->CreateFootnoteView());
+    frame->SetFootnoteView(delegate->DisownFootnoteView());
   }
   frame->SetBubbleBorder(std::move(border));
   return frame;
@@ -226,13 +222,19 @@ NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
 const DialogClientView* DialogDelegate::GetDialogClientView() const {
   if (!GetWidget())
     return nullptr;
-  return GetWidget()->client_view()->AsDialogClientView();
+  const views::View* client_view = GetWidget()->client_view();
+  return client_view->GetClassName() == DialogClientView::kViewClassName
+             ? static_cast<const DialogClientView*>(client_view)
+             : nullptr;
 }
 
 DialogClientView* DialogDelegate::GetDialogClientView() {
   if (!GetWidget())
     return nullptr;
-  return GetWidget()->client_view()->AsDialogClientView();
+  views::View* client_view = GetWidget()->client_view();
+  return client_view->GetClassName() == DialogClientView::kViewClassName
+             ? static_cast<DialogClientView*>(client_view)
+             : nullptr;
 }
 
 BubbleFrameView* DialogDelegate::GetBubbleFrameView() const {
@@ -244,25 +246,25 @@ BubbleFrameView* DialogDelegate::GetBubbleFrameView() const {
   return view ? static_cast<BubbleFrameView*>(view->frame_view()) : nullptr;
 }
 
-views::LabelButton* DialogDelegate::GetOkButton() {
+views::LabelButton* DialogDelegate::GetOkButton() const {
   DCHECK(GetWidget()) << "Don't call this before OnDialogInitialized";
   auto* client = GetDialogClientView();
   return client ? client->ok_button() : nullptr;
 }
 
-views::LabelButton* DialogDelegate::GetCancelButton() {
+views::LabelButton* DialogDelegate::GetCancelButton() const {
   DCHECK(GetWidget()) << "Don't call this before OnDialogInitialized";
   auto* client = GetDialogClientView();
   return client ? client->cancel_button() : nullptr;
 }
 
-views::View* DialogDelegate::GetExtraView() {
+views::View* DialogDelegate::GetExtraView() const {
   DCHECK(GetWidget()) << "Don't call this before OnDialogInitialized";
   auto* client = GetDialogClientView();
   return client ? client->extra_view() : nullptr;
 }
 
-views::View* DialogDelegate::GetFootnoteViewForTesting() {
+views::View* DialogDelegate::GetFootnoteViewForTesting() const {
   if (!GetWidget())
     return footnote_view_.get();
 
@@ -306,6 +308,10 @@ void DialogDelegate::ResetViewShownTimeStampForTesting() {
   GetDialogClientView()->ResetViewShownTimeStampForTesting();
 }
 
+void DialogDelegate::SetButtonRowInsets(const gfx::Insets& insets) {
+  GetDialogClientView()->SetButtonRowInsets(insets);
+}
+
 DialogDelegate::~DialogDelegate() {
   UMA_HISTOGRAM_LONG_TIMES("Dialog.DialogDelegate.Duration",
                            base::TimeTicks::Now() - creation_time_);
@@ -313,6 +319,10 @@ DialogDelegate::~DialogDelegate() {
 
 ax::mojom::Role DialogDelegate::GetAccessibleWindowRole() {
   return ax::mojom::Role::kDialog;
+}
+
+std::unique_ptr<View> DialogDelegate::DisownFootnoteView() {
+  return std::move(footnote_view_);
 }
 
 void DialogDelegate::OnWidgetInitialized() {

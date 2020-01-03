@@ -1480,7 +1480,7 @@ bool RemoveShortcutFolderIfEmpty(ShellUtil::ShortcutLocation location,
     return false;
   }
   if (base::IsDirectoryEmpty(shortcut_folder) &&
-      !base::DeleteFile(shortcut_folder, true)) {
+      !base::DeleteFileRecursively(shortcut_folder)) {
     LOG(ERROR) << "Cannot remove folder " << shortcut_folder.value();
     return false;
   }
@@ -1890,8 +1890,8 @@ base::string16 ShellUtil::BuildAppModelId(
       // Append a shortened version of this component. Cut in the middle to try
       // to avoid losing the unique parts of this component (which are usually
       // at the beginning or end for things like usernames and paths).
-      app_id.append(component.c_str(), 0, max_component_length / 2);
-      app_id.append(component.c_str(),
+      app_id.append(component, 0, max_component_length / 2);
+      app_id.append(component,
                     component.length() - ((max_component_length + 1) / 2),
                     base::string16::npos);
     } else {

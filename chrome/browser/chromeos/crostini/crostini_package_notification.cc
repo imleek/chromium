@@ -8,6 +8,7 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/chromeos/crostini/crostini_package_service.h"
 #include "chrome/browser/chromeos/crostini/crostini_registry_service_factory.h"
+#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/grit/generated_resources.h"
@@ -29,6 +30,11 @@ constexpr char kNotifierCrostiniPackageOperation[] =
 
 int CrostiniPackageNotification::GetButtonCountForTesting() {
   return notification_->buttons().size();
+}
+
+const std::string& CrostiniPackageNotification::GetErrorMessageForTesting()
+    const {
+  return error_message_;
 }
 
 CrostiniPackageNotification::NotificationSettings::NotificationSettings() {}
@@ -151,10 +157,10 @@ CrostiniPackageNotification::GetNotificationSettingsForTypeAndAppName(
   return result;
 }
 
-// TODO(timloh): This doesn't get called if the user shuts down Crostini, so
-// the notification will be stuck at whatever percentage it is at.
-void CrostiniPackageNotification::UpdateProgress(PackageOperationStatus status,
-                                                 int progress_percent) {
+void CrostiniPackageNotification::UpdateProgress(
+    PackageOperationStatus status,
+    int progress_percent,
+    const std::string& error_message) {
   if (status == PackageOperationStatus::RUNNING &&
       current_status_ != PackageOperationStatus::RUNNING) {
     running_start_time_ = base::TimeTicks::Now();
@@ -205,6 +211,7 @@ void CrostiniPackageNotification::UpdateProgress(PackageOperationStatus status,
     case PackageOperationStatus::FAILED:
       title = notification_settings_.failure_title;
       body = notification_settings_.failure_body;
+      error_message_ = error_message;
       notification_->set_accent_color(
           ash::kSystemNotificationColorCriticalWarning);
       break;
@@ -268,11 +275,15 @@ void CrostiniPackageNotification::Close(bool by_user) {
 void CrostiniPackageNotification::Click(
     const base::Optional<int>& button_index,
     const base::Optional<base::string16>& reply) {
+  if (current_status_ == PackageOperationStatus::FAILED) {
+    crostini::ShowCrostiniPackageInstallFailureView(error_message_);
+  }
+
   if (current_status_ != PackageOperationStatus::SUCCEEDED)
     return;
 
   if (app_count_ == 0) {
-    LaunchCrostiniApp(profile_, kCrostiniTerminalId,
+    LaunchCrostiniApp(profile_, GetTerminalId(),
                       display::Screen::GetScreen()->GetPrimaryDisplay().id());
   } else if (app_count_ == 1) {
     DCHECK(!app_id_.empty());

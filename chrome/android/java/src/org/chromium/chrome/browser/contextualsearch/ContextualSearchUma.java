@@ -278,15 +278,6 @@ public class ContextualSearchUma {
         int NUM_ENTRIES = 2;
     }
 
-    // Constants used to log UMA "enum" histograms for triggering the Translate Onebox.
-    @IntDef({ForceTranslate.DID_FORCE, ForceTranslate.WOULD_FORCE})
-    @Retention(RetentionPolicy.SOURCE)
-    private @interface ForceTranslate {
-        int DID_FORCE = 0;
-        int WOULD_FORCE = 1;
-        int NUM_ENTRIES = 2;
-    }
-
     // Constants used to log UMA "enum" histograms for Quick Answers.
     @IntDef({QuickAnswerSeen.ACTIVATED_WAS_AN_ANSWER_SEEN,
             QuickAnswerSeen.ACTIVATED_WAS_AN_ANSWER_NOT_SEEN,
@@ -1346,15 +1337,6 @@ public class ContextualSearchUma {
                         : BarOverlapResults.NO_BAR_OVERLAP_RESULTS_NOT_SEEN_FROM_LONG_PRESS;
             }
         }
-    }
-
-    /**
-     * Logs that whether or not the conditions are met to perform a translation.
-     * @param isConditionMet Whether the translation conditions were met.
-     */
-    public static void logTranslateCondition(boolean isConditionMet) {
-        RecordHistogram.recordBooleanHistogram(
-                "Search.ContextualSearchTranslateCondition", isConditionMet);
     }
 
     /**

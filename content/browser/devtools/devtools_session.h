@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/containers/flat_map.h"
+#include "base/containers/span.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/values.h"
@@ -52,7 +53,7 @@ class DevToolsSession : public protocol::FrontendChannel,
   void TurnIntoExternalProxy(DevToolsExternalAgentProxyDelegate* delegate);
 
   void AttachToAgent(blink::mojom::DevToolsAgent* agent);
-  bool DispatchProtocolMessage(const std::string& message);
+  bool DispatchProtocolMessage(base::span<const uint8_t> message);
   void SuspendSendingMessagesToAgent();
   void ResumeSendingMessagesToAgent();
 
@@ -66,17 +67,17 @@ class DevToolsSession : public protocol::FrontendChannel,
                                       DevToolsAgentHostClient* client);
   void DetachChildSession(const std::string& session_id);
   void SendMessageFromChildSession(const std::string& session_id,
-                                   const std::string& message);
+                                   base::span<const uint8_t> message);
 
  private:
   void MojoConnectionDestroyed();
   void DispatchProtocolMessageToAgent(int call_id,
                                       const std::string& method,
-                                      const std::string& message);
+                                      crdtp::span<uint8_t> message);
   void HandleCommand(std::unique_ptr<protocol::DictionaryValue> value,
-                     const std::string& message);
+                     base::span<const uint8_t> message);
   bool DispatchProtocolMessageInternal(
-      const std::string& message,
+      base::span<const uint8_t> message,
       std::unique_ptr<protocol::DictionaryValue> value);
 
   // protocol::FrontendChannel implementation.
@@ -88,7 +89,7 @@ class DevToolsSession : public protocol::FrontendChannel,
   void flushProtocolNotifications() override;
   void fallThrough(int call_id,
                    const std::string& method,
-                   const std::string& message) override;
+                   crdtp::span<uint8_t> message) override;
 
   // blink::mojom::DevToolsSessionHost implementation.
   void DispatchProtocolResponse(
@@ -100,7 +101,7 @@ class DevToolsSession : public protocol::FrontendChannel,
       blink::mojom::DevToolsSessionStatePtr updates) override;
 
   // DevToolsExternalAgentProxy implementation.
-  void DispatchOnClientHost(const std::string& message) override;
+  void DispatchOnClientHost(base::span<const uint8_t> message) override;
   void ConnectionClosed() override;
 
   // Merges the |updates| received from the renderer into session_state_cookie_.

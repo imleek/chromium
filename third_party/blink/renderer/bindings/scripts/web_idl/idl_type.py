@@ -51,7 +51,8 @@ class IdlTypeFactory(object):
         attrs_to_be_proxied = (
             set(RefById.get_all_attributes(IdlType)).difference(
                 # attributes not to be proxied
-                set(('debug_info', 'extended_attributes', 'is_optional'))))
+                set(('debug_info', 'extended_attributes', 'is_optional',
+                     'optionality'))))
         self._ref_by_id_factory = RefByIdFactory(
             target_attrs_with_priority=attrs_to_be_proxied)
         # |_is_frozen| is initially False and you can create new instances of
@@ -149,6 +150,16 @@ class IdlType(WithExtendedAttributes, WithDebugInfo):
     like record type and promise type.
     """
 
+    class Optionality(object):
+        """https://heycam.github.io/webidl/#dfn-optionality-value"""
+
+        class Type(str):
+            pass
+
+        REQUIRED = Type('required')
+        OPTIONAL = Type('optional')
+        VARIADIC = Type('variadic')
+
     def __init__(self,
                  is_optional=False,
                  extended_attributes=None,
@@ -156,7 +167,8 @@ class IdlType(WithExtendedAttributes, WithDebugInfo):
                  pass_key=None):
         assert isinstance(is_optional, bool)
         assert pass_key is _IDL_TYPE_PASS_KEY
-        WithExtendedAttributes.__init__(self, extended_attributes)
+        WithExtendedAttributes.__init__(
+            self, extended_attributes, readonly=True)
         WithDebugInfo.__init__(self, debug_info)
         self._is_optional = is_optional
 
@@ -212,7 +224,7 @@ class IdlType(WithExtendedAttributes, WithDebugInfo):
         """
         callback(self)
 
-    def unwrap(self, nullable=None, typedef=None):
+    def unwrap(self, nullable=None, typedef=None, variadic=None):
         """
         Returns the body part of the actual type, i.e. returns the interesting
         part of this type.
@@ -230,6 +242,7 @@ class IdlType(WithExtendedAttributes, WithDebugInfo):
         switches = {
             'nullable': nullable,
             'typedef': typedef,
+            'variadic': variadic,
         }
 
         value_counts = {None: 0, False: 0, True: 0}
@@ -249,9 +262,18 @@ class IdlType(WithExtendedAttributes, WithDebugInfo):
     @property
     def does_include_nullable_type(self):
         """
-        Returns True if |self| includes a nulllable type.
+        Returns True if this type includes a nulllable type.
         https://heycam.github.io/webidl/#dfn-includes-a-nullable-type
-        @return bool
+        """
+        return False
+
+    @property
+    def does_include_nullable_or_dict(self):
+        """
+        Returns True if this type includes a nullable type or a dictionary type.
+
+        IdlType's own definition of "includes a dictionary type" just follows
+        the definition of "includes a nullable type".
         """
         return False
 
@@ -268,13 +290,40 @@ class IdlType(WithExtendedAttributes, WithDebugInfo):
         return False
 
     @property
+    def is_floating_point_numeric(self):
+        """Returns True if this is a floating point numeric type."""
+        return False
+
+    @property
     def is_boolean(self):
-        """Returns True if this is a boolean type."""
+        """Returns True if this is boolean."""
         return False
 
     @property
     def is_string(self):
-        """Returns True if this is a DOMString, ByteString, or USVString."""
+        """
+        Returns True if this is one of DOMString, ByteString, or USVString.
+        """
+        return False
+
+    @property
+    def is_buffer_source_type(self):
+        """Returns True if this is a buffer source type."""
+        return False
+
+    @property
+    def is_array_buffer(self):
+        """Returns True if this is ArrayBuffer."""
+        return False
+
+    @property
+    def is_data_view(self):
+        """Returns True if this is DataView."""
+        return False
+
+    @property
+    def is_typed_array_type(self):
+        """Returns True if this is a typed array type."""
         return False
 
     @property
@@ -399,6 +448,15 @@ class IdlType(WithExtendedAttributes, WithDebugInfo):
         return False
 
     @property
+    def optionality(self):
+        """Returns the optionality value."""
+        if self.is_variadic:
+            return IdlType.Optionality.VARIADIC
+        if self.is_optional:
+            return IdlType.Optionality.OPTIONAL
+        return IdlType.Optionality.REQUIRED
+
+    @property
     def original_type(self):
         """Returns the typedef'ed type."""
         return None
@@ -484,11 +542,17 @@ class SimpleType(IdlType):
 
     _INTEGER_TYPES = ('byte', 'octet', 'short', 'unsigned short', 'long',
                       'unsigned long', 'long long', 'unsigned long long')
-    _NUMERIC_TYPES = ('float', 'unrestricted float', 'double',
-                      'unrestricted double') + _INTEGER_TYPES
+    _FLOATING_POINT_NUMERIC_TYPES = ('float', 'unrestricted float', 'double',
+                                     'unrestricted double')
+    _NUMERIC_TYPES = _FLOATING_POINT_NUMERIC_TYPES + _INTEGER_TYPES
     _STRING_TYPES = ('DOMString', 'ByteString', 'USVString')
-    _VALID_TYPES = ('any', 'boolean', 'object', 'symbol',
-                    'void') + _NUMERIC_TYPES + _STRING_TYPES
+    _TYPED_ARRAY_TYPES = ('Int8Array', 'Int16Array', 'Int32Array',
+                          'Uint8Array', 'Uint16Array', 'Uint32Array',
+                          'Uint8ClampedArray', 'Float32Array', 'Float64Array')
+    _BUFFER_SOURCE_TYPES = ('ArrayBuffer', 'DataView') + _TYPED_ARRAY_TYPES
+    _MISC_TYPES = ('any', 'boolean', 'object', 'symbol', 'void')
+    _VALID_TYPES = set(_NUMERIC_TYPES + _STRING_TYPES + _BUFFER_SOURCE_TYPES +
+                       _MISC_TYPES)
 
     def __init__(self,
                  name,
@@ -513,7 +577,6 @@ class SimpleType(IdlType):
     def __hash__(self):
         return hash(self._name)
 
-    # IdlType overrides
     @property
     def syntactic_form(self):
         return self._format_syntactic_form(self._name)
@@ -537,12 +600,32 @@ class SimpleType(IdlType):
         return self._name in SimpleType._INTEGER_TYPES
 
     @property
+    def is_floating_point_numeric(self):
+        return self._name in SimpleType._FLOATING_POINT_NUMERIC_TYPES
+
+    @property
     def is_boolean(self):
         return self._name == 'boolean'
 
     @property
     def is_string(self):
         return self._name in SimpleType._STRING_TYPES
+
+    @property
+    def is_buffer_source_type(self):
+        return self._name in SimpleType._BUFFER_SOURCE_TYPES
+
+    @property
+    def is_array_buffer(self):
+        return self._name == 'ArrayBuffer'
+
+    @property
+    def is_data_view(self):
+        return self._name == 'DataView'
+
+    @property
+    def is_typed_array_type(self):
+        return self._name in SimpleType._TYPED_ARRAY_TYPES
 
     @property
     def is_object(self):
@@ -627,7 +710,6 @@ class DefinitionType(IdlType, WithIdentifier):
     def __hash__(self):
         return hash(self.identifier)
 
-    # IdlType overrides
     @property
     def syntactic_form(self):
         assert not self.extended_attributes
@@ -639,6 +721,10 @@ class DefinitionType(IdlType, WithIdentifier):
         assert not self.extended_attributes
         assert not self.is_optional
         return self.identifier
+
+    @property
+    def does_include_nullable_or_dict(self):
+        return self.is_dictionary
 
     @property
     def is_interface(self):
@@ -695,7 +781,6 @@ class TypedefType(IdlType, WithIdentifier):
     def __hash__(self):
         return hash(self.identifier)
 
-    # IdlType overrides
     @property
     def syntactic_form(self):
         assert not self.extended_attributes
@@ -715,6 +800,10 @@ class TypedefType(IdlType, WithIdentifier):
     @property
     def does_include_nullable_type(self):
         return self.original_type.does_include_nullable_type
+
+    @property
+    def does_include_nullable_or_dict(self):
+        return self.original_type.does_include_nullable_or_dict
 
     @property
     def is_typedef(self):
@@ -753,7 +842,6 @@ class _ArrayLikeType(IdlType):
     def __hash__(self):
         return hash((self.__class__, self.element_type))
 
-    # IdlType overrides
     def apply_to_all_composing_elements(self, callback):
         callback(self)
         self.element_type.apply_to_all_composing_elements(callback)
@@ -780,7 +868,6 @@ class SequenceType(_ArrayLikeType):
             debug_info=debug_info,
             pass_key=pass_key)
 
-    # IdlType overrides
     @property
     def syntactic_form(self):
         return self._format_syntactic_form('sequence<{}>'.format(
@@ -813,7 +900,6 @@ class FrozenArrayType(_ArrayLikeType):
             debug_info=debug_info,
             pass_key=pass_key)
 
-    # IdlType overrides
     @property
     def syntactic_form(self):
         return self._format_syntactic_form('FrozenArray<{}>'.format(
@@ -842,7 +928,6 @@ class VariadicType(_ArrayLikeType):
             debug_info=debug_info,
             pass_key=pass_key)
 
-    # IdlType overrides
     @property
     def syntactic_form(self):
         assert not self.extended_attributes
@@ -859,6 +944,11 @@ class VariadicType(_ArrayLikeType):
     @property
     def is_variadic(self):
         return True
+
+    def _unwrap(self, switches):
+        if switches['variadic']:
+            return self.element_type._unwrap(switches)
+        return self
 
 
 class RecordType(IdlType):
@@ -889,7 +979,6 @@ class RecordType(IdlType):
     def __hash__(self):
         return hash((self.__class__, self.key_type, self.value_type))
 
-    # IdlType overrides
     @property
     def syntactic_form(self):
         return self._format_syntactic_form('record<{}, {}>'.format(
@@ -943,7 +1032,6 @@ class PromiseType(IdlType):
     def __hash__(self):
         return hash((self.__class__, self.result_type))
 
-    # IdlType overrides
     @property
     def syntactic_form(self):
         return self._format_syntactic_form('Promise<{}>'.format(
@@ -964,10 +1052,7 @@ class PromiseType(IdlType):
 
     @property
     def result_type(self):
-        """
-        Returns the result type.
-        @return IdlType
-        """
+        """Returns the result type."""
         return self._result_type
 
 
@@ -1010,7 +1095,6 @@ class UnionType(IdlType):
                      functools.reduce(lambda x, idl_type: x + hash(idl_type),
                                       self.member_types, 0)))
 
-    # IdlType overrides
     @property
     def syntactic_form(self):
         return self._format_syntactic_form('({})'.format(' or '.join(
@@ -1030,6 +1114,11 @@ class UnionType(IdlType):
     def does_include_nullable_type(self):
         return any(
             member.does_include_nullable_type for member in self.member_types)
+
+    @property
+    def does_include_nullable_or_dict(self):
+        return any(member.does_include_nullable_or_dict
+                   for member in self.member_types)
 
     @property
     def is_union(self):
@@ -1081,7 +1170,6 @@ class NullableType(IdlType):
     def __hash__(self):
         return hash((self.__class__, self.inner_type))
 
-    # IdlType overrides
     @property
     def syntactic_form(self):
         assert not self.extended_attributes
@@ -1107,6 +1195,10 @@ class NullableType(IdlType):
 
     @property
     def does_include_nullable_type(self):
+        return True
+
+    @property
+    def does_include_nullable_or_dict(self):
         return True
 
     @property

@@ -2535,7 +2535,7 @@ void HTMLTreeBuilder::ProcessEndOfFile(AtomicHTMLToken* token) {
         DVLOG(1) << "Not implemented.";
       }
       Element* el = tree_.OpenElements()->Top();
-      if (IsHTMLTextAreaElement(el))
+      if (IsA<HTMLTextAreaElement>(el))
         To<HTMLFormControlElement>(el)->SetBlocksFormSubmission(true);
       tree_.OpenElements()->Pop();
       DCHECK_NE(original_insertion_mode_, kTextMode);
@@ -2811,6 +2811,13 @@ void HTMLTreeBuilder::ProcessTokenInForeignContent(AtomicHTMLToken* token) {
         if (ScriptingContentIsAllowed(tree_.GetParserContentPolicy()))
           script_to_process_ = tree_.CurrentElement();
         tree_.OpenElements()->Pop();
+        return;
+      }
+      if (token->GetName() == html_names::kBrTag ||
+          token->GetName() == html_names::kPTag) {
+        ParseError(token);
+        tree_.OpenElements()->PopUntilForeignContentScopeMarker();
+        ProcessEndTag(token);
         return;
       }
       if (!tree_.CurrentStackItem()->IsInHTMLNamespace()) {

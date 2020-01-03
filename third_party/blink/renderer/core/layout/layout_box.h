@@ -64,13 +64,13 @@ enum BackgroundRectType { kBackgroundClipRect, kBackgroundKnownOpaqueRect };
 
 enum ShouldComputePreferred { kComputeActual, kComputePreferred };
 
-using SnapAreaSet = HashSet<const LayoutBox*>;
+using SnapAreaSet = HashSet<LayoutBox*>;
 
-struct LayoutBoxRareData {
-  USING_FAST_MALLOC(LayoutBoxRareData);
-
+struct LayoutBoxRareData final : public GarbageCollected<LayoutBoxRareData> {
  public:
   LayoutBoxRareData();
+
+  void Trace(Visitor* visitor);
 
   // For spanners, the spanner placeholder that lays us out within the multicol
   // container.
@@ -115,7 +115,7 @@ struct LayoutBoxRareData {
   // Used by CSSLayoutDefinition::Instance::Layout. Represents the script
   // object for this box that web developers can query style, and perform
   // layout upon. Only created if IsCustomItem() is true.
-  Persistent<CustomLayoutChild> layout_child_;
+  Member<CustomLayoutChild> layout_child_;
 
   DISALLOW_COPY_AND_ASSIGN(LayoutBoxRareData);
 };
@@ -943,6 +943,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   NGPaintFragment* FirstInlineFragment() const final;
   void SetFirstInlineFragment(NGPaintFragment*) final;
+  wtf_size_t FirstInlineFragmentItemIndex() const final;
+  void ClearFirstInlineFragmentItemIndex() final;
+  void SetFirstInlineFragmentItemIndex(wtf_size_t) final;
 
   void SetCachedLayoutResult(const NGLayoutResult&, const NGBreakToken*);
   void ClearCachedLayoutResult();
@@ -1312,6 +1315,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   bool IsGridItem() const { return Parent() && Parent()->IsLayoutGrid(); }
 
+  bool IsMathItem() const { return Parent() && Parent()->IsMathML(); }
+
   LayoutUnit LineHeight(
       bool first_line,
       LineDirectionMode,
@@ -1395,6 +1400,13 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   IntSize OriginAdjustmentForScrollbars() const;
   IntPoint ScrollOrigin() const;
   LayoutSize ScrolledContentOffset() const;
+
+  // Scroll offset as snapped to physical pixels. This value should be used in
+  // any values used after layout and inside "layout code" that cares about
+  // where the content is displayed, rather than what the ideal offset is. For
+  // most other cases ScrolledContentOffset is probably more appropriate. This
+  // is the offset that's actually drawn to the screen.
+  LayoutSize PixelSnappedScrolledContentOffset() const;
 
   // Maps from scrolling contents space to box space and apply overflow
   // clip if needed. Returns true if no clipping applied or the flattened quad
@@ -1756,8 +1768,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   LayoutBoxRareData& EnsureRareData() {
     if (!rare_data_)
-      rare_data_ = std::make_unique<LayoutBoxRareData>();
-    return *rare_data_.get();
+      rare_data_ = MakeGarbageCollected<LayoutBoxRareData>();
+    return *rare_data_.Get();
   }
 
   bool LogicalHeightComputesAsNone(SizeType) const;
@@ -1778,7 +1790,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   LayoutRectOutsets margin_box_outsets_;
 
-  void AddSnapArea(const LayoutBox&);
+  void AddSnapArea(LayoutBox&);
   void RemoveSnapArea(const LayoutBox&);
 
   // Returns true when the current recursive scroll into visible could propagate
@@ -1876,9 +1888,13 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     // atomic inline elements. Valid only when
     // IsInLayoutNGInlineFormattingContext().
     NGPaintFragment* first_paint_fragment_;
+    // The index of the first fragment item associated with this object in
+    // |NGFragmentItems::Items()|. Zero means there are no such item.
+    // Valid only when IsInLayoutNGInlineFormattingContext().
+    wtf_size_t first_fragment_item_index_;
   };
 
-  std::unique_ptr<LayoutBoxRareData> rare_data_;
+  Persistent<LayoutBoxRareData> rare_data_;
   scoped_refptr<const NGLayoutResult> cached_layout_result_;
 };
 
@@ -1960,8 +1976,20 @@ inline void LayoutBox::SetInlineBoxWrapper(InlineBox* box_wrapper) {
 }
 
 inline NGPaintFragment* LayoutBox::FirstInlineFragment() const {
-  return IsInLayoutNGInlineFormattingContext() ? first_paint_fragment_
-                                               : nullptr;
+  if (!IsInLayoutNGInlineFormattingContext())
+    return nullptr;
+  // TODO(yosin): Once we replace all usage of |FirstInlineFragment()| to
+  // |NGInlineCursor|, we should change this to |DCHECK()|.
+  if (RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled())
+    return nullptr;
+  return first_paint_fragment_;
+}
+
+inline wtf_size_t LayoutBox::FirstInlineFragmentItemIndex() const {
+  if (!IsInLayoutNGInlineFormattingContext())
+    return 0u;
+  DCHECK(RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
+  return first_fragment_item_index_;
 }
 
 inline bool LayoutBox::IsForcedFragmentainerBreakValue(

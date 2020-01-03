@@ -20,7 +20,6 @@
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
-#include "chrome/browser/signin/scoped_account_consistency.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -39,6 +38,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/sync/base/passphrase_enums.h"
+#include "components/sync/base/user_selectable_type.h"
 #include "components/sync/driver/mock_sync_service.h"
 #include "components/sync/driver/sync_user_settings_impl.h"
 #include "components/sync/driver/sync_user_settings_mock.h"
@@ -104,8 +104,6 @@ std::string GetConfiguration(const base::DictionaryValue* extra_values,
                     types.Has(syncer::UserSelectableType::kExtensions));
   result.SetBoolean("passwordsSynced",
                     types.Has(syncer::UserSelectableType::kPasswords));
-  result.SetBoolean("wifiConfigurationsSynced",
-                    types.Has(syncer::UserSelectableType::kWifiConfigurations));
   result.SetBoolean("preferencesSynced",
                     types.Has(syncer::UserSelectableType::kPreferences));
   result.SetBoolean("tabsSynced", types.Has(syncer::UserSelectableType::kTabs));
@@ -166,8 +164,6 @@ void CheckConfigDataTypeArguments(const base::DictionaryValue* dictionary,
             types.Has(syncer::UserSelectableType::kExtensions));
   CheckBool(dictionary, "passwordsSynced",
             types.Has(syncer::UserSelectableType::kPasswords));
-  CheckBool(dictionary, "wifiConfigurationsSynced",
-            types.Has(syncer::UserSelectableType::kWifiConfigurations));
   CheckBool(dictionary, "preferencesSynced",
             types.Has(syncer::UserSelectableType::kPreferences));
   CheckBool(dictionary, "tabsSynced",
@@ -270,7 +266,7 @@ class PeopleHandlerTest : public ChromeRenderViewHostTestHarness {
   // Setup the expectations for calls made when displaying the config page.
   void SetDefaultExpectationsForConfigPage() {
     ON_CALL(*mock_sync_service_, GetDisableReasons())
-        .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
+        .WillByDefault(Return(syncer::SyncService::DisableReasonSet()));
     ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsSyncRequested())
         .WillByDefault(Return(true));
     ON_CALL(*mock_sync_service_->GetMockUserSettings(),
@@ -394,7 +390,7 @@ TEST_F(PeopleHandlerFirstSigninTest, DisplayBasicLogin) {
 
 TEST_F(PeopleHandlerTest, DisplayConfigureWithEngineDisabledAndCancel) {
   ON_CALL(*mock_sync_service_, GetDisableReasons())
-      .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
+      .WillByDefault(Return(syncer::SyncService::DisableReasonSet()));
   ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsSyncRequested())
       .WillByDefault(Return(true));
   ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsFirstSetupComplete())
@@ -430,7 +426,7 @@ TEST_F(PeopleHandlerTest,
   ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsFirstSetupComplete())
       .WillByDefault(Return(false));
   ON_CALL(*mock_sync_service_, GetDisableReasons())
-      .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
+      .WillByDefault(Return(syncer::SyncService::DisableReasonSet()));
   ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsSyncRequested())
       .WillByDefault(Return(true));
   // Sync engine is stopped initially, and will start up.
@@ -461,6 +457,7 @@ TEST_F(PeopleHandlerTest,
   CheckBool(dictionary, "encryptAllDataAllowed", true);
   CheckBool(dictionary, "encryptAllData", false);
   CheckBool(dictionary, "passphraseRequired", false);
+  CheckBool(dictionary, "trustedVaultKeysRequired", false);
 }
 
 // Verifies the case where the user cancels after the sync engine has
@@ -468,7 +465,7 @@ TEST_F(PeopleHandlerTest,
 TEST_F(PeopleHandlerTest,
        DisplayConfigureWithEngineDisabledAndCancelAfterSigninSuccess) {
   ON_CALL(*mock_sync_service_, GetDisableReasons())
-      .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
+      .WillByDefault(Return(syncer::SyncService::DisableReasonSet()));
   ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsSyncRequested())
       .WillByDefault(Return(true));
   ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsFirstSetupComplete())
@@ -511,7 +508,7 @@ TEST_F(PeopleHandlerTest, RestartSyncAfterDashboardClear) {
         // SetSyncRequested(true) clears DISABLE_REASON_USER_CHOICE, and
         // immediately starts initializing the engine.
         ON_CALL(*mock_sync_service_, GetDisableReasons())
-            .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
+            .WillByDefault(Return(syncer::SyncService::DisableReasonSet()));
         ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsSyncRequested())
             .WillByDefault(Return(true));
         ON_CALL(*mock_sync_service_, GetTransportState())
@@ -542,7 +539,7 @@ TEST_F(PeopleHandlerTest,
         // SetSyncRequested(true) clears DISABLE_REASON_USER_CHOICE. Since the
         // engine is already running, it just gets reconfigured.
         ON_CALL(*mock_sync_service_, GetDisableReasons())
-            .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
+            .WillByDefault(Return(syncer::SyncService::DisableReasonSet()));
         ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsSyncRequested())
             .WillByDefault(Return(true));
         ON_CALL(*mock_sync_service_, GetTransportState())
@@ -776,6 +773,7 @@ TEST_F(PeopleHandlerTest, EnterBlankExistingPassphrase) {
 // Walks through each user selectable type, and tries to sync just that single
 // data type.
 TEST_F(PeopleHandlerTest, TestSyncIndividualTypes) {
+  SetDefaultExpectationsForConfigPage();
   for (syncer::UserSelectableType type : GetAllTypes()) {
     syncer::UserSelectableTypeSet type_to_set;
     type_to_set.Put(type);
@@ -803,6 +801,7 @@ TEST_F(PeopleHandlerTest, TestSyncIndividualTypes) {
 }
 
 TEST_F(PeopleHandlerTest, TestSyncAllManually) {
+  SetDefaultExpectationsForConfigPage();
   std::string args = GetConfiguration(NULL,
                                       CHOOSE_WHAT_TO_SYNC,
                                       GetAllTypes(),
@@ -822,6 +821,32 @@ TEST_F(PeopleHandlerTest, TestSyncAllManually) {
   handler_->HandleSetDatatypes(&list_args);
 
   ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
+}
+
+TEST_F(PeopleHandlerTest, NonRegisteredType) {
+  SetDefaultExpectationsForConfigPage();
+
+  // Simulate apps not being registered.
+  syncer::UserSelectableTypeSet registered_types = GetAllTypes();
+  registered_types.Remove(syncer::UserSelectableType::kApps);
+  ON_CALL(*mock_sync_service_->GetMockUserSettings(),
+          GetRegisteredSelectableTypes())
+      .WillByDefault(Return(registered_types));
+  SetupInitializedSyncService();
+
+  // Simulate "Sync everything" being turned off, but all individual
+  // toggles left on.
+  std::string config =
+      GetConfiguration(/*extra_values=*/nullptr, CHOOSE_WHAT_TO_SYNC,
+                       GetAllTypes(), std::string(), ENCRYPT_PASSWORDS);
+  base::ListValue list_args;
+  list_args.AppendString(kTestCallbackId);
+  list_args.AppendString(config);
+
+  // Only the registered types are selected.
+  EXPECT_CALL(*mock_sync_service_->GetMockUserSettings(),
+              SetSelectedTypes(/*sync_everything=*/false, registered_types));
+  handler_->HandleSetDatatypes(&list_args);
 }
 
 TEST_F(PeopleHandlerTest, ShowSyncSetup) {
@@ -856,7 +881,6 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncEverything) {
   CheckBool(dictionary, "bookmarksRegistered", true);
   CheckBool(dictionary, "extensionsRegistered", true);
   CheckBool(dictionary, "passwordsRegistered", true);
-  CheckBool(dictionary, "wifiConfigurationsRegistered", true);
   CheckBool(dictionary, "preferencesRegistered", true);
   CheckBool(dictionary, "tabsRegistered", true);
   CheckBool(dictionary, "themesRegistered", true);
@@ -945,6 +969,26 @@ TEST_F(PeopleHandlerTest, ShowSetupCustomPassphraseRequired) {
   const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
   CheckBool(dictionary, "passphraseRequired", true);
   EXPECT_TRUE(dictionary->FindKey("enterPassphraseBody"));
+}
+
+TEST_F(PeopleHandlerTest, ShowSetupTrustedVaultKeysRequired) {
+  ON_CALL(*mock_sync_service_->GetMockUserSettings(),
+          IsTrustedVaultKeyRequiredForPreferredDataTypes())
+      .WillByDefault(Return(true));
+  ON_CALL(*mock_sync_service_->GetMockUserSettings(), GetPassphraseType())
+      .WillByDefault(Return(syncer::PassphraseType::kTrustedVaultPassphrase));
+  SetupInitializedSyncService();
+  SetDefaultExpectationsForConfigPage();
+
+  // This should display the sync setup dialog (not login).
+  handler_->HandleShowSetupUI(nullptr);
+
+  const base::DictionaryValue* dictionary = ExpectSyncPrefsChanged();
+  CheckBool(dictionary, "passphraseRequired", false);
+  CheckBool(dictionary, "trustedVaultKeysRequired", true);
+  EXPECT_FALSE(dictionary->FindKey("enterPassphraseBody"));
+  // TODO: See how to verify the appropriate action, once it's actually
+  // implemented.
 }
 
 TEST_F(PeopleHandlerTest, ShowSetupEncryptAll) {
@@ -1047,7 +1091,7 @@ TEST_F(PeopleHandlerTest, DashboardClearWhileSettingsOpen_ConfirmSoon) {
         // SetSyncRequested(true) clears DISABLE_REASON_USER_CHOICE, and
         // immediately starts initializing the engine.
         ON_CALL(*mock_sync_service_, GetDisableReasons())
-            .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
+            .WillByDefault(Return(syncer::SyncService::DisableReasonSet()));
         ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsSyncRequested())
             .WillByDefault(Return(true));
         ON_CALL(*mock_sync_service_, GetTransportState())
@@ -1113,7 +1157,7 @@ TEST_F(PeopleHandlerTest, DashboardClearWhileSettingsOpen_ConfirmLater) {
         // SetSyncRequested(true) clears DISABLE_REASON_USER_CHOICE, and
         // immediately starts initializing the engine.
         ON_CALL(*mock_sync_service_, GetDisableReasons())
-            .WillByDefault(Return(syncer::SyncService::DISABLE_REASON_NONE));
+            .WillByDefault(Return(syncer::SyncService::DisableReasonSet()));
         ON_CALL(*mock_sync_service_->GetMockUserSettings(), IsSyncRequested())
             .WillByDefault(Return(true));
         ON_CALL(*mock_sync_service_, GetTransportState())
@@ -1172,7 +1216,7 @@ TEST(PeopleHandlerDiceUnifiedConsentTest, StoredAccountsList) {
   base::Value accounts = handler.GetStoredAccountsList();
 
   ASSERT_TRUE(accounts.is_list());
-  base::span<const base::Value> accounts_list = accounts.GetList();
+  base::Value::ConstListView accounts_list = accounts.GetList();
 
   ASSERT_EQ(2u, accounts_list.size());
   ASSERT_TRUE(accounts_list[0].FindKey("email"));

@@ -237,9 +237,7 @@ class InspectorOverlayAgent::InspectorPageOverlayDelegate final
       return;
     }
 
-    if (DrawingRecorder::UseCachedDrawingIfPossible(
-            graphics_context, frame_overlay, DisplayItem::kFrameOverlay))
-      return;
+    frame_overlay.Invalidate();
     DrawingRecorder recorder(graphics_context, frame_overlay,
                              DisplayItem::kFrameOverlay);
     // The overlay frame is has a standalone paint property tree. Paint it in
@@ -691,7 +689,8 @@ WebInputEventResult InspectorOverlayAgent::HandleInputEvent(
 
   if (input_event.GetType() == WebInputEvent::kKeyUp &&
       swallow_next_escape_up_) {
-    auto keyboard_event = static_cast<const WebKeyboardEvent&>(input_event);
+    const auto& keyboard_event =
+        static_cast<const WebKeyboardEvent&>(input_event);
     if (keyboard_event.windows_key_code == VKEY_ESCAPE) {
       swallow_next_escape_up_ = false;
       return WebInputEventResult::kHandledSuppressed;

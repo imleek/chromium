@@ -64,33 +64,12 @@ Polymer({
     },
 
     /**
-     * List of options for the page zoom drop-down menu.
-     * @type {!Array<number>}
+     * Predefined zoom factors to be used when zooming in/out. These are in
+     * ascending order. Values are displayed in the page zoom drop-down menu
+     * as percentages.
+     * @private {!Array<number>}
      */
-    pageZoomLevels_: {
-      readOnly: true,
-      type: Array,
-      value: [
-        // TODO(dbeam): get these dynamically from C++ instead.
-        1 / 4,
-        1 / 3,
-        1 / 2,
-        2 / 3,
-        3 / 4,
-        4 / 5,
-        9 / 10,
-        1,
-        11 / 10,
-        5 / 4,
-        3 / 2,
-        7 / 4,
-        2,
-        5 / 2,
-        3,
-        4,
-        5,
-      ],
-    },
+    pageZoomLevels_: Array,
 
     /** @private */
     themeSublabel_: String,
@@ -121,11 +100,6 @@ Polymer({
   /** @private {?settings.AppearanceBrowserProxy} */
   appearanceBrowserProxy_: null,
 
-  // <if expr="chromeos">
-  /** @private {?settings.WallpaperBrowserProxy} */
-  wallpaperBrowserProxy_: null,
-  // </if>
-
   observers: [
     'defaultFontSizeChanged_(prefs.webkit.webprefs.default_font_size.value)',
     'themeChanged_(prefs.extensions.theme.id.value, useSystemTheme_)',
@@ -140,10 +114,6 @@ Polymer({
   created: function() {
     this.appearanceBrowserProxy_ =
         settings.AppearanceBrowserProxyImpl.getInstance();
-    // <if expr="chromeos">
-    this.wallpaperBrowserProxy_ =
-        settings.WallpaperBrowserProxyImpl.getInstance();
-    // </if>
   },
 
   /** @override */
@@ -154,17 +124,9 @@ Polymer({
     this.appearanceBrowserProxy_.getDefaultZoom().then(zoom => {
       this.defaultZoom_ = zoom;
     });
-    // <if expr="chromeos">
-    this.wallpaperBrowserProxy_.isWallpaperSettingVisible().then(
-        isWallpaperSettingVisible => {
-          assert(this.pageVisibility);
-          this.pageVisibility.setWallpaper = isWallpaperSettingVisible;
-        });
-    this.wallpaperBrowserProxy_.isWallpaperPolicyControlled().then(
-        isPolicyControlled => {
-          this.isWallpaperPolicyControlled_ = isPolicyControlled;
-        });
-    // </if>
+
+    this.pageZoomLevels_ = /** @type {!Array<number>} */ (
+        JSON.parse(loadTimeData.getString('presetZoomFactors')));
   },
 
   /**
@@ -222,16 +184,6 @@ Polymer({
   openThemeUrl_: function() {
     window.open(this.themeUrl_ || loadTimeData.getString('themesGalleryUrl'));
   },
-
-  // <if expr="chromeos">
-  /**
-   * ChromeOS only.
-   * @private
-   */
-  openWallpaperManager_: function() {
-    this.wallpaperBrowserProxy_.openWallpaperManager();
-  },
-  // </if>
 
   /** @private */
   onUseDefaultTap_: function() {

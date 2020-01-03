@@ -114,7 +114,10 @@ void ExpectAllContainers() {
       Shell::GetContainer(root_window, kShellWindowId_LockScreenContainer));
   EXPECT_TRUE(Shell::GetContainer(root_window,
                                   kShellWindowId_LockSystemModalContainer));
-  EXPECT_TRUE(Shell::GetContainer(root_window, kShellWindowId_StatusContainer));
+  EXPECT_TRUE(
+      Shell::GetContainer(root_window, kShellWindowId_ShelfControlContainer));
+  EXPECT_TRUE(
+      Shell::GetContainer(root_window, kShellWindowId_OverviewFocusContainer));
   EXPECT_TRUE(Shell::GetContainer(root_window, kShellWindowId_MenuContainer));
   EXPECT_TRUE(Shell::GetContainer(root_window,
                                   kShellWindowId_DragImageAndTooltipContainer));
@@ -518,20 +521,20 @@ TEST_F(ShellTest, ToggleAutoHide) {
   wm::ActivateWindow(window.get());
 
   Shelf* shelf = GetPrimaryShelf();
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
 
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kNever);
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever, shelf->auto_hide_behavior());
 
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever, shelf->auto_hide_behavior());
 
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
 
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kNever);
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever, shelf->auto_hide_behavior());
 }
 
 // Tests that the cursor-filter is ahead of the drag-drop controller in the
@@ -589,7 +592,7 @@ TEST_F(ShellTest2, DontCrashWhenWindowDeleted) {
 // Tests the local state code path.
 class ShellLocalStateTest : public AshTestBase {
  public:
-  ShellLocalStateTest() { disable_provide_local_state(); }
+  ShellLocalStateTest() { DisableProvideLocalState(); }
 
  protected:
   std::unique_ptr<TestingPrefServiceSimple> local_state_;
@@ -637,7 +640,7 @@ TEST_P(NoDuplicateShellContainerIdsTest, ValidateContainersIds) {
   ExpectAllContainers();
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          NoDuplicateShellContainerIdsTest,
                          ::testing::Values(false, true));
 

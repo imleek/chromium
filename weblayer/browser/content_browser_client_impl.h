@@ -68,6 +68,20 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
                        bool* no_javascript_access) override;
   std::vector<std::unique_ptr<content::NavigationThrottle>>
   CreateThrottlesForNavigation(content::NavigationHandle* handle) override;
+  content::GeneratedCodeCacheSettings GetGeneratedCodeCacheSettings(
+      content::BrowserContext* context) override;
+  bool BindAssociatedReceiverFromFrame(
+      content::RenderFrameHost* render_frame_host,
+      const std::string& interface_name,
+      mojo::ScopedInterfaceEndpointHandle* handle) override;
+  void ExposeInterfacesToRenderer(
+      service_manager::BinderRegistry* registry,
+      blink::AssociatedInterfaceRegistry* associated_registry,
+      content::RenderProcessHost* render_process_host) override;
+  void RegisterBrowserInterfaceBindersForFrame(
+      content::RenderFrameHost* render_frame_host,
+      service_manager::BinderMapWithContext<content::RenderFrameHost*>* map)
+      override;
 
 #if defined(OS_LINUX) || defined(OS_ANDROID)
   void GetAdditionalMappedFilesForChildProcess(
@@ -76,10 +90,23 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
       content::PosixFileDescriptorInfo* mappings) override;
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
+#if defined(OS_ANDROID)
+  bool ShouldOverrideUrlLoading(int frame_tree_node_id,
+                                bool browser_initiated,
+                                const GURL& gurl,
+                                const std::string& request_method,
+                                bool has_user_gesture,
+                                bool is_redirect,
+                                bool is_main_frame,
+                                ui::PageTransition transition,
+                                bool* ignore_navigation) override;
+#endif
+
  private:
   MainParams* params_;
 
 #if defined(OS_ANDROID)
+  SafeBrowsingService* GetSafeBrowsingService();
   std::unique_ptr<SafeBrowsingService> safe_browsing_service_;
 #endif
 };

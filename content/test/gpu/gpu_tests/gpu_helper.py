@@ -10,8 +10,10 @@ import mock
 EXPECTATIONS_DRIVER_TAGS = frozenset([
     'intel_lt_25.20.100.6444',
     'intel_lt_25.20.100.6577',
-    'mesa_lt_19.1.2',
+    'intel_lt_26.20.100.7000',
+    'intel_lt_26.20.100.7323',
     'mesa_eq_18.0.5',
+    'mesa_lt_19.1.2',
 ])
 
 
@@ -46,9 +48,9 @@ def _GetANGLEGpuDeviceId(device_string):
     return None
 
 
-def GetGpuVendorString(gpu_info):
+def GetGpuVendorString(gpu_info, index):
   if gpu_info:
-    primary_gpu = gpu_info.devices[0]
+    primary_gpu = gpu_info.devices[index]
     if primary_gpu:
       vendor_string = primary_gpu.vendor_string
       angle_vendor_string = _ParseANGLEGpuVendorString(
@@ -67,9 +69,9 @@ def GetGpuVendorString(gpu_info):
   return 'unknown_gpu'
 
 
-def GetGpuDeviceId(gpu_info):
+def GetGpuDeviceId(gpu_info, index):
   if gpu_info:
-    primary_gpu = gpu_info.devices[0]
+    primary_gpu = gpu_info.devices[index]
     if primary_gpu:
       return (
           primary_gpu.device_id
@@ -158,7 +160,9 @@ def GetMockArgs(is_asan=False, webgl_version='1.0.0'):
   args.is_asan = is_asan
   args.webgl_conformance_version = webgl_version
   args.webgl2_only = False
-  args.url = 'https://www.google.com'
+  # for power_measurement_integration_test.py, .url has to be None to
+  # generate the correct test lists for bots.
+  args.url = None
   args.duration = 10
   args.delay = 10
   args.resolution = 100

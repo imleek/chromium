@@ -43,6 +43,7 @@
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
+#include "third_party/blink/public/web/web_origin_policy.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/frame_types.h"
@@ -146,6 +147,13 @@ class CORE_EXPORT FrameLoader final {
   void ForceSandboxFlags(WebSandboxFlags flags) {
     forced_sandbox_flags_ |= flags;
   }
+
+  // Set frame_owner's effective sandbox flags, which are sandbox flags value
+  // at the beginning of navigation.
+  void SetFrameOwnerSandboxFlags(WebSandboxFlags flags) {
+    frame_owner_sandbox_flags_ = flags;
+  }
+
   // Includes the collection of forced, inherited, and FrameOwner's sandbox
   // flags. Note: with FeaturePolicyForSandbox the frame owner's sandbox flags
   // only includes the flags which are *not* implemented as feature policies
@@ -216,7 +224,6 @@ class CORE_EXPORT FrameLoader final {
   // Like ClearClientNavigation, but also notifies the client to actually cancel
   // the navigation.
   void CancelClientNavigation();
-  void DetachProvisionalDocumentLoader();
 
   void Trace(blink::Visitor*);
 
@@ -230,6 +237,8 @@ class CORE_EXPORT FrameLoader final {
                               const ContentSecurityPolicy*);
 
   bool IsClientNavigationInitialHistoryLoad();
+
+  static bool NeedsHistoryItemRestore(WebFrameLoadType type);
 
  private:
   bool AllowRequestForThisFrame(const FrameLoadRequest&);
@@ -263,12 +272,23 @@ class CORE_EXPORT FrameLoader final {
   void TakeObjectSnapshot() const;
 
   // Commits the given |document_loader|.
+  // |is_initialization| should be true when committing the initial empty
+  // document. |is_javascript_url| should be true when committing a navigation
+  // to a javascript URL (eg. javascript:foo).
   void CommitDocumentLoader(
       DocumentLoader* document_loader,
       const base::Optional<Document::UnloadEventTiming>&,
-      bool dispatch_did_start,
+      HistoryItem* previous_history_item,
+      bool is_initialization,
       base::OnceClosure call_before_attaching_new_document,
-      bool dispatch_did_commit);
+      bool is_javascript_url);
+
+  // Creates CSP based on |response| and checks that they allow loading |url|.
+  // Returns nullptr if the check fails.
+  ContentSecurityPolicy* CreateCSP(
+      const KURL& url,
+      const ResourceResponse& response,
+      const base::Optional<WebOriginPolicy>& origin_policy);
 
   LocalFrameClient* Client() const;
 
@@ -282,13 +302,8 @@ class CORE_EXPORT FrameLoader final {
 
   Member<ProgressTracker> progress_tracker_;
 
-  // Document loaders for the three phases of frame loading. Note that while a
-  // new request is being loaded, the old document loader may still be
-  // referenced. E.g. while a new request is in the "policy" state, the old
-  // document loader may be consulted in particular as it makes sense to imply
-  // certain settings on the new loader.
+  // Document loader for frame loading.
   Member<DocumentLoader> document_loader_;
-  Member<DocumentLoader> provisional_document_loader_;
 
   // This struct holds information about a navigation, which is being
   // initiated by the client through the browser process, until the navigation
@@ -302,6 +317,13 @@ class CORE_EXPORT FrameLoader final {
   bool in_restore_scroll_;
 
   WebSandboxFlags forced_sandbox_flags_;
+  // A snapshot value of frame_owner's sandbox flags states at the beginning of
+  // navigation. For main frame which does not have a frame owner, the value is
+  // base::nullopt.
+  // The snapshot value is needed because of potential racing conditions on
+  // sandbox attribute on iframe element.
+  // crbug.com/1026627
+  base::Optional<WebSandboxFlags> frame_owner_sandbox_flags_ = base::nullopt;
 
   bool dispatching_did_clear_window_object_in_main_world_;
   bool detached_;

@@ -13,8 +13,21 @@ settings.MAX_SIGNIN_PROMO_IMPRESSION = 10;
 
 Polymer({
   is: 'settings-sync-account-control',
-  behaviors: [WebUIListenerBehavior],
+
+  behaviors: [
+    WebUIListenerBehavior,
+    PrefsBehavior,
+  ],
+
   properties: {
+    /**
+     * Preferences state.
+     */
+    prefs: {
+      type: Object,
+      notify: true,
+    },
+
     /**
      * The current sync status, supplied by parent element.
      * @type {!settings.SyncStatus}
@@ -233,19 +246,20 @@ Polymer({
    * @private
    */
   getSyncIconStyle_: function() {
-    if (this.syncStatus.hasUnrecoverableError) {
-      return 'sync-problem';
-    }
-    if (this.syncStatus.hasError) {
-      return this.syncStatus.statusAction ==
-              settings.StatusAction.REAUTHENTICATE ?
-          'sync-paused' :
-          'sync-problem';
-    }
     if (this.syncStatus.disabled) {
       return 'sync-disabled';
     }
-    return 'sync';
+    if (!this.syncStatus.hasError) {
+      return 'sync';
+    }
+    // Specific error cases below.
+    if (this.syncStatus.hasUnrecoverableError) {
+      return 'sync-problem';
+    }
+    if (this.syncStatus.statusAction == settings.StatusAction.REAUTHENTICATE) {
+      return 'sync-paused';
+    }
+    return 'sync-problem';
   },
 
   /**
@@ -265,21 +279,48 @@ Polymer({
   },
 
   /**
+   * @param {string} accountName
+   * @param {string} syncErrorLabel
+   * @param {string} syncPasswordsOnlyErrorLabel
+   * @param {string} authErrorLabel
+   * @param {string} disabledLabel
    * @return {string}
    * @private
    */
   getAvatarRowTitle_: function(
-      accountName, syncErrorLabel, authErrorLabel, disabledLabel) {
-    switch (this.getSyncIconStyle_()) {
-      case 'sync-problem':
-        return syncErrorLabel;
-      case 'sync-paused':
-        return authErrorLabel;
-      case 'sync-disabled':
-        return disabledLabel;
-      default:
-        return accountName;
+      accountName, syncErrorLabel, syncPasswordsOnlyErrorLabel, authErrorLabel,
+      disabledLabel) {
+    if (this.syncStatus.disabled) {
+      return disabledLabel;
     }
+    if (!this.syncStatus.hasError) {
+      return accountName;
+    }
+    // Specific error cases below.
+    if (this.syncStatus.hasUnrecoverableError) {
+      return syncErrorLabel;
+    }
+    if (this.syncStatus.statusAction == settings.StatusAction.REAUTHENTICATE) {
+      return authErrorLabel;
+    }
+    if (this.syncStatus.hasPasswordsOnlyError) {
+      return syncPasswordsOnlyErrorLabel;
+    }
+    return syncErrorLabel;
+  },
+
+  /**
+   * Determines if the sync button should be disabled in response to
+   * either a first setup flow or chrome sign-in being disabled.
+   * @return {boolean}
+   * @private
+   */
+  shouldDisableSyncButton_: function() {
+    if (this.hideButtons || this.prefs === undefined) {
+      return this.computeShowSetupButtons_();
+    }
+    return !!this.syncStatus.firstSetupInProgress ||
+        !this.getPref('signin.allowed_on_next_startup').value;
   },
 
   /**
@@ -345,6 +386,9 @@ Polymer({
         break;
       case settings.StatusAction.UPGRADE_CLIENT:
         settings.navigateTo(settings.routes.ABOUT);
+        break;
+      case settings.StatusAction.RETRIEVE_TRUSTED_VAULT_KEYS:
+        this.syncBrowserProxy_.startKeyRetrieval();
         break;
       case settings.StatusAction.ENTER_PASSPHRASE:
       case settings.StatusAction.CONFIRM_SYNC_SETTINGS:

@@ -2,42 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import <EarlGrey/EarlGrey.h>
-#import <XCTest/XCTest.h>
-
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#include "components/bookmarks/browser/bookmark_model.h"
-#include "components/bookmarks/browser/titled_url_match.h"
-#include "components/strings/grit/components_strings.h"
-#include "components/sync/base/model_type.h"
-#include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "ios/chrome/browser/bookmarks/bookmarks_utils.h"
-#include "ios/chrome/browser/signin/authentication_service.h"
-#include "ios/chrome/browser/signin/authentication_service_factory.h"
-#import "ios/chrome/browser/ui/authentication/cells/signin_promo_view.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui.h"
-#import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils.h"
-#import "ios/chrome/browser/ui/settings/settings_table_view_controller.h"
-#include "ios/chrome/grit/ios_strings.h"
-#import "ios/chrome/test/app/chrome_test_util.h"
+#import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils_app_interface.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
-#import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
-#import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service.h"
+#import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #include "ios/web/public/test/http_server/http_server_util.h"
-#import "net/base/mac/url_conversions.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-using chrome_test_util::SettingsDoneButton;
 
 namespace {
 
@@ -86,13 +65,13 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
 // Tests that a bookmark added on the client (before Sync is enabled) is
 // uploaded to the Sync server once Sync is turned on.
 - (void)testSyncUploadBookmarkOnFirstSync {
-  [self addBookmark:GURL("https://www.foo.com") withTitle:@"foo"];
+  [self addBookmark:@"https://www.foo.com" withTitle:@"foo"];
 
   // Sign in to sync, after a bookmark has been added.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   // Assert that the correct number of bookmarks have been synced.
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
@@ -101,14 +80,14 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
 
 // Tests that a bookmark added on the client is uploaded to the Sync server.
 - (void)testSyncUploadBookmark {
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   // Add a bookmark after sync is initialized.
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
-  [self addBookmark:GURL("https://www.goo.com") withTitle:@"goo"];
+  [self addBookmark:@"https://www.goo.com" withTitle:@"goo"];
   AssertNumberOfEntities(1, syncer::BOOKMARKS);
 }
 
@@ -120,10 +99,10 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
   [ChromeEarlGrey addFakeSyncServerBookmarkWithURL:URL title:"hoo"];
 
   // Sign in to sync, after a bookmark has been injected in the sync server.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
   [[self class] assertBookmarksWithTitle:@"hoo" expectedCount:1];
 }
@@ -131,10 +110,10 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
 // Tests that the local cache guid does not change when sync is restarted.
 - (void)testSyncCheckSameCacheGuid_SyncRestarted {
   // Sign in the fake identity.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
 
   // Store the original guid, then restart sync.
@@ -153,25 +132,20 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
 // signs back in with the same account.
 - (void)testSyncCheckDifferentCacheGuid_SignOutAndSignIn {
   // Sign in a fake identity, and store the initial sync guid.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
   std::string original_guid = [ChromeEarlGrey syncCacheGUID];
 
-  // Sign out the current user.
-  ios::ChromeBrowserState* browser_state =
-      chrome_test_util::GetOriginalBrowserState();
-  AuthenticationService* authentication_service =
-      AuthenticationServiceFactory::GetForBrowserState(browser_state);
-  GREYAssert(authentication_service->IsAuthenticated(),
+  GREYAssert([SigninEarlGreyUtilsAppInterface isAuthenticated],
              @"User is not signed in.");
-  authentication_service->SignOut(signin_metrics::SIGNOUT_TEST, nil);
+  [SigninEarlGreyUtilsAppInterface signOut];
   [ChromeEarlGrey waitForSyncInitialized:NO syncTimeout:kSyncOperationTimeout];
 
   // Sign the user back in, and verify the guid has changed.
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
   GREYAssertTrue(
       [ChromeEarlGrey syncCacheGUID] != original_guid,
@@ -183,24 +157,19 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
 // Test for http://crbug.com/413611 .
 - (void)testSyncCheckSameCacheGuid_SyncRestartedAfterSignOutAndSignIn {
   // Sign in a fake idenitty.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
 
-  // Sign out the current user.
-  ios::ChromeBrowserState* browser_state =
-      chrome_test_util::GetOriginalBrowserState();
-  AuthenticationService* authentication_service =
-      AuthenticationServiceFactory::GetForBrowserState(browser_state);
-  GREYAssert(authentication_service->IsAuthenticated(),
+  GREYAssert([SigninEarlGreyUtilsAppInterface isAuthenticated],
              @"User is not signed in.");
-  authentication_service->SignOut(signin_metrics::SIGNOUT_TEST, nil);
+  [SigninEarlGreyUtilsAppInterface signOut];
   [ChromeEarlGrey waitForSyncInitialized:NO syncTimeout:kSyncOperationTimeout];
 
   // Sign the user back in.
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
 
   // Record the initial guid, before restarting sync.
@@ -229,10 +198,10 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
   }];
 
   // Sign in to sync.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   // Verify that the autofill profile has been downloaded.
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
@@ -258,10 +227,10 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
   }];
 
   // Sign in to sync.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   // Verify that the autofill profile has been downloaded.
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
@@ -305,10 +274,10 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
   }];
 
   // Sign in to sync.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   // Verify that the autofill profile has been downloaded
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
@@ -346,10 +315,10 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
   [ChromeEarlGrey loadURL:URL2];
 
   // Sign in to sync, after opening two tabs.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   // Verify the sessions on the sync server.
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
@@ -374,10 +343,10 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
   [ChromeEarlGrey addHistoryServiceTypedURL:mockURL];
 
   // Sign in to sync.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
 
@@ -402,10 +371,10 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
   [ChromeEarlGrey addFakeSyncServerTypedURL:mockURL];
 
   // Sign in to sync.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
 
@@ -429,10 +398,10 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
   [ChromeEarlGrey addFakeSyncServerTypedURL:mockURL];
 
   // Sign in to sync.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
 
@@ -464,10 +433,10 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
   [ChromeEarlGrey addHistoryServiceTypedURL:mockURL];
 
   // Sign in to sync.
-  ChromeIdentity* identity = [SigninEarlGreyUtils fakeIdentity1];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity);
-  [SigninEarlGreyUI signinWithIdentity:identity];
+  FakeChromeIdentity* fakeIdentity =
+      [SigninEarlGreyUtilsAppInterface fakeIdentity1];
+  [SigninEarlGreyUtilsAppInterface addFakeIdentity:fakeIdentity];
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
   [ChromeEarlGrey triggerSyncCycleForType:syncer::TYPED_URLS];
@@ -491,13 +460,9 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
 // folder.
 // TODO(crbug.com/646164): This is copied from bookmarks_egtest.mm and should
 // move to common location.
-- (void)addBookmark:(const GURL)url withTitle:(NSString*)title {
+- (void)addBookmark:(NSString*)urlString withTitle:(NSString*)title {
   [ChromeEarlGrey waitForBookmarksToFinishLoading];
-  bookmarks::BookmarkModel* bookmark_model =
-      ios::BookmarkModelFactory::GetForBrowserState(
-          chrome_test_util::GetOriginalBrowserState());
-  bookmark_model->AddURL(bookmark_model->mobile_node(), 0,
-                         base::SysNSStringToUTF16(title), url);
+  [SigninEarlGreyUtilsAppInterface addBookmark:urlString withTitle:title];
 }
 
 // Asserts that |expectedCount| bookmarks exist with the corresponding |title|
@@ -506,17 +471,9 @@ void AssertNumberOfEntities(int entity_count, syncer::ModelType entity_type) {
 // move to common location.
 + (void)assertBookmarksWithTitle:(NSString*)title
                    expectedCount:(NSUInteger)expectedCount {
-  // Get BookmarkModel and wait for it to be loaded.
-  bookmarks::BookmarkModel* bookmarkModel =
-      ios::BookmarkModelFactory::GetForBrowserState(
-          chrome_test_util::GetOriginalBrowserState());
-
-  // Verify the correct number of bookmarks exist.
-  base::string16 matchString = base::SysNSStringToUTF16(title);
-  std::vector<bookmarks::TitledUrlMatch> matches;
-  bookmarkModel->GetBookmarksMatching(matchString, 50, &matches);
-  const size_t count = matches.size();
-  GREYAssertEqual(expectedCount, count, @"Unexpected number of bookmarks");
+  GREYAssertEqual(expectedCount,
+                  [SigninEarlGreyUtilsAppInterface bookmarkCount:title],
+                  @"Unexpected number of bookmarks");
 }
 
 @end

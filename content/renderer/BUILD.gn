@@ -49,10 +49,6 @@ target(link_target_type, "renderer") {
     "android/synchronous_layer_tree_frame_sink.h",
     "browser_exposed_renderer_interfaces.cc",
     "browser_exposed_renderer_interfaces.h",
-    "browser_plugin/browser_plugin.cc",
-    "browser_plugin/browser_plugin.h",
-    "browser_plugin/browser_plugin_manager.cc",
-    "browser_plugin/browser_plugin_manager.h",
     "categorized_worker_pool.cc",
     "categorized_worker_pool.h",
     "child_frame_compositing_helper.cc",
@@ -193,6 +189,8 @@ target(link_target_type, "renderer") {
     "media/media_factory.h",
     "media/media_permission_dispatcher.cc",
     "media/media_permission_dispatcher.h",
+    "media/power_status_helper_impl.cc",
+    "media/power_status_helper_impl.h",
     "media/render_media_client.cc",
     "media/render_media_client.h",
     "media/render_media_event_handler.cc",
@@ -383,7 +381,6 @@ target(link_target_type, "renderer") {
     "//services/audio/public/mojom",
     "//services/device/public/cpp/generic_sensor",
     "//services/device/public/mojom",
-    "//services/device/public/mojom:constants",
     "//services/device/public/mojom:usb",
     "//services/image_annotation/public/cpp:cpp",
     "//services/image_annotation/public/mojom:mojom",
@@ -474,11 +471,16 @@ target(link_target_type, "renderer") {
 
   if (is_fuchsia) {
     sources += [
+      "media/fuchsia_renderer_factory.cc",
+      "media/fuchsia_renderer_factory.h",
       "render_view_fuchsia.cc",
       "renderer_main_platform_delegate_fuchsia.cc",
     ]
 
-    deps += [ "//media/fuchsia/cdm/client" ]
+    deps += [
+      "//media/fuchsia/audio",
+      "//media/fuchsia/cdm/client",
+    ]
   }
 
   if (enable_media_remoting) {
@@ -662,10 +664,6 @@ target(link_target_type, "renderer") {
 
   if (enable_ipc_fuzzer) {
     configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
-  }
-
-  if (is_chromecast) {
-    defines += [ "IS_CHROMECAST" ]
   }
 }
 

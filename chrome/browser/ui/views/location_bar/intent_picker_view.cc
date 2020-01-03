@@ -30,21 +30,25 @@ namespace content {
 class WebContents;
 }
 
-IntentPickerView::IntentPickerView(Browser* browser,
-                                   PageActionIconView::Delegate* delegate)
-    : PageActionIconView(nullptr, 0, delegate), browser_(browser) {}
+IntentPickerView::IntentPickerView(
+    Browser* browser,
+    IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+    PageActionIconView::Delegate* page_action_icon_delegate)
+    : PageActionIconView(nullptr,
+                         0,
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate),
+      browser_(browser) {}
 
 IntentPickerView::~IntentPickerView() = default;
 
-bool IntentPickerView::Update() {
+void IntentPickerView::UpdateImpl() {
   bool was_visible = GetVisible();
 
   SetVisible(ShouldShowIcon());
 
   if (was_visible && !GetVisible())
     IntentPickerBubbleView::CloseCurrentBubble();
-
-  return was_visible != GetVisible();
 }
 
 void IntentPickerView::OnExecuting(
@@ -102,4 +106,8 @@ const gfx::VectorIcon& IntentPickerView::GetVectorIcon() const {
 
 base::string16 IntentPickerView::GetTextForTooltipAndAccessibleName() const {
   return l10n_util::GetStringUTF16(IDS_TOOLTIP_INTENT_PICKER_ICON);
+}
+
+const char* IntentPickerView::GetClassName() const {
+  return "IntentPickerView";
 }

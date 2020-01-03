@@ -10,6 +10,7 @@
 #include "base/deferred_sequenced_task_runner.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/no_destructor.h"
+#include "base/run_loop.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -245,8 +246,8 @@ void BrowserTaskExecutor::ResetForTesting() {
 // static
 void BrowserTaskExecutor::PostFeatureListSetup() {
   DCHECK(g_browser_task_executor);
-  DCHECK(g_browser_task_executor->ui_thread_executor_);
-  DCHECK(g_browser_task_executor->io_thread_executor_);
+  DCHECK(g_browser_task_executor->browser_ui_thread_handle_);
+  DCHECK(g_browser_task_executor->browser_io_thread_handle_);
   g_browser_task_executor->browser_ui_thread_handle_
       ->PostFeatureListInitializationSetup();
   g_browser_task_executor->browser_io_thread_handle_
@@ -284,12 +285,6 @@ void BrowserTaskExecutor::RunAllPendingTasksOnThreadForTesting(
           ->ScheduleRunAllPendingTasksForTesting(run_loop.QuitClosure());
       break;
     case BrowserThread::IO: {
-      // In tests there may not be a functional IO thread.
-      if (!g_browser_task_executor->io_thread_executor_ ||
-          !g_browser_task_executor->io_thread_executor_
-               ->HasDelegateForTesting()) {
-        return;
-      }
       g_browser_task_executor->browser_io_thread_handle_
           ->ScheduleRunAllPendingTasksForTesting(run_loop.QuitClosure());
       break;

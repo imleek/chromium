@@ -7,10 +7,10 @@
 #include "base/stl_util.h"
 #include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
-#include "third_party/blink/public/platform/web_pointer_event.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "third_party/blink/public/common/input/web_pointer_event.h"
 #include "ui/events/gesture_event_details.h"
 
 namespace ui {
@@ -270,9 +270,6 @@ TEST(BlinkEventUtilTest, WebMouseWheelEventCoalescing) {
   EXPECT_EQ(blink::WebMouseWheelEvent::kPhaseBegan, coalesced_event.phase);
   EXPECT_EQ(7, coalesced_event.delta_x);
   EXPECT_EQ(9, coalesced_event.delta_y);
-
-  event_to_be_coalesced.resending_plugin_id = 3;
-  EXPECT_FALSE(CanCoalesce(event_to_be_coalesced, coalesced_event));
 }
 
 TEST(BlinkEventUtilTest, WebGestureEventCoalescing) {
@@ -294,9 +291,6 @@ TEST(BlinkEventUtilTest, WebGestureEventCoalescing) {
   Coalesce(event_to_be_coalesced, &coalesced_event);
   EXPECT_EQ(4, coalesced_event.data.scroll_update.delta_x);
   EXPECT_EQ(5, coalesced_event.data.scroll_update.delta_y);
-
-  event_to_be_coalesced.resending_plugin_id = 3;
-  EXPECT_FALSE(CanCoalesce(event_to_be_coalesced, coalesced_event));
 }
 
 TEST(BlinkEventUtilTest, GesturePinchUpdateCoalescing) {

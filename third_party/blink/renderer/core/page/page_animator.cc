@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/validation_message_client.h"
@@ -46,7 +47,7 @@ void PageAnimator::ServiceScriptedAnimations(
   for (auto& document : documents) {
     ScopedFrameBlamer frame_blamer(document->GetFrame());
     TRACE_EVENT0("blink,rail", "PageAnimator::serviceScriptedAnimations");
-    DocumentAnimations::UpdateAnimationTimingForAnimationFrame(*document);
+    document->GetDocumentAnimations().UpdateAnimationTimingForAnimationFrame();
     if (document->View()) {
       if (document->View()->ShouldThrottleRendering()) {
         document->SetCurrentFrameIsThrottled(true);
@@ -138,6 +139,7 @@ void PageAnimator::UpdateAllLifecyclePhases(
   base::AutoReset<bool> servicing(&updating_layout_and_style_for_painting_,
                                   true);
   view->UpdateAllLifecyclePhases(reason);
+  UpdateHitTestOcclusionData(root_frame);
 }
 
 void PageAnimator::UpdateAllLifecyclePhasesExceptPaint(LocalFrame& root_frame) {
@@ -152,6 +154,15 @@ void PageAnimator::UpdateLifecycleToLayoutClean(LocalFrame& root_frame) {
   base::AutoReset<bool> servicing(&updating_layout_and_style_for_painting_,
                                   true);
   view->UpdateLifecycleToLayoutClean();
+}
+
+void PageAnimator::UpdateHitTestOcclusionData(LocalFrame& root_frame) {
+  for (Frame* frame = &root_frame; frame;
+       frame = frame->Tree().TraverseNext()) {
+    if (!frame->IsRemoteFrame())
+      continue;
+    To<RemoteFrame>(frame)->UpdateHitTestOcclusionData();
+  }
 }
 
 }  // namespace blink

@@ -53,6 +53,7 @@ using metrics_util::GaiaPasswordHashChange;
 #endif
 
 class AffiliatedMatchHelper;
+class CompromisedCredentialsObserver;
 class PasswordStoreConsumer;
 class PasswordLeakHistoryConsumer;
 class PasswordStoreSigninNotifier;
@@ -319,8 +320,11 @@ class PasswordStore : protected PasswordStoreSync,
   // Saves |username| and a hash of |password| for GAIA password reuse checking.
   // |event| is used for metric logging and for distinguishing sync password
   // hash change event and other non-sync GAIA password change event.
+  // |is_primary_account| is whether account belong to the password is a
+  // primary account.
   virtual void SaveGaiaPasswordHash(const std::string& username,
                                     const base::string16& password,
+                                    bool is_primary_account,
                                     GaiaPasswordHashChange event);
 
   // Saves |username| and a hash of |password| for enterprise password reuse
@@ -356,7 +360,9 @@ class PasswordStore : protected PasswordStoreSync,
       std::unique_ptr<PasswordStoreSigninNotifier> notifier);
 
   // Schedules the update of password hashes used by reuse detector.
-  void SchedulePasswordHashUpdate(bool should_log_metrics);
+  // |does_primary_account_exists| is only used if |should_log_metrics| is true.
+  void SchedulePasswordHashUpdate(bool should_log_metrics,
+                                  bool does_primary_account_exists);
 
   // Schedules the update of enterprise login and change password URLs.
   // These URLs are used in enterprise password reuse detection.
@@ -514,9 +520,11 @@ class PasswordStore : protected PasswordStoreSync,
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   // Saves |username| and a hash of |password| for password reuse checking.
   // |is_gaia_password| indicates if it is a Gaia account. |event| is used for
-  // metric logging.
+  // metric logging. |is_primary_account| is whether account belong to the
+  // password is a primary account.
   void SaveProtectedPasswordHash(const std::string& username,
                                  const base::string16& password,
+                                 bool is_primary_account,
                                  bool is_gaia_password,
                                  GaiaPasswordHashChange event);
 
@@ -527,10 +535,12 @@ class PasswordStore : protected PasswordStoreSync,
 
   // Synchronous implementation of SaveProtectedPasswordHash().
   // |should_log_metrics| indicates whether to log the counts of captured
-  // password hashes.
+  // password hashes. |does_primary_account_exists| is used to differentiate
+  // between the metrics.
   void SaveProtectedPasswordHashImpl(
       PasswordHashDataList protected_password_data_list,
-      bool should_log_metrics);
+      bool should_log_metrics,
+      bool does_primary_account_exists);
 
   // Propagates enterprise login urls and change password url to
   // |reuse_detector_|.
@@ -591,7 +601,9 @@ class PasswordStore : protected PasswordStoreSync,
   // Schedules the given |task| to be run on the PasswordStore's TaskRunner.
   // Invokes |consumer|->OnGetPasswordStoreResults() on the caller's thread with
   // the result, after it was post-processed by |processor|.
+  // |trace_name| is the trace to be closed before calling the consumer.
   void PostLoginsTaskAndReplyToConsumerWithProcessedResult(
+      const char* trace_name,
       PasswordStoreConsumer* consumer,
       LoginsTask task,
       LoginsResultProcessor processor);
@@ -754,6 +766,9 @@ class PasswordStore : protected PasswordStoreSync,
   base::RepeatingClosure sync_enabled_or_disabled_cb_;
 
   std::unique_ptr<AffiliatedMatchHelper> affiliated_match_helper_;
+
+  std::unique_ptr<CompromisedCredentialsObserver>
+      compromised_credentials_observer_;
 
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   PrefService* prefs_ = nullptr;

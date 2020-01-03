@@ -25,7 +25,6 @@ import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.device.DeviceClassManager;
-import org.chromium.chrome.browser.firstrun.FirstRunUtils;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvider;
@@ -43,18 +42,16 @@ import java.util.Map;
  * startup before native is initialized but are set via native code. The caching is done in
  * {@link android.content.SharedPreferences}, which is available in Java immediately.
  *
- * When adding a new cached flag, it is common practice to use a static Boolean in this file to
- * track whether the feature is enabled. A static method that returns the static Boolean can
- * then be added to this file allowing client code to query whether the feature is enabled. The
- * first time the method is called, the static Boolean should be set to the corresponding shared
- * preference. After native is initialized, the shared preference will be updated to reflect the
- * native flag value (e.g. the actual experimental feature flag value).
- *
- * When using a cached flag, the static Boolean should be the source of truth for whether the
- * feature is turned on for the current session. As such, always rely on the static Boolean
- * when determining whether the corresponding experimental behavior should be enabled. When
- * querying whether a cached feature is enabled from native, an @CalledByNative method can be
- * exposed in this file to allow feature_utilities.cc to retrieve the cached value.
+ * To cache the flag {@link ChromeFeatureList}.FOO:
+ * - Call {@link FeatureUtilities#cacheFlag(String, String)} in {@link
+ *   FeatureUtilities#cacheNativeFlags()} passing
+ *   {@link ChromePreferenceKeys#FLAGS_CACHED}.createKey(FOO) and FOO.
+ * - To query whether the cached flag is enabled in client code, call
+ *   {@link FeatureUtilities#isFlagEnabled(String, boolean)} passing
+ *   {@link ChromePreferenceKeys#FLAGS_CACHED}.createKey(FOO).
+ *   Consider this the source of truth for whether the flag is turned on in the current session.
+ * - When querying whether a cached feature is enabled from native, a @CalledByNative method can be
+ *   exposed in this file to allow feature_utilities.cc to retrieve the cached value.
  *
  * For cached flags that are queried before native is initialized, when a new experiment
  * configuration is received the metrics reporting system will record metrics as if the
@@ -63,125 +60,6 @@ import java.util.Map;
  * value in shared preferences.
  */
 public class FeatureUtilities {
-    /**
-     * Key for whether DownloadResumptionBackgroundTask should load native in service manager only
-     * mode.
-     * Default value is false.
-     */
-    private static final String SERVICE_MANAGER_FOR_DOWNLOAD_RESUMPTION_KEY =
-            "service_manager_for_download_resumption";
-
-    /**
-     * Key for whether PrefetchBackgroundTask should load native in service manager only mode.
-     * Default value is false.
-     */
-    private static final String SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH_KEY =
-            "service_manager_for_background_prefetch";
-
-    private static final String INTEREST_FEED_CONTENT_SUGGESTIONS_KEY =
-            "interest_feed_content_suggestions";
-
-    /**
-     * Whether or not the download auto-resumption is enabled in native.
-     * Default value is true.
-     */
-    private static final String DOWNLOAD_AUTO_RESUMPTION_IN_NATIVE_KEY =
-            "download_auto_resumption_in_native";
-
-    /**
-     * Whether or not the bottom toolbar is enabled.
-     * Default value is false.
-     */
-    private static final String BOTTOM_TOOLBAR_ENABLED_KEY = "bottom_toolbar_enabled";
-
-    /**
-     * Whether or not the adaptive toolbar is enabled.
-     * Default value is true.
-     */
-    private static final String ADAPTIVE_TOOLBAR_ENABLED_KEY = "adaptive_toolbar_enabled";
-
-    /**
-     * Whether or not the labeled bottom toolbar is enabled.
-     * Default value is false.
-     */
-    private static final String LABELED_BOTTOM_TOOLBAR_ENABLED_KEY =
-            "labeled_bottom_toolbar_enabled";
-
-    /**
-     * Whether or not night mode is available.
-     * Default value is false.
-     */
-    private static final String NIGHT_MODE_AVAILABLE_KEY = "night_mode_available";
-
-    /**
-     * Whether or not night mode should set "light" as the default option.
-     * Default value is false.
-     */
-    private static final String NIGHT_MODE_DEFAULT_TO_LIGHT = "night_mode_default_to_light";
-
-    /**
-     * Whether or not night mode is available for custom tabs.
-     * Default value is false.
-     */
-    private static final String NIGHT_MODE_CCT_AVAILABLE_KEY = "night_mode_cct_available";
-
-    /**
-     * Whether or not command line on non-rooted devices is enabled.
-     * Default value is false.
-     */
-    private static final String COMMAND_LINE_ON_NON_ROOTED_ENABLED_KEY =
-            "command_line_on_non_rooted_enabled";
-
-    /**
-     * Whether or not the start surface is enabled.
-     * Default value is false.
-     */
-    private static final String START_SURFACE_ENABLED_KEY = "start_surface_enabled";
-
-    /**
-     * Whether or not the grid tab switcher is enabled.
-     * Default value is false.
-     */
-    private static final String GRID_TAB_SWITCHER_ENABLED_KEY = "grid_tab_switcher_enabled";
-
-    /**
-     * Whether or not the tab group is enabled.
-     * Default value is false.
-     */
-    private static final String TAB_GROUPS_ANDROID_ENABLED_KEY = "tab_group_android_enabled";
-
-    /**
-     * Whether or not bootstrap tasks should be prioritized (i.e. bootstrap task prioritization
-     * experiment is enabled). Default value is true.
-     */
-    private static final String PRIORITIZE_BOOTSTRAP_TASKS_KEY = "prioritize_bootstrap_tasks";
-
-    /**
-     * Whether warming up network service is enabled.
-     * Default value is false.
-     */
-    private static final String NETWORK_SERVICE_WARM_UP_ENABLED_KEY =
-            "network_service_warm_up_enabled";
-
-    /**
-     * Key to cache whether immersive ui mode is enabled.
-     */
-    private static final String IMMERSIVE_UI_MODE_ENABLED = "immersive_ui_mode_enabled";
-
-    /**
-     * Key to cache whether
-     * {@link ChromeFeatureList#SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT} is enabled.
-     */
-    private static final String SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT =
-            "swap_pixel_format_to_fix_convert_from_translucent";
-
-    /**
-     * Whether or not we should directly open the dialer when a click to call notification is
-     * received. Default value is false.
-     */
-    private static final String CLICK_TO_CALL_OPEN_DIALER_DIRECTLY_KEY =
-            "click_to_call_open_dialer_directly";
-
     private static Map<String, Boolean> sFlags = new HashMap<>();
     private static Boolean sHasRecognitionIntentHandler;
     private static String sReachedCodeProfilerTrialGroup;
@@ -222,11 +100,18 @@ public class FeatureUtilities {
     }
 
     /**
+     * Records the type of the currently visible Activity for metrics.
+     * @param activityType The type of the Activity.
+     */
+    public static void setActivityType(@ActivityType int activityType) {
+        FeatureUtilitiesJni.get().setActivityType(activityType);
+    }
+
+    /**
      * Caches flags that must take effect on startup but are set via native code.
      */
     public static void cacheNativeFlags() {
         cacheCommandLineOnNonRootedEnabled();
-        FirstRunUtils.cacheFirstRunPrefs();
         cacheBottomToolbarEnabled();
         cacheAdaptiveToolbarEnabled();
         cacheLabeledBottomToolbarEnabled();
@@ -241,10 +126,8 @@ public class FeatureUtilities {
         cacheSwapPixelFormatToFixConvertFromTranslucentEnabled();
         cacheReachedCodeProfilerTrialGroup();
         cacheStartSurfaceEnabled();
-        cacheClickToCallOpenDialerDirectlyEnabled();
-
-        if (isHighEndPhone()) cacheGridTabSwitcherEnabled();
-        if (isHighEndPhone()) cacheTabGroupsAndroidEnabled();
+        cacheNativeTabSwitcherUiFlags();
+        cacheHomepageLocationPolicyEnabled();
 
         // Propagate REACHED_CODE_PROFILER feature value to LibraryLoader. This can't be done in
         // LibraryLoader itself because it lives in //base and can't depend on ChromeFeatureList.
@@ -275,7 +158,7 @@ public class FeatureUtilities {
     }
 
     private static void cacheServiceManagerForDownloadResumption() {
-        cacheFlag(SERVICE_MANAGER_FOR_DOWNLOAD_RESUMPTION_KEY,
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED_SERVICE_MANAGER_FOR_DOWNLOAD_RESUMPTION,
                 ChromeFeatureList.SERVICE_MANAGER_FOR_DOWNLOAD);
     }
 
@@ -283,11 +166,12 @@ public class FeatureUtilities {
      * @return if DownloadResumptionBackgroundTask should load native in service manager only mode.
      */
     public static boolean isServiceManagerForDownloadResumptionEnabled() {
-        return isFlagEnabled(SERVICE_MANAGER_FOR_DOWNLOAD_RESUMPTION_KEY, false);
+        return isFlagEnabled(
+                ChromePreferenceKeys.FLAGS_CACHED_SERVICE_MANAGER_FOR_DOWNLOAD_RESUMPTION, false);
     }
 
     public static void cacheServiceManagerForBackgroundPrefetch() {
-        cacheFlag(SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH_KEY,
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED_SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH,
                 ChromeFeatureList.SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH);
     }
 
@@ -295,7 +179,10 @@ public class FeatureUtilities {
      * @return if PrefetchBackgroundTask should load native in service manager only mode.
      */
     public static boolean isServiceManagerForBackgroundPrefetchEnabled() {
-        return isFlagEnabled(SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH_KEY, false) && isFeedEnabled();
+        return isFlagEnabled(
+                       ChromePreferenceKeys.FLAGS_CACHED_SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH,
+                       false)
+                && isFeedEnabled();
     }
 
     /**
@@ -303,7 +190,7 @@ public class FeatureUtilities {
      * native is loaded.
      */
     public static void cacheFeedEnabled() {
-        cacheFlag(INTEREST_FEED_CONTENT_SUGGESTIONS_KEY,
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED_INTEREST_FEED_CONTENT_SUGGESTIONS,
                 ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS);
     }
 
@@ -311,7 +198,8 @@ public class FeatureUtilities {
      * @return Whether or not the Feed is enabled (based on the cached value in SharedPrefs).
      */
     public static boolean isFeedEnabled() {
-        return isFlagEnabled(INTEREST_FEED_CONTENT_SUGGESTIONS_KEY, false);
+        return isFlagEnabled(
+                ChromePreferenceKeys.FLAGS_CACHED_INTEREST_FEED_CONTENT_SUGGESTIONS, false);
     }
 
     /**
@@ -319,7 +207,8 @@ public class FeatureUtilities {
      */
     @CalledByNative
     public static boolean isDownloadAutoResumptionEnabledInNative() {
-        return isFlagEnabled(DOWNLOAD_AUTO_RESUMPTION_IN_NATIVE_KEY, true);
+        return isFlagEnabled(
+                ChromePreferenceKeys.FLAGS_CACHED_DOWNLOAD_AUTO_RESUMPTION_IN_NATIVE, true);
     }
 
     /**
@@ -327,7 +216,8 @@ public class FeatureUtilities {
      * be made available immediately.
      */
     public static void cacheBottomToolbarEnabled() {
-        cacheFlag(BOTTOM_TOOLBAR_ENABLED_KEY, ChromeFeatureList.CHROME_DUET);
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED_BOTTOM_TOOLBAR_ENABLED,
+                ChromeFeatureList.CHROME_DUET);
     }
 
     /**
@@ -335,7 +225,8 @@ public class FeatureUtilities {
      * be made available immediately.
      */
     public static void cacheAdaptiveToolbarEnabled() {
-        cacheFlag(ADAPTIVE_TOOLBAR_ENABLED_KEY, ChromeFeatureList.CHROME_DUET_ADAPTIVE);
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED_ADAPTIVE_TOOLBAR_ENABLED,
+                ChromeFeatureList.CHROME_DUET_ADAPTIVE);
     }
 
     /**
@@ -343,7 +234,8 @@ public class FeatureUtilities {
      * be made available immediately.
      */
     public static void cacheLabeledBottomToolbarEnabled() {
-        cacheFlag(LABELED_BOTTOM_TOOLBAR_ENABLED_KEY, ChromeFeatureList.CHROME_DUET_LABELED);
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED_LABELED_BOTTOM_TOOLBAR_ENABLED,
+                ChromeFeatureList.CHROME_DUET_LABELED);
     }
 
     /**
@@ -351,13 +243,13 @@ public class FeatureUtilities {
      * value can be made available immediately.
      */
     private static void cacheDownloadAutoResumptionEnabledInNative() {
-        cacheFlag(DOWNLOAD_AUTO_RESUMPTION_IN_NATIVE_KEY,
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED_DOWNLOAD_AUTO_RESUMPTION_IN_NATIVE,
                 ChromeFeatureList.DOWNLOADS_AUTO_RESUMPTION_NATIVE);
     }
 
     @VisibleForTesting
     public static void setDownloadAutoResumptionEnabledInNativeForTesting(Boolean value) {
-        sFlags.put(DOWNLOAD_AUTO_RESUMPTION_IN_NATIVE_KEY, value);
+        sFlags.put(ChromePreferenceKeys.FLAGS_CACHED_DOWNLOAD_AUTO_RESUMPTION_IN_NATIVE, value);
     }
 
     /**
@@ -365,10 +257,10 @@ public class FeatureUtilities {
      */
     public static boolean isBottomToolbarEnabled() {
         // TODO(crbug.com/944228): TabGroupsAndroid and ChromeDuet are incompatible for now.
-        return isFlagEnabled(BOTTOM_TOOLBAR_ENABLED_KEY, false)
+        return isFlagEnabled(ChromePreferenceKeys.FLAGS_CACHED_BOTTOM_TOOLBAR_ENABLED, false)
                 && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(
                         ContextUtils.getApplicationContext())
-                && !isTabGroupsAndroidEnabled();
+                && (isDuetTabStripIntegrationAndroidEnabled() || !isTabGroupsAndroidEnabled());
     }
 
     /**
@@ -376,22 +268,24 @@ public class FeatureUtilities {
      */
     @VisibleForTesting
     public static void setIsBottomToolbarEnabledForTesting(Boolean enabled) {
-        sFlags.put(BOTTOM_TOOLBAR_ENABLED_KEY, enabled);
+        sFlags.put(ChromePreferenceKeys.FLAGS_CACHED_BOTTOM_TOOLBAR_ENABLED, enabled);
     }
 
     /**
      * @return Whether or not the adaptive toolbar is enabled.
      */
     public static boolean isAdaptiveToolbarEnabled() {
-        return isFlagEnabled(ADAPTIVE_TOOLBAR_ENABLED_KEY, true) && isBottomToolbarEnabled()
-                && !isGridTabSwitcherEnabled();
+        return isFlagEnabled(ChromePreferenceKeys.FLAGS_CACHED_ADAPTIVE_TOOLBAR_ENABLED, true)
+                && isBottomToolbarEnabled();
     }
 
     /**
      * @return Whether or not the labeled bottom toolbar is enabled.
      */
     public static boolean isLabeledBottomToolbarEnabled() {
-        return isFlagEnabled(LABELED_BOTTOM_TOOLBAR_ENABLED_KEY, false) && isBottomToolbarEnabled();
+        return isFlagEnabled(
+                       ChromePreferenceKeys.FLAGS_CACHED_LABELED_BOTTOM_TOOLBAR_ENABLED, false)
+                && isBottomToolbarEnabled();
     }
 
     /**
@@ -402,7 +296,8 @@ public class FeatureUtilities {
         boolean available = ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_NIGHT_MODE)
                 || (BuildInfo.isAtLeastQ()
                         && ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_NIGHT_MODE_FOR_Q));
-        SharedPreferencesManager.getInstance().writeBoolean(NIGHT_MODE_AVAILABLE_KEY, available);
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.FLAGS_CACHED_NIGHT_MODE_AVAILABLE, available);
     }
 
     /**
@@ -410,7 +305,7 @@ public class FeatureUtilities {
      *         enabled).
      */
     public static boolean isNightModeAvailable() {
-        return isFlagEnabled(NIGHT_MODE_AVAILABLE_KEY, true);
+        return isFlagEnabled(ChromePreferenceKeys.FLAGS_CACHED_NIGHT_MODE_AVAILABLE, true);
     }
 
     /**
@@ -419,7 +314,7 @@ public class FeatureUtilities {
      */
     @VisibleForTesting
     public static void setNightModeAvailableForTesting(@Nullable Boolean available) {
-        sFlags.put(NIGHT_MODE_AVAILABLE_KEY, available);
+        sFlags.put(ChromePreferenceKeys.FLAGS_CACHED_NIGHT_MODE_AVAILABLE, available);
     }
 
     /**
@@ -438,7 +333,7 @@ public class FeatureUtilities {
                 ChromeFeatureList.ANDROID_NIGHT_MODE, lightModeDefaultParam, true);
 
         SharedPreferencesManager.getInstance().writeBoolean(
-                NIGHT_MODE_DEFAULT_TO_LIGHT, lightModeAsDefault);
+                ChromePreferenceKeys.FLAGS_CACHED_NIGHT_MODE_DEFAULT_TO_LIGHT, lightModeAsDefault);
     }
 
     /**
@@ -448,7 +343,7 @@ public class FeatureUtilities {
         if (BuildInfo.isAtLeastQ()) {
             return false;
         }
-        return isFlagEnabled(NIGHT_MODE_DEFAULT_TO_LIGHT, true);
+        return isFlagEnabled(ChromePreferenceKeys.FLAGS_CACHED_NIGHT_MODE_DEFAULT_TO_LIGHT, true);
     }
 
     /**
@@ -457,7 +352,7 @@ public class FeatureUtilities {
      */
     @VisibleForTesting
     public static void setNightModeDefaultToLightForTesting(@Nullable Boolean available) {
-        sFlags.put(NIGHT_MODE_DEFAULT_TO_LIGHT, available);
+        sFlags.put(ChromePreferenceKeys.FLAGS_CACHED_NIGHT_MODE_DEFAULT_TO_LIGHT, available);
     }
 
     /**
@@ -465,7 +360,8 @@ public class FeatureUtilities {
      * enabled), so the value is immediately available on next start-up.
      */
     public static void cacheNightModeForCustomTabsAvailable() {
-        cacheFlag(NIGHT_MODE_CCT_AVAILABLE_KEY, ChromeFeatureList.ANDROID_NIGHT_MODE_CCT);
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED_NIGHT_MODE_CCT_AVAILABLE,
+                ChromeFeatureList.ANDROID_NIGHT_MODE_CCT);
     }
 
     /**
@@ -473,7 +369,7 @@ public class FeatureUtilities {
      *         enabled) for custom tabs.
      */
     public static boolean isNightModeForCustomTabsAvailable() {
-        return isFlagEnabled(NIGHT_MODE_CCT_AVAILABLE_KEY, true);
+        return isFlagEnabled(ChromePreferenceKeys.FLAGS_CACHED_NIGHT_MODE_CCT_AVAILABLE, true);
     }
 
     /**
@@ -481,19 +377,20 @@ public class FeatureUtilities {
      * testing. Should be reset back to NULL after the test has finished.
      */
     public static void setNightModeForCustomTabsAvailableForTesting(Boolean available) {
-        sFlags.put(NIGHT_MODE_CCT_AVAILABLE_KEY, available);
+        sFlags.put(ChromePreferenceKeys.FLAGS_CACHED_NIGHT_MODE_CCT_AVAILABLE, available);
     }
 
     /**
      * Cache whether or not command line is enabled on non-rooted devices.
      */
     private static void cacheCommandLineOnNonRootedEnabled() {
-        cacheFlag(COMMAND_LINE_ON_NON_ROOTED_ENABLED_KEY,
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED_COMMAND_LINE_ON_NON_ROOTED_ENABLED,
                 ChromeFeatureList.COMMAND_LINE_ON_NON_ROOTED);
     }
 
     public static boolean isCommandLineOnNonRootedEnabled() {
-        return isFlagEnabled(COMMAND_LINE_ON_NON_ROOTED_ENABLED_KEY, false);
+        return isFlagEnabled(
+                ChromePreferenceKeys.FLAGS_CACHED_COMMAND_LINE_ON_NON_ROOTED_ENABLED, false);
     }
 
     /**
@@ -504,21 +401,53 @@ public class FeatureUtilities {
     }
 
     private static void cacheStartSurfaceEnabled() {
-        cacheFlag(START_SURFACE_ENABLED_KEY, ChromeFeatureList.START_SURFACE_ANDROID);
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED_START_SURFACE_ENABLED,
+                ChromeFeatureList.START_SURFACE_ANDROID);
+        String feature = ChromeFeatureList.getFieldTrialParamByFeature(
+                ChromeFeatureList.START_SURFACE_ANDROID, "start_surface_variation");
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.START_SURFACE_SINGLE_PANE_ENABLED_KEY,
+                feature.equals("single"));
     }
 
     /**
      * @return Whether the Start Surface is enabled.
      */
     public static boolean isStartSurfaceEnabled() {
-        return isFlagEnabled(START_SURFACE_ENABLED_KEY, false);
+        return isFlagEnabled(ChromePreferenceKeys.FLAGS_CACHED_START_SURFACE_ENABLED, false);
     }
 
-    private static void cacheGridTabSwitcherEnabled() {
-        SharedPreferencesManager.getInstance().writeBoolean(GRID_TAB_SWITCHER_ENABLED_KEY,
-                !DeviceClassManager.enableAccessibilityLayout()
-                        && ChromeFeatureList.isEnabled(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID)
-                        && TabManagementModuleProvider.getDelegate() != null);
+    @VisibleForTesting
+    static void cacheNativeTabSwitcherUiFlags() {
+        if (isEligibleForTabUiExperiments()) {
+            cacheGridTabSwitcherEnabled();
+            cacheTabGroupsAndroidEnabled();
+            cacheDuetTabStripIntegrationAndroidEnabled();
+        }
+    }
+
+    /**
+     * @return Whether the Start Surface SinglePane is enabled.
+     */
+    public static boolean isStartSurfaceSinglePaneEnabled() {
+        return isStartSurfaceEnabled()
+                && isFlagEnabled(ChromePreferenceKeys.START_SURFACE_SINGLE_PANE_ENABLED_KEY, false);
+    }
+
+    @VisibleForTesting
+    static void cacheGridTabSwitcherEnabled() {
+        SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
+        String featureKey = ChromePreferenceKeys.FLAGS_CACHED_GRID_TAB_SWITCHER_ENABLED;
+        boolean shouldQueryFeatureFlag = !DeviceClassManager.enableAccessibilityLayout();
+        if (!shouldQueryFeatureFlag) {
+            sharedPreferencesManager.writeBoolean(featureKey, false);
+            return;
+        }
+        boolean queriedFlagValue =
+                ChromeFeatureList.isEnabled(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID);
+        boolean gridTabSwitcherEnabled =
+                queriedFlagValue && TabManagementModuleProvider.isTabManagementModuleSupported();
+        sharedPreferencesManager.writeBoolean(featureKey, gridTabSwitcherEnabled);
     }
 
     /**
@@ -528,8 +457,9 @@ public class FeatureUtilities {
         // TODO(yusufo): AccessibilityLayout check should not be here and the flow should support
         // changing that setting while Chrome is alive.
         // Having Tab Groups or Start implies Grid Tab Switcher.
-        return isFlagEnabled(GRID_TAB_SWITCHER_ENABLED_KEY, false) || isTabGroupsAndroidEnabled()
-                || isStartSurfaceEnabled();
+        return !(isTabGroupsAndroidContinuationChromeFlagEnabled() && SysUtils.isLowEndDevice())
+                && isFlagEnabled(ChromePreferenceKeys.FLAGS_CACHED_GRID_TAB_SWITCHER_ENABLED, false)
+                || isTabGroupsAndroidEnabled() || isStartSurfaceEnabled();
     }
 
     /**
@@ -538,21 +468,46 @@ public class FeatureUtilities {
      */
     @VisibleForTesting
     public static void setGridTabSwitcherEnabledForTesting(@Nullable Boolean enabled) {
-        sFlags.put(GRID_TAB_SWITCHER_ENABLED_KEY, enabled);
+        sFlags.put(ChromePreferenceKeys.FLAGS_CACHED_GRID_TAB_SWITCHER_ENABLED, enabled);
     }
 
-    private static void cacheTabGroupsAndroidEnabled() {
-        SharedPreferencesManager.getInstance().writeBoolean(TAB_GROUPS_ANDROID_ENABLED_KEY,
-                !DeviceClassManager.enableAccessibilityLayout()
-                        && ChromeFeatureList.isEnabled(ChromeFeatureList.TAB_GROUPS_ANDROID)
-                        && TabManagementModuleProvider.getDelegate() != null && isHighEndPhone());
+    @VisibleForTesting
+    static void cacheTabGroupsAndroidEnabled() {
+        SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
+        String featureKey = ChromePreferenceKeys.FLAGS_CACHED_TAB_GROUPS_ANDROID_ENABLED;
+        boolean shouldQueryFeatureFlag = !DeviceClassManager.enableAccessibilityLayout();
+        if (!shouldQueryFeatureFlag) {
+            sharedPreferencesManager.writeBoolean(featureKey, false);
+            return;
+        }
+        boolean queriedFlagValue =
+                ChromeFeatureList.isEnabled(ChromeFeatureList.TAB_GROUPS_ANDROID);
+        boolean tabGroupsEnabled =
+                queriedFlagValue && TabManagementModuleProvider.isTabManagementModuleSupported();
+        sharedPreferencesManager.writeBoolean(featureKey, tabGroupsEnabled);
+    }
+
+    private static void cacheDuetTabStripIntegrationAndroidEnabled() {
+        SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
+        String featureKey =
+                ChromePreferenceKeys.FLAGS_CACHED_DUET_TABSTRIP_INTEGRATION_ANDROID_ENABLED;
+        boolean shouldQueryFeatureFlag = !DeviceClassManager.enableAccessibilityLayout();
+        if (!shouldQueryFeatureFlag) {
+            sharedPreferencesManager.writeBoolean(featureKey, false);
+            return;
+        }
+        boolean queriedFlagValue =
+                ChromeFeatureList.isEnabled(ChromeFeatureList.DUET_TABSTRIP_INTEGRATION_ANDROID);
+        boolean duetTabStripIntegrationEnabled =
+                queriedFlagValue && TabManagementModuleProvider.isTabManagementModuleSupported();
+        sharedPreferencesManager.writeBoolean(featureKey, duetTabStripIntegrationEnabled);
     }
 
     /**
      * @return Whether the tab group feature is enabled and available for use.
      */
     public static boolean isTabGroupsAndroidEnabled() {
-        return isFlagEnabled(TAB_GROUPS_ANDROID_ENABLED_KEY, false);
+        return isFlagEnabled(ChromePreferenceKeys.FLAGS_CACHED_TAB_GROUPS_ANDROID_ENABLED, false);
     }
 
     /**
@@ -561,7 +516,7 @@ public class FeatureUtilities {
      */
     @VisibleForTesting
     public static void setTabGroupsAndroidEnabledForTesting(@Nullable Boolean available) {
-        sFlags.put(TAB_GROUPS_ANDROID_ENABLED_KEY, available);
+        sFlags.put(ChromePreferenceKeys.FLAGS_CACHED_TAB_GROUPS_ANDROID_ENABLED, available);
     }
 
     /**
@@ -570,11 +525,29 @@ public class FeatureUtilities {
      */
     @VisibleForTesting
     public static void setStartSurfaceEnabledForTesting(@Nullable Boolean isEnabled) {
-        sFlags.put(START_SURFACE_ENABLED_KEY, isEnabled);
+        sFlags.put(ChromePreferenceKeys.FLAGS_CACHED_START_SURFACE_ENABLED, isEnabled);
+    }
+
+    /**
+     * Toggles whether the Duet-TabStrip integration is enabled for testing. Should be reset back to
+     * null after the test has finished. Notice that TabGroup should also be turned on in order to
+     * really get the feature.
+     */
+    @VisibleForTesting
+    public static void setDuetTabStripIntegrationAndroidEnabledForTesting(
+            @Nullable Boolean isEnabled) {
+        sFlags.put(ChromePreferenceKeys.FLAGS_CACHED_DUET_TABSTRIP_INTEGRATION_ANDROID_ENABLED,
+                isEnabled);
     }
 
     private static boolean isHighEndPhone() {
         return !SysUtils.isLowEndDevice()
+                && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(
+                        ContextUtils.getApplicationContext());
+    }
+
+    private static boolean isEligibleForTabUiExperiments() {
+        return (isTabGroupsAndroidContinuationChromeFlagEnabled() || !SysUtils.isLowEndDevice())
                 && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(
                         ContextUtils.getApplicationContext());
     }
@@ -592,8 +565,24 @@ public class FeatureUtilities {
      * @return Whether the tab group continuation feature is enabled and available for use.
      */
     public static boolean isTabGroupsAndroidContinuationEnabled() {
+        return isTabGroupsAndroidEnabled() && isTabGroupsAndroidContinuationChromeFlagEnabled();
+    }
+
+    /**
+     * @return Whether the tab group continuation Chrome flag is enabled.
+     */
+    public static boolean isTabGroupsAndroidContinuationChromeFlagEnabled() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID);
+    }
+
+    /**
+     * @return Whether the tab strip and duet integration feature is enabled and available for use.
+     */
+    public static boolean isDuetTabStripIntegrationAndroidEnabled() {
         return isTabGroupsAndroidEnabled()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID);
+                && isFlagEnabled(
+                        ChromePreferenceKeys.FLAGS_CACHED_DUET_TABSTRIP_INTEGRATION_ANDROID_ENABLED,
+                        false);
     }
 
     /**
@@ -610,7 +599,8 @@ public class FeatureUtilities {
      * can be made available immediately.
      */
     public static void cachePrioritizeBootstrapTasks() {
-        cacheFlag(PRIORITIZE_BOOTSTRAP_TASKS_KEY, ChromeFeatureList.PRIORITIZE_BOOTSTRAP_TASKS);
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED_PRIORITIZE_BOOTSTRAP_TASKS,
+                ChromeFeatureList.PRIORITIZE_BOOTSTRAP_TASKS);
     }
 
     /**
@@ -618,7 +608,7 @@ public class FeatureUtilities {
      *         prioritization experiment is enabled).
      */
     public static boolean shouldPrioritizeBootstrapTasks() {
-        return isFlagEnabled(PRIORITIZE_BOOTSTRAP_TASKS_KEY, true);
+        return isFlagEnabled(ChromePreferenceKeys.FLAGS_CACHED_PRIORITIZE_BOOTSTRAP_TASKS, true);
     }
 
     /**
@@ -626,7 +616,8 @@ public class FeatureUtilities {
      * can be made available immediately on next start up.
      */
     private static void cacheNetworkServiceWarmUpEnabled() {
-        SharedPreferencesManager.getInstance().writeBoolean(NETWORK_SERVICE_WARM_UP_ENABLED_KEY,
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.FLAGS_CACHED_NETWORK_SERVICE_WARM_UP_ENABLED,
                 FeatureUtilitiesJni.get().isNetworkServiceWarmUpEnabled());
     }
 
@@ -634,18 +625,20 @@ public class FeatureUtilities {
      * @return whether warming up network service is enabled.
      */
     public static boolean isNetworkServiceWarmUpEnabled() {
-        return isFlagEnabled(NETWORK_SERVICE_WARM_UP_ENABLED_KEY, false);
+        return isFlagEnabled(
+                ChromePreferenceKeys.FLAGS_CACHED_NETWORK_SERVICE_WARM_UP_ENABLED, false);
     }
 
     private static void cacheImmersiveUiModeEnabled() {
-        cacheFlag(IMMERSIVE_UI_MODE_ENABLED, ChromeFeatureList.IMMERSIVE_UI_MODE);
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED_IMMERSIVE_UI_MODE_ENABLED,
+                ChromeFeatureList.IMMERSIVE_UI_MODE);
     }
 
     /**
      * @return Whether immersive ui mode is enabled.
      */
     public static boolean isImmersiveUiModeEnabled() {
-        return isFlagEnabled(IMMERSIVE_UI_MODE_ENABLED, false);
+        return isFlagEnabled(ChromePreferenceKeys.FLAGS_CACHED_IMMERSIVE_UI_MODE_ENABLED, false);
     }
 
     /**
@@ -654,38 +647,14 @@ public class FeatureUtilities {
      */
     public static boolean isSwapPixelFormatToFixConvertFromTranslucentEnabled() {
         return SharedPreferencesManager.getInstance().readBoolean(
-                SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT, true);
+                ChromePreferenceKeys.FLAGS_CACHED_SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT,
+                true);
     }
 
     public static void cacheSwapPixelFormatToFixConvertFromTranslucentEnabled() {
-        cacheFlag(SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT,
+        cacheFlag(
+                ChromePreferenceKeys.FLAGS_CACHED_SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT,
                 ChromeFeatureList.SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT);
-    }
-
-    /**
-     * Cache the value of the flag whether or not to directly open the dialer for click to call.
-     */
-    public static void cacheClickToCallOpenDialerDirectlyEnabled() {
-        cacheFlag(CLICK_TO_CALL_OPEN_DIALER_DIRECTLY_KEY,
-                ChromeFeatureList.CLICK_TO_CALL_OPEN_DIALER_DIRECTLY);
-    }
-
-    /**
-     * @return Whether or not we should directly open dialer for click to call (based on the cached
-     *         value in SharedPrefs).
-     */
-    public static boolean isClickToCallOpenDialerDirectlyEnabled() {
-        return isFlagEnabled(CLICK_TO_CALL_OPEN_DIALER_DIRECTLY_KEY, false);
-    }
-
-    /**
-     * Toggles whether experiment for opening dialer directly in click to call is enabled for
-     * testing. Should be reset back to null after the test has finished.
-     */
-    @VisibleForTesting
-    public static void setIsClickToCallOpenDialerDirectlyEnabledForTesting(
-            @Nullable Boolean isEnabled) {
-        sFlags.put(CLICK_TO_CALL_OPEN_DIALER_DIRECTLY_KEY, isEnabled);
     }
 
     /**
@@ -698,7 +667,7 @@ public class FeatureUtilities {
         }
 
         SharedPreferencesManager.getInstance().writeString(
-                ChromePreferenceKeys.REACHED_CODE_PROFILER_GROUP_KEY,
+                ChromePreferenceKeys.REACHED_CODE_PROFILER_GROUP,
                 FieldTrialList.findFullName(ChromeFeatureList.REACHED_CODE_PROFILER));
     }
 
@@ -709,10 +678,38 @@ public class FeatureUtilities {
     public static String getReachedCodeProfilerTrialGroup() {
         if (sReachedCodeProfilerTrialGroup == null) {
             sReachedCodeProfilerTrialGroup = SharedPreferencesManager.getInstance().readString(
-                    ChromePreferenceKeys.REACHED_CODE_PROFILER_GROUP_KEY, "");
+                    ChromePreferenceKeys.REACHED_CODE_PROFILER_GROUP, "");
         }
 
         return sReachedCodeProfilerTrialGroup;
+    }
+
+    /**
+     * Caches the feature flag for whether we enable the homepage location policy.
+     */
+    private static void cacheHomepageLocationPolicyEnabled() {
+        cacheFlag(ChromePreferenceKeys.FLAGS_CACHED.createKey(
+                          ChromeFeatureList.HOMEPAGE_LOCATION_POLICY),
+                ChromeFeatureList.HOMEPAGE_LOCATION_POLICY);
+    }
+
+    /**
+     * @return True if homepage location policy is supported to be enabled.
+     */
+    public static boolean isHomepageLocationPolicyEnabled() {
+        return isFlagEnabled(ChromePreferenceKeys.FLAGS_CACHED.createKey(
+                                     ChromeFeatureList.HOMEPAGE_LOCATION_POLICY),
+                false);
+    }
+
+    /**
+     * Expose an interface to set the homepage policy feature flag to be enabled during tests.
+     */
+    @VisibleForTesting
+    public static void setHomepageLocationPolicyEnabledForTesting(@Nullable Boolean isEnabled) {
+        sFlags.put(ChromePreferenceKeys.FLAGS_CACHED.createKey(
+                           ChromeFeatureList.HOMEPAGE_LOCATION_POLICY),
+                isEnabled);
     }
 
     private static void cacheFlag(String preferenceName, String featureName) {
@@ -729,9 +726,15 @@ public class FeatureUtilities {
         return flag;
     }
 
+    @VisibleForTesting
+    public static void resetFlagsForTesting() {
+        sFlags.clear();
+    }
+
     @NativeMethods
     interface Natives {
         void setCustomTabVisible(boolean visible);
+        void setActivityType(@ActivityType int type);
         void setIsInMultiWindowMode(boolean isInMultiWindowMode);
         boolean isNetworkServiceWarmUpEnabled();
     }

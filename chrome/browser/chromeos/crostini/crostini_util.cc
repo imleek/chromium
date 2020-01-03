@@ -11,10 +11,12 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/task/post_task.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
+#include "chrome/browser/chromeos/crostini/crostini_installer.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_mime_types_service.h"
 #include "chrome/browser/chromeos/crostini/crostini_mime_types_service_factory.h"
@@ -28,12 +30,17 @@
 #include "chrome/browser/chromeos/virtual_machines/virtual_machines_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/crostini/crostini_app_icon.h"
+#include "chrome/browser/ui/ash/launcher/app_service/app_service_app_window_crostini_tracker.h"
+#include "chrome/browser/ui/ash/launcher/app_service/app_service_app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/crostini_app_window_shelf_controller.h"
 #include "chrome/browser/ui/ash/launcher/shelf_spinner_controller.h"
 #include "chrome/browser/ui/ash/launcher/shelf_spinner_item_controller.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
+#include "chrome/browser/ui/webui/chromeos/crostini_upgrader/crostini_upgrader_dialog.h"
+#include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -78,11 +85,21 @@ void OnLaunchFailed(const std::string& app_id) {
   chrome_controller->GetShelfSpinnerController()->CloseSpinner(app_id);
 }
 
+// TODO(nverne): Real conditions (e.g. once per session max, container id is
+// default and still on old version).
+bool ShouldPromptContainerUpgrade() {
+  return false;
+}
+
 void OnCrostiniRestarted(Profile* profile,
                          const std::string& app_id,
                          Browser* browser,
                          base::OnceClosure callback,
                          crostini::CrostiniResult result) {
+  if (ShouldPromptContainerUpgrade()) {
+    chromeos::CrostiniUpgraderDialog::Show(profile, std::move(callback));
+    return;
+  }
   if (result != crostini::CrostiniResult::SUCCESS) {
     OnLaunchFailed(app_id);
     if (browser && browser->window())
@@ -148,10 +165,19 @@ void LaunchApplication(
   ChromeLauncherController* chrome_launcher_controller =
       ChromeLauncherController::instance();
   DCHECK(chrome_launcher_controller);
-  CrostiniAppWindowShelfController* shelf_controller =
-      chrome_launcher_controller->crostini_app_window_shelf_controller();
-  DCHECK(shelf_controller);
-  shelf_controller->OnAppLaunchRequested(app_id, display_id);
+
+  if (base::FeatureList::IsEnabled(features::kAppServiceInstanceRegistry)) {
+    AppServiceAppWindowLauncherController* app_service_controller =
+        chrome_launcher_controller->app_service_app_window_controller();
+    DCHECK(app_service_controller);
+    app_service_controller->app_service_crostini_tracker()
+        ->OnAppLaunchRequested(app_id, display_id);
+  } else {
+    CrostiniAppWindowShelfController* shelf_controller =
+        chrome_launcher_controller->crostini_app_window_shelf_controller();
+    DCHECK(shelf_controller);
+    shelf_controller->OnAppLaunchRequested(app_id, display_id);
+  }
 
   // Share any paths not in crostini.  The user will see the spinner while this
   // is happening.
@@ -280,6 +306,10 @@ bool operator<(const ContainerId& lhs, const ContainerId& rhs) noexcept {
   return result < 0 || (result == 0 && lhs.container_name < rhs.container_name);
 }
 
+bool operator==(const ContainerId& lhs, const ContainerId& rhs) noexcept {
+  return lhs.vm_name == rhs.vm_name && lhs.container_name == rhs.container_name;
+}
+
 std::ostream& operator<<(std::ostream& ostream,
                          const ContainerId& container_id) {
   return ostream << "(vm: \"" << container_id.vm_name << "\" container: \""
@@ -288,7 +318,7 @@ std::ostream& operator<<(std::ostream& ostream,
 
 bool IsUninstallable(Profile* profile, const std::string& app_id) {
   if (!CrostiniFeatures::Get()->IsEnabled(profile) ||
-      app_id == kCrostiniTerminalId) {
+      app_id == GetTerminalId()) {
     return false;
   }
   CrostiniRegistryService* registry_service =
@@ -311,6 +341,11 @@ bool ShouldConfigureDefaultContainer(Profile* profile) {
   return base::FeatureList::IsEnabled(
              features::kCrostiniAnsibleInfrastructure) &&
          !ansible_playbook_file_path.empty();
+}
+
+// TODO(davidmunro): Answer based on flag and current container version.
+bool ShouldAllowContainerUpgrade() {
+  return false;
 }
 
 void LaunchCrostiniApp(Profile* profile,
@@ -360,19 +395,27 @@ void LaunchCrostiniApp(Profile* profile,
 
   base::OnceClosure launch_closure;
   Browser* browser = nullptr;
-  if (app_id == kCrostiniTerminalId) {
+  if (app_id == GetTerminalId()) {
     DCHECK(files.empty());
     RecordAppLaunchHistogram(CrostiniAppLaunchAppType::kTerminal);
 
     // At this point, we know that Crostini UI is allowed.
     if (!crostini_manager->IsCrosTerminaInstalled() ||
-        !profile->GetPrefs()->GetBoolean(crostini::prefs::kCrostiniEnabled)) {
-      ShowCrostiniInstallerView(profile, CrostiniUISurface::kAppList);
+        !CrostiniFeatures::Get()->IsEnabled(profile)) {
+      crostini::CrostiniInstaller::GetForProfile(profile)->ShowDialog(
+          CrostiniUISurface::kAppList);
       return std::move(callback).Run(false, "Crostini not installed");
     }
 
     GURL vsh_in_crosh_url = GenerateVshInCroshUrl(
         profile, vm_name, container_name, std::vector<std::string>());
+
+    if (base::FeatureList::IsEnabled(features::kTerminalSystemApp)) {
+      web_app::LaunchSystemWebApp(profile, web_app::SystemAppType::TERMINAL,
+                                  vsh_in_crosh_url);
+      return;
+    }
+
     apps::AppLaunchParams launch_params = GenerateTerminalAppLaunchParams();
     // Create the terminal here so it's created in the right display. If the
     // browser creation is delayed into the callback the root window for new
@@ -499,6 +542,24 @@ base::string16 GetTimeRemainingMessage(base::TimeTicks start, int percent) {
     return l10n_util::GetStringUTF16(
         IDS_CROSTINI_NOTIFICATION_OPERATION_STARTING);
   }
+}
+
+const std::string& GetTerminalId() {
+  static const base::NoDestructor<std::string> app_id([] {
+    return base::FeatureList::IsEnabled(features::kTerminalSystemApp)
+               ? kCrostiniTerminalSystemAppId
+               : kCrostiniTerminalId;
+  }());
+  return *app_id;
+}
+
+const std::string& GetDeletedTerminalId() {
+  static const base::NoDestructor<std::string> app_id([] {
+    return base::FeatureList::IsEnabled(features::kTerminalSystemApp)
+               ? kCrostiniTerminalId
+               : kCrostiniTerminalSystemAppId;
+  }());
+  return *app_id;
 }
 
 }  // namespace crostini

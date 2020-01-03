@@ -74,6 +74,12 @@ const char kAutofillSaveCardDismissOnNavigationDescription[] =
     "Dismisses the Save Card Infobar on a user initiated Navigation, other "
     "than one caused by submitted form.";
 
+const char kAutofillSaveCardInfobarEditSupportName[] =
+    "Save Card Infobar Edit Support";
+const char kAutofillSaveCardInfobarEditSupportDescription[] =
+    "When enabled and saving a credit card to Google Payments, a dialog is "
+    "displayed that allows editing the card info before confirming save.";
+
 const char kAutofillShowAllSuggestionsOnPrefilledFormsName[] =
     "Enable showing all suggestions when focusing prefilled field";
 const char kAutofillShowAllSuggestionsOnPrefilledFormsDescription[] =
@@ -124,6 +130,11 @@ const char kConfirmInfobarMessagesUIName[] = "Confirm Infobars Messages UI";
 const char kConfirmInfobarMessagesUIDescription[] =
     "When enabled Confirm Infobars use the new Messages UI.";
 
+const char kCrashRestoreInfobarMessagesUIName[] =
+    "Crash Restore Infobars Messages UI";
+const char kCrashRestoreInfobarMessagesUIDescription[] =
+    "When enabled Crash Restore Infobars use the new Messages UI.";
+
 const char kCreditCardScannerName[] = "Enable the 'Use Camera' button";
 const char kCreditCardScannerDescription[] =
     "Allow a user to scan a credit card using the credit card camera scanner."
@@ -135,6 +146,11 @@ const char kDcheckIsFatalDescription[] =
     "By default Chrome will evaluate in this build, but only log failures, "
     "rather than crashing. If enabled, DCHECKs will crash the calling process.";
 #endif  // defined(DCHECK_IS_CONFIGURABLE)
+
+const char kDefaultToDesktopOnIPadName[] = "Request desktop version by default";
+const char kDefaultToDesktopOnIPadDescription[] =
+    "By default, on iPad, the desktop version of the web sites will be "
+    "requested";
 
 const char kDetectMainThreadFreezeName[] = "Detect freeze in the main thread.";
 const char kDetectMainThreadFreezeDescription[] =
@@ -216,6 +232,11 @@ const char kIgnoresViewportScaleLimitsName[] = "Ignore Viewport Scale Limits";
 const char kIgnoresViewportScaleLimitsDescription[] =
     "When enabled the page can always be scaled, regardless of author intent.";
 
+const char kInfobarOverlayUIName[] = "Use OverlayPresenter for infobars";
+const char kInfobarOverlayUIDescription[] =
+    "When enabled alongside the Infobar UI Reboot, infobars will be presented "
+    "using OverlayPresenter.";
+
 const char kInfobarUIRebootName[] = "Infobar UI Reboot";
 const char kInfobarUIRebootDescription[] =
     "When enabled, Infobar will use the new UI.";
@@ -227,11 +248,6 @@ const char kInProductHelpDemoModeDescription[] =
     "an individual promotion causes that promotion but no other promotions to "
     "occur.";
 
-const char kLanguageSettingsName[] = "Language Settings";
-const char kLanguageSettingsDescription[] =
-    "Enables the Language Settings page allowing modifications to user "
-    "preferred languages and translate preferences.";
-
 const char kLockBottomToolbarName[] = "Lock bottom toolbar";
 const char kLockBottomToolbarDescription[] =
     "When enabled, the bottom toolbar will not get collapsed when scrolling "
@@ -239,6 +255,11 @@ const char kLockBottomToolbarDescription[] =
 
 const char kMarkHttpAsName[] = "Mark non-secure origins as non-secure";
 const char kMarkHttpAsDescription[] = "Change the UI treatment for HTTP pages";
+
+const char kMobileGoogleSRPName[] = "Mobile version of Google SRP by default";
+const char kMobileGoogleSRPDescription[] =
+    "Request the Mobile version of Google SRP by default when the desktop mode "
+    "is requested by default.";
 
 const char kNewClearBrowsingDataUIName[] = "Clear Browsing Data UI";
 const char kNewClearBrowsingDataUIDescription[] =
@@ -254,17 +275,20 @@ const char kNonModalDialogsDescription[] =
     "Presents JavaScript dialogs non-modally so that the user can change tabs "
     "while a dialog is displayed.";
 
-const char kOfflineVersionWithoutNativeContentName[] =
-    "Use offline pages without native content";
-const char kOfflineVersionWithoutNativeContentDescription[] =
-    "Shows offline pages directly in the web view.  This feature is forced"
-    "enabled if web::features::kSlimNavigationManager is enabled.";
-
 const char kOmniboxPopupShortcutIconsInZeroStateName[] =
     "Show zero-state omnibox shortcuts";
 const char kOmniboxPopupShortcutIconsInZeroStateDescription[] =
     "Instead of ZeroSuggest, show most visited sites and collection shortcuts "
     "in the omnibox popup.";
+
+const char kOmniboxPreserveDefaultMatchAgainstAsyncUpdateName[] =
+    "Omnibox Preserve Default Match Against Async Update";
+const char kOmniboxPreserveDefaultMatchAgainstAsyncUpdateDescription[] =
+    "Preserves the default match against change when providers return results "
+    "asynchronously. This prevents the default match from changing after the "
+    "user finishes typing. Without this feature, if the default match is "
+    "updated right when the user presses Enter, the user may go to a "
+    "surprising destination.";
 
 const char kOmniboxUIMaxAutocompleteMatchesName[] =
     "Omnibox UI Max Autocomplete Matches";
@@ -286,6 +310,11 @@ const char kOmniboxOnDeviceHeadSuggestionsDescription[] =
 const char kPasswordLeakDetectionName[] = "Password Leak Detection";
 const char kPasswordLeakDetectionDescription[] =
     "Enables the detection of leaked passwords.";
+
+const char kReloadSadTabName[] = "Reload SadTab automatically";
+const char kReloadSadTabDescription[] =
+    "When enabled, the first time the renderer crashes, the page is reloaded "
+    "instead of showing the SadTab";
 
 const char kSaveCardInfobarMessagesUIName[] = "Save Card Infobar Messages UI";
 const char kSaveCardInfobarMessagesUIDescription[] =
@@ -325,11 +354,6 @@ const char kShowAutofillTypePredictionsName[] = "Show Autofill predictions";
 const char kShowAutofillTypePredictionsDescription[] =
     "Annotates web forms with Autofill field type predictions as placeholder "
     "text.";
-
-const char kSlimNavigationManagerName[] = "Use Slim Navigation Manager";
-const char kSlimNavigationManagerDescription[] =
-    "When enabled, uses the experimental slim navigation manager that provides "
-    "better compatibility with HTML navigation spec.";
 
 const char kSnapshotDrawViewName[] = "Use DrawViewHierarchy for Snapshots";
 const char kSnapshotDrawViewDescription[] =

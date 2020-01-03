@@ -327,58 +327,7 @@ bool SecurityOrigin::CanAccess(const SecurityOrigin* other,
     return true;
   }
 
-  // This is needed to ensure an origin can access to itself under nullified
-  // document.domain.
-  // TODO(tzik): Update the nulled domain handling and remove this condition.
-  if (this == other) {
-    detail = AccessResultDomainDetail::kDomainNotRelevant;
-    return true;
-  }
-
-  if (IsOpaque() || other->IsOpaque()) {
-    detail = AccessResultDomainDetail::kDomainNotRelevant;
-    return nonce_if_opaque_ == other->nonce_if_opaque_;
-  }
-
-  // document.domain handling, as per
-  // https://html.spec.whatwg.org/C/#dom-document-domain:
-  //
-  // 1) Neither document has set document.domain. In this case, we insist
-  //    that the scheme, host, and port of the URLs match.
-  //
-  // 2) Both documents have set document.domain. In this case, we insist
-  //    that the documents have set document.domain to the same value and
-  //    that the scheme of the URLs match. Ports do not need to match.
-  bool can_access = false;
-  if (protocol_ == other->protocol_) {
-    if (!domain_was_set_in_dom_ && !other->domain_was_set_in_dom_) {
-      detail = AccessResultDomainDetail::kDomainNotSet;
-      if (host_ == other->host_ && port_ == other->port_)
-        can_access = true;
-    } else if (domain_was_set_in_dom_ && other->domain_was_set_in_dom_) {
-      if (domain_ == other->domain_) {
-        can_access = true;
-        detail = (host_ == other->host_ && port_ == other->port_)
-                     ? AccessResultDomainDetail::kDomainMatchUnnecessary
-                     : AccessResultDomainDetail::kDomainMatchNecessary;
-      } else {
-        detail = (host_ == other->host_ && port_ == other->port_)
-                     ? AccessResultDomainDetail::kDomainMismatch
-                     : AccessResultDomainDetail::kDomainNotRelevant;
-      }
-    } else {
-      detail = (host_ == other->host_ && port_ == other->port_)
-                   ? AccessResultDomainDetail::kDomainSetByOnlyOneOrigin
-                   : AccessResultDomainDetail::kDomainNotRelevant;
-    }
-  } else {
-    detail = AccessResultDomainDetail::kDomainNotRelevant;
-  }
-
-  if (can_access && IsLocal() && !PassesFileCheck(other)) {
-    detail = AccessResultDomainDetail::kDomainNotRelevant;
-    can_access = false;
-  }
+  bool can_access = IsSameOriginDomainWith(other, detail);
 
   // Compare that the clusters are the same.
   if (can_access && !cross_agent_cluster_access_ &&
@@ -426,9 +375,9 @@ bool SecurityOrigin::CanRequest(const KURL& url) const {
   if (target_origin->IsOpaque())
     return false;
 
-  // We call isSameSchemeHostPort here instead of canAccess because we want
-  // to ignore document.domain effects.
-  if (IsSameSchemeHostPort(target_origin.get()))
+  // We call IsSameOriginWith here instead of canAccess because we want to
+  // ignore `document.domain` effects.
+  if (IsSameOriginWith(target_origin.get()))
     return true;
 
   if (SecurityPolicy::IsOriginAccessAllowed(this, target_origin.get()))
@@ -597,7 +546,7 @@ scoped_refptr<SecurityOrigin> SecurityOrigin::Create(const String& protocol,
   return Create(KURL(NullURL(), protocol + "://" + host + port_part + "/"));
 }
 
-bool SecurityOrigin::IsSameSchemeHostPort(const SecurityOrigin* other) const {
+bool SecurityOrigin::IsSameOriginWith(const SecurityOrigin* other) const {
   // This is needed to ensure a local origin considered to have the same scheme,
   // host, and port to itself.
   // TODO(tzik): Make the local origin unique but not opaque, and remove this
@@ -623,10 +572,69 @@ bool SecurityOrigin::IsSameSchemeHostPort(const SecurityOrigin* other) const {
   return true;
 }
 
-bool SecurityOrigin::AreSameSchemeHostPort(const KURL& a, const KURL& b) {
+bool SecurityOrigin::AreSameOrigin(const KURL& a, const KURL& b) {
   scoped_refptr<const SecurityOrigin> origin_a = SecurityOrigin::Create(a);
   scoped_refptr<const SecurityOrigin> origin_b = SecurityOrigin::Create(b);
-  return origin_b->IsSameSchemeHostPort(origin_a.get());
+  return origin_b->IsSameOriginWith(origin_a.get());
+}
+
+bool SecurityOrigin::IsSameOriginDomainWith(
+    const SecurityOrigin* other,
+    AccessResultDomainDetail& detail) const {
+  // This is needed to ensure an origin can access to itself under nullified
+  // document.domain.
+  // TODO(tzik): Update the nulled domain handling and remove this condition.
+  if (this == other) {
+    detail = AccessResultDomainDetail::kDomainNotRelevant;
+    return true;
+  }
+
+  if (IsOpaque() || other->IsOpaque()) {
+    detail = AccessResultDomainDetail::kDomainNotRelevant;
+    return nonce_if_opaque_ == other->nonce_if_opaque_;
+  }
+
+  // document.domain handling, as per
+  // https://html.spec.whatwg.org/C/#dom-document-domain:
+  //
+  // 1) Neither document has set document.domain. In this case, we insist
+  //    that the scheme, host, and port of the URLs match.
+  //
+  // 2) Both documents have set document.domain. In this case, we insist
+  //    that the documents have set document.domain to the same value and
+  //    that the scheme of the URLs match. Ports do not need to match.
+  bool can_access = false;
+  if (protocol_ == other->protocol_) {
+    if (!domain_was_set_in_dom_ && !other->domain_was_set_in_dom_) {
+      detail = AccessResultDomainDetail::kDomainNotSet;
+      if (host_ == other->host_ && port_ == other->port_)
+        can_access = true;
+    } else if (domain_was_set_in_dom_ && other->domain_was_set_in_dom_) {
+      if (domain_ == other->domain_) {
+        can_access = true;
+        detail = (host_ == other->host_ && port_ == other->port_)
+                     ? AccessResultDomainDetail::kDomainMatchUnnecessary
+                     : AccessResultDomainDetail::kDomainMatchNecessary;
+      } else {
+        detail = (host_ == other->host_ && port_ == other->port_)
+                     ? AccessResultDomainDetail::kDomainMismatch
+                     : AccessResultDomainDetail::kDomainNotRelevant;
+      }
+    } else {
+      detail = (host_ == other->host_ && port_ == other->port_)
+                   ? AccessResultDomainDetail::kDomainSetByOnlyOneOrigin
+                   : AccessResultDomainDetail::kDomainNotRelevant;
+    }
+  } else {
+    detail = AccessResultDomainDetail::kDomainNotRelevant;
+  }
+
+  if (can_access && IsLocal() && !PassesFileCheck(other)) {
+    detail = AccessResultDomainDetail::kDomainNotRelevant;
+    can_access = false;
+  }
+
+  return can_access;
 }
 
 const KURL& SecurityOrigin::UrlWithUniqueOpaqueOrigin() {

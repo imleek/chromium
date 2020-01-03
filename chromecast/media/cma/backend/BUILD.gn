@@ -10,10 +10,6 @@ import("//media/media_options.gni")
 declare_args() {
   system_owns_volume =
       use_alsa && !enable_assistant && chromecast_branding != "google"
-
-  # If true, the mixer will be instantiated inside cast_shell. When false, the
-  # mixer is expected to be running in another process.
-  mixer_in_cast_shell = true
 }
 
 cast_source_set("backend") {
@@ -109,22 +105,6 @@ cast_source_set("public") {
   ]
 }
 
-cast_source_set("audio_helpers") {
-  sources = [
-    "audio_fader.cc",
-    "audio_fader.h",
-  ]
-
-  deps = [
-    "//base",
-    "//media",
-  ]
-
-  public_deps = [
-    "//chromecast/public/media",
-  ]
-}
-
 cast_source_set("av_sync_dummy") {
   sources = [
     "av_sync_dummy.cc",
@@ -158,40 +138,6 @@ cast_source_set("cast_audio_json") {
   ]
 }
 
-cast_source_set("audio_resampler") {
-  sources = [
-    "audio_resampler.cc",
-    "audio_resampler.h",
-  ]
-
-  deps = [
-    "//base",
-    "//chromecast/media/cma/base",
-    "//media",
-  ]
-
-  # Use fastest possible float math.
-  configs -= [ "//build/config/compiler:default_optimization" ]
-  configs += [ "//build/config/compiler:optimize_speed" ]
-  cflags = [ "-ffast-math" ]
-}
-
-cast_source_set("interleaved_channel_mixer") {
-  sources = [
-    "interleaved_channel_mixer.cc",
-    "interleaved_channel_mixer.h",
-  ]
-  deps = [
-    "//base",
-    "//media",
-  ]
-
-  # Use fastest possible float math.
-  configs -= [ "//build/config/compiler:default_optimization" ]
-  configs += [ "//build/config/compiler:optimize_speed" ]
-  cflags = [ "-ffast-math" ]
-}
-
 cast_source_set("volume_map") {
   sources = [
     "volume_map.cc",
@@ -215,13 +161,12 @@ cast_source_set("for_mixer_audio") {
 
   deps = [
     ":audio_buildflags",
-    ":audio_helpers",
-    ":audio_resampler",
     ":cast_audio_json",
     ":public",
     ":volume_map",
     "//base",
     "//chromecast/base",
+    "//chromecast/media/audio:processing",
     "//chromecast/media/audio/mixer_service:common",
     "//chromecast/media/audio/mixer_service:control_connection",
     "//chromecast/media/audio/mixer_service:output_stream_connection",
@@ -244,15 +189,11 @@ cast_source_set("for_mixer_audio") {
 test("cast_audio_backend_unittests") {
   testonly = true
   sources = [
-    "audio_fader_unittest.cc",
-    "interleaved_channel_mixer_unittest.cc",
     "volume_map_unittest.cc",
   ]
 
   deps = [
-    ":audio_helpers",
     ":cast_audio_json",
-    ":interleaved_channel_mixer",
     ":volume_map",
     "//base",
     "//base/test:run_all_unittests",

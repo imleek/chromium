@@ -106,7 +106,7 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy) {
     // WebURLLoaderTestDelegate overrides:
     bool FillNavigationParamsResponse(WebNavigationParams* params) override {
       params->response = WebURLResponse(params->url);
-      params->response.SetMimeType("application/pdf");
+      params->response.SetMimeType("application/x-webkit-test-webplugin");
       params->response.SetHttpStatusCode(200);
 
       String data("<html><body>foo</body></html>");
@@ -167,9 +167,9 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy) {
     StaticDataNavigationBodyLoader* body_loader_ = nullptr;
   };
 
-  // We use a plugin document triggered by "application/pdf" mime type,
-  // because that gives us reliable way to get a WebLocalFrameClient callback
-  // from inside BodyDataReceived() call.
+  // We use a plugin document triggered by "application/x-webkit-test-webplugin"
+  // mime type, because that gives us reliable way to get a WebLocalFrameClient
+  // callback from inside BodyDataReceived() call.
   ScopedFakePluginRegistry fake_plugins;
   MainFrameClient main_frame_client;
   web_view_helper_.Initialize(&main_frame_client);
@@ -198,33 +198,6 @@ TEST_F(DocumentLoaderTest, isCommittedButEmpty) {
                   ->Loader()
                   .GetDocumentLoader()
                   ->IsCommittedButEmpty());
-}
-
-TEST_F(DocumentLoaderTest, MixedContentOptOutSetIfHeaderReceived) {
-  WebURL url =
-      url_test_helpers::ToKURL("https://examplenoupgrade.com/foo.html");
-  WebURLResponse response(url);
-  response.SetHttpStatusCode(200);
-  response.SetHttpHeaderField("mixed-content", "noupgrade");
-  response.SetMimeType("text/html");
-  url_test_helpers::RegisterMockedURLLoadWithCustomResponse(
-      url, test::CoreTestDataPath("foo.html"), response);
-  WebViewImpl* web_view_impl = web_view_helper_.InitializeAndLoad(
-      "https://examplenoupgrade.com/foo.html");
-  EXPECT_TRUE(To<LocalFrame>(web_view_impl->GetPage()->MainFrame())
-                  ->GetDocument()
-                  ->GetMixedAutoUpgradeOptOut());
-}
-
-TEST_F(DocumentLoaderTest, MixedContentOptOutNotSetIfNoHeaderReceived) {
-  WebViewImpl* web_view_impl =
-      web_view_helper_.InitializeAndLoad("https://example.com/foo.html");
-  EXPECT_FALSE(To<LocalFrame>(web_view_impl->GetPage()->MainFrame())
-                   ->Loader()
-                   .GetDocumentLoader()
-                   ->GetFrame()
-                   ->GetDocument()
-                   ->GetMixedAutoUpgradeOptOut());
 }
 
 class DocumentLoaderSimTest : public SimTest {};
@@ -356,6 +329,46 @@ TEST_F(DocumentLoaderTest, CommitsNotDeferredOnDataURLNavigation) {
   local_frame->Loader().CommitNavigation(std::move(params), nullptr);
 
   EXPECT_FALSE(local_frame->GetDocument()->DeferredCompositorCommitIsAllowed());
+}
+
+TEST_F(DocumentLoaderTest, SameOriginNavigation) {
+  const KURL& requestor_url =
+      KURL(NullURL(), "https://www.example.com/foo.html");
+  WebViewImpl* web_view_impl =
+      web_view_helper_.InitializeAndLoad("https://example.com/foo.html");
+
+  const KURL& same_origin_url =
+      KURL(NullURL(), "https://www.example.com/bar.html");
+  std::unique_ptr<WebNavigationParams> params =
+      WebNavigationParams::CreateWithHTMLBuffer(SharedBuffer::Create(),
+                                                same_origin_url);
+  params->requestor_origin = WebSecurityOrigin::Create(WebURL(requestor_url));
+  LocalFrame* local_frame =
+      To<LocalFrame>(web_view_impl->GetPage()->MainFrame());
+  local_frame->Loader().CommitNavigation(std::move(params), nullptr);
+
+  EXPECT_TRUE(
+      local_frame->Loader().GetDocumentLoader()->IsSameOriginNavigation());
+}
+
+TEST_F(DocumentLoaderTest, CrossOriginNavigation) {
+  const KURL& requestor_url =
+      KURL(NullURL(), "https://www.example.com/foo.html");
+  WebViewImpl* web_view_impl =
+      web_view_helper_.InitializeAndLoad("https://example.com/foo.html");
+
+  const KURL& other_origin_url =
+      KURL(NullURL(), "https://www.another.com/bar.html");
+  std::unique_ptr<WebNavigationParams> params =
+      WebNavigationParams::CreateWithHTMLBuffer(SharedBuffer::Create(),
+                                                other_origin_url);
+  params->requestor_origin = WebSecurityOrigin::Create(WebURL(requestor_url));
+  LocalFrame* local_frame =
+      To<LocalFrame>(web_view_impl->GetPage()->MainFrame());
+  local_frame->Loader().CommitNavigation(std::move(params), nullptr);
+
+  EXPECT_FALSE(
+      local_frame->Loader().GetDocumentLoader()->IsSameOriginNavigation());
 }
 
 }  // namespace blink

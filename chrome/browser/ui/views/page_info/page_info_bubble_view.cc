@@ -77,7 +77,6 @@
 #include "ui/views/layout/layout_manager.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_client_view.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
@@ -508,6 +507,9 @@ PageInfoBubbleView::PageInfoBubbleView(
   // before PageInfo updates trigger child layouts.
   SetSize(GetPreferredSize());
 
+  // When |web_contents| is not from a Tab, |web_contents| does not have a
+  // |TabSpecificContentSettings| and need to create one; otherwise, noop.
+  TabSpecificContentSettings::CreateForWebContents(web_contents);
   presenter_ = std::make_unique<PageInfo>(
       this, profile, TabSpecificContentSettings::FromWebContents(web_contents),
       web_contents, url, security_level, visible_security_state);
@@ -933,8 +935,10 @@ PageInfoBubbleView::CreateSecurityDescriptionForPasswordReuse() const {
       l10n_util::GetStringUTF16(IDS_PAGE_INFO_CHANGE_PASSWORD_SUMMARY);
   auto* service = safe_browsing::ChromePasswordProtectionService::
       GetPasswordProtectionService(profile_);
+  std::vector<size_t> placeholder_offsets;
   security_description->details = service->GetWarningDetailText(
-      service->reused_password_account_type_for_last_shown_warning());
+      service->reused_password_account_type_for_last_shown_warning(),
+      &placeholder_offsets);
   security_description->type = SecurityDescriptionType::SAFE_BROWSING;
   return security_description;
 }

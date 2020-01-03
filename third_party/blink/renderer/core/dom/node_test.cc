@@ -317,8 +317,8 @@ TEST_F(NodeTest, HasMediaControlAncestor_MediaControls) {
 TEST_F(NodeTest, appendChildProcessingInstructionNoStyleRecalc) {
   UpdateAllLifecyclePhasesForTest();
   EXPECT_FALSE(GetDocument().ChildNeedsStyleRecalc());
-  ProcessingInstruction* pi =
-      ProcessingInstruction::Create(GetDocument(), "A", "B");
+  auto* pi =
+      MakeGarbageCollected<ProcessingInstruction>(GetDocument(), "A", "B");
   GetDocument().body()->appendChild(pi, ASSERT_NO_EXCEPTION);
   EXPECT_FALSE(GetDocument().ChildNeedsStyleRecalc());
 }
@@ -511,12 +511,16 @@ TEST_F(NodeTest, UpdateChildDirtyAfterSlottingDirtyNode) {
   auto* host = GetDocument().getElementById("host");
   auto* span = To<Element>(host->firstChild());
 
+  ShadowRoot& shadow_root =
+      host->AttachShadowRootInternal(ShadowRootType::kOpen);
+  shadow_root.SetInnerHTMLFromString("<div><slot name=x></slot></div>");
+  UpdateAllLifecyclePhasesForTest();
+
   // Make sure the span is style dirty.
   span->setAttribute("style", "color:green");
 
-  ShadowRoot& shadow_root =
-      host->AttachShadowRootInternal(ShadowRootType::kOpen);
-  shadow_root.SetInnerHTMLFromString("<div><slot></slot></div>");
+  // Assign span to slot.
+  span->setAttribute("slot", "x");
 
   GetDocument().GetSlotAssignmentEngine().RecalcSlotAssignments();
 
@@ -525,6 +529,9 @@ TEST_F(NodeTest, UpdateChildDirtyAfterSlottingDirtyNode) {
   EXPECT_TRUE(shadow_root.firstChild()->ChildNeedsStyleRecalc());
   EXPECT_TRUE(shadow_root.firstChild()->firstChild()->ChildNeedsStyleRecalc());
   EXPECT_TRUE(span->NeedsStyleRecalc());
+
+  // This used to call a DCHECK failure. Make sure we don't regress.
+  UpdateAllLifecyclePhasesForTest();
 }
 
 TEST_F(NodeTest, ChildDirtyNeedsV0Distribution) {

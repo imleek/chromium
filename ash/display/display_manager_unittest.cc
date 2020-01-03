@@ -2236,12 +2236,12 @@ TEST_F(DisplayManagerTest, SoftwareMirroring) {
 
   UpdateDisplay("320x420/r,400x500");
   EXPECT_FALSE(display_observer.changed_and_reset());
-  EXPECT_EQ("320x420",
+  EXPECT_EQ("420x320",
             test_api.GetHosts()[0]->window()->bounds().size().ToString());
 
   UpdateDisplay("330x440/r,400x500");
   EXPECT_FALSE(display_observer.changed_and_reset());
-  EXPECT_EQ("330x440",
+  EXPECT_EQ("440x330",
             test_api.GetHosts()[0]->window()->bounds().size().ToString());
 
   // Overscan insets are ignored.
@@ -2930,7 +2930,7 @@ TEST_F(DisplayManagerTest, UnifiedDesktopGridLayout2x2) {
 
   // Default shelf alignment is bottom.
   Shelf* shelf = Shell::GetPrimaryRootWindowController()->shelf();
-  EXPECT_EQ(shelf->alignment(), SHELF_ALIGNMENT_BOTTOM);
+  EXPECT_EQ(shelf->alignment(), ShelfAlignment::kBottom);
 
   // Display in bottom-left cell is considered the primary mirroring display.
   EXPECT_EQ(list[2], Shell::Get()
@@ -2953,7 +2953,7 @@ TEST_F(DisplayManagerTest, UnifiedDesktopGridLayout2x2) {
 
   // Change the shelf alignment to left, and expect that the primary mirroring
   // display in the top-left display in the matrix.
-  shelf->SetAlignment(SHELF_ALIGNMENT_LEFT);
+  shelf->SetAlignment(ShelfAlignment::kLeft);
   EXPECT_EQ(list[0], Shell::Get()
                          ->display_configuration_controller()
                          ->GetPrimaryMirroringDisplayForUnifiedDesktop()
@@ -2961,7 +2961,7 @@ TEST_F(DisplayManagerTest, UnifiedDesktopGridLayout2x2) {
 
   // Change the shelf alignment to right, and expect that the primary mirroring
   // display in the top-right display in the matrix.
-  shelf->SetAlignment(SHELF_ALIGNMENT_RIGHT);
+  shelf->SetAlignment(ShelfAlignment::kRight);
   EXPECT_EQ(list[1], Shell::Get()
                          ->display_configuration_controller()
                          ->GetPrimaryMirroringDisplayForUnifiedDesktop()
@@ -2995,7 +2995,7 @@ TEST_F(DisplayManagerTest, UnifiedDesktopGridLayout3x2) {
 
   // Default shelf alignment is bottom.
   Shelf* shelf = Shell::GetPrimaryRootWindowController()->shelf();
-  EXPECT_EQ(shelf->alignment(), SHELF_ALIGNMENT_BOTTOM);
+  EXPECT_EQ(shelf->alignment(), ShelfAlignment::kBottom);
 
   // Display in bottom-left cell is considered the primary mirroring display.
   EXPECT_EQ(list[4], Shell::Get()
@@ -3023,7 +3023,7 @@ TEST_F(DisplayManagerTest, UnifiedDesktopGridLayout3x2) {
 
   // Change the shelf alignment to left, and expect that the primary mirroring
   // display in the top-left display in the matrix.
-  shelf->SetAlignment(SHELF_ALIGNMENT_LEFT);
+  shelf->SetAlignment(ShelfAlignment::kLeft);
   EXPECT_EQ(list[0], Shell::Get()
                          ->display_configuration_controller()
                          ->GetPrimaryMirroringDisplayForUnifiedDesktop()
@@ -3031,7 +3031,7 @@ TEST_F(DisplayManagerTest, UnifiedDesktopGridLayout3x2) {
 
   // Change the shelf alignment to right, and expect that the primary mirroring
   // display in the top-right display in the matrix.
-  shelf->SetAlignment(SHELF_ALIGNMENT_RIGHT);
+  shelf->SetAlignment(ShelfAlignment::kRight);
   EXPECT_EQ(list[1], Shell::Get()
                          ->display_configuration_controller()
                          ->GetPrimaryMirroringDisplayForUnifiedDesktop()
@@ -3951,14 +3951,14 @@ TEST_F(DisplayManagerTest, SoftwareMirrorModeBasics) {
   UpdateDisplay("320x420/r,400x500,500x600");
   EXPECT_FALSE(display_observer.changed_and_reset());
   host_list = test_api.GetHosts();
-  EXPECT_EQ(gfx::Size(320, 420), host_list[0]->window()->bounds().size());
-  EXPECT_EQ(gfx::Size(320, 420), host_list[1]->window()->bounds().size());
+  EXPECT_EQ(gfx::Size(420, 320), host_list[0]->window()->bounds().size());
+  EXPECT_EQ(gfx::Size(420, 320), host_list[1]->window()->bounds().size());
 
   UpdateDisplay("330x440/r,400x500,500x600");
   EXPECT_FALSE(display_observer.changed_and_reset());
   host_list = test_api.GetHosts();
-  EXPECT_EQ(gfx::Size(330, 440), host_list[0]->window()->bounds().size());
-  EXPECT_EQ(gfx::Size(330, 440), host_list[1]->window()->bounds().size());
+  EXPECT_EQ(gfx::Size(440, 330), host_list[0]->window()->bounds().size());
+  EXPECT_EQ(gfx::Size(440, 330), host_list[1]->window()->bounds().size());
 
   // Overscan insets are ignored.
   UpdateDisplay("400x600/o,600x800/o,500x600/o");

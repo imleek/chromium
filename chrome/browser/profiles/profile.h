@@ -352,6 +352,8 @@ class Profile : public content::BrowserContext {
   // Returns whether it is a system profile.
   virtual bool IsSystemProfile() const;
 
+  bool CanUseDiskWhenOffTheRecord() override;
+
   // Did the user restore the last session? This is set by SessionRestore.
   void set_restored_last_session(bool restored_last_session) {
     restored_last_session_ = restored_last_session;
@@ -408,10 +410,6 @@ class Profile : public content::BrowserContext {
   // not been shut down since the profile was created.
   // This method is virtual in order to be overridden for tests.
   virtual bool IsNewProfile();
-
-  // Checks whether sync is configurable by the user. Returns false if sync is
-  // disallowed by the command line or controlled by configuration management.
-  bool IsSyncAllowed();
 
   // Send NOTIFICATION_PROFILE_DESTROYED for this Profile, if it has not
   // already been sent. It is necessary because most Profiles are destroyed by

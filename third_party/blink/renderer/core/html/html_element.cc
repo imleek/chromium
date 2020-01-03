@@ -61,6 +61,7 @@
 #include "third_party/blink/renderer/core/html/forms/labels_node_list.h"
 #include "third_party/blink/renderer/core/html/html_br_element.h"
 #include "third_party/blink/renderer/core/html/html_dimension.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_template_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
@@ -122,7 +123,7 @@ bool IsEditable(const Node& node) {
     return false;
   if (html_element)
     return true;
-  if (IsSVGSVGElement(node))
+  if (IsA<SVGSVGElement>(node))
     return true;
   auto* element = DynamicTo<Element>(node);
   if (element && element->HasTagName(mathml_names::kMathTag))
@@ -135,7 +136,7 @@ const WebFeature kNoWebFeature = static_cast<WebFeature>(0);
 }  // anonymous namespace
 
 String HTMLElement::DebugNodeName() const {
-  if (GetDocument().IsHTMLDocument()) {
+  if (IsA<HTMLDocument>(GetDocument())) {
     return TagQName().HasPrefix() ? Element::nodeName().UpperASCII()
                                   : TagQName().LocalName().UpperASCII();
   }
@@ -150,7 +151,7 @@ String HTMLElement::nodeName() const {
   // chars that does not have to copy the string on a hit in the hash.
   // FIXME: We should have a way to detect XHTML elements and replace the
   // hasPrefix() check with it.
-  if (GetDocument().IsHTMLDocument()) {
+  if (IsA<HTMLDocument>(GetDocument())) {
     if (!TagQName().HasPrefix())
       return TagQName().LocalNameUpper();
     return Element::nodeName().UpperASCII();
@@ -374,8 +375,6 @@ AttributeTriggers* HTMLElement::TriggersForAttributeName(
        event_type_names::kAnimationstart, nullptr},
       {html_names::kOnauxclickAttr, kNoWebFeature, event_type_names::kAuxclick,
        nullptr},
-      {html_names::kOnbeforeactivateAttr, kNoWebFeature,
-       event_type_names::kBeforeactivate, nullptr},
       {html_names::kOnbeforecopyAttr, kNoWebFeature,
        event_type_names::kBeforecopy, nullptr},
       {html_names::kOnbeforecutAttr, kNoWebFeature,
@@ -505,6 +504,8 @@ AttributeTriggers* HTMLElement::TriggersForAttributeName(
        nullptr},
       {html_names::kOnratechangeAttr, kNoWebFeature,
        event_type_names::kRatechange, nullptr},
+      {html_names::kOnrendersubtreeactivationAttr, kNoWebFeature,
+       event_type_names::kRendersubtreeactivation, nullptr},
       {html_names::kOnresetAttr, kNoWebFeature, event_type_names::kReset,
        nullptr},
       {html_names::kOnresizeAttr, kNoWebFeature, event_type_names::kResize,
@@ -600,8 +601,6 @@ AttributeTriggers* HTMLElement::TriggersForAttributeName(
        kNoEvent, nullptr},
       {html_names::kAriaHaspopupAttr, WebFeature::kARIAHasPopupAttribute,
        kNoEvent, nullptr},
-      {html_names::kAriaHelpAttr, WebFeature::kARIAHelpAttribute, kNoEvent,
-       nullptr},
       {html_names::kAriaHiddenAttr, WebFeature::kARIAHiddenAttribute, kNoEvent,
        nullptr},
       {html_names::kAriaInvalidAttr, WebFeature::kARIAInvalidAttribute,
@@ -743,12 +742,8 @@ void HTMLElement::ParseAttribute(const AttributeModificationParams& params) {
 
   if (triggers->web_feature != kNoWebFeature) {
     // Count usage of attributes but ignore attributes in user agent shadow DOM.
-    if (!IsInUserAgentShadowRoot()) {
-      if (triggers->web_feature == WebFeature::kARIAHelpAttribute)
-        Deprecation::CountDeprecation(GetDocument(), triggers->web_feature);
-      else
-        UseCounter::Count(GetDocument(), triggers->web_feature);
-    }
+    if (!IsInUserAgentShadowRoot())
+      UseCounter::Count(GetDocument(), triggers->web_feature);
   }
   if (triggers->function)
     ((*this).*(triggers->function))(params);
@@ -1118,7 +1113,7 @@ TextDirection HTMLElement::DirectionalityIfhasDirAutoAttribute(
 }
 
 TextDirection HTMLElement::Directionality() const {
-  if (auto* input_element = ToHTMLInputElementOrNull(*this)) {
+  if (auto* input_element = DynamicTo<HTMLInputElement>(*this)) {
     bool has_strong_directionality;
     TextDirection text_direction = DetermineDirectionality(
         input_element->value(), &has_strong_directionality);

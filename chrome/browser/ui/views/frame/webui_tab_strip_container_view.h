@@ -7,18 +7,26 @@
 
 #include <memory>
 
+#include "base/optional.h"
 #include "base/scoped_observer.h"
+#include "base/time/time.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui.h"
+#include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_embedder.h"
 #include "chrome/common/buildflags.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/views/accessible_pane_view.h"
 #include "ui/views/view.h"
+#include "ui/views/widget/widget.h"
 
 #if !BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
 #error
 #endif
+
+namespace feature_engagement {
+class Tracker;
+}  // namespace feature_engagement
 
 namespace ui {
 class MenuModel;
@@ -31,13 +39,14 @@ class WebView;
 }  // namespace views
 
 class Browser;
-class TabCounterModelObserver;
+class FeaturePromoBubbleView;
 
-class WebUITabStripContainerView : public TabStripUI::Embedder,
+class WebUITabStripContainerView : public TabStripUIEmbedder,
                                    public gfx::AnimationDelegate,
                                    public views::AccessiblePaneView,
                                    public views::ButtonListener,
-                                   public views::ViewObserver {
+                                   public views::ViewObserver,
+                                   public views::WidgetObserver {
  public:
   WebUITabStripContainerView(Browser* browser,
                              views::View* tab_contents_container);
@@ -53,6 +62,17 @@ class WebUITabStripContainerView : public TabStripUI::Embedder,
 
   void UpdateButtons();
 
+  // Should be called on BrowserView re-layout. If IPH is showing,
+  // updates the promo for the new tab counter location.
+  void UpdatePromoBubbleBounds();
+
+  // Clicking the tab counter button opens and closes the container with
+  // an animation, so it is unsuitable for an interactive test. This
+  // should be called instead. View::SetVisible() isn't sufficient since
+  // the container's preferred size will change.
+  void SetVisibleForTesting(bool visible);
+  views::WebView* web_view_for_testing() const { return web_view_; }
+
  private:
   class AutoCloser;
 
@@ -63,7 +83,11 @@ class WebUITabStripContainerView : public TabStripUI::Embedder,
   // through to its target.
   bool EventShouldPropagate(const ui::Event& event);
 
+  // Passed to the AutoCloser to handle closing.
+  void CloseForEventOutsideTabStrip();
+
   // TabStripUI::Embedder:
+  const ui::AcceleratorProvider* GetAcceleratorProvider() const override;
   void CloseContainer() override;
   void ShowContextMenuAtPoint(
       gfx::Point point,
@@ -86,13 +110,26 @@ class WebUITabStripContainerView : public TabStripUI::Embedder,
   void OnViewBoundsChanged(View* observed_view) override;
   void OnViewIsDeleting(View* observed_view) override;
 
+  // views::WidgetObserver:
+  void OnWidgetDestroying(views::Widget* widget) override;
+
+  // views::AccessiblePaneView
+  bool SetPaneFocusAndFocusDefault() override;
+
   Browser* const browser_;
   views::WebView* const web_view_;
-  views::View* const tab_contents_container_;
+  views::View* tab_contents_container_;
   ToolbarButton* new_tab_button_ = nullptr;
-  views::LabelButton* tab_counter_ = nullptr;
+  views::View* tab_counter_ = nullptr;
 
   int desired_height_ = 0;
+
+  // When opened, if currently open. Used to calculate metric for how
+  // long the tab strip is kept open.
+  base::Optional<base::TimeTicks> time_at_open_;
+
+  feature_engagement::Tracker* const iph_tracker_;
+  FeaturePromoBubbleView* tab_counter_promo_ = nullptr;
 
   gfx::SlideAnimation animation_{this};
 
@@ -102,8 +139,7 @@ class WebUITabStripContainerView : public TabStripUI::Embedder,
   std::unique_ptr<ui::MenuModel> context_menu_model_;
 
   ScopedObserver<views::View, views::ViewObserver> view_observer_{this};
-
-  std::unique_ptr<TabCounterModelObserver> tab_counter_model_observer_;
+  ScopedObserver<views::Widget, views::WidgetObserver> widget_observer_{this};
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_WEBUI_TAB_STRIP_CONTAINER_VIEW_H_

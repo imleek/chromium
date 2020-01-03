@@ -18,9 +18,7 @@
 #include "chrome/browser/media/webrtc/media_stream_devices_controller.h"
 #include "chrome/browser/permissions/mock_permission_request.h"
 #include "chrome/browser/permissions/permission_context_base.h"
-#include "chrome/browser/permissions/permission_features.h"
 #include "chrome/browser/permissions/permission_request_impl.h"
-#include "chrome/browser/permissions/permission_request_manager_test_api.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -31,6 +29,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "chrome/test/permissions/permission_request_manager_test_api.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/render_frame_host.h"
@@ -192,6 +191,7 @@ class PermissionDialogTest
 
   // TestBrowserDialog:
   void ShowUi(const std::string& name) override;
+  void DismissUi() override;
 
   // Holds requests that do not delete themselves.
   std::vector<std::unique_ptr<PermissionRequest>> owned_requests_;
@@ -284,6 +284,11 @@ void PermissionDialogTest::ShowUi(const std::string& name) {
       return;
   }
   base::RunLoop().RunUntilIdle();
+}
+
+void PermissionDialogTest::DismissUi() {
+  GetPermissionRequestManager()->Closing();
+  TestBrowserDialog::DismissUi();
 }
 
 // Requests before the load event should be bundled into one bubble.
@@ -459,14 +464,10 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
   EXPECT_EQ(2, bubble_factory_1->show_count());
 }
 
-// Regularly timing out in Linux Debug Builds. https://crbug.com/931657
-#if defined(OS_LINUX)
-#define MAYBE_BackgroundTabNavigation DISABLED_BackgroundTabNavigation
-#else
-#define MAYBE_BackgroundTabNavigation BackgroundTabNavigation
-#endif
+// Regularly timing out in Windows, Linux and macOS Debug Builds.
+// https://crbug.com/931657
 IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
-                       MAYBE_BackgroundTabNavigation) {
+                       DISABLED_BackgroundTabNavigation) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
@@ -691,67 +692,17 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
       "PermissionRequestManager"));
 }
 
-// For browser tests feature overrides need to be enabled during SetUp.
-// Have a separate fixture based on which UI flavor needs to be enabled.
-class PermissionRequestManagerBrowserTest_StaticIcon
-    : public PermissionRequestManagerBrowserTest {
- public:
-  void SetUp() override {
-    base::FieldTrialParams params;
-    params[kQuietNotificationPromptsUIFlavorParameterName] =
-        kQuietNotificationPromptsStaticIcon;
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeatureWithParameters(
-        features::kQuietNotificationPrompts, params);
-
-    PermissionRequestManagerBrowserTest::SetUp();
-  }
-};
-
 class PermissionRequestManagerBrowserTest_AnimatedIcon
     : public PermissionRequestManagerBrowserTest {
  public:
   void SetUp() override {
-    base::FieldTrialParams params;
-    params[kQuietNotificationPromptsUIFlavorParameterName] =
-        kQuietNotificationPromptsAnimatedIcon;
     base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeatureWithParameters(
-        features::kQuietNotificationPrompts, params);
+    scoped_feature_list.InitAndEnableFeature(
+        features::kQuietNotificationPrompts);
 
     PermissionRequestManagerBrowserTest::SetUp();
   }
 };
-
-// Re-enable when 1016233 is fixed.
-// Quiet permission requests are cancelled when a new request is made.
-IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest_StaticIcon,
-                       DISABLED_QuietPendingRequestsKilledOnNewRequest) {
-  // First add a quiet permission request. Ensure that this request is decided
-  // by the end of this test.
-  MockPermissionRequest request_quiet(
-      "quiet", PermissionRequestType::PERMISSION_NOTIFICATIONS,
-      PermissionRequestGestureType::UNKNOWN);
-  GetPermissionRequestManager()->AddRequest(&request_quiet);
-  base::RunLoop().RunUntilIdle();
-
-  // Add a second permission request. This ones should cause the initial
-  // request to be cancelled.
-  MockPermissionRequest request_loud(
-      "loud", PermissionRequestType::PERMISSION_GEOLOCATION,
-      PermissionRequestGestureType::UNKNOWN);
-  GetPermissionRequestManager()->AddRequest(&request_loud);
-  base::RunLoop().RunUntilIdle();
-
-  // The first dialog should now have been decided.
-  EXPECT_TRUE(request_quiet.finished());
-  EXPECT_EQ(1u, GetPermissionRequestManager()->Requests().size());
-
-  // Cleanup remaining request. And check that this was the last request.
-  GetPermissionRequestManager()->Closing();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(0u, GetPermissionRequestManager()->Requests().size());
-}
 
 // Re-enable when 1016233 is fixed.
 // Quiet permission requests are cancelled when a new request is made.
@@ -787,7 +738,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest_AnimatedIcon,
 IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
                        LoudPendingRequestsQueued) {
   MockPermissionRequest request1(
-      "request1", PermissionRequestType::PERMISSION_CLIPBOARD_READ,
+      "request1", PermissionRequestType::PERMISSION_CLIPBOARD_READ_WRITE,
       PermissionRequestGestureType::UNKNOWN);
   GetPermissionRequestManager()->AddRequest(&request1);
   base::RunLoop().RunUntilIdle();

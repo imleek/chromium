@@ -19,7 +19,6 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chromeos/profiles/profile_util.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
@@ -326,6 +325,8 @@ const char* GetReportingTypeValue(ReportingType reportingType) {
 // TODO(raleksandov) Move to util class or smth similar.
 // static
 std::string ManagementUIHandler::GetAccountDomain(Profile* profile) {
+  if (!IsProfileManaged(profile))
+    return std::string();
   auto username = profile->GetProfileUserName();
   size_t email_separator_pos = username.find('@');
   bool is_email = email_separator_pos != std::string::npos &&

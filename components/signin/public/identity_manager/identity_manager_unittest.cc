@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
 #include "base/run_loop.h"
+#include "base/scoped_observer.h"
 #include "base/stl_util.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/task_environment.h"
@@ -1558,6 +1559,47 @@ TEST_F(
   EXPECT_EQ(identity_manager()->GetUnconsentedPrimaryAccountInfo(), empty_info);
 }
 
+TEST_F(IdentityManagerTest, UnconsentedPrimaryAccountNotChangedOnSignout) {
+  // Setup cookies and token for the main account.
+  CoreAccountInfo account_info;
+  account_info.email = kTestEmail;
+  account_info.gaia = kTestGaiaId;
+  account_info.account_id =
+      identity_manager()->PickAccountIdForAccount(kTestGaiaId, kTestEmail);
+  SetCookieAccounts(identity_manager(), test_url_loader_factory(),
+                    {{account_info.email, account_info.gaia}});
+  SetRefreshTokenForAccount(identity_manager(), account_info.account_id,
+                            "refresh-token");
+  EXPECT_EQ(account_info,
+            identity_manager()->GetUnconsentedPrimaryAccountInfo());
+  EXPECT_EQ(account_info, identity_manager()->GetPrimaryAccountInfo());
+  EXPECT_TRUE(identity_manager()->HasPrimaryAccountWithRefreshToken());
+
+  // Tests that OnUnconsentedPrimaryAccountChanged is never called.
+  class UnconsentedPrimaryAccountObserver : public IdentityManager::Observer {
+   public:
+    void OnUnconsentedPrimaryAccountChanged(
+        const CoreAccountInfo& unconsented_primary_account_info) override {
+      NOTREACHED();
+      called_ = true;
+    }
+    bool called_ = false;
+  };
+  UnconsentedPrimaryAccountObserver observer;
+  ScopedObserver<IdentityManager, IdentityManager::Observer> scoped_observer(
+      &observer);
+  scoped_observer.Add(identity_manager());
+  // Clear primary account but do not delete the account.
+  ClearPrimaryAccount(identity_manager(),
+                      ClearPrimaryAccountPolicy::KEEP_ALL_ACCOUNTS);
+  // Primary account is cleared, but unconsented account is not.
+  EXPECT_FALSE(identity_manager()->HasPrimaryAccount());
+  EXPECT_EQ(account_info,
+            identity_manager()->GetUnconsentedPrimaryAccountInfo());
+  // OnUnconsentedPrimaryAccountChanged was not fired.
+  EXPECT_FALSE(observer.called_);
+}
+
 TEST_F(IdentityManagerTest,
        UnconsentedPrimaryAccountTokenRevokedWithStaleCookies) {
   ClearPrimaryAccount(identity_manager(), ClearPrimaryAccountPolicy::DEFAULT);
@@ -1608,6 +1650,38 @@ TEST_F(IdentityManagerTest,
   // Unconsented account was removed.
   EXPECT_EQ(identity_manager()->GetUnconsentedPrimaryAccountInfo(),
             CoreAccountInfo());
+}
+
+TEST_F(IdentityManagerTest, UnconsentedPrimaryAccountDuringLoad) {
+  ClearPrimaryAccount(identity_manager(), ClearPrimaryAccountPolicy::DEFAULT);
+  // Add two accounts with cookies.
+  AccountInfo main_account_info =
+      MakeAccountAvailable(identity_manager(), kTestEmail2);
+  AccountInfo secondary_account_info =
+      MakeAccountAvailable(identity_manager(), kTestEmail3);
+  SetCookieAccounts(
+      identity_manager(), test_url_loader_factory(),
+      {{main_account_info.email, main_account_info.gaia},
+       {secondary_account_info.email, secondary_account_info.gaia}});
+  EXPECT_EQ(identity_manager()->GetUnconsentedPrimaryAccountInfo(),
+            main_account_info);
+
+  // Set the token service in "loading" mode.
+  token_service()->set_all_credentials_loaded_for_testing(false);
+
+  // Unconsented primary account is available while tokens are not loaded.
+  EXPECT_EQ(identity_manager()->GetUnconsentedPrimaryAccountInfo(),
+            main_account_info);
+  // Revoking an unrelated token doesn't change the unconsented primary account.
+  token_service()->RevokeCredentials(secondary_account_info.account_id);
+  EXPECT_EQ(identity_manager()->GetUnconsentedPrimaryAccountInfo(),
+            main_account_info);
+  // Revoke the unconsented primary account.
+  token_service()->RevokeCredentials(main_account_info.account_id);
+  EXPECT_FALSE(identity_manager()->HasUnconsentedPrimaryAccount());
+  // Finish the token load.
+  token_service()->set_all_credentials_loaded_for_testing(true);
+  EXPECT_FALSE(identity_manager()->HasUnconsentedPrimaryAccount());
 }
 #endif
 
@@ -1972,8 +2046,8 @@ TEST_F(IdentityManagerTest,
   const CoreAccountId kTestAccountId("account_id");
   const CoreAccountId kTestAccountId2("account_id2");
   const std::vector<std::pair<CoreAccountId, std::string>> accounts = {
-      {kTestAccountId, kTestAccountId.id},
-      {kTestAccountId2, kTestAccountId2.id}};
+      {kTestAccountId, kTestAccountId.ToString()},
+      {kTestAccountId2, kTestAccountId2.ToString()}};
 
   SetAccountsInCookieResult
       error_from_set_accounts_in_cookie_completed_callback;
@@ -2001,8 +2075,8 @@ TEST_F(IdentityManagerTest,
   const CoreAccountId kTestAccountId("account_id");
   const CoreAccountId kTestAccountId2("account_id2");
   const std::vector<std::pair<CoreAccountId, std::string>> accounts = {
-      {kTestAccountId, kTestAccountId.id},
-      {kTestAccountId2, kTestAccountId2.id}};
+      {kTestAccountId, kTestAccountId.ToString()},
+      {kTestAccountId2, kTestAccountId2.ToString()}};
 
   SetAccountsInCookieResult
       error_from_set_accounts_in_cookie_completed_callback;
@@ -2245,9 +2319,9 @@ TEST_F(IdentityManagerTest, TestPickAccountIdForAccount) {
       identity_manager()->GetAccountIdMigrationState() ==
       IdentityManager::AccountIdMigrationState::MIGRATION_DONE;
   if (account_id_migration_done) {
-    EXPECT_EQ(kTestGaiaId, account_id.id);
+    EXPECT_EQ(kTestGaiaId, account_id.ToString());
   } else {
-    EXPECT_TRUE(gaia::AreEmailsSame(kTestEmail, account_id.id));
+    EXPECT_TRUE(gaia::AreEmailsSame(kTestEmail, account_id.ToString()));
   }
 }
 
@@ -2318,7 +2392,7 @@ TEST_F(IdentityManagerTest, ForceRefreshOfExtendedAccountInfo) {
 
   SimulateSuccessfulFetchOfAccountInfo(
       identity_manager(), account_info.account_id, account_info.email,
-      account_info.account_id, kTestHostedDomain, kTestFullName, kTestGivenName,
+      account_info.gaia, kTestHostedDomain, kTestFullName, kTestGivenName,
       kTestLocale, kTestPictureUrl);
 
   const AccountInfo& refreshed_account_info =

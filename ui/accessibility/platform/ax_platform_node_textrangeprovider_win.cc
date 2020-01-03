@@ -472,6 +472,14 @@ STDMETHODIMP AXPlatformNodeTextRangeProviderWin::GetAttributeValue(
         delegate->GetFromNodeID(it->anchor_id()));
     DCHECK(platform_node);
 
+    // Only get attributes for nodes in the tree
+    if (platform_node->GetDelegate()->IsChildOfLeaf()) {
+      platform_node = static_cast<AXPlatformNodeWin*>(
+          AXPlatformNode::FromNativeViewAccessible(
+              platform_node->GetDelegate()->GetClosestPlatformObject()));
+      DCHECK(platform_node);
+    }
+
     base::win::ScopedVariant current_variant;
     HRESULT hr = platform_node->GetTextAttributeValue(
         attribute_id, current_variant.Receive());
@@ -559,7 +567,8 @@ STDMETHODIMP AXPlatformNodeTextRangeProviderWin::GetEnclosingElement(
   enclosing_node = enclosing_node->GetLowestAccessibleElement();
   DCHECK(enclosing_node);
 
-  while (ui::IsIgnored(enclosing_node->GetData())) {
+  while (enclosing_node->GetData().IsIgnored() ||
+         enclosing_node->GetData().role == ax::mojom::Role::kInlineTextBox) {
     AXPlatformNodeWin* parent = static_cast<AXPlatformNodeWin*>(
         AXPlatformNode::FromNativeViewAccessible(enclosing_node->GetParent()));
     DCHECK(parent);
@@ -681,8 +690,8 @@ STDMETHODIMP AXPlatformNodeTextRangeProviderWin::MoveEndpointByUnit(
 
   bool is_start_endpoint = endpoint == TextPatternRangeEndpoint_Start;
   AXPositionInstance& position_to_move = is_start_endpoint ? start_ : end_;
-  AXPositionInstance new_position;
 
+  AXPositionInstance new_position;
   switch (unit) {
     case TextUnit_Character:
       new_position =
@@ -716,8 +725,12 @@ STDMETHODIMP AXPlatformNodeTextRangeProviderWin::MoveEndpointByUnit(
   position_to_move = std::move(new_position);
 
   // If the start was moved past the end, create a degenerate range with the end
-  // equal to the start. Do the equivalent if the end moved past the start.
-  if (*end_->AsTreePosition() < *start_->AsTreePosition() || *end_ < *start_) {
+  // equal to the start; do the equivalent if the end moved past the start.
+  base::Optional<int> endpoint_comparison =
+      AXNodeRange::CompareEndpoints(start_.get(), end_.get());
+  DCHECK(endpoint_comparison.has_value());
+
+  if (endpoint_comparison.value_or(0) > 0) {
     if (is_start_endpoint)
       end_ = start_->Clone();
     else
@@ -878,7 +891,7 @@ STDMETHODIMP AXPlatformNodeTextRangeProviderWin::GetChildren(
   const AXNode::AXID node_id = common_anchor->id();
   AXPlatformNodeDelegate* delegate = GetDelegate(tree_id, node_id);
   DCHECK(delegate);
-  while (ui::IsIgnored(delegate->GetData())) {
+  while (delegate->GetData().IsIgnored()) {
     auto* node = static_cast<AXPlatformNodeWin*>(
         AXPlatformNode::FromNativeViewAccessible(delegate->GetParent()));
     DCHECK(node);
@@ -914,15 +927,40 @@ STDMETHODIMP AXPlatformNodeTextRangeProviderWin::GetChildren(
 // static
 bool AXPlatformNodeTextRangeProviderWin::AtStartOfLinePredicate(
     const AXPositionInstance& position) {
-  return !position->IsIgnored() &&
+  return !position->IsIgnored() && position->AtStartOfAnchor() &&
          (position->AtStartOfLine() || position->AtStartOfInlineBlock());
 }
 
 // static
 bool AXPlatformNodeTextRangeProviderWin::AtEndOfLinePredicate(
     const AXPositionInstance& position) {
-  return !position->IsIgnored() &&
+  return !position->IsIgnored() && position->AtEndOfAnchor() &&
          (position->AtEndOfLine() || position->AtStartOfInlineBlock());
+}
+
+// static
+AXPlatformNodeTextRangeProviderWin::AXPositionInstance
+AXPlatformNodeTextRangeProviderWin::GetNextTextBoundaryPosition(
+    const AXPositionInstance& position,
+    AXTextBoundary boundary_type,
+    AXBoundaryBehavior boundary_behavior,
+    AXTextBoundaryDirection boundary_direction) {
+  // Override At[Start|End]OfLinePredicate for behavior specific to UIA.
+  switch (boundary_type) {
+    case AXTextBoundary::kLineStart:
+      return position->CreateBoundaryStartPosition(
+          boundary_behavior, boundary_direction,
+          base::BindRepeating(&AtStartOfLinePredicate),
+          base::BindRepeating(&AtEndOfLinePredicate));
+    case AXTextBoundary::kLineEnd:
+      return position->CreateBoundaryEndPosition(
+          boundary_behavior, boundary_direction,
+          base::BindRepeating(&AtStartOfLinePredicate),
+          base::BindRepeating(&AtEndOfLinePredicate));
+    default:
+      return position->CreatePositionAtTextBoundary(
+          boundary_type, boundary_direction, boundary_behavior);
+  }
 }
 
 base::string16 AXPlatformNodeTextRangeProviderWin::GetString(
@@ -977,42 +1015,10 @@ AXPlatformNodeTextRangeProviderWin::MoveEndpointByLine(
     bool is_start_endpoint,
     const int count,
     int* units_moved) {
-  DCHECK_NE(count, 0);
-  const bool going_forward = count > 0;
-
-  AXPositionInstance current_endpoint = endpoint->Clone();
-  for (int iteration = 0; iteration < std::abs(count); ++iteration) {
-    AXPositionInstance next_endpoint;
-    if (is_start_endpoint) {
-      next_endpoint = current_endpoint->CreateBoundaryStartPosition(
-          AXBoundaryBehavior::StopAtLastAnchorBoundary,
-          going_forward ? AXTextBoundaryDirection::kForwards
-                        : AXTextBoundaryDirection::kBackwards,
-          base::BindRepeating(&AtStartOfLinePredicate),
-          base::BindRepeating(&AtEndOfLinePredicate));
-    } else {
-      next_endpoint = current_endpoint->CreateBoundaryEndPosition(
-          AXBoundaryBehavior::StopAtLastAnchorBoundary,
-          going_forward ? AXTextBoundaryDirection::kForwards
-                        : AXTextBoundaryDirection::kBackwards,
-          base::BindRepeating(&AtStartOfLinePredicate),
-          base::BindRepeating(&AtEndOfLinePredicate));
-    }
-    DCHECK(!next_endpoint->IsNullPosition());
-
-    // Since AXBoundaryBehavior::StopAtLastAnchorBoundary forces the next text
-    // boundary position to be different than the input position, the only case
-    // where these are equal is when they're already located at the last anchor
-    // boundary. In such case, there is no next position to move to.
-    if (*current_endpoint == *next_endpoint) {
-      *units_moved = going_forward ? iteration : -iteration;
-      return current_endpoint;
-    }
-    current_endpoint = std::move(next_endpoint);
-  }
-
-  *units_moved = count;
-  return current_endpoint;
+  return MoveEndpointByUnitHelper(
+      std::move(endpoint),
+      is_start_endpoint ? AXTextBoundary::kLineStart : AXTextBoundary::kLineEnd,
+      count, units_moved);
 }
 
 AXPlatformNodeTextRangeProviderWin::AXPositionInstance
@@ -1077,24 +1083,28 @@ AXPlatformNodeTextRangeProviderWin::MoveEndpointByUnitHelper(
     const int count,
     int* units_moved) {
   DCHECK_NE(count, 0);
-  const bool going_forward = count > 0;
+  const AXTextBoundaryDirection boundary_direction =
+      (count > 0) ? AXTextBoundaryDirection::kForwards
+                  : AXTextBoundaryDirection::kBackwards;
 
-  AXPositionInstance current_endpoint = endpoint->Clone();
+  // Most of the methods used to create the next/previous position go back and
+  // forth creating a leaf text position and rooting the result to the original
+  // position's anchor; avoid this by normalizing to a leaf text position.
+  AXPositionInstance current_endpoint = endpoint->AsLeafTextPosition();
+
   for (int iteration = 0; iteration < std::abs(count); ++iteration) {
-    AXPositionInstance next_endpoint =
-        current_endpoint->CreatePositionAtTextBoundary(
-            boundary_type,
-            going_forward ? AXTextBoundaryDirection::kForwards
-                          : AXTextBoundaryDirection::kBackwards,
-            AXBoundaryBehavior::StopAtLastAnchorBoundary);
-    DCHECK(!next_endpoint->IsNullPosition());
+    AXPositionInstance next_endpoint = GetNextTextBoundaryPosition(
+        current_endpoint, boundary_type,
+        AXBoundaryBehavior::StopAtLastAnchorBoundary, boundary_direction);
+    DCHECK(next_endpoint->IsLeafTextPosition());
 
     // Since AXBoundaryBehavior::StopAtLastAnchorBoundary forces the next text
     // boundary position to be different than the input position, the only case
     // where these are equal is when they're already located at the last anchor
     // boundary. In such case, there is no next position to move to.
-    if (*current_endpoint == *next_endpoint) {
-      *units_moved = going_forward ? iteration : -iteration;
+    if (next_endpoint->GetAnchor() == current_endpoint->GetAnchor() &&
+        *next_endpoint == *current_endpoint) {
+      *units_moved = (count > 0) ? iteration : -iteration;
       return current_endpoint;
     }
     current_endpoint = std::move(next_endpoint);
@@ -1112,22 +1122,22 @@ void AXPlatformNodeTextRangeProviderWin::NormalizeAsUnignoredTextRange() {
     return;
 
   if (start_->IsIgnored()) {
-    AXPositionInstance normalized_start = start_->AsUnignoredTextPosition(
-        AXNodePosition::AdjustmentBehavior::kMoveRight);
+    AXPositionInstance normalized_start = start_->AsUnignoredPosition(
+        AXPositionAdjustmentBehavior::kMoveForwards);
     if (normalized_start->IsNullPosition()) {
-      normalized_start = start_->AsUnignoredTextPosition(
-          AXNodePosition::AdjustmentBehavior::kMoveLeft);
+      normalized_start = start_->AsUnignoredPosition(
+          AXPositionAdjustmentBehavior::kMoveBackwards);
     }
     if (!normalized_start->IsNullPosition())
       start_ = std::move(normalized_start);
   }
 
   if (end_->IsIgnored()) {
-    AXPositionInstance normalized_end = end_->AsUnignoredTextPosition(
-        AXNodePosition::AdjustmentBehavior::kMoveRight);
+    AXPositionInstance normalized_end =
+        end_->AsUnignoredPosition(AXPositionAdjustmentBehavior::kMoveForwards);
     if (normalized_end->IsNullPosition()) {
-      normalized_end = end_->AsUnignoredTextPosition(
-          AXNodePosition::AdjustmentBehavior::kMoveLeft);
+      normalized_end = end_->AsUnignoredPosition(
+          AXPositionAdjustmentBehavior::kMoveBackwards);
     }
     if (!normalized_end->IsNullPosition())
       end_ = std::move(normalized_end);
@@ -1144,24 +1154,35 @@ void AXPlatformNodeTextRangeProviderWin::NormalizeTextRange() {
   // first snap them both to be unignored positions.
   NormalizeAsUnignoredTextRange();
 
-  // Only normalize non-degenerate ranges.
-  if (*start_ != *end_) {
-    AXPositionInstance normalized_start =
-        start_->AsLeafTextPositionBeforeCharacter();
-    if (!normalized_start->IsNullPosition()) {
-      DCHECK_EQ(*start_, *normalized_start);
-      start_ = std::move(normalized_start);
-    }
+  if (*start_ == *end_)
+    return;
 
-    AXPositionInstance normalized_end =
-        end_->AsLeafTextPositionAfterCharacter();
-    if (!normalized_end->IsNullPosition()) {
-      DCHECK_EQ(*end_, *normalized_end);
-      end_ = std::move(normalized_end);
-    }
+  AXPositionInstance normalized_start =
+      start_->AsLeafTextPositionBeforeCharacter();
+  AXPositionInstance normalized_end = end_->AsLeafTextPositionAfterCharacter();
 
-    DCHECK_LE(*start_, *end_);
+  // Handle the fringe case when |normalized_start| and |normalized_end| end up
+  // inverted after AsLeafTextPosition{Before|After}Character() calls.
+  // Consider the following case:
+  //    text1<start_>|IGNORED node|<end_>text2
+  // Due to |start_| and |end_| positions spanning ignored nodes, we end up
+  // with the following inverted normalized positions:
+  //    <normalized_end>text1|IGNORED node|<normalized_start>text2
+  // So we want to create a collapsed range by setting |normalized_end| to
+  // |normalized_start|.
+  if (!normalized_start->IsNullPosition() &&
+      !normalized_end->IsNullPosition() &&
+      *normalized_end < *normalized_start) {
+    normalized_end = normalized_start->Clone();
   }
+
+  if (!normalized_start->IsNullPosition() &&
+      !normalized_end->IsNullPosition()) {
+    start_ = std::move(normalized_start);
+    end_ = std::move(normalized_end);
+  }
+
+  DCHECK_LE(*start_, *end_);
 }
 
 }  // namespace ui

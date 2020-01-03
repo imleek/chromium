@@ -382,6 +382,8 @@
     "inline-flex",
     "grid",
     "inline-grid",
+    "math",
+    "inline-math",
     "contents",
     //none
     "-webkit-flex",
@@ -616,13 +618,6 @@
     //
     // auto
     // none
-
-    //
-    // -webkit-margin-collapse
-    //
-    // collapse
-    // separate
-    "discard",
 
     //
     // word-break

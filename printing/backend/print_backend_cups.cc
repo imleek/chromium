@@ -14,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/memory/ref_counted.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
@@ -35,8 +36,10 @@ const char kCUPSPrinterTypeOpt[] = "printer-type";
 
 PrintBackendCUPS::PrintBackendCUPS(const GURL& print_server_url,
                                    http_encryption_t encryption,
-                                   bool blocking)
-    : print_server_url_(print_server_url),
+                                   bool blocking,
+                                   const std::string& locale)
+    : PrintBackend(locale),
+      print_server_url_(print_server_url),
       cups_encryption_(encryption),
       blocking_(blocking) {}
 
@@ -155,7 +158,7 @@ bool PrintBackendCUPS::GetPrinterSemanticCapsAndDefaults(
   if (!GetPrinterCapsAndDefaults(printer_name, &info))
     return false;
 
-  return ParsePpdCapabilities(printer_name, info.printer_capabilities,
+  return ParsePpdCapabilities(printer_name, locale(), info.printer_capabilities,
                               printer_info);
 }
 
@@ -211,7 +214,8 @@ bool PrintBackendCUPS::IsValidPrinter(const std::string& printer_name) {
 
 #if !defined(OS_CHROMEOS)
 scoped_refptr<PrintBackend> PrintBackend::CreateInstanceImpl(
-    const base::DictionaryValue* print_backend_settings) {
+    const base::DictionaryValue* print_backend_settings,
+    const std::string& locale) {
   std::string print_server_url_str, cups_blocking;
   int encryption = HTTP_ENCRYPT_NEVER;
   if (print_backend_settings) {
@@ -223,18 +227,22 @@ scoped_refptr<PrintBackend> PrintBackend::CreateInstanceImpl(
     print_backend_settings->GetInteger(kCUPSEncryption, &encryption);
   }
   GURL print_server_url(print_server_url_str);
-  return new PrintBackendCUPS(print_server_url,
-                              static_cast<http_encryption_t>(encryption),
-                              cups_blocking == kValueTrue);
+  return base::MakeRefCounted<PrintBackendCUPS>(
+      print_server_url, static_cast<http_encryption_t>(encryption),
+      cups_blocking == kValueTrue, locale);
 }
 #endif  // !defined(OS_CHROMEOS)
 
 int PrintBackendCUPS::GetDests(cups_dest_t** dests) {
-  if (print_server_url_.is_empty())  // Use default (local) print server.
-    return cupsGetDests(dests);
+  // Default to the local print server (CUPS scheduler)
+  if (print_server_url_.is_empty())
+    return cupsGetDests2(CUPS_HTTP_DEFAULT, dests);
 
   HttpConnectionCUPS http(print_server_url_, cups_encryption_);
   http.SetBlocking(blocking_);
+
+  // This call must be made in the same scope as |http| because its destructor
+  // closes the connection.
   return cupsGetDests2(http.http(), dests);
 }
 

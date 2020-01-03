@@ -96,7 +96,7 @@ class ClearBrowsingDataCollectionViewControllerTest
         std::make_unique<AuthenticationServiceDelegateFake>());
 
     ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()
-        ->AddIdentities(@[ @"syncuser@example.com" ]);
+        ->AddIdentities(@[ @"syncuser" ]);
 
     test_sync_service_ = static_cast<syncer::TestSyncService*>(
         ProfileSyncServiceFactory::GetForBrowserState(browser_state_.get()));
@@ -214,7 +214,7 @@ TEST_F(ClearBrowsingDataCollectionViewControllerTest,
 TEST_F(ClearBrowsingDataCollectionViewControllerTest,
        TestItemsSignedInSyncActiveHistoryOff) {
   test_sync_service_->SetDisableReasons(
-      syncer::SyncService::DISABLE_REASON_NONE);
+      syncer::SyncService::DisableReasonSet());
   test_sync_service_->SetTransportState(
       syncer::SyncService::TransportState::ACTIVE);
   test_sync_service_->SetFirstSetupComplete(true);

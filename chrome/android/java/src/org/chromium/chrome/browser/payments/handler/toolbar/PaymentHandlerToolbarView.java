@@ -7,12 +7,14 @@ package org.chromium.chrome.browser.payments.handler.toolbar;
 import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.View.OnClickListener;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.payments.handler.toolbar.PaymentHandlerToolbarCoordinator.PaymentHandlerToolbarObserver;
 import org.chromium.chrome.browser.ui.widget.FadingShadow;
 import org.chromium.chrome.browser.ui.widget.FadingShadowView;
 
@@ -31,7 +33,8 @@ import org.chromium.chrome.browser.ui.widget.FadingShadowView;
      *
      * @param context The context where the bottome-sheet should be shown.
      */
-    /* package */ PaymentHandlerToolbarView(Context context) {
+    /* package */ PaymentHandlerToolbarView(Context context,
+            OnClickListener securityIconOnClickListener, PaymentHandlerToolbarObserver observer) {
         mToolbarHeightPx =
                 context.getResources().getDimensionPixelSize(R.dimen.sheet_tab_toolbar_height);
 
@@ -40,6 +43,9 @@ import org.chromium.chrome.browser.ui.widget.FadingShadowView;
         mTitleView = mToolbarView.findViewById(R.id.title);
         mProgressBar = mToolbarView.findViewById(R.id.progress_bar);
         mSecurityIconView = mToolbarView.findViewById(R.id.security_icon);
+        View closeButton = mToolbarView.findViewById(R.id.close);
+        closeButton.setOnClickListener(view -> observer.onToolbarCloseButtonClicked());
+        mSecurityIconView.setOnClickListener(securityIconOnClickListener);
 
         // These parts from sheet_tab_toolbar are not needed in this component.
         mToolbarView.findViewById(R.id.open_in_new_tab).setVisibility(View.GONE);

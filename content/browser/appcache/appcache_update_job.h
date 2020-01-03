@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "base/containers/circular_deque.h"
+#include "base/feature_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -25,6 +26,8 @@
 #include "content/browser/appcache/appcache_response.h"
 #include "content/browser/appcache/appcache_service_impl.h"
 #include "content/browser/appcache/appcache_storage.h"
+#include "content/browser/appcache/appcache_update_job_state.h"
+#include "content/browser/appcache/appcache_update_metrics_recorder.h"
 #include "content/common/appcache_interfaces.h"
 #include "content/common/content_export.h"
 #include "net/http/http_response_headers.h"
@@ -41,6 +44,8 @@ class AppCacheUpdateJobTest;
 }
 
 class HostNotifier;
+
+CONTENT_EXPORT extern const base::Feature kAppCacheManifestScopeChecksFeature;
 
 // Application cache Update algorithm and state.
 class CONTENT_EXPORT AppCacheUpdateJob
@@ -81,18 +86,6 @@ class CONTENT_EXPORT AppCacheUpdateJob
     UNKNOWN_TYPE,
     UPGRADE_ATTEMPT,
     CACHE_ATTEMPT,
-  };
-
-  enum InternalUpdateState {
-    FETCH_MANIFEST,
-    NO_UPDATE,
-    DOWNLOADING,
-
-    // Every state after this comment indicates the update is terminating.
-    REFETCH_MANIFEST,
-    CACHE_FAILURE,
-    CANCELLED,
-    COMPLETED,
   };
 
   enum StoredState {
@@ -175,6 +168,11 @@ class CONTENT_EXPORT AppCacheUpdateJob
   void CheckIfManifestChanged();
   void OnManifestDataReadComplete(int result);
 
+  // Used to read a manifest from the cache in case of a 304 Not Modified HTTP
+  // response.
+  void ReadManifestFromCacheAndContinue();
+  void OnManifestFromCacheDataReadComplete(int result);
+
   // Creates the list of files that may need to be fetched and initiates
   // fetches. Section 6.9.4 steps 12-17
   void BuildUrlFileList(const AppCacheManifest& manifest);
@@ -224,11 +222,29 @@ class CONTENT_EXPORT AppCacheUpdateJob
   // Deletes this object after letting the stack unwind.
   void DeleteSoon();
 
-  bool IsTerminating() { return internal_state_ >= REFETCH_MANIFEST ||
-                                stored_state_ != UNSTORED; }
+  bool IsTerminating() {
+    return internal_state_ >= AppCacheUpdateJobState::REFETCH_MANIFEST ||
+           stored_state_ != UNSTORED;
+  }
 
   AppCacheServiceImpl* service_;
   const GURL manifest_url_;  // here for easier access
+
+  // Stores the manifest parser version for the group before an update begins.
+  int64_t cached_manifest_parser_version_;
+  // Stores the manifest parser version determined during the fetch phase.
+  int64_t fetched_manifest_parser_version_;
+
+  // Stores the manifest scope for the group before an update begins.
+  std::string cached_manifest_scope_;
+  // Stores the manifest scope determined during the fetch phase.
+  std::string fetched_manifest_scope_;
+  // Stores the manifest scope determined during the refetch phase.
+  std::string refetched_manifest_scope_;
+
+  // If true, AppCaches will be limited to their determined manifest scope
+  // (either the scope of the manifest URL or the override the server gives us).
+  bool manifest_scope_checks_enabled_;
 
   // Defined prior to refs to AppCaches and Groups because destruction
   // order matters, the disabled_storage_reference_ must outlive those
@@ -240,7 +256,7 @@ class CONTENT_EXPORT AppCacheUpdateJob
   AppCacheGroup* group_;
 
   UpdateType update_type_;
-  InternalUpdateState internal_state_;
+  AppCacheUpdateJobState internal_state_;
   base::Time last_progress_time_;
   bool doing_full_update_check_;
 
@@ -302,6 +318,10 @@ class CONTENT_EXPORT AppCacheUpdateJob
 
   // Whether we've stored the resulting group/cache yet.
   StoredState stored_state_;
+
+  // Used to track behavior and conditions found during update for submission
+  // to UMA.
+  AppCacheUpdateMetricsRecorder update_metrics_;
 
   AppCacheStorage* storage_;
   base::WeakPtrFactory<AppCacheUpdateJob> weak_factory_{this};

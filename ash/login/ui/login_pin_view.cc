@@ -17,6 +17,7 @@
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
+#include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -180,14 +181,16 @@ class BasePinButton : public views::InkDropHostView {
  protected:
   // Called when the button has been pressed.
   virtual void DispatchPress(ui::Event* event) {
-    if (on_press_)
-      on_press_.Run();
     if (event)
       event->SetHandled();
 
     AnimateInkDrop(views::InkDropState::ACTION_TRIGGERED,
                    ui::LocatedEvent::FromIfValid(event));
     SchedulePaint();
+
+    // |on_press_| may delete us.
+    if (on_press_)
+      on_press_.Run();
   }
 
   // Handler for press events. May be null.
@@ -299,7 +302,7 @@ class LoginPinView::BackspacePinButton : public BasePinButton {
     }
 
     // If this is the first time the button has been pressed, do not fire a
-    // submit even immediately. Instead, trigger the delay timer. The
+    // submit event immediately. Instead, trigger the delay timer. The
     // cancellation logic handles the edge case of a button just being tapped.
     if (!is_held_) {
       is_held_ = true;
@@ -443,6 +446,7 @@ LoginPinView::LoginPinView(Style keyboard_style,
     row->SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kHorizontal));
     AddChildView(row);
+    rows.push_back(row);
     return row;
   };
 
@@ -493,6 +497,15 @@ LoginPinView::LoginPinView(Style keyboard_style,
 }
 
 LoginPinView::~LoginPinView() = default;
+
+void LoginPinView::NotifyAccessibilityLocationChanged() {
+  this->NotifyAccessibilityEvent(ax::mojom::Event::kLocationChanged,
+                                 false /*send_native_event*/);
+  for (NonAccessibleView* row : rows) {
+    row->NotifyAccessibilityEvent(ax::mojom::Event::kLocationChanged,
+                                  false /*send_native_event*/);
+  }
+}
 
 void LoginPinView::SetBackButtonVisible(bool visible) {
   back_button_->SetVisible(visible);

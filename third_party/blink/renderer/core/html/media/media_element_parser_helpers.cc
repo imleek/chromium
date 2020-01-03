@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html/image_document.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_element_type_helpers.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
@@ -22,10 +23,11 @@ namespace blink {
 namespace media_element_parser_helpers {
 
 bool IsMediaElement(const Element* element) {
-  if ((IsHTMLImageElement(element) || IsSVGImageElement(element)) &&
-      !element->GetDocument().IsImageDocument())
+  if ((IsA<HTMLImageElement>(element) || IsA<SVGImageElement>(element)) &&
+      !IsA<ImageDocument>(element->GetDocument()))
     return true;
-  if (IsHTMLVideoElement(element) && !element->GetDocument().IsMediaDocument())
+  if (IsA<HTMLVideoElement>(element) &&
+      !element->GetDocument().IsMediaDocument())
     return true;
   return false;
 }

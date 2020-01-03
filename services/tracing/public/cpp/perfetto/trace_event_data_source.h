@@ -20,6 +20,7 @@
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_config.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
+#include "services/tracing/public/cpp/perfetto/track_event_thread_local_event_sink.h"
 #include "third_party/perfetto/protos/perfetto/trace/chrome/chrome_metadata.pbzero.h"
 #include "third_party/perfetto/protos/perfetto/trace/chrome/chrome_trace_event.pbzero.h"
 
@@ -35,6 +36,7 @@ namespace perfetto {
 class StartupTraceWriter;
 class StartupTraceWriterRegistry;
 class TraceWriter;
+class EventContext;
 }
 
 namespace tracing {
@@ -132,6 +134,16 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventMetadataSource
 class COMPONENT_EXPORT(TRACING_CPP) TraceEventDataSource
     : public PerfettoTracedProcess::DataSourceBase {
  public:
+  struct SessionFlags {
+    // True if startup tracing is enabled for the current tracing session.
+    bool is_startup_tracing : 1;
+
+    // This ID is incremented whenever a new tracing session is started (either
+    // when startup tracing is enabled or when the service tells us to start the
+    // session otherwise).
+    uint32_t session_id : 31;
+  };
+
   static TraceEventDataSource* GetInstance();
 
   // Destroys and recreates the global instance for testing.
@@ -142,11 +154,13 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventDataSource
 
   static base::ThreadLocalBoolean* GetThreadIsInTraceEventTLS();
 
-  // Installs TraceLog overrides for tracing during Chrome startup. Trace data
-  // is locally buffered until connection to the perfetto service is
-  // established. Expects a later call to StartTracing() to bind to the perfetto
-  // service. Should only be called once.
+  // Enables startup tracing. Trace data is locally buffered until connection to
+  // the perfetto service is established. Expects a later call to StartTracing()
+  // to bind to the perfetto service. Should only be called once.
   void SetupStartupTracing(bool privacy_filtering_enabled);
+
+  // Installs TraceLog overrides for tracing during Chrome startup.
+  void RegisterStartupHooks();
 
   void OnTaskSchedulerAvailable();
 
@@ -175,6 +189,29 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventDataSource
 
   bool IsEnabled();
 
+  static TrackEventThreadLocalEventSink* GetOrPrepareEventSink(
+      bool thread_will_flush);
+
+  template <
+      typename TrackEventArgumentFunction = void (*)(perfetto::EventContext)>
+  static void OnAddTraceEvent(base::trace_event::TraceEvent* trace_event,
+                              bool thread_will_flush,
+                              base::trace_event::TraceEventHandle* handle,
+                              TrackEventArgumentFunction func) {
+    auto* thread_local_event_sink = GetOrPrepareEventSink(thread_will_flush);
+    if (thread_local_event_sink) {
+      AutoThreadLocalBoolean thread_is_in_trace_event(
+          GetThreadIsInTraceEventTLS());
+      thread_local_event_sink->AddTraceEvent(trace_event, handle, func);
+    }
+  }
+
+  // Registered with base::StatisticsRecorder to receive a callback on every
+  // histogram sample which gets added.
+  static void OnMetricsSampleCallback(const char* histogram_name,
+                                      uint64_t name_hash,
+                                      base::HistogramBase::Sample sample);
+
  private:
   friend class base::NoDestructor<TraceEventDataSource>;
 
@@ -193,14 +230,19 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventDataSource
   void UnregisterFromTraceLog();
 
   std::unique_ptr<perfetto::StartupTraceWriter> CreateTraceWriterLocked();
-  ThreadLocalEventSink* CreateThreadLocalEventSink(bool thread_will_flush);
+  TrackEventThreadLocalEventSink* CreateThreadLocalEventSink(
+      bool thread_will_flush);
 
   // Callback from TraceLog, can be called from any thread.
   static void OnAddTraceEvent(base::trace_event::TraceEvent* trace_event,
                               bool thread_will_flush,
                               base::trace_event::TraceEventHandle* handle);
   static void OnUpdateDuration(
+      const unsigned char* category_group_enabled,
+      const char* name,
       base::trace_event::TraceEventHandle handle,
+      int thread_id,
+      bool explicit_timestamps,
       const base::TimeTicks& now,
       const base::ThreadTicks& thread_now,
       base::trace_event::ThreadInstructionCount thread_instruction_now);
@@ -214,20 +256,23 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventDataSource
   void LogHistogram(base::HistogramBase* histogram);
   void EmitProcessDescriptor();
 
+  void IncrementSessionIdOrClearStartupFlagWhileLocked();
+  void SetStartupTracingFlagsWhileLocked();
+
   bool disable_interning_ = false;
   base::OnceClosure stop_complete_callback_;
+  base::TimeDelta startup_tracing_timeout_ = base::TimeDelta::FromSeconds(60);
 
   // Incremented and accessed atomically but without memory order guarantees.
-  // This ID is incremented whenever a new tracing session is started.
   static constexpr uint32_t kInvalidSessionID = 0;
-  static constexpr uint32_t kFirstSessionID = 1;
-  base::TimeDelta startup_tracing_timeout_ = base::TimeDelta::FromSeconds(60);
-  std::atomic<uint32_t> session_id_{kInvalidSessionID};
+  std::atomic<SessionFlags> session_flags_{
+      SessionFlags{false, kInvalidSessionID}};
 
   // To avoid lock-order inversion, this lock should not be held while making
   // calls to mojo interfaces or posting tasks, or calling any other code path
   // that may acquire another lock that may also be held while emitting a trace
-  // event (crbug.com/986248).
+  // event (crbug.com/986248). Use AutoLockWithDeferredTaskPosting rather than
+  // base::AutoLock to protect code paths which may post tasks.
   base::Lock lock_;  // Protects subsequent members.
   uint32_t target_buffer_ = 0;
   // We own the registry during startup, but transfer its ownership to the

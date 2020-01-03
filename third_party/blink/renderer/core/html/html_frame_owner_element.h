@@ -111,6 +111,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   int MarginWidth() const override { return -1; }
   int MarginHeight() const override { return -1; }
   bool AllowFullscreen() const override { return false; }
+  bool DisallowDocumentAccess() const override { return false; }
   bool AllowPaymentRequest() const override { return false; }
   bool IsDisplayNone() const override { return !embedded_content_view_; }
   AtomicString RequiredCsp() const override { return g_null_atom; }
@@ -129,8 +130,8 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   HTMLFrameOwnerElement(const QualifiedName& tag_name, Document&);
 
   void SetSandboxFlags(WebSandboxFlags);
-  void SetAllowedToDownloadWithoutUserActivation(bool allowed) {
-    frame_policy_.allowed_to_download_without_user_activation = allowed;
+  void SetAllowedToDownload(bool allowed) {
+    frame_policy_.allowed_to_download = allowed;
   }
 
   bool LoadOrRedirectSubframe(const KURL&,
@@ -159,6 +160,16 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   // Update the container policy and notify the frame loader client of any
   // changes.
   void UpdateContainerPolicy(Vector<String>* messages = nullptr);
+
+  // Return a document policy required policy for this frame, based on the
+  // frame attributes.
+  virtual DocumentPolicy::FeatureState ConstructRequiredPolicy() const {
+    return DocumentPolicy::FeatureState{};
+  }
+
+  // Update the required policy and notify the frame loader client of any
+  // changes.
+  void UpdateRequiredPolicy();
 
  private:
   // Intentionally private to prevent redundant checks when the type is

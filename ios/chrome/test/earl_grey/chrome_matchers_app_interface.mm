@@ -9,15 +9,16 @@
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/autofill/form_suggestion_constants.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/address_mediator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/address_view_controller.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/card_coordinator.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/card_mediator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/card_view_controller.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_accessory_view_controller.h"
+#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_address_mediator.h"
+#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_card_mediator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_password_cell.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_password_mediator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/password_view_controller.h"
+#import "ios/chrome/browser/ui/autofill/save_card_infobar_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_ui_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
@@ -41,16 +42,18 @@
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_collection_view_controller.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_ui_constants.h"
 #import "ios/chrome/browser/ui/settings/credit_card_scanner/credit_card_scanner_view_controller.h"
-#import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller.h"
-#import "ios/chrome/browser/ui/settings/google_services/advanced_signin_settings_coordinator.h"
+#import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller_constants.h"
+#import "ios/chrome/browser/ui/settings/google_services/advanced_signin_settings_constants.h"
+#import "ios/chrome/browser/ui/settings/google_services/google_services_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/import_data_table_view_controller.h"
-#import "ios/chrome/browser/ui/settings/password/passwords_table_view_controller.h"
+#import "ios/chrome/browser/ui/settings/password/passwords_table_view_constants.h"
 #import "ios/chrome/browser/ui/settings/privacy_table_view_controller.h"
-#import "ios/chrome/browser/ui/settings/settings_root_table_view_controller.h"
-#import "ios/chrome/browser/ui/settings/settings_table_view_controller.h"
-#import "ios/chrome/browser/ui/static_content/static_html_view_controller.h"
+#import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
+#import "ios/chrome/browser/ui/settings/settings_root_table_constants.h"
+#import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_grid/tab_grid_constants.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/ui/toolbar/keyboard_assist/toolbar_assistive_keyboard_views_utils.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
@@ -539,6 +542,10 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
                     grey_descendant(mainTextLabelMatcher), nil);
 }
 
++ (id<GREYMatcher>)googleServicesSettingsView {
+  return grey_accessibilityID(kGoogleServicesSettingsViewIdentifier);
+}
+
 + (id<GREYMatcher>)settingsMenuBackButton {
   UINavigationBar* navBar = base::mac::ObjCCastStrict<UINavigationBar>(
       SubviewWithAccessibilityIdentifier(
@@ -585,23 +592,43 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
 }
 
 + (id<GREYMatcher>)clearBrowsingHistoryButton {
+  // Needs to use grey_sufficientlyVisible() to make the difference between a
+  // cell used by the tableview and a invisible recycled cell.
   return grey_allOf(
       grey_accessibilityID(kClearBrowsingHistoryCellAccessibilityIdentifier),
       grey_sufficientlyVisible(), nil);
 }
 
 + (id<GREYMatcher>)clearCookiesButton {
-  return grey_accessibilityID(kClearCookiesCellAccessibilityIdentifier);
+  // Needs to use grey_sufficientlyVisible() to make the difference between a
+  // cell used by the tableview and a invisible recycled cell.
+  return grey_allOf(
+      grey_accessibilityID(kClearCookiesCellAccessibilityIdentifier),
+      grey_sufficientlyVisible(), nil);
 }
 
 + (id<GREYMatcher>)clearCacheButton {
+  // Needs to use grey_sufficientlyVisible() to make the difference between a
+  // cell used by the tableview and a invisible recycled cell.
   return grey_allOf(
       grey_accessibilityID(kClearCacheCellAccessibilityIdentifier),
       grey_sufficientlyVisible(), nil);
 }
 
 + (id<GREYMatcher>)clearSavedPasswordsButton {
-  return grey_accessibilityID(kClearSavedPasswordsCellAccessibilityIdentifier);
+  // Needs to use grey_sufficientlyVisible() to make the difference between a
+  // cell used by the tableview and a invisible recycled cell.
+  return grey_allOf(
+      grey_accessibilityID(kClearSavedPasswordsCellAccessibilityIdentifier),
+      grey_sufficientlyVisible(), nil);
+}
+
++ (id<GREYMatcher>)clearAutofillButton {
+  // Needs to use grey_sufficientlyVisible() to make the difference between a
+  // cell used by the tableview and a invisible recycled cell.
+  return grey_allOf(
+      grey_accessibilityID(kClearAutofillCellAccessibilityIdentifier),
+      grey_sufficientlyVisible(), nil);
 }
 
 + (id<GREYMatcher>)contentSuggestionCollectionView {
@@ -767,6 +794,48 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
 
 + (id<GREYMatcher>)settingsBottomToolbarDeleteButton {
   return grey_accessibilityID(kSettingsToolbarDeleteButtonId);
+}
+
++ (id<GREYMatcher>)contentViewSmallerThanScrollView {
+  GREYMatchesBlock matches = ^BOOL(UIView* view) {
+    UIScrollView* scrollView = base::mac::ObjCCast<UIScrollView>(view);
+    return scrollView &&
+           scrollView.contentSize.height < scrollView.bounds.size.height;
+  };
+  GREYDescribeToBlock describe = ^void(id<GREYDescription> description) {
+    [description
+        appendText:@"Not a scroll view or the scroll view content is bigger "
+                   @"than the scroll view bounds"];
+  };
+  return [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
+                                              descriptionBlock:describe];
+}
+
++ (id<GREYMatcher>)autofillSaveCardLocallyInfobar {
+  return grey_accessibilityID(kSaveCardInfobarViewLocalAccessibilityID);
+}
+
++ (id<GREYMatcher>)autofillUploadCardInfobar {
+  return grey_accessibilityID(kSaveCardInfobarViewUploadAccessibilityID);
+}
+
++ (id<GREYMatcher>)historyEntryForURL:(NSString*)URL title:(NSString*)title {
+  GREYMatchesBlock matches = ^BOOL(TableViewURLCell* cell) {
+    return [cell.titleLabel.text isEqual:title] &&
+           [cell.URLLabel.text isEqual:URL];
+  };
+
+  GREYDescribeToBlock describe = ^(id<GREYDescription> description) {
+    [description appendText:@"view containing URL text: "];
+    [description appendText:URL];
+    [description appendText:@" title text: "];
+    [description appendText:title];
+  };
+  return grey_allOf(
+      grey_kindOfClass([TableViewURLCell class]),
+      [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
+                                           descriptionBlock:describe],
+      grey_sufficientlyVisible(), nil);
 }
 
 #pragma mark - Manual Fallback

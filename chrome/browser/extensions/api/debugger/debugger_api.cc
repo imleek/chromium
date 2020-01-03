@@ -145,9 +145,8 @@ class ExtensionDevToolsClientHost : public content::DevToolsAgentHostClient,
   // DevToolsAgentHostClient interface.
   void AgentHostClosed(DevToolsAgentHost* agent_host) override;
   void DispatchProtocolMessage(DevToolsAgentHost* agent_host,
-                               const std::string& message) override;
-  bool MayAttachToRenderer(content::RenderFrameHost* render_frame_host,
-                           bool is_webui) override;
+                               base::span<const uint8_t> message) override;
+  bool MayAttachToURL(const GURL& url, bool is_webui) override;
   bool MayAttachToBrowser() override;
   bool MayReadLocalFiles() override;
   bool MayWriteLocalFiles() override;
@@ -267,9 +266,11 @@ void ExtensionDevToolsClientHost::SendMessageToBackend(
         "params", command_params->additional_properties.CreateDeepCopy());
   }
 
-  std::string json_args;
-  base::JSONWriter::Write(protocol_request, &json_args);
-  agent_host_->DispatchProtocolMessage(this, json_args);
+  std::string json;
+  base::JSONWriter::Write(protocol_request, &json);
+
+  agent_host_->DispatchProtocolMessage(this,
+                                       base::as_bytes(base::make_span(json)));
 }
 
 void ExtensionDevToolsClientHost::InfoBarDismissed() {
@@ -315,15 +316,18 @@ void ExtensionDevToolsClientHost::Observe(
 }
 
 void ExtensionDevToolsClientHost::DispatchProtocolMessage(
-    DevToolsAgentHost* agent_host, const std::string& message) {
+    DevToolsAgentHost* agent_host,
+    base::span<const uint8_t> message) {
   DCHECK(agent_host == agent_host_.get());
   if (!EventRouter::Get(profile_))
     return;
 
+  base::StringPiece message_str(reinterpret_cast<const char*>(message.data()),
+                                message.size());
   std::unique_ptr<base::Value> result = base::JSONReader::ReadDeprecated(
-      message, base::JSON_REPLACE_INVALID_CHARACTERS);
+      message_str, base::JSON_REPLACE_INVALID_CHARACTERS);
   if (!result || !result->is_dict()) {
-    LOG(ERROR) << "Tried to send invalid message to extension: " << message;
+    LOG(ERROR) << "Tried to send invalid message to extension: " << message_str;
     return;
   }
   base::DictionaryValue* dictionary =
@@ -357,29 +361,15 @@ void ExtensionDevToolsClientHost::DispatchProtocolMessage(
   }
 }
 
-bool ExtensionDevToolsClientHost::MayAttachToRenderer(
-    content::RenderFrameHost* render_frame_host,
-    bool is_webui) {
+bool ExtensionDevToolsClientHost::MayAttachToURL(const GURL& url,
+                                                 bool is_webui) {
   if (is_webui)
     return false;
-
-  if (!render_frame_host)
+  // Allow the extension to attach to about:blank.
+  if (url.is_empty() || url == "about:")
     return true;
-
   std::string error;
-  // We check the site instance URL here (instead of
-  // RenderFrameHost::GetLastCommittedURL()) because it's too early in the
-  // navigation for anything else.
-  const GURL& site_instance_url =
-      render_frame_host->GetSiteInstance()->GetSiteURL();
-
-  if (site_instance_url.is_empty() || site_instance_url == "about:") {
-    // Allow the extension to attach to about:blank.
-    return true;
-  }
-
-  return ExtensionCanAttachToURL(*extension_, site_instance_url, profile_,
-                                 &error);
+  return ExtensionCanAttachToURL(*extension_, url, profile_, &error);
 }
 
 bool ExtensionDevToolsClientHost::MayAttachToBrowser() {
