@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "chrome/browser/background/background_contents.h"
@@ -49,6 +48,9 @@ class MockBackgroundContents : public BackgroundContents {
     service_->OnBackgroundContentsClosed(this);
   }
 
+  MockBackgroundContents(const MockBackgroundContents&) = delete;
+  MockBackgroundContents& operator=(const MockBackgroundContents&) = delete;
+
   ~MockBackgroundContents() override = default;
 
   BackgroundContentsService* service() { return service_; }
@@ -62,17 +64,21 @@ class MockBackgroundContents : public BackgroundContents {
 
   // The ID of our parent application
   std::string appid_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockBackgroundContents);
 };
 
 class BackgroundContentsServiceTest : public testing::Test {
  public:
   BackgroundContentsServiceTest() = default;
+
+  BackgroundContentsServiceTest(const BackgroundContentsServiceTest&) = delete;
+  BackgroundContentsServiceTest& operator=(
+      const BackgroundContentsServiceTest&) = delete;
+
   ~BackgroundContentsServiceTest() override = default;
 
   void SetUp() override {
-    command_line_.reset(new base::CommandLine(base::CommandLine::NO_PROGRAM));
+    command_line_ =
+        std::make_unique<base::CommandLine>(base::CommandLine::NO_PROGRAM);
     BackgroundContentsService::DisableCloseBalloonForTesting(true);
   }
 
@@ -106,15 +112,18 @@ class BackgroundContentsServiceTest : public testing::Test {
 
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<base::CommandLine> command_line_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(BackgroundContentsServiceTest);
 };
 
 class BackgroundContentsServiceNotificationTest
     : public BrowserWithTestWindowTest {
  public:
   BackgroundContentsServiceNotificationTest() {}
+
+  BackgroundContentsServiceNotificationTest(
+      const BackgroundContentsServiceNotificationTest&) = delete;
+  BackgroundContentsServiceNotificationTest& operator=(
+      const BackgroundContentsServiceNotificationTest&) = delete;
+
   ~BackgroundContentsServiceNotificationTest() override {}
 
   // Overridden from testing::Test
@@ -141,9 +150,6 @@ class BackgroundContentsServiceNotificationTest
   }
 
   std::unique_ptr<NotificationDisplayServiceTester> display_service_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(BackgroundContentsServiceNotificationTest);
 };
 
 TEST_F(BackgroundContentsServiceTest, Create) {
@@ -162,20 +168,20 @@ TEST_F(BackgroundContentsServiceTest, BackgroundContentsUrlAdded) {
   {
     std::unique_ptr<MockBackgroundContents> owned_contents(
         new MockBackgroundContents(&service));
-    EXPECT_EQ(0U, GetPrefs(&profile)->size());
+    EXPECT_EQ(0U, GetPrefs(&profile)->DictSize());
     auto* contents = AddToService(std::move(owned_contents));
 
     contents->Navigate(url);
-    EXPECT_EQ(1U, GetPrefs(&profile)->size());
+    EXPECT_EQ(1U, GetPrefs(&profile)->DictSize());
     EXPECT_EQ(url.spec(), GetPrefURLForApp(&profile, contents->appid()));
 
     // Navigate the contents to a new url, should not change url.
     contents->Navigate(url2);
-    EXPECT_EQ(1U, GetPrefs(&profile)->size());
+    EXPECT_EQ(1U, GetPrefs(&profile)->DictSize());
     EXPECT_EQ(url.spec(), GetPrefURLForApp(&profile, contents->appid()));
   }
   // Contents are deleted, url should persist.
-  EXPECT_EQ(1U, GetPrefs(&profile)->size());
+  EXPECT_EQ(1U, GetPrefs(&profile)->DictSize());
 }
 
 TEST_F(BackgroundContentsServiceTest, BackgroundContentsUrlAddedAndClosed) {
@@ -184,15 +190,15 @@ TEST_F(BackgroundContentsServiceTest, BackgroundContentsUrlAddedAndClosed) {
 
   GURL url("http://a/");
   auto owned_contents = std::make_unique<MockBackgroundContents>(&service);
-  EXPECT_EQ(0U, GetPrefs(&profile)->size());
+  EXPECT_EQ(0U, GetPrefs(&profile)->DictSize());
   auto* contents = AddToService(std::move(owned_contents));
   contents->Navigate(url);
-  EXPECT_EQ(1U, GetPrefs(&profile)->size());
+  EXPECT_EQ(1U, GetPrefs(&profile)->DictSize());
   EXPECT_EQ(url.spec(), GetPrefURLForApp(&profile, contents->appid()));
 
   // Fake a window closed by script.
   contents->MockClose(&profile);
-  EXPECT_EQ(0U, GetPrefs(&profile)->size());
+  EXPECT_EQ(0U, GetPrefs(&profile)->DictSize());
 }
 
 // Test what happens if a BackgroundContents shuts down (say, due to a renderer
@@ -206,11 +212,11 @@ TEST_F(BackgroundContentsServiceTest, RestartBackgroundContents) {
     MockBackgroundContents* contents = AddToService(
         std::make_unique<MockBackgroundContents>(&service, "appid"));
     contents->Navigate(url);
-    EXPECT_EQ(1U, GetPrefs(&profile)->size());
+    EXPECT_EQ(1U, GetPrefs(&profile)->DictSize());
     EXPECT_EQ(url.spec(), GetPrefURLForApp(&profile, contents->appid()));
   }
   // Contents deleted, url should be persisted.
-  EXPECT_EQ(1U, GetPrefs(&profile)->size());
+  EXPECT_EQ(1U, GetPrefs(&profile)->DictSize());
 
   {
     // Reopen the BackgroundContents to the same URL, we should not register the
@@ -218,7 +224,7 @@ TEST_F(BackgroundContentsServiceTest, RestartBackgroundContents) {
     MockBackgroundContents* contents = AddToService(
         std::make_unique<MockBackgroundContents>(&service, "appid"));
     contents->Navigate(url);
-    EXPECT_EQ(1U, GetPrefs(&profile)->size());
+    EXPECT_EQ(1U, GetPrefs(&profile)->DictSize());
   }
 }
 
@@ -236,20 +242,20 @@ TEST_F(BackgroundContentsServiceTest, TestApplicationIDLinkage) {
       std::make_unique<MockBackgroundContents>(&service, "appid2"));
   EXPECT_EQ(contents, service.GetAppBackgroundContents(contents->appid()));
   EXPECT_EQ(contents2, service.GetAppBackgroundContents(contents2->appid()));
-  EXPECT_EQ(0U, GetPrefs(&profile)->size());
+  EXPECT_EQ(0U, GetPrefs(&profile)->DictSize());
 
   // Navigate the contents, then make sure the one associated with the extension
   // is unregistered.
   GURL url("http://a/");
   GURL url2("http://b/");
   contents->Navigate(url);
-  EXPECT_EQ(1U, GetPrefs(&profile)->size());
+  EXPECT_EQ(1U, GetPrefs(&profile)->DictSize());
   contents2->Navigate(url2);
-  EXPECT_EQ(2U, GetPrefs(&profile)->size());
+  EXPECT_EQ(2U, GetPrefs(&profile)->DictSize());
   service.ShutdownAssociatedBackgroundContents("appid");
   EXPECT_FALSE(service.IsTracked(contents));
-  EXPECT_EQ(NULL, service.GetAppBackgroundContents("appid"));
-  EXPECT_EQ(1U, GetPrefs(&profile)->size());
+  EXPECT_EQ(nullptr, service.GetAppBackgroundContents("appid"));
+  EXPECT_EQ(1U, GetPrefs(&profile)->DictSize());
   EXPECT_EQ(url2.spec(), GetPrefURLForApp(&profile, contents2->appid()));
 }
 

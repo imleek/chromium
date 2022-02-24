@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {BrowserService, ensureLazyLoaded, HistoryPageViewHistogram, SyncedTabsHistogram, SYNCED_TABS_HISTOGRAM_NAME} from 'chrome://history/history.js';
+import {BrowserService, ensureLazyLoaded, HistoryPageViewHistogram, SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram} from 'chrome://history/history.js';
+import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {TestBrowserService} from 'chrome://test/history/test_browser_service.js';
 import {createHistoryEntry, createHistoryInfo, createSession, createWindow, disableLinkClicks, polymerSelectAll} from 'chrome://test/history/test_util.js';
-import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {flushTasks, waitAfterNextRender} from 'chrome://test/test_util.m.js';
+import {flushTasks, waitAfterNextRender} from 'chrome://test/test_util.js';
 
 suite('Metrics', function() {
   let testService;
@@ -19,9 +20,9 @@ suite('Metrics', function() {
   });
 
   setup(async () => {
-    PolymerTest.clearBody();
+    document.body.innerHTML = '';
 
-    BrowserService.instance_ = new TestBrowserService();
+    BrowserService.setInstance(new TestBrowserService());
     testService = BrowserService.getInstance();
 
     actionMap = testService.actionMap;
@@ -46,7 +47,7 @@ suite('Metrics', function() {
           ensureLazyLoaded(),
         ])
         .then(function() {
-          cr.webUIListenerCallback('sign-in-state-changed', false);
+          webUIListenerCallback('sign-in-state-changed', false);
           return flushTasks();
         });
   }
@@ -64,7 +65,7 @@ suite('Metrics', function() {
     await testService.whenCalled('otherDevicesInitialized');
 
     testService.resetResolver('recordHistogram');
-    cr.webUIListenerCallback('sign-in-state-changed', true);
+    webUIListenerCallback('sign-in-state-changed', true);
     await testService.whenCalled('recordHistogram');
 
     assertEquals(1, histogram[HistoryPageViewHistogram.SYNCED_TABS]);

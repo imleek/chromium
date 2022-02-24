@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/frame/user_activation.h"
 
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 
 namespace blink {
 
@@ -22,7 +23,7 @@ UserActivation::UserActivation(LocalDOMWindow* window) : window_(window) {}
 
 UserActivation::~UserActivation() = default;
 
-void UserActivation::Trace(blink::Visitor* visitor) {
+void UserActivation::Trace(Visitor* visitor) const {
   visitor->Trace(window_);
   ScriptWrappable::Trace(visitor);
 }

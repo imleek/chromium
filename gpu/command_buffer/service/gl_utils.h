@@ -12,11 +12,12 @@
 
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/constants.h"
+#include "gpu/gpu_gles2_export.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rrect_f.h"
+#include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/overlay_transform.h"
-#include "ui/gfx/rrect_f.h"
-#include "ui/gfx/transform.h"
 #include "ui/gl/gl_bindings.h"
 
 // Define this for extra GL error debugging (slower).
@@ -91,9 +92,9 @@ void LogGLDebugMessage(GLenum source,
                        GLsizei length,
                        const GLchar* message,
                        Logger* error_logger);
-void InitializeGLDebugLogging(bool log_non_errors,
-                              GLDEBUGPROC callback,
-                              const void* user_param);
+GPU_GLES2_EXPORT void InitializeGLDebugLogging(bool log_non_errors,
+                                               GLDEBUGPROC callback,
+                                               const void* user_param);
 
 bool ValidContextLostReason(GLenum reason);
 error::ContextLostReason GetContextLostReasonFromResetStatus(
@@ -106,6 +107,8 @@ bool GetCompressedTexSizeInBytes(const char* function_name,
                                  GLenum format,
                                  GLsizei* size_in_bytes,
                                  ErrorState* error_state);
+
+bool ValidateCompressedFormatTarget(GLenum target, GLenum format);
 
 bool ValidateCompressedTexSubDimensions(GLenum target,
                                         GLint level,
@@ -157,6 +160,9 @@ gfx::OverlayTransform GetGFXOverlayTransform(GLenum plane_transform);
 
 bool GetGFXBufferFormat(GLenum internal_format, gfx::BufferFormat* out_format);
 bool GetGFXBufferUsage(GLenum buffer_usage, gfx::BufferUsage* out_usage);
+
+bool IsASTCFormat(GLenum internal_format);
+bool IsCompressedTextureFormat(GLenum internal_format);
 
 }  // namespace gles2
 }  // namespace gpu

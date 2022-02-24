@@ -7,7 +7,17 @@
  * user about update over mobile data. By clicking 'Continue', the user
  * agrees to download update using mobile data.
  */
+import '//resources/cr_elements/cr_button/cr_button.m.js';
+import '//resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import '../../settings_shared_css.js';
+
+import {I18nBehavior} from '//resources/js/i18n_behavior.m.js';
+import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {AboutPageBrowserProxy, AboutPageBrowserProxyImpl, AboutPageUpdateInfo, BrowserChannel, browserChannelToI18nId, ChannelInfo, isTargetChannelMoreStable, RegulatoryInfo, TPMFirmwareUpdateStatusChangedEvent, UpdateStatus, UpdateStatusChangedEvent, VersionInfo} from './about_page_browser_proxy.js';
+
 Polymer({
+  _template: html`{__html_template__}`,
   is: 'settings-update-warning-dialog',
 
   behaviors: [I18nBehavior],
@@ -20,33 +30,38 @@ Polymer({
     },
   },
 
-  /** @private {?settings.AboutPageBrowserProxy} */
+  /** @private {?AboutPageBrowserProxy} */
   browserProxy_: null,
 
   /** @override */
-  ready: function() {
-    this.browserProxy_ = settings.AboutPageBrowserProxyImpl.getInstance();
+  ready() {
+    this.browserProxy_ = AboutPageBrowserProxyImpl.getInstance();
   },
 
   /** @override */
-  attached: function() {
+  attached() {
     this.$.dialog.showModal();
   },
 
   /** @private */
-  onCancelTap_: function() {
+  onCancelTap_() {
     this.$.dialog.close();
   },
 
   /** @private */
-  onContinueTap_: function() {
+  onContinueTap_() {
+    if (!this.updateInfo || !this.updateInfo.version || !this.updateInfo.size){
+      console.log('ERROR: requestUpdateOverCellular arguments are undefined');
+      return;
+    }
     this.browserProxy_.requestUpdateOverCellular(
-        this.updateInfo.version, this.updateInfo.size);
+        /** @type {!string} */ (this.updateInfo.version),
+        /** @type {!string} */ (this.updateInfo.size));
     this.$.dialog.close();
   },
 
   /** @private */
-  updateInfoChanged_: function() {
+  updateInfoChanged_() {
     this.$$('#update-warning-message').innerHTML = this.i18n(
         'aboutUpdateWarningMessage',
         // Convert bytes to megabytes

@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include "base/callback.h"
+#include "base/logging.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 
 namespace syncer {
@@ -20,7 +21,7 @@ bool WeakHandleCoreBase::IsOnOwnerThread() const {
   return owner_loop_task_runner_->RunsTasksInCurrentSequence();
 }
 
-WeakHandleCoreBase::~WeakHandleCoreBase() {}
+WeakHandleCoreBase::~WeakHandleCoreBase() = default;
 
 void WeakHandleCoreBase::PostToOwnerThread(const base::Location& from_here,
                                            base::OnceClosure fn) const {

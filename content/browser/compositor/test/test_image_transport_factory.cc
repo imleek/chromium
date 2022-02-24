@@ -48,7 +48,8 @@ TestImageTransportFactory::~TestImageTransportFactory() = default;
 
 void TestImageTransportFactory::CreateLayerTreeFrameSink(
     base::WeakPtr<ui::Compositor> compositor) {
-  compositor->SetLayerTreeFrameSink(cc::FakeLayerTreeFrameSink::Create3d());
+  compositor->SetLayerTreeFrameSink(cc::FakeLayerTreeFrameSink::Create3d(),
+                                    nullptr);
 }
 
 scoped_refptr<viz::ContextProvider>
@@ -87,6 +88,10 @@ viz::FrameSinkId TestImageTransportFactory::AllocateFrameSinkId() {
   return frame_sink_id_allocator_.NextFrameSinkId();
 }
 
+viz::SubtreeCaptureId TestImageTransportFactory::AllocateSubtreeCaptureId() {
+  return subtree_capture_id_allocator_.NextSubtreeCaptureId();
+}
+
 viz::HostFrameSinkManager*
 TestImageTransportFactory::GetHostFrameSinkManager() {
   return &host_frame_sink_manager_;
@@ -97,11 +102,6 @@ void TestImageTransportFactory::DisableGpuCompositing() {
 }
 
 ui::ContextFactory* TestImageTransportFactory::GetContextFactory() {
-  return this;
-}
-
-ui::ContextFactoryPrivate*
-TestImageTransportFactory::GetContextFactoryPrivate() {
   return this;
 }
 

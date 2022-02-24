@@ -3,16 +3,17 @@
 // found in the LICENSE file.
 
 import {BrowserService, ensureLazyLoaded} from 'chrome://history/history.js';
-import {TestBrowserService} from 'chrome://test/history/test_browser_service.js';
-import {createHistoryEntry, createHistoryInfo, polymerSelectAll} from 'chrome://test/history/test_util.js';
-import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {eventToPromise, flushTasks, waitAfterNextRender} from 'chrome://test/test_util.m.js';
 import {isMac} from 'chrome://resources/js/cr.m.js';
 import {pressAndReleaseKeyOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {TestBrowserService} from 'chrome://test/history/test_browser_service.js';
+import {createHistoryEntry, createHistoryInfo, polymerSelectAll} from 'chrome://test/history/test_util.js';
+import {eventToPromise, flushTasks, waitAfterNextRender} from 'chrome://test/test_util.js';
 
 suite('<history-list>', function() {
   let app;
   let element;
+  let testService;
   const TEST_HISTORY_RESULTS = [
     createHistoryEntry('2016-03-15', 'https://www.google.com'),
     createHistoryEntry('2016-03-14 10:00', 'https://www.example.com'),
@@ -23,9 +24,9 @@ suite('<history-list>', function() {
 
   setup(function() {
     window.history.replaceState({}, '', '/');
-    PolymerTest.clearBody();
-    const testService = new TestBrowserService();
-    BrowserService.instance_ = testService;
+    document.body.innerHTML = '';
+    testService = new TestBrowserService();
+    BrowserService.setInstance(testService);
     testService.setQueryResult({
       info: createHistoryInfo(),
       value: TEST_HISTORY_RESULTS,
@@ -135,5 +136,22 @@ suite('<history-list>', function() {
     assertDeepEquals(
         [false, false, false, false],
         element.historyData_.map(i => i.selected));
+  });
+
+  test('deleting last item will focus on new last item', async () => {
+    let focused;
+    await flushTasks();
+    flush();
+    const items = polymerSelectAll(element, 'history-item');
+    assertEquals(4, element.historyData_.length);
+    assertEquals(4, items.length);
+    items[3].$['menu-button'].click();
+    await flushTasks();
+    element.$$('#menuRemoveButton').click();
+    assertNotEquals(items[2].$['menu-button'], element.lastFocused_);
+    await testService.whenCalled('removeVisits');
+    await flushTasks();
+    assertEquals(3, element.historyData_.length);
+    assertEquals(items[2].$['menu-button'], element.lastFocused_);
   });
 });

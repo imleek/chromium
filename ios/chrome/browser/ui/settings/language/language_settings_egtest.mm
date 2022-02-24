@@ -28,6 +28,7 @@ using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::NavigationBarDoneButton;
 using chrome_test_util::SettingsMenuBackButton;
 using chrome_test_util::SettingsSwitchCell;
+using chrome_test_util::TabGridEditButton;
 using chrome_test_util::TurnSettingsSwitchOn;
 
 namespace {
@@ -53,12 +54,10 @@ id<GREYMatcher> AddLanguageTableView() {
   return grey_accessibilityID(kAddLanguageTableViewAccessibilityIdentifier);
 }
 
-#ifndef CHROME_EARL_GREY_2
 // Matcher for the Language Settings's Language Details page table view.
 id<GREYMatcher> LanguageDetailsTableView() {
   return grey_accessibilityID(kLanguageDetailsTableViewAccessibilityIdentifier);
 }
-#endif
 
 // Matcher for the Language Settings's general Settings menu entry.
 id<GREYMatcher> LanguageSettingsButton() {
@@ -135,7 +134,7 @@ id<GREYMatcher> LanguageEntryDeleteButton() {
 id<GREYMatcher> NavigationBarEditButton() {
   return grey_allOf(
       ButtonWithAccessibilityLabelId(IDS_IOS_NAVIGATION_BAR_EDIT_BUTTON),
-      grey_kindOfClass([UIButton class]),
+      grey_not(TabGridEditButton()), grey_kindOfClass([UIButton class]),
       grey_ancestor(grey_kindOfClass([UINavigationBar class])),
       grey_sufficientlyVisible(), nil);
 }
@@ -150,7 +149,8 @@ id<GREYMatcher> NavigationBarEditButton() {
 - (void)setUp {
   [super setUp];
 
-  [ChromeEarlGrey setBoolValue:YES forUserPref:prefs::kOfferTranslateEnabled];
+  [ChromeEarlGrey setBoolValue:YES
+                   forUserPref:translate::prefs::kOfferTranslateEnabled];
   [LanguageSettingsAppInterface removeAllLanguages];
   [LanguageSettingsAppInterface addLanguage:@"en"];
 }
@@ -180,9 +180,6 @@ id<GREYMatcher> NavigationBarEditButton() {
       assertWithMatcher:grey_notNil()];
   [ChromeEarlGrey verifyAccessibilityForCurrentScreen];
 
-// TODO(crbug.com/1036578): Enable the second part of the test when back button
-// matcher is fixed in EG2.
-#ifndef CHROME_EARL_GREY_2
   // Navigate back.
   [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
       performAction:grey_tap()];
@@ -196,7 +193,6 @@ id<GREYMatcher> NavigationBarEditButton() {
   [[EarlGrey selectElementWithMatcher:LanguageDetailsTableView()]
       assertWithMatcher:grey_notNil()];
   [ChromeEarlGrey verifyAccessibilityForCurrentScreen];
-#endif
 }
 
 // Tests that the Translate Switch enables/disables Translate and the UI gets

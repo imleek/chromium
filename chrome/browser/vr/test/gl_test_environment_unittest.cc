@@ -7,16 +7,18 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/size.h"
 
-namespace vr {
-
-// Failing on Win7 Tests (dbg)(1). crbug.com/1035767
 #if defined(OS_WIN)
-#define MAYBE_InitializeAndCleanup DISABLED_InitializeAndCleanup
-#else
-#define MAYBE_InitializeAndCleanup InitializeAndCleanup
+#include "base/win/windows_version.h"
 #endif
 
-TEST(GlTestEnvironmentTest, MAYBE_InitializeAndCleanup) {
+namespace vr {
+
+TEST(GlTestEnvironmentTest, InitializeAndCleanup) {
+#if defined(OS_WIN)
+  // VR is not supported on Windows 7.
+  if (base::win::GetVersion() <= base::win::Version::WIN7)
+    return;
+#endif
   GlTestEnvironment gl_test_environment(gfx::Size(100, 100));
   EXPECT_NE(gl_test_environment.GetFrameBufferForTesting(), 0u);
   EXPECT_EQ(glGetError(), (GLenum)GL_NO_ERROR);

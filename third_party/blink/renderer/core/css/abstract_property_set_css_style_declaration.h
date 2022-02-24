@@ -45,7 +45,7 @@ class AbstractPropertySetCSSStyleDeclaration : public CSSStyleDeclaration {
   AbstractPropertySetCSSStyleDeclaration(ExecutionContext* context)
       : CSSStyleDeclaration(context) {}
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) const override;
 
  private:
   CSSRule* parentRule() const override { return nullptr; }
@@ -69,7 +69,7 @@ class AbstractPropertySetCSSStyleDeclaration : public CSSStyleDeclaration {
                   ExceptionState&) final;
   const CSSValue* GetPropertyCSSValueInternal(CSSPropertyID) final;
   const CSSValue* GetPropertyCSSValueInternal(
-      AtomicString custom_property_name) final;
+      const AtomicString& custom_property_name) final;
   String GetPropertyValueInternal(CSSPropertyID) final;
   void SetPropertyInternal(CSSPropertyID,
                            const String& custom_property_name,

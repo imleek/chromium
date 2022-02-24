@@ -4,7 +4,7 @@ This directory contains chromium project documentation in
 [Gitiles-flavored Markdown].  It is automatically [rendered by Gitiles].
 
 [Gitiles-flavored Markdown]: https://gerrit.googlesource.com/gitiles/+/master/Documentation/markdown.md
-[rendered by Gitiles]: https://chromium.googlesource.com/chromium/src/+/master/docs/
+[rendered by Gitiles]: https://chromium.googlesource.com/chromium/src/+/main/docs/
 
 If you add new documents, please also add a link to them in the Document Index
 below.
@@ -48,8 +48,8 @@ used when committed.
     (on a Linux host)
 *   [Cast for Android Build Instructions](android_cast_build_instructions.md) -
     Cast for Android (on a Linux host)
-*   [Fuchsia Build Instructions](fuchsia_build_instructions.md) - Fuchsia target
-    (on a Linux host)
+*   [Fuchsia Build Instructions](fuchsia/build_instructions.md) -
+    Fuchsia target (on a Linux host)
 *   [iOS Build Instructions](ios/build_instructions.md) - iOS target (on a MacOS
     host)
 *   [Chrome OS Build Instructions](chromeos_build_instructions.md) - Chrome OS
@@ -110,6 +110,7 @@ used when committed.
 *   [Code Reviews](code_reviews.md) - Code review requirements and guidelines
 *   [Respectful Code Reviews](cr_respect.md) - A guide for code reviewers
 *   [Respectful Changes](cl_respect.md) - A guide for code authors
+*   [Mandatory Code-Review Rollout](code_review_owners.md) - Upcoming policy changes related to code review and OWNERS
 *   [LUCI Migration FAQ](luci_migration_faq.md) - FAQ on Buildbot-to-LUCI
     builder migration for Chromium
 *   [Tour of Continuous Integration UI](tour_of_luci_ui.md) - A tour of our
@@ -122,6 +123,7 @@ used when committed.
     and handle thread safety in Chrome.
 *   [Callback<> and Bind()](callback.md) - All about Callbacks, Closures, and
     Bind().
+*   [Chromium Views UI](ui/index.md) - Working with the desktop UI framework.
 *   [Views Platform Styling](ui/views/platform_style.md) - How views are styled
     to fit in different native platforms
 *   [Tab Helpers](tab_helpers.md) - Using WebContents/WebContentsObserver to add
@@ -132,7 +134,6 @@ used when committed.
     Visualizing view trees during debugging
 *   [Bitmap Pipeline](bitmap_pipeline.md) - How bitmaps are moved from the
     renderer to the screen.
-*   [base::Optional](optional.md) - How to use `base::Optional` in C++ code.
 *   [Using the Origin Trials Framework](origin_trials_integration.md) - A
     framework for conditionally enabling experimental APIs for testing.
 *   [`ClientTagBasedModelTypeProcessor` in Unified Sync and Storage](sync/uss/client_tag_based_model_type_processor.md) -
@@ -153,9 +154,15 @@ used when committed.
     chrome:// URLs).
 *   [Watchlists](infra/watchlists.md) - Use watchlists to get notified of CLs
     you are interested in.
+*   [Shutdown](shutdown.md) - Explains the steps of Chrome shutdown, to make it
+    easier to determine where to add a new shutdown operation.
+*   [API Keys](api_keys.md) - When you need access to Google APIs for a custom
+    build, fork, integration of stock Chromium, or are building ChromiumOS (for
+    login).
 
 ### Testing
 *   [Running and Debugging Web Tests](testing/web_tests.md)
+*   [On disabling tests](testing/on_disabling_tests.md)
 *   [Writing Web Tests](testing/writing_web_tests.md) - Web Tests using
     `content_shell`
 *   [Web Test Expectations and Baselines](testing/web_test_expectations.md) -
@@ -173,7 +180,7 @@ used when committed.
 *   [Using Crashpad with `content_shell`](testing/using_crashpad_with_content_shell.md) -
     Capture stack traces on layout test crashes without an attached debugger
 *   [Test Descriptions](testing/test_descriptions.md) - Unit test targets that can be
-    built, with associated desciptions.
+    built, with associated descriptions.
 *   [Fuzz Testing](../testing/libfuzzer/README.md) - Fuzz testing in Chromium.
 *   [IPC Fuzzer](testing/ipc_fuzzer.md) - Fuzz testing of Chromium IPC interfaces.
 *   [Running Chrome tests with AddressSanitizer (asan) and LeakSanitizer (lsan)](testing/linux_running_asan_tests.md) -
@@ -196,7 +203,7 @@ used when committed.
 *   [Linux Proxy Config](linux/proxy_config.md) - Network proxy sources on Linux
 *   [Debugging SSL on Linux](linux/debugging_ssl.md) - Tips on debugging SSL
     code in Linux
-*   [Linux Cert Managment](linux/cert_management.md) - Managing X.509
+*   [Linux Cert Management](linux/cert_management.md) - Managing X.509
     Certificates in Linux
 *   [Tips for Debugging on Linux](linux/debugging.md)
 *   [Linux GTK Theme Integration](linux/gtk_theme_integration.md) - Having
@@ -237,6 +244,8 @@ used when committed.
     hardware video decode codepaths on Linux
 
 ### Misc MacOS-Specific Docs
+*   [Mac Debugging Tips](mac/debugging.md) - An introduction to debugging on
+    Mac, as well as a collection of useful tips.
 *   [Using CCache on Mac](ccache_mac.md) - Speed up builds on Mac using ccache
     with clang/ninja
 *   [Cocoa tips and tricks](cocoa_tips_and_tricks.md) - A collection of idioms
@@ -249,6 +258,11 @@ used when committed.
     on top of DirectX
 *   [Windows Split DLLs](windows_split_dll.md) - Splitting `chrome.dll` into
     multiple dlls to work around toolchain limitations on Windows.
+*   [Windows Native Window Occlusion Tracking](windows_native_window_occlusion_tracking.md)
+*   [Windows PWA Integration](windows_pwa_integration.md) - Integration with
+    Progressive Web Apps on Windows
+*   [Windows Shortcut and Taskbar Handling](windows_shortcut_and_taskbar_handling.md)
+*   [Windows Virtual Desktop Integration](windows_virtual_desktop_handling.md)
 
 ### Misc Android-Specific Docs
 *   [Google Play Services in Chrome for Android](google_play_services.md)
@@ -264,18 +278,13 @@ used when committed.
     how to debug Java and/or C/C++ code running on Android.
 *   [Android Logging](android_logging.md) - How Chrome's logging API works with
     `android.util.Log` on Android, and usage guidelines.
-*   [Chromoting Android Hacking](chromoting_android_hacking.md) - Viewing the
-    logs and debugging the Chrome Remote Desktop Android client.
 *   [Android Java Static Analysis](../build/android/docs/lint.md) - Catching
     Java related issues at compile time with the 'lint' tool.
 *   [Java Code Coverage](../build/android/docs/coverage.md) - Collecting code
     coverage data with the EMMA tool.
-*   [Android BuildConfig files](../build/android/docs/build_config.md) -
-    What are .build_config files and how they are used.
-*   [Android App Bundles](../build/android/docs/android_app_bundles.md) -
-    How to build Android app bundles for Chrome.
-*   [Dynamic Feature Modules (DFMs)](android_dynamic_feature_modules.md) - How
-    to create dynamic feature modules.
+*   [Dynamic Feature Modules (DFMs)](android_dynamic_feature_modules.md) - What
+    are they and how to create new ones.
+*   [Other build-related Android docs](../build/android/docs/index.md)
 *   [Chrome for Android UI](ui/android/overview.md) - Resources and best practices for
     developing UI
 
@@ -286,6 +295,8 @@ used when committed.
 *   [User Agent in Chrome for iOS](ios/user_agent.md) - Notes on User Agent
     strings using Chrome for iOS.
 *   [Running iOS test suites locally](ios/testing.md)
+*   [Working With Project Files in iOS](ios/working_with_files.md) - How
+    to add, remove, and rename files in the iOS Chromium project.
 
 ### Misc Chrome-OS-Specific Docs
 *   [Setting up captive portals and other restrictive networks](login/restrictive_networks.md)
@@ -293,10 +304,13 @@ used when committed.
     *   [Kiosk mode and public sessions](enterprise/kiosk_public_session.md)
 *   [Debugging UI in OOBE/login/lock](login/ui_debugging.md)
 *   [Chrome Logging on Chrome OS](chrome_os_logging.md)
+*   [Debugging tips](testing/chromeos_debugging_tips.md)
 
 ### Misc WebUI-Specific Docs
 *   [Creating WebUI Interfaces in components/](webui_in_components.md) How to
     create a new WebUI component in the `components/` directory.
+*   [Trusted Types on WebUI](trusted_types_on_webui.md) Tips for coding in WebUI
+    with Trusted Types in mind.
 
 ### Media
 *   [Audio Focus Handling](media/audio_focus.md) - How multiple MediaSession
@@ -327,7 +341,7 @@ used when committed.
 *   [BRLTTY in Chrome OS](accessibility/brltty.md) - Chrome OS integration with
     BRLTTY to support refreshable braille displays
 *   [PATTS on Chrome OS](accessibility/patts.md) - Notes on the PATTS speech
-    sythesis engine used on Chrome OS
+    synthesis engine used on Chrome OS
 *   [VoiceOver](ios/voiceover.md) - Using Apple's VoiceOver feature with
     Chromium on iOS.
 
@@ -342,6 +356,11 @@ used when committed.
 *   [Memory Usage in CC](memory-infra/probe-cc.md)
 *   [Memory Benchmarks](memory-infra/memory_benchmarks.md)
 *   [Heap Profiling](memory-infra/heap_profiler.md)
+
+### Metrics
+*   [Histograms](/tools/metrics/histograms/README.md)
+*   [User Actions](/tools/metrics/actions/README.md)
+*   [Code review guidelines](/tools/metrics/histograms/review_guidelines.md)
 
 ### Misc
 *   [Useful URLs](useful_urls.md) - A collection of links to various tools and
@@ -361,14 +380,13 @@ used when committed.
     install Chromium OS on VMWare.
 *   [User Data Directory](user_data_dir.md) - How the user data and cache
     directories are determined on all platforms.
+*   [User Data Storage](user_data_storage.md) - Policy documentation for files in User Data.
 
 ### Mojo &amp; Services
 *   [Intro to Mojo &amp; Services](mojo_and_services.md) - Quick introduction
     to Mojo and services in Chromium, with examples
 *   [Mojo API Reference](/mojo/README.md) - Detailed reference documentation for
     all things Mojo
-*   [The Service Manager &amp; Services](/services/service_manager/README.md) -
-    Services system overview, API references, example services
 *   [Service Development Guidelines](/services/README.md) - Guidelines for
     service development in the Chromium tree
 *   [Servicifying Chromium Features](servicification.md) - General advice for
@@ -377,10 +395,12 @@ used when committed.
     patterns for practical IPC conversion work
 *   [Mojo “Style” Guide](security/mojo.md) - Recommendations for best practices
     from Mojo and IPC reviewers
+*   [D-Bus Mojo Connection Service](dbus_mojo_connection_service.md) - A service
+    in Chrome to bootstrap CrOS services' Mojo connection.
 
-### WebXR
-*   [Running OpenVR Without Headset](xr/run_openvr_without_headset.md) -
-    Instructions for running OpenVR on Windows without a headset
+### Speed
+*   [Chrome Speed](speed/README.md) - Documentation for performance measurements and regressions in Chrome.
+*   [Chrome Speed Metrics](speed_metrics/README.md) - Documentation about user experience metrics in the web and their JavaScript APIs.
 
 ### Probably Obsolete
 *   [TPM Quick Reference](tpm_quick_ref.md) - Trusted Platform Module notes.
@@ -396,6 +416,5 @@ used when committed.
 *   [Linux PID Namespace Support](linux/pid_namespace_support.md)
 *   [Vanilla msysgit workflow](vanilla_msysgit_workflow.md) - A workflow for
     using mostly vanilla git on Windows.
-*   [Old Chromoting Build Instructions](old_chromoting_build_instructions.md)
 *   [Old Options](chrome_settings.md) - Pre-Material Design chrome://settings
     notes.

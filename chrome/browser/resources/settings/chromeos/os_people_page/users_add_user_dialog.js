@@ -63,7 +63,13 @@ Polymer({
 
   usersPrivate_: chrome.usersPrivate,
 
-  open: function() {
+  /** @override */
+  attached() {
+    // Initialize the announcer once.
+    Polymer.IronA11yAnnouncer.requestAvailability();
+  },
+
+  open() {
     this.$.addUserInput.value = '';
     this.onInput_();
     this.$.dialog.showModal();
@@ -72,7 +78,7 @@ Polymer({
   },
 
   /** @private */
-  addUser_: function() {
+  addUser_() {
     // May be submitted by the Enter key even if the input value is invalid.
     if (this.$.addUserInput.disabled) {
       return;
@@ -91,15 +97,18 @@ Polymer({
       userEmail = emailMatches[1] + '@' + emailMatches[2];
     }
 
-    this.usersPrivate_.isWhitelistedUser(userEmail, doesUserExist => {
-      if (doesUserExist) {
+    this.usersPrivate_.isUserInList(userEmail, isUserInList => {
+      if (isUserInList) {
         // This user email had been saved previously
         this.errorCode_ = UserAddError.USER_EXISTS;
         return;
       }
 
+      this.fire(
+          'iron-announce', {text: this.i18n('userAddedMessage', userEmail)});
+
       this.$.dialog.close();
-      this.usersPrivate_.addWhitelistedUser(
+      this.usersPrivate_.addUser(
           userEmail,
           /* callback */ function(success) {});
 
@@ -111,20 +120,20 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  canAddUser_: function() {
+  canAddUser_() {
     return this.isEmail_ && !this.isEmpty_;
   },
 
   /** @private */
-  onCancelTap_: function() {
+  onCancelTap_() {
     this.$.dialog.cancel();
   },
 
   /** @private */
-  onInput_: function() {
+  onInput_() {
     const input = this.$.addUserInput.value;
     this.isEmail_ = NAME_ONLY_REGEX.test(input) || EMAIL_REGEX.test(input);
-    this.isEmpty_ = input.length == 0;
+    this.isEmpty_ = input.length === 0;
 
     if (!this.isEmail_ && !this.isEmpty_) {
       this.errorCode_ = UserAddError.INVALID_EMAIL;
@@ -138,16 +147,16 @@ Polymer({
    * @private
    * @return {boolean}
    */
-  shouldShowError_: function() {
-    return this.errorCode_ != UserAddError.NO_ERROR;
+  shouldShowError_() {
+    return this.errorCode_ !== UserAddError.NO_ERROR;
   },
 
   /**
    * @private
    * @return {string}
    */
-  getErrorString_: function(errorCode_) {
-    if (errorCode_ == UserAddError.USER_EXISTS) {
+  getErrorString_(errorCode_) {
+    if (errorCode_ === UserAddError.USER_EXISTS) {
       return this.i18n('userExistsError');
     }
     // TODO errorString for UserAddError.INVALID_EMAIL crbug/1007481

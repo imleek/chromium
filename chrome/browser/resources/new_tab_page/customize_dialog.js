@@ -4,56 +4,41 @@
 
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
-import './theme_icon.js';
+import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.m.js';
+import 'chrome://resources/cr_elements/hidden_style_css.m.js';
+import 'chrome://resources/polymer/v3_0/iron-pages/iron-pages.js';
+import 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
+import 'chrome://resources/cr_components/customize_themes/customize_themes.js';
+import './customize_backgrounds.js';
+import './customize_shortcuts.js';
+import './customize_modules.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {BrowserProxy} from './browser_proxy.js';
+import {CustomizeDialogPage} from './customize_dialog_types.js';
+import {I18nBehavior, loadTimeData} from './i18n_setup.js';
+import {NewTabPageProxy} from './new_tab_page_proxy.js';
+import {createScrollBorders} from './utils.js';
 
-/**
- * @typedef {{
- *   id:number,
- *   label:string,
- *   frameColor:string,
- *   activeTabColor:string,
- * }}
- */
-let ChromeTheme;
 
 /**
- * @param {skia.mojom.SkColor} skColor
- * @return {string}
+ * Workaround until new_tab_page is migrated to TypeScript.
+ * @interface
  */
-function skColorToRgb(skColor) {
-  const r = (skColor.value >> 16) & 0xff;
-  const g = (skColor.value >> 8) & 0xff;
-  const b = skColor.value & 0xff;
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
-/**
- * @param {string} hexColor
- * @return {skia.mojom.SkColor}
- */
-function hexColorToSkColor(hexColor) {
-  if (!/^#[0-9a-f]{6}$/.test(hexColor)) {
-    return {value: 0};
-  }
-  const r = parseInt(hexColor.substring(1, 3), 16);
-  const g = parseInt(hexColor.substring(3, 5), 16);
-  const b = parseInt(hexColor.substring(5, 7), 16);
-  return {value: 0xff000000 + (r << 16) + (g << 8) + b};
+class CustomizeThemesElement {
+  revertThemeChanges() {}
+  confirmThemeChanges() {}
 }
 
 /**
  * Dialog that lets the user customize the NTP such as the background color or
  * image.
- * TODO(crbug.com/1032327): Add keyboard support.
- * TODO(crbug.com/1032328): Add support for selecting background image.
- * TODO(crbug.com/1032333): Add support for selecting shortcuts vs most visited.
+ * @polymer
+ * @extends {PolymerElement}
  */
-class CustomizeDialogElement extends PolymerElement {
+class CustomizeDialogElement extends mixinBehaviors
+([I18nBehavior], PolymerElement) {
   static get is() {
     return 'ntp-customize-dialog';
   }
@@ -64,73 +49,105 @@ class CustomizeDialogElement extends PolymerElement {
 
   static get properties() {
     return {
-      /** @private {!Array<!ChromeTheme>} */
-      chromeThemes_: Array,
-      /** @private {!newTabPage.mojom.Theme} */
-      theme_: Object,
+      /** @type {!newTabPage.mojom.Theme} */
+      theme: Object,
+
+      /** @type {CustomizeDialogPage} */
+      selectedPage: {
+        type: String,
+        observer: 'onSelectedPageChange_',
+      },
+
+      /** @private {newTabPage.mojom.BackgroundCollection} */
+      selectedCollection_: Object,
+
+      /** @private */
+      showTitleNavigation_: {
+        type: Boolean,
+        computed:
+            'computeShowTitleNavigation_(selectedPage, selectedCollection_)',
+        value: false,
+      },
+
+      /** @private */
+      isRefreshToggleChecked_: {
+        type: Boolean,
+        computed: `computeIsRefreshToggleChecked_(theme, selectedCollection_)`,
+      },
+
+      /** @private */
+      shortcutsEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('shortcutsEnabled'),
+      },
+
+      /** @private */
+      modulesEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('modulesEnabled'),
+      },
     };
   }
 
   constructor() {
     super();
-    const {callbackRouter, handler} = BrowserProxy.getInstance();
-    /** @private {!newTabPage.mojom.PageCallbackRouter} */
-    this.callbackRouter_ = callbackRouter;
     /** @private {newTabPage.mojom.PageHandlerRemote} */
-    this.pageHandler_ = handler;
-    /** @private {?number} */
-    this.setThemeListenerId_ = null;
-  }
-
-  /** @override */
-  connectedCallback() {
-    super.connectedCallback();
-    this.pageHandler_.getCustomizeInfo().then(
-        ({info: {currentTheme, chromeThemes}}) => {
-          this.chromeThemes_ = chromeThemes.map(
-              theme => ({
-                id: theme.id,
-                label: theme.label,
-                frameColor: skColorToRgb(theme.colors.frame),
-                activeTabColor: skColorToRgb(theme.colors.activeTab),
-              }));
-          this.theme_ = currentTheme;
-          this.$.dialog.showModal();
-        });
-    this.setThemeListenerId_ =
-        this.callbackRouter_.setTheme.addListener(theme => {
-          this.theme_ = theme;
-          if (theme.type !== newTabPage.mojom.ThemeType.AUTOGENERATED) {
-            return;
-          }
-          const rgbFrameColor =
-              skColorToRgb(theme.info.autogeneratedThemeColors.frame);
-          const rgbActiveTabColor =
-              skColorToRgb(theme.info.autogeneratedThemeColors.activeTab);
-          this.$.autogeneratedTheme.style.setProperty(
-              '--ntp-theme-icon-frame-color', rgbFrameColor);
-          this.$.autogeneratedTheme.style.setProperty(
-              '--ntp-theme-icon-stroke-color', rgbFrameColor);
-          this.$.autogeneratedTheme.style.setProperty(
-              '--ntp-theme-icon-active-tab-color', rgbActiveTabColor);
-        });
+    this.pageHandler_ = NewTabPageProxy.getInstance().handler;
+    /** @private {!Array<!IntersectionObserver>} */
+    this.intersectionObservers_ = [];
   }
 
   /** @override */
   disconnectedCallback() {
     super.disconnectedCallback();
-    this.callbackRouter_.removeListener(assert(this.setThemeListenerId_));
+    this.intersectionObservers_.forEach(observer => {
+      observer.disconnect();
+    });
+    this.intersectionObservers_ = [];
+  }
+
+  /** @override */
+  ready() {
+    super.ready();
+    this.intersectionObservers_ = [
+      createScrollBorders(
+          this.$.menu, this.$.topPageScrollBorder,
+          this.$.bottomPageScrollBorder, 'show-1'),
+      createScrollBorders(
+          this.$.pages, this.$.topPageScrollBorder,
+          this.$.bottomPageScrollBorder, 'show-2'),
+    ];
+    this.pageHandler_.onCustomizeDialogAction(
+        newTabPage.mojom.CustomizeDialogAction.kOpenClicked);
+  }
+
+  /** @private */
+  onCancel_() {
+    this.$.backgrounds.revertBackgroundChanges();
+    /** @type {CustomizeThemesElement} */ (this.$.customizeThemes)
+        .revertThemeChanges();
   }
 
   /** @private */
   onCancelClick_() {
-    this.pageHandler_.revertThemeChanges();
+    this.pageHandler_.onCustomizeDialogAction(
+        newTabPage.mojom.CustomizeDialogAction.kCancelClicked);
     this.$.dialog.cancel();
   }
 
-  /** @private */
+  /**
+   * @private
+   */
   onDoneClick_() {
-    this.pageHandler_.confirmThemeChanges();
+    this.$.backgrounds.confirmBackgroundChanges();
+    /** @type {CustomizeThemesElement} */ (this.$.customizeThemes)
+        .confirmThemeChanges();
+    this.shadowRoot.querySelector('ntp-customize-shortcuts').apply();
+    if (this.modulesEnabled_) {
+      this.shadowRoot.querySelector('ntp-customize-modules').apply();
+    }
+    this.pageHandler_.onCustomizeDialogAction(
+        newTabPage.mojom.CustomizeDialogAction.kDoneClicked);
     this.$.dialog.close();
   }
 
@@ -138,64 +155,60 @@ class CustomizeDialogElement extends PolymerElement {
    * @param {!Event} e
    * @private
    */
-  onCustomFrameColorChange_(e) {
-    this.pageHandler_.applyAutogeneratedTheme(
-        hexColorToSkColor(e.target.value));
+  onMenuItemKeyDown_(e) {
+    if (!['Enter', ' '].includes(e.key)) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    this.selectedPage = e.target.getAttribute('page-name');
   }
 
   /** @private */
-  onAutogeneratedThemeClick_() {
-    this.$.colorPicker.click();
-  }
-
-  /** @private */
-  onDefaultThemeClick_() {
-    this.pageHandler_.applyDefaultTheme();
+  onSelectedPageChange_() {
+    this.$.pages.scrollTop = 0;
   }
 
   /**
-   * @param {!Event} e
-   * @private
-   */
-  onChromeThemeClick_(e) {
-    this.pageHandler_.applyChromeTheme(
-        this.$.themes.itemForElement(e.target).id);
-  }
-
-  /**
-   * @param {!Event} e
-   * @private
-   */
-  onUninstallThirdPartyThemeClick_(e) {
-    this.pageHandler_.applyDefaultTheme();
-    this.pageHandler_.confirmThemeChanges();
-  }
-
-  /**
-   * @param {string|number} id
    * @return {boolean}
    * @private
    */
-  isThemeIconSelected_(id) {
-    if (!this.theme_) {
+  computeIsRefreshToggleChecked_() {
+    if (!this.selectedCollection_) {
       return false;
     }
-    if (id === 'autogenerated') {
-      return this.theme_.type === newTabPage.mojom.ThemeType.AUTOGENERATED;
-    } else if (id === 'default') {
-      return this.theme_.type === newTabPage.mojom.ThemeType.DEFAULT;
-    } else {
-      return this.theme_.type === newTabPage.mojom.ThemeType.CHROME &&
-          id === this.theme_.info.chromeThemeId;
-    }
+    return !!this.theme &&
+        this.selectedCollection_.id === this.theme.dailyRefreshCollectionId;
   }
 
   /**
    * @return {boolean}
    * @private
    */
-  isThirdPartyTheme_() {
-    return this.theme_.type === newTabPage.mojom.ThemeType.THIRD_PARTY;
+  computeShowTitleNavigation_() {
+    return this.selectedPage === CustomizeDialogPage.BACKGROUNDS &&
+        !!this.selectedCollection_;
+  }
+
+  /** @private */
+  onBackClick_() {
+    this.selectedCollection_ = null;
+    this.pageHandler_.onCustomizeDialogAction(
+        newTabPage.mojom.CustomizeDialogAction.kBackgroundsBackClicked);
+    this.$.pages.scrollTop = 0;
+  }
+
+  /** @private */
+  onBackgroundDailyRefreshToggleChange_() {
+    if (this.$.refreshToggle.checked) {
+      this.pageHandler_.setDailyRefreshCollectionId(
+          this.selectedCollection_.id);
+    } else {
+      this.pageHandler_.setDailyRefreshCollectionId('');
+    }
+    this.pageHandler_.onCustomizeDialogAction(
+        newTabPage.mojom.CustomizeDialogAction
+            .kBackgroundsRefreshToggleClicked);
   }
 }
 

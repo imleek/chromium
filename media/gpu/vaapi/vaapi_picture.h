@@ -12,11 +12,11 @@
 
 #include <stdint.h>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
 #include "media/gpu/media_gpu_export.h"
+#include "media/gpu/vaapi/vaapi_status.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
@@ -30,6 +30,9 @@ class VaapiWrapper;
 // Picture is native pixmap abstraction (X11/Ozone).
 class MEDIA_GPU_EXPORT VaapiPicture {
  public:
+  VaapiPicture(const VaapiPicture&) = delete;
+  VaapiPicture& operator=(const VaapiPicture&) = delete;
+
   virtual ~VaapiPicture();
 
   // Uses the buffer of |format|, pointed to by |gpu_memory_buffer_handle| as
@@ -40,8 +43,7 @@ class MEDIA_GPU_EXPORT VaapiPicture {
       gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle) = 0;
 
   // Allocates a buffer of |format| to use as backing storage for this picture.
-  // Return true on success.
-  virtual bool Allocate(gfx::BufferFormat format) = 0;
+  virtual VaapiStatus Allocate(gfx::BufferFormat format) = 0;
 
   int32_t picture_buffer_id() const { return picture_buffer_id_; }
 
@@ -59,6 +61,7 @@ class MEDIA_GPU_EXPORT VaapiPicture {
                const BindGLImageCallback& bind_image_cb,
                int32_t picture_buffer_id,
                const gfx::Size& size,
+               const gfx::Size& visible_size,
                uint32_t texture_id,
                uint32_t client_texture_id,
                uint32_t texture_target);
@@ -69,6 +72,7 @@ class MEDIA_GPU_EXPORT VaapiPicture {
   const BindGLImageCallback bind_image_cb_;
 
   const gfx::Size size_;
+  const gfx::Size visible_size_;
   const uint32_t texture_id_;
   const uint32_t client_texture_id_;
   const uint32_t texture_target_;
@@ -77,8 +81,6 @@ class MEDIA_GPU_EXPORT VaapiPicture {
 
  private:
   const int32_t picture_buffer_id_;
-
-  DISALLOW_COPY_AND_ASSIGN(VaapiPicture);
 };
 
 }  // namespace media

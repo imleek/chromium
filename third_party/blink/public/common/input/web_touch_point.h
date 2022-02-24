@@ -33,39 +33,28 @@
 
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/input/web_pointer_properties.h"
+#include "third_party/blink/public/mojom/input/touch_event.mojom-shared.h"
 
 namespace blink {
 
 // TODO(mustaq): Unify WebTouchPoint & WebMouseEvent into WebPointerEvent.
 // crbug.com/508283
-class WebTouchPoint : public WebPointerProperties {
+class BLINK_COMMON_EXPORT WebTouchPoint : public WebPointerProperties {
  public:
   WebTouchPoint() : WebTouchPoint(WebPointerProperties(0)) {}
 
   WebTouchPoint(WebPointerProperties web_pointer_properties)
-      : WebPointerProperties(web_pointer_properties),
-        state(kStateUndefined),
-        radius_x(0),
-        radius_y(0),
-        rotation_angle(0) {}
+      : WebPointerProperties(web_pointer_properties) {}
 
-  enum State {
-    kStateUndefined,
-    kStateReleased,
-    kStatePressed,
-    kStateMoved,
-    kStateStationary,
-    kStateCancelled,
-    kStateMax = kStateCancelled
-  };
+  using State = mojom::TouchState;
 
-  State state;
+  State state = State::kStateUndefined;
 
-  float radius_x;
-  float radius_y;
-  float rotation_angle;
+  float radius_x = 0.0f;
+  float radius_y = 0.0f;
+  float rotation_angle = 0.0f;
 };
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_INPUT_WEB_TOUCH_POINT_H_

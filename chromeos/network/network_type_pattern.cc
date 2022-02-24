@@ -6,7 +6,8 @@
 
 #include <stddef.h>
 
-#include "base/stl_util.h"
+#include "base/cxx17_backports.h"
+#include "base/notreached.h"
 #include "chromeos/network/network_event_log.h"
 #include "chromeos/network/tether_constants.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -46,7 +47,7 @@ NetworkTypeBitFlag ShillNetworkTypeToFlag(const std::string& shill_type) {
     if (shill_type_to_flag[i].shill_network_type == shill_type)
       return shill_type_to_flag[i].bit_flag;
   }
-  NET_LOG_ERROR("ShillNetworkTypeToFlag", "Unknown type: " + shill_type);
+  NET_LOG(ERROR) << "ShillNetworkTypeToFlag unknown type: " << shill_type;
   return kNetworkTypeNone;
 }
 
@@ -122,8 +123,8 @@ bool NetworkTypePattern::Equals(const NetworkTypePattern& other) const {
 bool NetworkTypePattern::MatchesType(
     const std::string& shill_network_type) const {
   if (shill_network_type.empty()) {
-    NOTREACHED() << "NetworkTypePattern: " << ToDebugString()
-                 << ": Can not match empty type.";
+    NET_LOG(ERROR) << "NetworkTypePattern: " << ToDebugString()
+                   << ": Can not match empty type.";
     return false;
   }
   return MatchesPattern(Primitive(shill_network_type));

@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "extensions/common/activation_sequence.h"
 #include "extensions/renderer/v8_schema_registry.h"
 
 namespace extensions {
@@ -20,9 +21,13 @@ class ServiceWorkerData {
  public:
   ServiceWorkerData(
       int64_t service_worker_version_id,
-      int activation_sequence,
+      ActivationSequence activation_sequence,
       ScriptContext* context,
       std::unique_ptr<NativeExtensionBindingsSystem> bindings_system);
+
+  ServiceWorkerData(const ServiceWorkerData&) = delete;
+  ServiceWorkerData& operator=(const ServiceWorkerData&) = delete;
+
   ~ServiceWorkerData();
 
   V8SchemaRegistry* v8_schema_registry() { return v8_schema_registry_.get(); }
@@ -32,18 +37,18 @@ class ServiceWorkerData {
   int64_t service_worker_version_id() const {
     return service_worker_version_id_;
   }
-  int activation_sequence() const { return activation_sequence_; }
+  ActivationSequence activation_sequence() const {
+    return activation_sequence_;
+  }
   ScriptContext* context() const { return context_; }
 
  private:
   const int64_t service_worker_version_id_;
-  const int activation_sequence_;
+  const ActivationSequence activation_sequence_;
   ScriptContext* const context_ = nullptr;
 
   std::unique_ptr<V8SchemaRegistry> v8_schema_registry_;
   std::unique_ptr<NativeExtensionBindingsSystem> bindings_system_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerData);
 };
 
 }  // namespace extensions

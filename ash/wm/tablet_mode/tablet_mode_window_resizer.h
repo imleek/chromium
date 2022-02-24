@@ -9,8 +9,8 @@
 
 #include "ash/ash_export.h"
 #include "ash/wm/window_resizer.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "ui/gfx/geometry/point_f.h"
 
 namespace ash {
 
@@ -28,10 +28,14 @@ class ASH_EXPORT TabletModeWindowResizer : public WindowResizer {
   TabletModeWindowResizer(
       WindowState* window_state,
       std::unique_ptr<TabletModeWindowDragDelegate> drag_delegate);
+
+  TabletModeWindowResizer(const TabletModeWindowResizer&) = delete;
+  TabletModeWindowResizer& operator=(const TabletModeWindowResizer&) = delete;
+
   ~TabletModeWindowResizer() override;
 
   // WindowResizer:
-  void Drag(const gfx::Point& location_in_parent, int event_flags) override;
+  void Drag(const gfx::PointF& location_in_parent, int event_flags) override;
   void CompleteDrag() override;
   void RevertDrag() override;
   void FlingOrSwipe(ui::GestureEvent* event) override;
@@ -45,15 +49,13 @@ class ASH_EXPORT TabletModeWindowResizer : public WindowResizer {
   // preview windows, blurred background, etc, during dragging.
   std::unique_ptr<TabletModeWindowDragDelegate> drag_delegate_;
 
-  gfx::Point previous_location_in_screen_;
+  gfx::PointF previous_location_in_screen_;
 
   bool did_lock_cursor_ = false;
 
   // Used to determine if this has been deleted during a drag such as when a tab
   // gets dragged into another browser window.
   base::WeakPtrFactory<TabletModeWindowResizer> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(TabletModeWindowResizer);
 };
 
 }  // namespace ash

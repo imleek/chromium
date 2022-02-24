@@ -9,9 +9,11 @@
 #include "chrome/browser/ui/views/page_action/page_action_icon_container.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_icon_container_view.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 
 class AvatarToolbarButton;
 class Browser;
+class BrowserView;
 class PageActionIconController;
 
 // A container view for user-account-related PageActionIconViews and the profile
@@ -21,7 +23,8 @@ class ToolbarAccountIconContainerView : public ToolbarIconContainerView,
                                         public PageActionIconContainer,
                                         public PageActionIconView::Delegate {
  public:
-  explicit ToolbarAccountIconContainerView(Browser* browser);
+  METADATA_HEADER(ToolbarAccountIconContainerView);
+  explicit ToolbarAccountIconContainerView(BrowserView* browser_view);
   ToolbarAccountIconContainerView(const ToolbarAccountIconContainerView&) =
       delete;
   ToolbarAccountIconContainerView& operator=(
@@ -34,26 +37,25 @@ class ToolbarAccountIconContainerView : public ToolbarIconContainerView,
   // IconLabelBubbleView::Delegate:
   SkColor GetIconLabelBubbleSurroundingForegroundColor() const override;
   SkColor GetIconLabelBubbleInkDropColor() const override;
+  SkColor GetIconLabelBubbleBackgroundColor() const override;
 
   // PageActionIconView::Delegate:
   float GetPageActionInkDropVisibleOpacity() const override;
   content::WebContents* GetWebContentsForPageActionIconView() override;
-  std::unique_ptr<views::Border> CreatePageActionIconBorder() const override;
+  gfx::Insets GetPageActionIconInsets(
+      const PageActionIconView* icon_view) const override;
 
   // views::View:
   void OnThemeChanged() override;
-  const char* GetClassName() const override;
 
   PageActionIconController* page_action_icon_controller() {
     return page_action_icon_controller_.get();
   }
   AvatarToolbarButton* avatar_button() { return avatar_; }
 
-  static const char kToolbarAccountIconContainerViewClassName[];
-
  private:
   // PageActionIconContainer:
-  void AddPageActionIcon(views::View* icon) override;
+  void AddPageActionIcon(std::unique_ptr<views::View> icon) override;
 
   std::unique_ptr<PageActionIconController> page_action_icon_controller_;
 

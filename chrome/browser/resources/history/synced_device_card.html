@@ -1,9 +1,7 @@
     <style include="shared-style">
       :host {
-        @apply --card-sizing;
         -webkit-tap-highlight-color: transparent;
         display: block;
-        padding-bottom: var(--card-padding-between);
       }
 
       #card-heading {
@@ -41,9 +39,9 @@
       }
 
       #history-item-container {
-        @apply --cr-card-elevation;
         background-color: var(--cr-card-background-color);
         border-radius: var(--cr-card-border-radius);
+        box-shadow: var(--cr-card-shadow);
       }
 
       .item-container {

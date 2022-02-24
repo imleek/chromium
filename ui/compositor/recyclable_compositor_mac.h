@@ -25,8 +25,11 @@ namespace ui {
 class COMPOSITOR_EXPORT RecyclableCompositorMac
     : public ui::CompositorObserver {
  public:
-  RecyclableCompositorMac(ui::ContextFactory* context_factory,
-                          ui::ContextFactoryPrivate* context_factory_private);
+  explicit RecyclableCompositorMac(ui::ContextFactory* context_factory);
+
+  RecyclableCompositorMac(const RecyclableCompositorMac&) = delete;
+  RecyclableCompositorMac& operator=(const RecyclableCompositorMac&) = delete;
+
   ~RecyclableCompositorMac() override;
 
   ui::Compositor* compositor() { return &compositor_; }
@@ -43,12 +46,13 @@ class COMPOSITOR_EXPORT RecyclableCompositorMac
   // Update the compositor's surface information, if needed.
   void UpdateSurface(const gfx::Size& size_pixels,
                      float scale_factor,
-                     const gfx::ColorSpace& color_space);
-  // Invalidate the compositor's surface information.
-  void InvalidateSurface();
+                     const gfx::DisplayColorSpaces& display_color_spaces);
 
  private:
   friend class RecyclableCompositorMacFactory;
+
+  // Invalidate the compositor's surface information.
+  void InvalidateSurface();
 
   // ui::CompositorObserver implementation:
   void OnCompositingDidCommit(ui::Compositor* compositor) override;
@@ -58,13 +62,11 @@ class COMPOSITOR_EXPORT RecyclableCompositorMac
   viz::ParentLocalSurfaceIdAllocator local_surface_id_allocator_;
   gfx::Size size_pixels_;
   float scale_factor_ = 1.f;
-  gfx::ColorSpace color_space_;
+  gfx::DisplayColorSpaces display_color_spaces_;
 
   std::unique_ptr<ui::AcceleratedWidgetMac> accelerated_widget_mac_;
   ui::Compositor compositor_;
   std::unique_ptr<ui::CompositorLock> compositor_suspended_lock_;
-
-  DISALLOW_COPY_AND_ASSIGN(RecyclableCompositorMac);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -79,7 +81,6 @@ class COMPOSITOR_EXPORT RecyclableCompositorMacFactory {
   // Create a compositor, or recycle a preexisting one.
   std::unique_ptr<RecyclableCompositorMac> CreateCompositor(
       ui::ContextFactory* context_factory,
-      ui::ContextFactoryPrivate* context_factory_private,
       bool force_new_compositor = false);
 
   // Delete a compositor, or allow it to be recycled.

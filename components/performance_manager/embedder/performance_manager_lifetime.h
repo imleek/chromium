@@ -8,20 +8,41 @@
 #include <memory>
 
 #include "base/callback_forward.h"
+#include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "components/performance_manager/public/performance_manager.h"
 
 namespace performance_manager {
 
 class Graph;
+class GraphFeatures;
 
 using GraphCreatedCallback = base::OnceCallback<void(Graph*)>;
 
-// Creates a PerformanceManager with default decorators.
-// |graph_created_callback| is invoked on the PM sequence once the Graph is
-// created.
-std::unique_ptr<PerformanceManager>
-CreatePerformanceManagerWithDefaultDecorators(
-    GraphCreatedCallback graph_created_callback);
+// A helper class that manages the lifetime of PerformanceManager
+// and PerformanceManagerRegistry.
+class PerformanceManagerLifetime {
+ public:
+  PerformanceManagerLifetime(const GraphFeatures&, GraphCreatedCallback);
+  ~PerformanceManagerLifetime();
+
+  // Allows specifying an additional callback that will be invoked in tests.
+  static void SetAdditionalGraphCreatedCallbackForTesting(
+      GraphCreatedCallback graph_created_callback);
+
+  // Sets an override for the features enabled in testing. These will be used
+  // instead of the features passed to the PerformanceManagerLifetime
+  // constructor in tests. Individual tests can enable more features by
+  // creating another GraphFeatures object and calling its ConfigureGraph
+  // method.
+  //
+  // This needs to be set before any PerformanceManagerLifetime is created. In
+  // browser tests this occurs as part of Chrome browser main parts.
+  static void SetGraphFeaturesOverrideForTesting(const GraphFeatures&);
+
+ private:
+  std::unique_ptr<PerformanceManager> performance_manager_;
+  std::unique_ptr<PerformanceManagerRegistry> performance_manager_registry_;
+};
 
 // Unregisters |instance| and arranges for its deletion on its sequence.
 void DestroyPerformanceManager(std::unique_ptr<PerformanceManager> instance);

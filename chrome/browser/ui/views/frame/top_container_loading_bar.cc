@@ -5,7 +5,10 @@
 #include "chrome/browser/ui/views/frame/top_container_loading_bar.h"
 
 #include "chrome/browser/favicon/favicon_utils.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
@@ -13,7 +16,7 @@
 LoadingBarView::LoadingBarView() {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
-  animation_.SetDuration(base::TimeDelta::FromMilliseconds(300));
+  animation_.SetDuration(base::Milliseconds(300));
 }
 
 double LoadingBarView::GetDisplayedLoadingProgress() const {
@@ -24,6 +27,7 @@ double LoadingBarView::GetDisplayedLoadingProgress() const {
 }
 
 void LoadingBarView::OnThemeChanged() {
+  views::View::OnThemeChanged();
   SchedulePaint();
 }
 
@@ -82,7 +86,11 @@ void LoadingBarView::AnimationProgressed(const gfx::Animation* animation) {
   SchedulePaint();
 }
 
-TopContainerLoadingBar::TopContainerLoadingBar() = default;
+BEGIN_METADATA(LoadingBarView, views::View)
+END_METADATA
+
+TopContainerLoadingBar::TopContainerLoadingBar(Browser* browser)
+    : browser_(browser) {}
 
 void TopContainerLoadingBar::SetWebContents(
     content::WebContents* web_contents) {
@@ -107,7 +115,7 @@ void TopContainerLoadingBar::SetWebContents(
 
 void TopContainerLoadingBar::UpdateLoadingProgress() {
   DCHECK(web_contents());
-  if (!favicon::ShouldDisplayFavicon(web_contents())) {
+  if (!browser_->ShouldDisplayFavicon(web_contents())) {
     HideImmediately();
     return;
   }
@@ -145,7 +153,7 @@ void TopContainerLoadingBar::UpdateLoadingProgress() {
   }
 }
 
-double TopContainerLoadingBar::GetLoadingProgress() {
+double TopContainerLoadingBar::GetLoadingProgress() const {
   DCHECK(web_contents());
   return std::min(web_contents()->GetLoadProgress(), 0.9);
 }
@@ -153,3 +161,7 @@ double TopContainerLoadingBar::GetLoadingProgress() {
 void TopContainerLoadingBar::LoadProgressChanged(double progress) {
   UpdateLoadingProgress();
 }
+
+BEGIN_METADATA(TopContainerLoadingBar, LoadingBarView)
+ADD_READONLY_PROPERTY_METADATA(double, LoadingProgress)
+END_METADATA

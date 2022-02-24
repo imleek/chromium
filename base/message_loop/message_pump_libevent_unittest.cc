@@ -10,16 +10,18 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "base/containers/span.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/synchronization/waitable_event_watcher.h"
 #include "base/task/single_thread_task_executor.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/gtest_util.h"
 #include "base/test/task_environment.h"
 #include "base/third_party/libevent/event.h"
@@ -41,12 +43,17 @@ class MessagePumpLibeventTest : public testing::Test {
 
   void SetUp() override {
     Thread::Options options(MessagePumpType::IO, 0);
-    ASSERT_TRUE(io_thread_.StartWithOptions(options));
+    ASSERT_TRUE(io_thread_.StartWithOptions(std::move(options)));
     int ret = pipe(pipefds_);
     ASSERT_EQ(0, ret);
   }
 
   void TearDown() override {
+    // Some tests watch |pipefds_| from the |io_thread_|. The |io_thread_| must
+    // thus be joined to ensure those watches are complete before closing the
+    // pipe.
+    io_thread_.Stop();
+
     if (IGNORE_EINTR(close(pipefds_[0])) < 0)
       PLOG(ERROR) << "close";
     if (IGNORE_EINTR(close(pipefds_[1])) < 0)
@@ -216,7 +223,7 @@ void WriteFDWrapper(const int fd,
                     const char* buf,
                     int size,
                     WaitableEvent* event) {
-  ASSERT_TRUE(WriteFileDescriptor(fd, buf, size));
+  ASSERT_TRUE(WriteFileDescriptor(fd, StringPiece(buf, size)));
 }
 
 // Tests that MessagePumpLibevent quits immediately when it is quit from

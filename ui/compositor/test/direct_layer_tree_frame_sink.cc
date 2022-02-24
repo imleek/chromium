@@ -84,17 +84,16 @@ void DirectLayerTreeFrameSink::SubmitCompositorFrame(
 
   if (frame.size_in_pixels() != last_swap_frame_size_ ||
       frame.device_scale_factor() != device_scale_factor_ ||
-      !parent_local_surface_id_allocator_.HasValidLocalSurfaceIdAllocation()) {
+      !parent_local_surface_id_allocator_.HasValidLocalSurfaceId()) {
     parent_local_surface_id_allocator_.GenerateId();
     last_swap_frame_size_ = frame.size_in_pixels();
     device_scale_factor_ = frame.device_scale_factor();
     display_->SetLocalSurfaceId(
-        parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
-            .local_surface_id(),
+        parent_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
         device_scale_factor_);
   }
 
-  base::Optional<viz::HitTestRegionList> hit_test_region_list =
+  absl::optional<viz::HitTestRegionList> hit_test_region_list =
       client_->BuildHitTestData();
 
   if (!hit_test_region_list) {
@@ -105,7 +104,7 @@ void DirectLayerTreeFrameSink::SubmitCompositorFrame(
                                         last_hit_test_data_)) {
       DCHECK(!viz::HitTestRegionList::IsEqual(*hit_test_region_list,
                                               viz::HitTestRegionList()));
-      hit_test_region_list = base::nullopt;
+      hit_test_region_list = absl::nullopt;
     } else {
       last_hit_test_data_ = *hit_test_region_list;
     }
@@ -114,13 +113,13 @@ void DirectLayerTreeFrameSink::SubmitCompositorFrame(
   }
 
   support_->SubmitCompositorFrame(
-      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id(),
+      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
       std::move(frame), std::move(hit_test_region_list));
 }
 
 void DirectLayerTreeFrameSink::DidNotProduceFrame(
-    const viz::BeginFrameAck& ack) {
+    const viz::BeginFrameAck& ack,
+    cc::FrameSkippedReason reason) {
   DCHECK(!ack.has_damage);
   DCHECK(ack.frame_id.IsSequenceValid());
   support_->DidNotProduceFrame(ack);
@@ -145,7 +144,7 @@ void DirectLayerTreeFrameSink::DisplayOutputSurfaceLost() {
 
 void DirectLayerTreeFrameSink::DisplayWillDrawAndSwap(
     bool will_draw_and_swap,
-    viz::RenderPassList* render_passes) {
+    viz::AggregatedRenderPassList* render_passes) {
   if (support_->GetHitTestAggregator()) {
     support_->GetHitTestAggregator()->Aggregate(display_->CurrentSurfaceId(),
                                                 render_passes);
@@ -154,24 +153,25 @@ void DirectLayerTreeFrameSink::DisplayWillDrawAndSwap(
 
 base::TimeDelta
 DirectLayerTreeFrameSink::GetPreferredFrameIntervalForFrameSinkId(
-    const viz::FrameSinkId& id) {
-  return frame_sink_manager_->GetPreferredFrameIntervalForFrameSinkId(id);
+    const viz::FrameSinkId& id,
+    viz::mojom::CompositorFrameSinkType* type) {
+  return frame_sink_manager_->GetPreferredFrameIntervalForFrameSinkId(id, type);
 }
 
 void DirectLayerTreeFrameSink::DidReceiveCompositorFrameAck(
-    const std::vector<viz::ReturnedResource>& resources) {
+    std::vector<viz::ReturnedResource> resources) {
   // Submitting a CompositorFrame can synchronously draw and dispatch a frame
   // ack. PostTask to ensure the client is notified on a new stack frame.
   compositor_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(
           &DirectLayerTreeFrameSink::DidReceiveCompositorFrameAckInternal,
-          weak_factory_.GetWeakPtr(), resources));
+          weak_factory_.GetWeakPtr(), std::move(resources)));
 }
 
 void DirectLayerTreeFrameSink::DidReceiveCompositorFrameAckInternal(
-    const std::vector<viz::ReturnedResource>& resources) {
-  client_->ReclaimResources(resources);
+    std::vector<viz::ReturnedResource> resources) {
+  client_->ReclaimResources(std::move(resources));
   client_->DidReceiveCompositorFrameAck();
 }
 
@@ -184,7 +184,8 @@ void DirectLayerTreeFrameSink::OnBeginFrame(
   if (!needs_begin_frames_) {
     // OnBeginFrame() can be called just to deliver presentation feedback, so
     // report that we didn't use this BeginFrame.
-    DidNotProduceFrame(viz::BeginFrameAck(args, false));
+    DidNotProduceFrame(viz::BeginFrameAck(args, false),
+                       cc::FrameSkippedReason::kNoDamage);
     return;
   }
 
@@ -192,8 +193,8 @@ void DirectLayerTreeFrameSink::OnBeginFrame(
 }
 
 void DirectLayerTreeFrameSink::ReclaimResources(
-    const std::vector<viz::ReturnedResource>& resources) {
-  client_->ReclaimResources(resources);
+    std::vector<viz::ReturnedResource> resources) {
+  client_->ReclaimResources(std::move(resources));
 }
 
 void DirectLayerTreeFrameSink::OnBeginFramePausedChanged(bool paused) {

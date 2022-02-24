@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_AUTOFILL_PAYMENTS_LOCAL_CARD_MIGRATION_ICON_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_AUTOFILL_PAYMENTS_LOCAL_CARD_MIGRATION_ICON_VIEW_H_
 
-#include "base/macros.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 
 class CommandUpdater;
@@ -22,12 +21,17 @@ class LocalCardMigrationIconView : public PageActionIconView {
       CommandUpdater* command_updater,
       IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
       PageActionIconView::Delegate* page_action_icon_delegate);
+
+  LocalCardMigrationIconView(const LocalCardMigrationIconView&) = delete;
+  LocalCardMigrationIconView& operator=(const LocalCardMigrationIconView&) =
+      delete;
+
   ~LocalCardMigrationIconView() override;
 
   // PageActionIconView:
-  views::BubbleDialogDelegateView* GetBubble() const override;
+  views::BubbleDialogDelegate* GetBubble() const override;
   void UpdateImpl() override;
-  base::string16 GetTextForTooltipAndAccessibleName() const override;
+  std::u16string GetTextForTooltipAndAccessibleName() const override;
 
  protected:
   // PageActionIconView:
@@ -42,8 +46,6 @@ class LocalCardMigrationIconView : public PageActionIconView {
   // IconLabelBubbleView:
   void AnimationProgressed(const gfx::Animation* animation) override;
   void AnimationEnded(const gfx::Animation* animation) override;
-
-  DISALLOW_COPY_AND_ASSIGN(LocalCardMigrationIconView);
 };
 
 }  // namespace autofill

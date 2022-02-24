@@ -6,7 +6,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_ANIMATION_SVG_INTERPOLATION_ENVIRONMENT_H_
 
 #include "third_party/blink/renderer/core/animation/interpolation_environment.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 
 namespace blink {
 
@@ -39,8 +38,8 @@ class SVGInterpolationEnvironment : public InterpolationEnvironment {
   }
 
  private:
-  Member<SVGElement> svg_element_ = nullptr;
-  Member<const SVGPropertyBase> svg_base_value_ = nullptr;
+  SVGElement* svg_element_ = nullptr;
+  const SVGPropertyBase* svg_base_value_ = nullptr;
 };
 
 template <>

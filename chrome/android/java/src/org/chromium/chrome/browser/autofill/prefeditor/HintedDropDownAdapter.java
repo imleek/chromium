@@ -5,10 +5,11 @@
 package org.chromium.chrome.browser.autofill.prefeditor;
 
 import android.content.Context;
-import android.support.v4.view.ViewCompat;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+
+import androidx.core.view.ViewCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
@@ -65,7 +66,8 @@ public class HintedDropDownAdapter<T> extends DropdownFieldAdapter<T> {
             ViewCompat.setPaddingRelative(convertView, ViewCompat.getPaddingStart(convertView), 0,
                     ViewCompat.getPaddingEnd(convertView), 0);
             mTextView.setCompoundDrawablesWithIntrinsicBounds(null, null, null, null);
-            ApiCompatibilityUtils.setTextAppearance(mTextView, R.style.TextAppearance_BlackTitle1);
+            ApiCompatibilityUtils.setTextAppearance(
+                    mTextView, R.style.TextAppearance_TextLarge_Primary);
         }
         convertView = super.getDropDownView(position, convertView, parent);
 

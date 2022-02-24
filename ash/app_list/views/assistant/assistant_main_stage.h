@@ -7,42 +7,53 @@
 
 #include <memory>
 
-#include "ash/app_list/app_list_export.h"
+#include "ash/ash_export.h"
 #include "ash/assistant/model/assistant_interaction_model_observer.h"
 #include "ash/assistant/model/assistant_ui_model_observer.h"
-#include "base/macros.h"
+#include "ash/public/cpp/assistant/controller/assistant_controller.h"
+#include "ash/public/cpp/assistant/controller/assistant_controller_observer.h"
+#include "base/scoped_observation.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/views/controls/separator.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
 
-namespace views {
-class Label;
-}  // namespace views
-
 namespace ash {
+
 class AssistantFooterView;
 class AssistantProgressIndicator;
 class AssistantQueryView;
 class AssistantViewDelegate;
+class AssistantZeroStateView;
 class UiElementContainerView;
 
 // AppListAssistantMainStage is the child of AssistantMainView responsible for
 // displaying the Assistant interaction to the user. This includes visual
 // affordances for the query, response, as well as suggestions.
-class APP_LIST_EXPORT AppListAssistantMainStage
+class ASH_EXPORT AppListAssistantMainStage
     : public views::View,
       public views::ViewObserver,
+      public AssistantControllerObserver,
       public AssistantInteractionModelObserver,
       public AssistantUiModelObserver {
  public:
+  METADATA_HEADER(AppListAssistantMainStage);
+
   explicit AppListAssistantMainStage(AssistantViewDelegate* delegate);
+  AppListAssistantMainStage(const AppListAssistantMainStage&) = delete;
+  AppListAssistantMainStage& operator=(const AppListAssistantMainStage&) =
+      delete;
   ~AppListAssistantMainStage() override;
 
   // views::View:
-  const char* GetClassName() const override;
   void ChildPreferredSizeChanged(views::View* child) override;
+  void OnThemeChanged() override;
 
   // views::ViewObserver:
   void OnViewPreferredSizeChanged(views::View* view) override;
+
+  // AssistantControllerObserver:
+  void OnAssistantControllerDestroying() override;
 
   // AssistantInteractionModelObserver:
   void OnCommittedQueryChanged(const AssistantQuery& query) override;
@@ -55,33 +66,36 @@ class APP_LIST_EXPORT AppListAssistantMainStage
   void OnUiVisibilityChanged(
       AssistantVisibility new_visibility,
       AssistantVisibility old_visibility,
-      base::Optional<AssistantEntryPoint> entry_point,
-      base::Optional<AssistantExitPoint> exit_point) override;
+      absl::optional<AssistantEntryPoint> entry_point,
+      absl::optional<AssistantExitPoint> exit_point) override;
 
  private:
   void InitLayout();
-  views::View* CreateContentLayoutContainer();
-  void InitGreetingLabel();
-  views::View* CreateMainContentLayoutContainer();
-  views::View* CreateDividerLayoutContainer();
-  views::View* CreateFooterLayoutContainer();
+  std::unique_ptr<views::View> CreateContentLayoutContainer();
+  std::unique_ptr<views::View> CreateMainContentLayoutContainer();
+  std::unique_ptr<views::View> CreateDividerLayoutContainer();
+  std::unique_ptr<views::View> CreateFooterLayoutContainer();
 
-  void AnimateInGreetingLabel();
+  void AnimateInZeroState();
   void AnimateInFooter();
 
-  void MaybeHideGreetingLabel();
+  void MaybeHideZeroState();
 
   AssistantViewDelegate* const delegate_;  // Owned by Shell.
 
+  // Whether to use dark/light mode colors, which default to dark.
+  const bool use_dark_light_mode_colors_;
+
   // Owned by view hierarchy.
   AssistantProgressIndicator* progress_indicator_;
-  views::View* horizontal_separator_;
+  views::Separator* horizontal_separator_;
   AssistantQueryView* query_view_;
   UiElementContainerView* ui_element_container_;
-  views::Label* greeting_label_;
+  AssistantZeroStateView* zero_state_view_;
   AssistantFooterView* footer_;
 
-  DISALLOW_COPY_AND_ASSIGN(AppListAssistantMainStage);
+  base::ScopedObservation<AssistantController, AssistantControllerObserver>
+      assistant_controller_observation_{this};
 };
 
 }  // namespace ash

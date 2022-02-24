@@ -11,9 +11,6 @@
  * </settings-setup-pin-dialog>
  */
 
-(function() {
-'use strict';
-
 Polymer({
   is: 'settings-setup-pin-dialog',
 
@@ -57,19 +54,19 @@ Polymer({
      */
     writeUma_: {
       type: Object,
-      value: function() {
+      value() {
         return () => {};
       }
     },
   },
 
   /** @override */
-  attached: function() {
+  attached() {
     this.$.dialog.showModal();
     this.$.pinKeyboard.focus();
   },
 
-  close: function() {
+  close() {
     if (this.$.dialog.open) {
       this.$.dialog.close();
     }
@@ -79,19 +76,19 @@ Polymer({
 
 
   /** @private */
-  onCancelTap_: function() {
+  onCancelTap_() {
     this.$.pinKeyboard.resetState();
     this.$.dialog.close();
   },
 
   /** @private */
-  onPinSubmit_: function() {
+  onPinSubmit_() {
     this.$.pinKeyboard.doSubmit();
   },
 
 
   /** @private */
-  onSetPinDone_: function() {
+  onSetPinDone_() {
     if (this.$.dialog.open) {
       this.$.dialog.close();
     }
@@ -102,7 +99,7 @@ Polymer({
    * @param {boolean} isConfirmStep
    * @return {string}
    */
-  getTitleMessage_: function(isConfirmStep) {
+  getTitleMessage_(isConfirmStep) {
     return this.i18n(
         isConfirmStep ? 'configurePinConfirmPinTitle' :
                         'configurePinChoosePinTitle');
@@ -113,8 +110,7 @@ Polymer({
    * @param {boolean} isConfirmStep
    * @return {string}
    */
-  getContinueMessage_: function(isConfirmStep) {
+  getContinueMessage_(isConfirmStep) {
     return this.i18n(isConfirmStep ? 'confirm' : 'continue');
   },
 });
-})();

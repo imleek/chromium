@@ -23,20 +23,20 @@ android_apk("webview_ui_test_app_apk") {
 }
 
 android_library("webview_ui_test_app_java") {
-  sources = [
-    "java/src/org/chromium/webview_ui_test/WebViewUiTestActivity.java",
-  ]
+  sources =
+      [ "java/src/org/chromium/webview_ui_test/WebViewUiTestActivity.java" ]
   deps = [
     ":webview_ui_test_app_apk_resources",
     "//base:base_java",
   ]
-
-  android_manifest_for_lint = "java/AndroidManifest.xml"
 }
 
 android_resources("webview_ui_test_app_apk_resources") {
-  resource_dirs = [ "java/res" ]
-  custom_package = "org.chromium.webview_ui_test"
+  sources = [
+    "java/res/layout/edittext_webview.xml",
+    "java/res/layout/fullscreen_webview.xml",
+    "java/res/values/strings.xml",
+  ]
 }
 
 instrumentation_test_apk("webview_ui_test_app_test_apk") {
@@ -58,17 +58,17 @@ instrumentation_test_apk("webview_ui_test_app_test_apk") {
     ":webview_ui_test_app_java",
     "//base:base_java",
     "//base:base_java_test_support",
-    "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//third_party/android_deps:espresso_java",
     "//third_party/android_sdk:android_test_base_java",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
-    "//third_party/espresso:espresso_all_java",
+    "//third_party/androidx:androidx_annotation_annotation_java",
+    "//third_party/androidx:androidx_test_runner_java",
     "//third_party/hamcrest:hamcrest_java",
     "//third_party/junit",
     "//third_party/ub-uiautomator:ub_uiautomator_java",
+    "//ui/android:ui_java_test_support",
   ]
-  data = [
-    "test/data/",
-  ]
+  data = [ "test/data/" ]
   use_webview_provider = system_webview_apk_target
 }

@@ -31,16 +31,20 @@ SingleThreadTaskExecutor::SingleThreadTaskExecutor(
       default_task_queue_(sequence_manager_->CreateTaskQueue(
           sequence_manager::TaskQueue::Spec("default_tq"))),
       type_(type),
-      simple_task_executor_(sequence_manager_.get(), task_runner()) {
+      simple_task_executor_(task_runner()) {
   sequence_manager_->SetDefaultTaskRunner(default_task_queue_->task_runner());
   sequence_manager_->BindToMessagePump(std::move(pump));
 }
 
 SingleThreadTaskExecutor::~SingleThreadTaskExecutor() = default;
 
-scoped_refptr<SingleThreadTaskRunner> SingleThreadTaskExecutor::task_runner()
-    const {
+const scoped_refptr<SingleThreadTaskRunner>&
+SingleThreadTaskExecutor::task_runner() const {
   return default_task_queue_->task_runner();
+}
+
+void SingleThreadTaskExecutor::SetWorkBatchSize(size_t work_batch_size) {
+  sequence_manager_->SetWorkBatchSize(work_batch_size);
 }
 
 }  // namespace base

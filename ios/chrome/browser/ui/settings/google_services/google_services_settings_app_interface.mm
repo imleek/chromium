@@ -5,7 +5,6 @@
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_app_interface.h"
 
 #import "ios/chrome/app/main_controller.h"
-#import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
@@ -20,7 +19,7 @@ using chrome_test_util::GetMainController;
 
 namespace {
 
-// This decider blocks all navigation.
+// This decider cancels all navigation.
 class NavigationBlockerDecider
     : public web::WebStatePolicyDecider,
       public web::WebStateUserData<NavigationBlockerDecider> {
@@ -28,15 +27,16 @@ class NavigationBlockerDecider
   NavigationBlockerDecider(web::WebState* web_state)
       : web::WebStatePolicyDecider(web_state) {}
 
-  bool ShouldAllowRequest(NSURLRequest* request,
-                          const RequestInfo& request_info) override {
-    return false;
+  NavigationBlockerDecider(const NavigationBlockerDecider&) = delete;
+  NavigationBlockerDecider& operator=(const NavigationBlockerDecider&) = delete;
+
+  void ShouldAllowRequest(NSURLRequest* request,
+                          RequestInfo request_info,
+                          PolicyDecisionCallback callback) override {
+    std::move(callback).Run(PolicyDecision::Cancel());
   }
 
   WEB_STATE_USER_DATA_KEY_DECL();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(NavigationBlockerDecider);
 };
 
 WEB_STATE_USER_DATA_KEY_IMPL(NavigationBlockerDecider)

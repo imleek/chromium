@@ -103,7 +103,7 @@ void shell_surface_set_title(wl_client* client,
                              wl_resource* resource,
                              const char* title) {
   GetUserDataAs<ShellSurface>(resource)->SetTitle(
-      base::string16(base::UTF8ToUTF16(title)));
+      std::u16string(base::UTF8ToUTF16(title)));
 }
 
 void shell_surface_set_class(wl_client* client,
@@ -125,7 +125,7 @@ const struct wl_shell_surface_interface shell_surface_implementation = {
 uint32_t HandleShellSurfaceConfigureCallback(
     wl_resource* resource,
     const gfx::Size& size,
-    ash::WindowStateType state_type,
+    chromeos::WindowStateType state_type,
     bool resizing,
     bool activated,
     const gfx::Vector2d& origin_offset) {

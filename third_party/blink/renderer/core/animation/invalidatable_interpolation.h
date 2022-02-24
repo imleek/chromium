@@ -55,7 +55,7 @@ class CORE_EXPORT InvalidatableInterpolation : public Interpolation {
     return cached_value_.get();
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(start_keyframe_);
     visitor->Trace(end_keyframe_);
     Interpolation::Trace(visitor);
@@ -67,10 +67,10 @@ class CORE_EXPORT InvalidatableInterpolation : public Interpolation {
   std::unique_ptr<TypedInterpolationValue> MaybeConvertUnderlyingValue(
       const InterpolationEnvironment&) const;
   const TypedInterpolationValue* EnsureValidConversion(
-      const InterpolationEnvironment&,
+      InterpolationEnvironment&,
       const UnderlyingValueOwner&) const;
-  void EnsureValidInterpolationTypes(const InterpolationEnvironment&) const;
-  void ClearConversionCache() const;
+  void EnsureValidInterpolationTypes(InterpolationEnvironment&) const;
+  void ClearConversionCache(InterpolationEnvironment& environment) const;
   bool IsConversionCacheValid(const InterpolationEnvironment&,
                               const UnderlyingValueOwner&) const;
   bool IsNeutralKeyframeActive() const;

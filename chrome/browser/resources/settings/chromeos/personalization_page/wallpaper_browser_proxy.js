@@ -2,47 +2,44 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-cr.define('settings', function() {
-  /** @interface */
-  class WallpaperBrowserProxy {
-    /**
-     * @return {!Promise<boolean>} Whether the wallpaper setting row should be
-     *     visible.
-     */
-    isWallpaperSettingVisible() {}
+// clang-format off
+import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
+// clang-format on
 
-    /**
-     * @return {!Promise<boolean>} Whether the wallpaper is policy controlled.
-     */
-    isWallpaperPolicyControlled() {}
-
-    openWallpaperManager() {}
-  }
+/** @interface */
+export class WallpaperBrowserProxy {
+  /**
+   * @return {!Promise<boolean>} Whether the wallpaper setting row should be
+   *     visible.
+   */
+  isWallpaperSettingVisible() {}
 
   /**
-   * @implements {settings.WallpaperBrowserProxy}
+   * @return {!Promise<boolean>} Whether the wallpaper is policy controlled.
    */
-  class WallpaperBrowserProxyImpl {
-    /** @override */
-    isWallpaperSettingVisible() {
-      return cr.sendWithPromise('isWallpaperSettingVisible');
-    }
+  isWallpaperPolicyControlled() {}
 
-    /** @override */
-    isWallpaperPolicyControlled() {
-      return cr.sendWithPromise('isWallpaperPolicyControlled');
-    }
+  openWallpaperManager() {}
+}
 
-    /** @override */
-    openWallpaperManager() {
-      chrome.send('openWallpaperManager');
-    }
+/**
+ * @implements {WallpaperBrowserProxy}
+ */
+export class WallpaperBrowserProxyImpl {
+  /** @override */
+  isWallpaperSettingVisible() {
+    return sendWithPromise('isWallpaperSettingVisible');
   }
 
-  cr.addSingletonGetter(WallpaperBrowserProxyImpl);
+  /** @override */
+  isWallpaperPolicyControlled() {
+    return sendWithPromise('isWallpaperPolicyControlled');
+  }
 
-  return {
-    WallpaperBrowserProxy: WallpaperBrowserProxy,
-    WallpaperBrowserProxyImpl: WallpaperBrowserProxyImpl,
-  };
-});
+  /** @override */
+  openWallpaperManager() {
+    chrome.send('openWallpaperManager');
+  }
+}
+
+addSingletonGetter(WallpaperBrowserProxyImpl);

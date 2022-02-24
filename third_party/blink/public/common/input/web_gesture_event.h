@@ -5,11 +5,16 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_INPUT_WEB_GESTURE_EVENT_H_
 #define THIRD_PARTY_BLINK_PUBLIC_COMMON_INPUT_WEB_GESTURE_EVENT_H_
 
+#include <memory>
+
+#include "base/check.h"
+#include "base/notreached.h"
 #include "cc/paint/element_id.h"
 #include "third_party/blink/public/common/input/web_gesture_device.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_pointer_properties.h"
-#include "third_party/blink/public/common/input/web_scroll_types.h"
+#include "third_party/blink/public/mojom/input/gesture_event.mojom-shared.h"
+#include "ui/events/types/scroll_input_type.h"
 #include "ui/events/types/scroll_types.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size_f.h"
@@ -20,26 +25,25 @@ namespace blink {
 
 class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
  public:
-  enum class InertialPhaseState : uint8_t {
-    kUnknownMomentum = 0,  // No phase information.
-    kNonMomentum,          // Regular scrolling phase.
-    kMomentum,             // Momentum phase.
-    kMaxValue = kMomentum,
-  };
+  using InertialPhaseState = mojom::InertialPhaseState;
 
-  bool is_source_touch_event_set_non_blocking;
+  bool is_source_touch_event_set_blocking = false;
 
   // The pointer type for the first touch point in the gesture.
   WebPointerProperties::PointerType primary_pointer_type =
       WebPointerProperties::PointerType::kUnknown;
+  // The unique_touch_event id of the first touch in the gesture sequence
+  uint32_t primary_unique_touch_event_id = 0;
 
-  // If the WebGestureEvent has source_device == WebGestureDevice::kTouchscreen,
-  // this field contains the unique identifier for the touch event that released
-  // this event at TouchDispositionGestureFilter. If the WebGestureEvents was
-  // not released through a touch event (e.g. timer-released gesture events or
-  // gesture events with source_device != WebGestureDevice::kTouchscreen), the
-  // field contains 0. See crbug.com/618738.
-  uint32_t unique_touch_event_id;
+  // If the WebGestureEvent has source_device ==
+  // mojom::GestureDevice::kTouchscreen, this field contains the unique
+  // identifier for the touch event that released this event at
+  // TouchDispositionGestureFilter. If the WebGestureEvents was not released
+  // through a touch event (e.g. synthesized gesture events and pinches
+  // or gesture events with source_device !=
+  // mojom::GestureDevice::kTouchscreen), the field contains 0. See
+  // crbug.com/618738.
+  uint32_t unique_touch_event_id = 0;
 
   union {
     // Tap information must be set for GestureTap, GestureTapUnconfirmed,
@@ -79,7 +83,10 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
       // a hit-test. Should be used for gestures queued up internally within
       // the renderer process. This is an ElementIdType instead of ElementId
       // due to the fact that ElementId has a non-trivial constructor that
-      // can't easily participate in this union of structs.
+      // can't easily participate in this union of structs. Note that while
+      // this is used in scroll unification to perform a main thread hit test,
+      // in which case |main_thread_hit_tested| is true, it is also used in
+      // other cases like scroll events reinjected for scrollbar scrolling.
       cc::ElementIdType scrollable_area_element_id;
       // Initial motion that triggered the scroll.
       float delta_x_hint;
@@ -87,7 +94,7 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
       // number of pointers down.
       int pointer_count;
       // Default initialized to kScrollByPrecisePixel.
-      ui::input_types::ScrollGranularity delta_hint_units;
+      ui::ScrollGranularity delta_hint_units;
       // The state of inertial phase scrolling. OSX has unique phases for normal
       // and momentum scroll events. Should always be kUnknownMomentumPhase for
       // touch based input as it generates GestureFlingStart instead.
@@ -95,9 +102,17 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
       // If true, this event will skip hit testing to find a scroll
       // target and instead just scroll the viewport.
       bool target_viewport;
-      // True if this event is generated from a wheel event with synthetic
-      // phase.
+      // True if this event is generated from a mousewheel or scrollbar.
+      // Synthetic GSB(s) are ignored by the blink::ElasticOverscrollController.
       bool synthetic;
+      // If true, this event has been hit tested by the main thread and the
+      // result is stored in scrollable_area_element_id. Used only in scroll
+      // unification when the event is sent back the the compositor for a
+      // second time after the main thread hit test is complete.
+      bool main_thread_hit_tested;
+      // If true, this event will be used for cursor control instead of
+      // scrolling. the entire scroll sequence will be used for cursor control.
+      bool cursor_control;
     } scroll_begin;
 
     struct {
@@ -107,13 +122,13 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
       float velocity_y;
       InertialPhaseState inertial_phase;
       // Default initialized to kScrollByPrecisePixel.
-      ui::input_types::ScrollGranularity delta_units;
+      ui::ScrollGranularity delta_units;
     } scroll_update;
 
     struct {
       // The original delta units the ScrollBegin and ScrollUpdates
       // were sent as.
-      ui::input_types::ScrollGranularity delta_units;
+      ui::ScrollGranularity delta_units;
       // The state of inertial phase scrolling. OSX has unique phases for normal
       // and momentum scroll events. Should always be kUnknownMomentumPhase for
       // touch based input as it generates GestureFlingStart instead.
@@ -181,22 +196,30 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
   // Screen coordinate
   gfx::PointF position_in_screen_;
 
-  WebGestureDevice source_device_;
+  mojom::GestureDevice source_device_ = mojom::GestureDevice::kUninitialized;
 
  public:
-  WebGestureEvent(Type type,
-                  int modifiers,
-                  base::TimeTicks time_stamp,
-                  WebGestureDevice device = WebGestureDevice::kUninitialized)
-      : WebInputEvent(sizeof(WebGestureEvent), type, modifiers, time_stamp),
-        source_device_(device) {}
+  WebGestureEvent(
+      Type type,
+      int modifiers,
+      base::TimeTicks time_stamp,
+      mojom::GestureDevice device = mojom::GestureDevice::kUninitialized)
+      : WebInputEvent(type, modifiers, time_stamp), source_device_(device) {
+    memset(&data, 0, sizeof(data));
+  }
 
-  WebGestureEvent()
-      : WebInputEvent(sizeof(WebGestureEvent)),
-        source_device_(WebGestureDevice::kUninitialized) {}
+  WebGestureEvent() { memset(&data, 0, sizeof(data)); }
 
   const gfx::PointF& PositionInWidget() const { return position_in_widget_; }
   const gfx::PointF& PositionInScreen() const { return position_in_screen_; }
+
+  std::unique_ptr<WebInputEvent> Clone() const override;
+  bool CanCoalesce(const WebInputEvent& event) const override;
+  void Coalesce(const WebInputEvent& event) override;
+
+  // Returns the input type of a scroll event. Should not be called on
+  // non-scroll events.
+  ui::ScrollInputType GetScrollInputType() const;
 
   void SetPositionInWidget(const gfx::PointF& point) {
     position_in_widget_ = point;
@@ -206,12 +229,12 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
     position_in_screen_ = point;
   }
 
-  WebGestureDevice SourceDevice() const { return source_device_; }
-  void SetSourceDevice(WebGestureDevice device) { source_device_ = device; }
+  mojom::GestureDevice SourceDevice() const { return source_device_; }
+  void SetSourceDevice(mojom::GestureDevice device) { source_device_ = device; }
 
   float DeltaXInRootFrame() const;
   float DeltaYInRootFrame() const;
-  ui::input_types::ScrollGranularity DeltaUnits() const;
+  ui::ScrollGranularity DeltaUnits() const;
   gfx::PointF PositionInRootFrame() const;
   InertialPhaseState InertialPhase() const;
   bool Synthetic() const;
@@ -230,23 +253,23 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
 
   bool IsScrollEvent() const {
     switch (type_) {
-      case kGestureScrollBegin:
-      case kGestureScrollEnd:
-      case kGestureScrollUpdate:
-      case kGestureFlingStart:
-      case kGestureFlingCancel:
-      case kGesturePinchBegin:
-      case kGesturePinchEnd:
-      case kGesturePinchUpdate:
+      case Type::kGestureScrollBegin:
+      case Type::kGestureScrollEnd:
+      case Type::kGestureScrollUpdate:
+      case Type::kGestureFlingStart:
+      case Type::kGestureFlingCancel:
+      case Type::kGesturePinchBegin:
+      case Type::kGesturePinchEnd:
+      case Type::kGesturePinchUpdate:
         return true;
-      case kGestureTap:
-      case kGestureTapUnconfirmed:
-      case kGestureTapDown:
-      case kGestureShowPress:
-      case kGestureTapCancel:
-      case kGestureTwoFingerTap:
-      case kGestureLongPress:
-      case kGestureLongTap:
+      case Type::kGestureTap:
+      case Type::kGestureTapUnconfirmed:
+      case Type::kGestureTapDown:
+      case Type::kGestureShowPress:
+      case Type::kGestureTapCancel:
+      case Type::kGestureTwoFingerTap:
+      case Type::kGestureLongPress:
+      case Type::kGestureLongTap:
         return false;
       default:
         NOTREACHED();
@@ -256,11 +279,11 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
 
   bool IsTargetViewport() const {
     switch (type_) {
-      case kGestureScrollBegin:
+      case Type::kGestureScrollBegin:
         return data.scroll_begin.target_viewport;
-      case kGestureFlingStart:
+      case Type::kGestureFlingStart:
         return data.fling_start.target_viewport;
-      case kGestureFlingCancel:
+      case Type::kGestureFlingCancel:
         return data.fling_cancel.target_viewport;
       default:
         return false;
@@ -270,21 +293,21 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
   bool IsTouchpadZoomEvent() const {
     // Touchpad GestureDoubleTap also causes a page scale change like a touchpad
     // pinch gesture.
-    return source_device_ == WebGestureDevice::kTouchpad &&
+    return source_device_ == mojom::GestureDevice::kTouchpad &&
            (WebInputEvent::IsPinchGestureEventType(type_) ||
-            type_ == kGestureDoubleTap);
+            type_ == Type::kGestureDoubleTap);
   }
 
   bool NeedsWheelEvent() const {
     DCHECK(IsTouchpadZoomEvent());
     switch (type_) {
-      case kGesturePinchBegin:
+      case Type::kGesturePinchBegin:
         return data.pinch_begin.needs_wheel_event;
-      case kGesturePinchUpdate:
+      case Type::kGesturePinchUpdate:
         return data.pinch_update.needs_wheel_event;
-      case kGesturePinchEnd:
+      case Type::kGesturePinchEnd:
         return data.pinch_end.needs_wheel_event;
-      case kGestureDoubleTap:
+      case Type::kGestureDoubleTap:
         return data.tap.needs_wheel_event;
       default:
         NOTREACHED();
@@ -295,22 +318,49 @@ class BLINK_COMMON_EXPORT WebGestureEvent : public WebInputEvent {
   void SetNeedsWheelEvent(bool needs_wheel_event) {
     DCHECK(!needs_wheel_event || IsTouchpadZoomEvent());
     switch (type_) {
-      case kGesturePinchBegin:
+      case Type::kGesturePinchBegin:
         data.pinch_begin.needs_wheel_event = needs_wheel_event;
         break;
-      case kGesturePinchUpdate:
+      case Type::kGesturePinchUpdate:
         data.pinch_update.needs_wheel_event = needs_wheel_event;
         break;
-      case kGesturePinchEnd:
+      case Type::kGesturePinchEnd:
         data.pinch_end.needs_wheel_event = needs_wheel_event;
         break;
-      case kGestureDoubleTap:
+      case Type::kGestureDoubleTap:
         data.tap.needs_wheel_event = needs_wheel_event;
         break;
       default:
         break;
     }
   }
+
+  // Coalesce the |new_event| with |last_event| and optionally
+  // |second_last_event|. Scroll and pinch are two separate gestures so they
+  // would need separate events that is why this method returns a pair.
+  static std::pair<std::unique_ptr<WebGestureEvent>,
+                   std::unique_ptr<WebGestureEvent>>
+  CoalesceScrollAndPinch(const WebGestureEvent* second_last_event,
+                         const WebGestureEvent& last_event,
+                         const WebGestureEvent& new_event);
+
+  // Whether |event_in_queue| is a touchscreen GesturePinchUpdate or
+  // GestureScrollUpdate and has the same modifiers/source as the new
+  // scroll/pinch event. Compatible touchscreen scroll and pinch event pairs
+  // can be logically coalesced.
+  static bool IsCompatibleScrollorPinch(const WebGestureEvent& new_event,
+                                        const WebGestureEvent& event_in_queue);
+
+  // Generate a scroll gesture event (begin, update, or end), based on the
+  // parameters passed in. Populates the data field of the created
+  // WebGestureEvent based on the type.
+  static std::unique_ptr<blink::WebGestureEvent> GenerateInjectedScrollGesture(
+      WebInputEvent::Type type,
+      base::TimeTicks timestamp,
+      WebGestureDevice device,
+      gfx::PointF position_in_widget,
+      gfx::Vector2dF scroll_delta,
+      ui::ScrollGranularity granularity);
 };
 
 }  // namespace blink

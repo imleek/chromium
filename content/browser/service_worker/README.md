@@ -6,7 +6,7 @@
 [disk_cache]: /net/disk_cache/README.md
 [embedded_worker.mojom]: https://codesearch.chromium.org/chromium/src/third_party/blink/public/mojom/service_worker/embedded_worker.mojom
 [service_worker_container.mojom]: https://codesearch.chromium.org/chromium/src/third_party/blink/public/mojom/service_worker/service_worker_container.mojom
-[service_worker_database.h]: https://codesearch.chromium.org/chromium/src/content/browser/service_worker/service_worker_database.h
+[service_worker_database.h]: https://codesearch.chromium.org/chromium/src/components/services/storage/service_worker/service_worker_database.h
 [third_party/blink/common/service_worker]: /third_party/blink/common/service_worker
 [third_party/blink/public/common/service_worker]: /third_party/blink/public/common/service_worker
 [third_party/blink/public/mojom/service_worker]: /third_party/blink/public/mojom/service_worker
@@ -18,13 +18,15 @@
 [LevelDB]: /third_party/leveldatabase/README.chromium
 [Onion Soup]: https://docs.google.com/document/d/1K1nO8G9dO9kNSmtVz2gJ2GG9gQOTgm65sJlV3Fga4jE/edit?usp=sharing
 [Quota Manager]: /storage/browser/quota
-[ServiceWorkerDatabase]: https://codesearch.chromium.org/chromium/src/content/browser/service_worker/service_worker_database.h
-[ServiceWorkerStorage]: https://codesearch.chromium.org/chromium/src/content/browser/service_worker/service_worker_storage.h
+[ServiceWorkerDatabase]: https://codesearch.chromium.org/chromium/src/components/services/storage/service_worker/service_worker_database.h
+[ServiceWorkerStorage]: https://codesearch.chromium.org/chromium/src/components/services/storage/service_worker/service_worker_storage.h
 [Service Worker specification]: https://w3c.github.io/ServiceWorker/
 [MDN documentation]: https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API
 
 This document describes Chromium's implementation of [service
 workers](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API).
+
+[TOC]
 
 ## Introduction to service workers
 
@@ -167,9 +169,8 @@ to request the renderer to start and stop the service worker thread.
 > use the same "embedded worker" classes. But it turned out only service workers
 > use it.
 
-A running service worker has a corresponding host in the browser process
-called `ServiceWorkerProviderHost` ([to be renamed
-`ServiceWorkerHost`](https://crbug.com/931087)).
+A running service worker has a corresponding host in the browser process called
+`ServiceWorkerHost`.
 
 In addition, service worker clients (windows and web workers) are represented by
 a `ServiceWorkerContainerHost` in the browser process. This host holds
@@ -216,6 +217,112 @@ Service worker clients have an associated
 `content::ServiceWorkerProviderContext` which contains information such as which
 service worker controls the client and manages request interception to that
 service worker.
+
+### Mojo
+
+[Mojo](/mojo/README.md) is Chromium's IPC system and plays a important role in
+service worker architecture. This section describes the main Mojo interfaces for
+service workers, and which message pipes they are on.
+
+#### Browser <->  Renderer (window)
+
+For windows (or [clients](https://w3c.github.io/ServiceWorker/#service-worker-client-concept)),
+the browser process and renderer process talk over Mojo interfaces bound to the Mojo pipe to commit
+a navigation, which is considered as the legacy IPC "channel" message pipe. This guarantees the
+order of IPC messages between Mojo interfaces.
+
+Each window in the renderer process is connected to a host in the browser
+process. The renderer talks to the browser process over the
+`mojom.blink.ServiceWorkerContainerHost` interface which provides functionality
+like registering service workers. The browser talks to the renderer over the
+`mojom.blink.ServiceWorkerContainer` interface.
+
+The window obtains `ServiceWorkerRegistration` and `ServiceWorker` JavaScript
+objects via APIs like `navigator.serviceWorker.ready`,
+`navigator.serviceWorker.controller`, and `navigator.serviceWorker.register()`.
+Each object has a connection to the browser, again on the channel-associated
+message pipe. `ServiceWorkerRegistration` has a remote to a
+`mojom.blink.ServiceWorkerRegistrationObjectHost` and `ServiceWorker` has a
+remote to a `ServiceWorkerObjectHost`. Conversely, the browser process has
+remotes to `mojom.blink.ServiceWorkerRegistrationObject` and
+`mojom.blink.ServiceWorkerRegistration`.
+
+> After making this design, there's been some realization that asynchronous
+> ownership makes destruction complicated because of non-deterministic
+> destruction order sometimes caused crashes.
+> It may have worked better to use fewer interfaces, e.g., a single
+> ServiceWorkerContainer interface from which one can manipulate
+> ServiceWorkerRegistration and ServiceWorker, or maybe prohibiting destructions
+> initiated from the renderer may work.
+> In addition, we have a Mojo interface for in-process communication across threads like
+> [this](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/public/mojom/service_worker/controller_service_worker.mojom;l=95;drc=6e8b402a6231405b753919029c9027404325ea00).
+> Mojo is now slightly overused for abstraction of layers for service workers.
+
+#### Browser <-> Renderer (shared worker)
+
+For shared workers, the browser process and renderer process talk over Mojo
+interfaces bound to the dedicated message pipe established by
+the `mojom.blink.SharedWorkerFactory` implementation that creates the shared
+worker.
+
+Similar to windows, the shared worker has a remote to a
+`mojom.blink.ServiceWorkerContainerHost` in the browser process, and the
+browser process has a remote to the `mojom.blink.ServiceWorkerContainer`
+in the renderer process.
+
+However, shared workers don't yet support `navigator.serviceWorker`,
+so they don't use many of the methods on `ServiceWorkerContainerHost`.
+They also don't yet have a way to obtain a `ServiceWorkerRegistration`
+or `ServiceWorker` JavaScript object.
+
+#### Browser <-> Renderer (service worker)
+
+For service workers, there are two message pipes: a) a "bootstrap" message
+pipe for starting/stopping the service worker thread, and b) a message pipe
+bound to the running service worker thread.
+
+The "bootstrap" message pipe is established by the
+`mojom.blink.EmbeddedWorkerInstanceClient` implementation in the renderer.  The
+browser process uses this interface to ask the renderer process to start and
+stop a service worker thread. The renderer process has a remote to a
+corresponding `mojom.blink.EmbeddedWorkerInstanceHost` in the browser process.
+
+In addition, like windows and shared workers above, the service worker has a
+remote to a `mojom.blink.ServiceWorkerContainerHost` in the brocess process, and
+the browser process has a remote to a `mojom.blink.ServiceWorkerContainer`.
+These are on the bootstrap message pipe.
+
+> Note: It's unclear why service workers use the `ServiceWorkerContainerHost`
+> interface, because they are forbidden from calling any methods on this
+> interface.  There are some plans to clean this up, see
+> https://crbug.com/931087.
+
+Running service worker threads have a dedicated message pipe, established by the
+`mojom.blink.ServiceWorker` implementation. The browser process uses this
+interface to ask the renderer to dispatch events to the service worker. The
+service worker has a remote to a corresponding `mojom.blink.ServiceWorkerHost`
+in the browser process.
+
+Service workers have access to a `ServiceWorkerRegistration` JavaScript object
+via `self.registration` and its `ServiceWorker` properties. The
+`mojom.blink.ServiceWorker(Registration)Object(Host)` interfaces are bound to
+the service worker thread's message pipe.
+
+#### Renderer (window or shared worker) <-> Renderer (service worker)
+
+Service worker clients in a renderer process have a direct connection to their
+controller service worker, which can be in the same process or a different
+process. The clients have a remote to a `mojom.blink.ControllerServiceWorker`
+which they use to dispatch fetch events to the service worker.
+
+This remote is given to the client by the browser process using
+`SetController()` on the `mojom.blink.ServiceWorkerContainer` interface.  The
+browser is the source of truth about which service worker is controlling which
+client.
+
+If the connection breaks, it likely means the service worker has stopped. The
+service worker client asks the browser process to restart the service worker so
+it can again dispatch fetch events to it.
 
 ## Directory structure
 
@@ -325,21 +432,49 @@ controlled loads:
 Service worker startup time and breakdown:
 - ServiceWorker.StartWorker.Time
 - ServiceWorker.StartTiming.Duration
-- ServiceWorker.StartTiming.\*To\* (e.g.,
+- ServiceWorker.StartTiming.[A]To[B] (e.g.,
   ServiceWorker.StartTiming.StartToReceivedStartWorker)
 
 Fetch event handling:
 - ServiceWorker.LoadTiming.MainFrame.MainResource.\*
 - ServiceWorker.LoadTiming.Subresource.\*
 
-> TODO(falken, bashi): Add a list of the milestones of startup and fetch event
-> handling.
+Service worker's startup sequence is composed of a few steps in
+ServiceWorker.StartTiming.[A]To[B]. These are the milestones that can be in the
+[A] and [B].
+
+1. Start (browser)
+2. SentStartWorker (browser)
+3. ReceivedStartWorker (renderer)
+4. ScriptEvaluationStart (renderer)
+5. ScriptEvaluationEnd (renderer)
+6. End (browser)
+
+Here's the explanation about the each section:
+- **Start to SentStartWorker**: the browser process initiates a starting
+  worker sequence. This may include process creation if not exists, and setting up
+  URLLoaderFactories.
+- **SentStartWorker to ReceivedStartWorker**:  This section measures the IPC
+  delay. SendStartWorker is recorded when the browser sends a Mojo message to
+  start a worker thread to the renderer process. ReceivedStartWorker is
+  recordred when the renderer receives it.
+- **ReceivedStartWorker to ScriptEvaluationStart**: This measures the time to be
+  spent for starting a worker thread, and preparation for the V8 isolate and
+  context.
+- **ScriptEvaluationStart to ScriptEvaluationEnd**: the initial script
+  evaluation. This metrics can be affected by the content of service scripts.
+- **ScriptEvaluationEnd to End**: This measures the IPC delay of OnStarted
+   message from the renderer to the browser.
 
 ### Tests
 
 We run a limited number of
 [Telemetry](https://chromium.googlesource.com/catapult/+/HEAD/telemetry/README.md)
-benchmark tests for service worker. These tests are part of the [Loading
+benchmark tests for service worker and a few microbenchmarks in
+[blink_perf](https://chromium.googlesource.com/chromium/src/+/main/docs/speed/benchmark/harnesses/blink_perf.md#service-worker-perf-tests)
+([crbug](https://crbug.com/1019097)).
+
+Telemetry tests are part of the [Loading
 benchmarks](/docs/speed/benchmark/harnesses/loading.md), as the "pwa" tests
 inside the "loading.mobile" suite. The tests do not run on desktop machines
 (loading.desktop) due to resource constraints.
@@ -378,10 +513,11 @@ Code links and resources:
 - PWA test suite: see 'pwa' in
   [loading_mobile.py](/tools/perf/page_sets/loading_mobile.py), as of March 2019
   [here](https://cs.chromium.org/chromium/src/tools/perf/page_sets/loading_mobile.py?l=88&rcl=e590d4e0ae6d3cbdabee199ea6fabe152a3eea83).
-- [cache_temperature.py](https://chromium.googlesource.com/catapult/+/master/telemetry/telemetry/page/cache_temperature.py)
+- [cache_temperature.py](https://chromium.googlesource.com/catapult/+/main/telemetry/telemetry/page/cache_temperature.py)
 - "Perf benchmark for PWAs using the loading benchmark": [crbug](https://crbug.com/736697) and
   [design doc](https://docs.google.com/document/d/1Nf97CVp1X7aSqvAspyJ7yOCDyr1osUNrnfrGwZ_Yuuo/edit?usp=sharing).
 
 ## Other documentation
 
 - [Service Worker Security FAQ](/docs/security/service-worker-security-faq.md)
+- [ES Modules in Service Workers](/content/browser/service_worker/es_modules.md)

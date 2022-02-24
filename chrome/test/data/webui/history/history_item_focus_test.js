@@ -5,14 +5,14 @@
 import {BrowserService} from 'chrome://history/history.js';
 import {TestBrowserService} from 'chrome://test/history/test_browser_service.js';
 import {createHistoryEntry} from 'chrome://test/history/test_util.js';
-import {eventToPromise, flushTasks, waitAfterNextRender} from 'chrome://test/test_util.m.js';
+import {eventToPromise, flushTasks, waitAfterNextRender} from 'chrome://test/test_util.js';
 
 suite('<history-item> focus test', function() {
   let item;
 
   setup(function() {
-    PolymerTest.clearBody();
-    BrowserService.instance_ = new TestBrowserService();
+    document.body.innerHTML = '';
+    BrowserService.setInstance(new TestBrowserService());
 
     item = document.createElement('history-item');
     item.item = createHistoryEntry('2016-03-16 10:00', 'http://www.google.com');

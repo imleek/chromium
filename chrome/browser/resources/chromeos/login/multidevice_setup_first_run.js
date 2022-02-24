@@ -25,19 +25,18 @@ cr.define('multidevice_setup', function() {
     }
 
     /** @override */
-    setHostDevice(hostDeviceId, opt_authToken) {
+    setHostDevice(hostInstanceIdOrLegacyDeviceId, opt_authToken) {
       // An authentication token is not expected since a password is not
       // required.
       assert(!opt_authToken);
 
       if (!this.remote_) {
-        this.remote_ =
-            chromeos.multideviceSetup.mojom.PrivilegedHostDeviceSetter
-                .getRemote(/*useBrowserInterfaceBroker=*/ true);
+        this.remote_ = chromeos.multideviceSetup.mojom
+                           .PrivilegedHostDeviceSetter.getRemote();
       }
 
       return /** @type {!Promise<{success: boolean}>} */ (
-          this.remote_.setHostDevice(hostDeviceId));
+          this.remote_.setHostDevice(hostInstanceIdOrLegacyDeviceId));
     }
 
     /** @override */
@@ -112,7 +111,7 @@ cr.define('multidevice_setup', function() {
     },
 
     /** @override */
-    attached: function() {
+    attached() {
       this.delegate_ = new MultiDeviceSetupFirstRunDelegate();
       this.$.multideviceHelpOverlayWebview.addEventListener(
           'contentload', () => {
@@ -121,16 +120,16 @@ cr.define('multidevice_setup', function() {
     },
 
     /** @override */
-    ready: function() {
+    ready() {
       this.updateLocalizedContent();
     },
 
-    updateLocalizedContent: function() {
+    updateLocalizedContent() {
       this.i18nUpdateLocale();
       this.$.multideviceSetup.updateLocalizedContent();
     },
 
-    onForwardButtonFocusRequested_: function() {
+    onForwardButtonFocusRequested_() {
       this.$.nextButton.focus();
     },
 
@@ -138,7 +137,7 @@ cr.define('multidevice_setup', function() {
      * @param {!CustomEvent<!{didUserCompleteSetup: boolean}>} event
      * @private
      */
-    onExitRequested_: function(event) {
+    onExitRequested_(event) {
       if (event.detail.didUserCompleteSetup) {
         chrome.send(
             'login.MultiDeviceSetupScreen.userActed', ['setup-accepted']);
@@ -149,7 +148,7 @@ cr.define('multidevice_setup', function() {
     },
 
     /** @private */
-    hideWebviewOverlay_: function() {
+    hideWebviewOverlay_() {
       this.webviewOverlayHidden_ = true;
     },
 
@@ -157,7 +156,7 @@ cr.define('multidevice_setup', function() {
      * @param {!CustomEvent<string>} event
      * @private
      */
-    onOpenLearnMoreWebviewRequested_: function(event) {
+    onOpenLearnMoreWebviewRequested_(event) {
       this.isWebviewLoading_ = true;
       this.webviewSrc_ = event.detail;
       this.webviewOverlayHidden_ = false;

@@ -36,7 +36,7 @@ Polymer({
 
     /**
      * Alias for allowing Polymer bindings to settings.routes.
-     * @type {?SettingsRoutes}
+     * @type {?OsSettingsRoutes}
      */
     routes: {
       type: Object,
@@ -49,7 +49,7 @@ Polymer({
      */
     showTechnologyBadge_: {
       type: Boolean,
-      value: function() {
+      value() {
         return loadTimeData.valueExists('showTechnologyBadge') &&
             loadTimeData.getBoolean('showTechnologyBadge');
       }
@@ -60,15 +60,20 @@ Polymer({
   networkConfig_: null,
 
   /** @override */
-  created: function() {
+  created() {
     this.networkConfig_ = network_config.MojoInterfaceProviderImpl.getInstance()
                               .getMojoServiceRemote();
   },
 
   /** @override */
-  attached: function() {
+  attached() {
     this.updateTetherDeviceState_();
     this.updateTetherNetworkState_();
+  },
+
+  /** @override */
+  focus() {
+    this.$$('settings-multidevice-feature-item').focus();
   },
 
   /**
@@ -81,9 +86,9 @@ Polymer({
    *     networks
    * @private
    */
-  onActiveNetworksChanged: function(networks) {
+  onActiveNetworksChanged(networks) {
     const guid = this.activeNetworkState_.guid;
-    if (!networks.find(network => network.guid == guid)) {
+    if (!networks.find(network => network.guid === guid)) {
       return;
     }
     this.networkConfig_.getNetworkState(guid).then(response => {
@@ -94,12 +99,12 @@ Polymer({
   },
 
   /** CrosNetworkConfigObserver impl */
-  onNetworkStateListChanged: function() {
+  onNetworkStateListChanged() {
     this.updateTetherNetworkState_();
   },
 
   /** CrosNetworkConfigObserver impl */
-  onDeviceStateListChanged: function() {
+  onDeviceStateListChanged() {
     this.updateTetherDeviceState_();
   },
 
@@ -111,14 +116,15 @@ Polymer({
    * state.
    * @private
    */
-  updateTetherDeviceState_: function() {
+  updateTetherDeviceState_() {
     this.networkConfig_.getDeviceStateList().then(response => {
       const kTether = chromeos.networkConfig.mojom.NetworkType.kTether;
       const deviceStates = response.result;
       const deviceState =
-          deviceStates.find(deviceState => deviceState.type == kTether);
+          deviceStates.find(deviceState => deviceState.type === kTether);
       this.deviceState_ = deviceState || {
         deviceState: chromeos.networkConfig.mojom.DeviceStateType.kDisabled,
+        inhibitReason: chromeos.networkConfig.mojom.InhibitReason.kNotInhibited,
         managedNetworkAvailable: false,
         scanning: false,
         simAbsent: false,
@@ -135,7 +141,7 @@ Polymer({
    * with an empty string for a GUID otherwise.
    * @private
    */
-  updateTetherNetworkState_: function() {
+  updateTetherNetworkState_() {
     const kTether = chromeos.networkConfig.mojom.NetworkType.kTether;
     const filter = {
       filter: chromeos.networkConfig.mojom.FilterType.kVisible,
@@ -156,7 +162,7 @@ Polymer({
    * @return {!Array<chromeos.networkConfig.mojom.NetworkStateProperties>}
    * @private
    */
-  getNetworkStateList_: function() {
+  getNetworkStateList_() {
     return this.activeNetworkState_.guid ? [this.activeNetworkState_] : [];
   },
 
@@ -164,7 +170,7 @@ Polymer({
    * @return {!URLSearchParams}
    * @private
    */
-  getTetherNetworkUrlSearchParams_: function() {
+  getTetherNetworkUrlSearchParams_() {
     return new URLSearchParams('type=Tether');
   },
 });

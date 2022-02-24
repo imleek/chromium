@@ -52,25 +52,25 @@ class BLINK_COMMON_EXPORT WebMouseWheelEvent : public WebMouseEvent {
     kScrollVertical
   };
 
-  float delta_x;
-  float delta_y;
-  float wheel_ticks_x;
-  float wheel_ticks_y;
+  float delta_x = 0.0f;
+  float delta_y = 0.0f;
+  float wheel_ticks_x = 0.0f;
+  float wheel_ticks_y = 0.0f;
 
-  float acceleration_ratio_x;
-  float acceleration_ratio_y;
+  float acceleration_ratio_x = 1.0f;
+  float acceleration_ratio_y = 1.0f;
 
-  Phase phase;
-  Phase momentum_phase;
+  Phase phase = kPhaseNone;
+  Phase momentum_phase = kPhaseNone;
 
-  RailsMode rails_mode;
+  RailsMode rails_mode = kRailsModeFree;
 
   // Whether the event is blocking, non-blocking, all event
   // listeners were passive or was forced to be non-blocking.
-  DispatchType dispatch_type;
+  DispatchType dispatch_type = DispatchType::kBlocking;
 
   // The expected result of this wheel event (if not canceled).
-  EventAction event_action;
+  EventAction event_action = EventAction::kPageZoom;
 
   // True when phase information is added in mouse_wheel_phase_handler based
   // on its timer.
@@ -80,39 +80,12 @@ class BLINK_COMMON_EXPORT WebMouseWheelEvent : public WebMouseEvent {
   // kScrollByPrecisePixel, kScrollByPixel, and kScrollByPage, as they are
   // the only values expected after converting an OS event to a
   // WebMouseWheelEvent.
-  ui::input_types::ScrollGranularity delta_units;
+  ui::ScrollGranularity delta_units = ui::ScrollGranularity::kScrollByPixel;
 
   WebMouseWheelEvent(Type type, int modifiers, base::TimeTicks time_stamp)
-      : WebMouseEvent(sizeof(WebMouseWheelEvent),
-                      type,
-                      modifiers,
-                      time_stamp,
-                      kMousePointerId),
-        delta_x(0.0f),
-        delta_y(0.0f),
-        wheel_ticks_x(0.0f),
-        wheel_ticks_y(0.0f),
-        acceleration_ratio_x(1.0f),
-        acceleration_ratio_y(1.0f),
-        phase(kPhaseNone),
-        momentum_phase(kPhaseNone),
-        rails_mode(kRailsModeFree),
-        dispatch_type(kBlocking),
-        delta_units(ui::input_types::ScrollGranularity::kScrollByPixel) {}
+      : WebMouseEvent(type, modifiers, time_stamp, kMousePointerId) {}
 
-  WebMouseWheelEvent()
-      : WebMouseEvent(sizeof(WebMouseWheelEvent), kMousePointerId),
-        delta_x(0.0f),
-        delta_y(0.0f),
-        wheel_ticks_x(0.0f),
-        wheel_ticks_y(0.0f),
-        acceleration_ratio_x(1.0f),
-        acceleration_ratio_y(1.0f),
-        phase(kPhaseNone),
-        momentum_phase(kPhaseNone),
-        rails_mode(kRailsModeFree),
-        dispatch_type(kBlocking),
-        delta_units(ui::input_types::ScrollGranularity::kScrollByPixel) {}
+  WebMouseWheelEvent() : WebMouseEvent(kMousePointerId) {}
 
   float DeltaXInRootFrame() const;
   float DeltaYInRootFrame() const;
@@ -121,7 +94,19 @@ class BLINK_COMMON_EXPORT WebMouseWheelEvent : public WebMouseEvent {
   // back to 1 and |frame_translate_| X and Y coordinates back to 0.
   WebMouseWheelEvent FlattenTransform() const;
 
-  bool IsCancelable() const { return dispatch_type == kBlocking; }
+  bool IsCancelable() const { return dispatch_type == DispatchType::kBlocking; }
+
+  std::unique_ptr<WebInputEvent> Clone() const override;
+  bool CanCoalesce(const WebInputEvent& event) const override;
+  void Coalesce(const WebInputEvent& event) override;
+
+  // Return the platform specific default event action given the mouse wheel
+  // event. Can be used to determine the appropriate value for |event_action|.
+  static EventAction GetPlatformSpecificDefaultEventAction(
+      const WebMouseWheelEvent& event);
+
+ private:
+  bool HaveConsistentPhase(const WebMouseWheelEvent& event) const;
 };
 
 }  // namespace blink

@@ -5,7 +5,7 @@
 (async function() {
   TestRunner.addResult('Tests that evaluation with top-level await may be performed in console.');
 
-  await TestRunner.loadModule('console_test_runner');
+  await TestRunner.loadLegacyModule('console'); await TestRunner.loadTestModule('console_test_runner');
   await TestRunner.showPanel('console');
 
   await TestRunner.evaluateInPagePromise(`
@@ -59,6 +59,6 @@
   await test('s');
   await test('await {...{foo: 42}}');
   await new Promise(resolve => ConsoleTestRunner.waitForRemoteObjectsConsoleMessages(resolve));
-  ConsoleTestRunner.dumpConsoleMessages();
+  await ConsoleTestRunner.dumpConsoleMessages();
   TestRunner.completeTest();
 })();

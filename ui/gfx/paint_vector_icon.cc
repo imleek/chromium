@@ -10,7 +10,7 @@
 
 #include "base/i18n/rtl.h"
 #include "base/lazy_instance.h"
-#include "base/macros.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/trace_event/trace_event.h"
@@ -23,6 +23,7 @@
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/vector_icon_types.h"
+#include "ui/gfx/vector_icon_utils.h"
 
 namespace gfx {
 
@@ -85,6 +86,10 @@ class PathParser {
  public:
   PathParser(const PathElement* path_elements, size_t path_size)
       : path_elements_(path_elements), path_size_(path_size) {}
+
+  PathParser(const PathParser&) = delete;
+  PathParser& operator=(const PathParser&) = delete;
+
   ~PathParser() {}
 
   void Advance() { command_index_ += GetArgumentCount() + 1; }
@@ -116,6 +121,8 @@ class PathParser {
       case R_MOVE_TO:
       case LINE_TO:
       case R_LINE_TO:
+      case QUADRATIC_TO_SHORTHAND:
+      case R_QUADRATIC_TO_SHORTHAND:
         return 2;
 
       case CIRCLE:
@@ -124,6 +131,9 @@ class PathParser {
       case PATH_COLOR_ARGB:
       case CUBIC_TO_SHORTHAND:
       case CLIP:
+      case QUADRATIC_TO:
+      case R_QUADRATIC_TO:
+      case OVAL:
         return 4;
 
       case ROUND_RECT:
@@ -153,8 +163,6 @@ class PathParser {
   const PathElement* path_elements_;
   size_t path_size_;
   size_t command_index_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(PathParser);
 };
 
 // Translates a string such as "MOVE_TO" into a command such as MOVE_TO.
@@ -182,7 +190,12 @@ CommandType CommandFromString(const std::string& source) {
   RETURN_IF_IS(CUBIC_TO);
   RETURN_IF_IS(R_CUBIC_TO);
   RETURN_IF_IS(CUBIC_TO_SHORTHAND);
+  RETURN_IF_IS(QUADRATIC_TO);
+  RETURN_IF_IS(R_QUADRATIC_TO);
+  RETURN_IF_IS(QUADRATIC_TO_SHORTHAND);
+  RETURN_IF_IS(R_QUADRATIC_TO_SHORTHAND);
   RETURN_IF_IS(CIRCLE);
+  RETURN_IF_IS(OVAL);
   RETURN_IF_IS(ROUND_RECT);
   RETURN_IF_IS(CLOSE);
   RETURN_IF_IS(CANVAS_DIMENSIONS);
@@ -210,6 +223,13 @@ std::vector<PathElement> PathFromSource(const std::string& source) {
       path.push_back(PathElement(CommandFromString(piece)));
   }
   return path;
+}
+
+bool IsCommandTypeCurve(CommandType command) {
+  return command == CUBIC_TO || command == R_CUBIC_TO ||
+         command == CUBIC_TO_SHORTHAND || command == QUADRATIC_TO ||
+         command == R_QUADRATIC_TO || command == QUADRATIC_TO_SHORTHAND ||
+         command == R_QUADRATIC_TO_SHORTHAND;
 }
 
 void PaintPath(Canvas* canvas,
@@ -348,28 +368,55 @@ void PaintPath(Canvas* canvas,
         path.rCubicTo(arg(0), arg(1), arg(2), arg(3), arg(4), arg(5));
         break;
 
-      case CUBIC_TO_SHORTHAND: {
-        // Compute the first control point (|x1| and |y1|) as the reflection
-        // of the second control point on the previous command relative to
-        // the current point. If there is no previous command or if the
-        // previous command is not a cubic Bezier curve, the first control
-        // point is coincident with the current point. Refer to the SVG
-        // path specs for further details.
+      case CUBIC_TO_SHORTHAND:
+      case QUADRATIC_TO_SHORTHAND:
+      case R_QUADRATIC_TO_SHORTHAND: {
+        // Compute the first control point (|x1| and |y1|) as the reflection of
+        // the last control point on the previous command relative to the
+        // current point. If there is no previous command or if the previous
+        // command is not a Bezier curve, the first control point is coincident
+        // with the current point. Refer to the SVG path specs for further
+        // details.
+        // Note that |x1| and |y1| will correspond to the sole control point if
+        // calculating a quadratic curve.
         SkPoint last_point;
         path.getLastPt(&last_point);
         SkScalar delta_x = 0;
         SkScalar delta_y = 0;
-        if (previous_command_type == CUBIC_TO ||
-            previous_command_type == R_CUBIC_TO ||
-            previous_command_type == CUBIC_TO_SHORTHAND) {
+        if (IsCommandTypeCurve(previous_command_type)) {
           SkPoint last_control_point = path.getPoint(path.countPoints() - 2);
+          // We find what the delta was between the last curve's starting point
+          // and the control point. This difference is what we will reflect on
+          // the current point, creating our new control point.
           delta_x = last_point.fX - last_control_point.fX;
           delta_y = last_point.fY - last_control_point.fY;
         }
 
         SkScalar x1 = last_point.fX + delta_x;
         SkScalar y1 = last_point.fY + delta_y;
-        path.cubicTo(x1, y1, arg(0), arg(1), arg(2), arg(3));
+        if (command_type == CUBIC_TO_SHORTHAND)
+          path.cubicTo(x1, y1, arg(0), arg(1), arg(2), arg(3));
+        else if (command_type == QUADRATIC_TO_SHORTHAND)
+          path.quadTo(x1, y1, arg(0), arg(1));
+        else if (command_type == R_QUADRATIC_TO_SHORTHAND)
+          path.rQuadTo(x1, y1, arg(0), arg(1));
+        break;
+      }
+
+      case QUADRATIC_TO:
+        path.quadTo(arg(0), arg(1), arg(2), arg(3));
+        break;
+
+      case R_QUADRATIC_TO:
+        path.rQuadTo(arg(0), arg(1), arg(2), arg(3));
+        break;
+
+      case OVAL: {
+        SkScalar x = arg(0);
+        SkScalar y = arg(1);
+        SkScalar rx = arg(2);
+        SkScalar ry = arg(3);
+        path.addOval(SkRect::MakeLTRB(x - rx, y - ry, x + rx, y + ry));
         break;
       }
 
@@ -431,8 +478,11 @@ class VectorIconSource : public CanvasImageSource {
 
   VectorIconSource(const std::string& definition, int dip_size, SkColor color)
       : CanvasImageSource(Size(dip_size, dip_size)),
-        data_(kNoneIcon, dip_size, color, kNoneIcon),
+        data_(kNoneIcon, dip_size, color, &kNoneIcon),
         path_(PathFromSource(definition)) {}
+
+  VectorIconSource(const VectorIconSource&) = delete;
+  VectorIconSource& operator=(const VectorIconSource&) = delete;
 
   ~VectorIconSource() override {}
 
@@ -454,8 +504,6 @@ class VectorIconSource : public CanvasImageSource {
  private:
   const IconDescription data_;
   const std::vector<PathElement> path_;
-
-  DISALLOW_COPY_AND_ASSIGN(VectorIconSource);
 };
 
 // This class caches vector icons (as ImageSkia) so they don't have to be drawn
@@ -464,6 +512,10 @@ class VectorIconSource : public CanvasImageSource {
 class VectorIconCache {
  public:
   VectorIconCache() {}
+
+  VectorIconCache(const VectorIconCache&) = delete;
+  VectorIconCache& operator=(const VectorIconCache&) = delete;
+
   ~VectorIconCache() {}
 
   ImageSkia GetOrCreateIcon(const IconDescription& description) {
@@ -479,8 +531,6 @@ class VectorIconCache {
 
  private:
   std::map<IconDescription, ImageSkia, CompareIconDescription> images_;
-
-  DISALLOW_COPY_AND_ASSIGN(VectorIconCache);
 };
 
 static base::LazyInstance<VectorIconCache>::DestructorAtExit g_icon_cache =
@@ -493,11 +543,11 @@ IconDescription::IconDescription(const IconDescription& other) = default;
 IconDescription::IconDescription(const VectorIcon& icon,
                                  int dip_size,
                                  SkColor color,
-                                 const VectorIcon& badge_icon)
+                                 const VectorIcon* badge_icon)
     : icon(icon),
       dip_size(dip_size),
       color(color),
-      badge_icon(badge_icon) {
+      badge_icon(badge_icon ? *badge_icon : kNoneIcon) {
   if (dip_size == 0)
     this->dip_size = GetDefaultSizeOfVectorIcon(icon);
 }
@@ -517,14 +567,14 @@ void PaintVectorIcon(Canvas* canvas,
   DCHECK(!icon.is_empty());
   for (size_t i = 0; i < icon.reps_size; ++i)
     DCHECK(icon.reps[i].path_size > 0);
-  const int px_size = gfx::ToCeiledInt(canvas->image_scale() * dip_size);
+  const int px_size = base::ClampCeil(canvas->image_scale() * dip_size);
   const VectorIconRep* rep = GetRepForPxSize(icon, px_size);
   PaintPath(canvas, rep->path, rep->path_size, dip_size, color);
 }
 
 ImageSkia CreateVectorIcon(const IconDescription& params) {
   if (params.icon.is_empty())
-    return gfx::ImageSkia();
+    return ImageSkia();
 
   return g_icon_cache.Get().GetOrCreateIcon(params);
 }
@@ -536,14 +586,14 @@ ImageSkia CreateVectorIcon(const VectorIcon& icon, SkColor color) {
 ImageSkia CreateVectorIcon(const VectorIcon& icon,
                            int dip_size,
                            SkColor color) {
-  return CreateVectorIcon(IconDescription(icon, dip_size, color, kNoneIcon));
+  return CreateVectorIcon(IconDescription(icon, dip_size, color, &kNoneIcon));
 }
 
 ImageSkia CreateVectorIconWithBadge(const VectorIcon& icon,
                                     int dip_size,
                                     SkColor color,
                                     const VectorIcon& badge_icon) {
-  return CreateVectorIcon(IconDescription(icon, dip_size, color, badge_icon));
+  return CreateVectorIcon(IconDescription(icon, dip_size, color, &badge_icon));
 }
 
 ImageSkia CreateVectorIconFromSource(const std::string& source,
@@ -551,18 +601,6 @@ ImageSkia CreateVectorIconFromSource(const std::string& source,
                                      SkColor color) {
   return CanvasImageSource::MakeImageSkia<VectorIconSource>(source, dip_size,
                                                             color);
-}
-
-int GetDefaultSizeOfVectorIcon(const VectorIcon& icon) {
-  if (icon.is_empty())
-    return kEmptyIconSize;
-  DCHECK_EQ(icon.reps[icon.reps_size - 1].path[0].command, CANVAS_DIMENSIONS)
-      << " " << icon.name
-      << " has no size in its icon definition, and it seems unlikely you want "
-         "to display at the default of 48dip. Please specify a size in "
-         "CreateVectorIcon().";
-  const PathElement* default_icon_path = icon.reps[icon.reps_size - 1].path;
-  return GetCanvasDimensions(default_icon_path);
 }
 
 }  // namespace gfx

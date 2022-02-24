@@ -10,21 +10,24 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
 #include "ui/base/models/tree_node_model.h"
+#include "ui/compositor/canvas_painter.h"
 #include "ui/views/accessibility/ax_virtual_view.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/accessibility/view_ax_platform_node_delegate.h"
 #include "ui/views/controls/prefix_selector.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/tree/tree_view_controller.h"
+#include "ui/views/test/view_metadata_test_utils.h"
 #include "ui/views/test/views_test_base.h"
+#include "ui/views/widget/unique_widget_ptr.h"
 #include "ui/views/widget/widget.h"
 
 using ui::TreeModel;
@@ -37,7 +40,7 @@ namespace views {
 
 namespace {
 
-std::string AccessibilityViewAsString(AXVirtualView& view) {
+std::string AccessibilityViewAsString(const AXVirtualView& view) {
   std::string result =
       view.GetData().GetStringAttribute(ax::mojom::StringAttribute::kName);
   if (!view.GetChildCount() ||
@@ -47,7 +50,7 @@ std::string AccessibilityViewAsString(AXVirtualView& view) {
   }
 
   result += " [";
-  for (auto& child_view : view.children()) {
+  for (const auto& child_view : view.children()) {
     result += AccessibilityViewAsString(*child_view) + " ";
   }
   result.pop_back();
@@ -61,10 +64,11 @@ std::string AccessibilityViewAsString(AXVirtualView& view) {
 class TestNode : public TreeNode<TestNode> {
  public:
   TestNode() = default;
-  ~TestNode() override = default;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestNode);
+  TestNode(const TestNode&) = delete;
+  TestNode& operator=(const TestNode&) = delete;
+
+  ~TestNode() override = default;
 };
 
 // Creates the following structure:
@@ -76,11 +80,14 @@ class TestNode : public TreeNode<TestNode> {
 class TreeViewTest : public ViewsTestBase {
  public:
   TreeViewTest() : model_(std::make_unique<TestNode>()) {
-    static_cast<TestNode*>(model_.GetRoot())->SetTitle(ASCIIToUTF16("root"));
+    static_cast<TestNode*>(model_.GetRoot())->SetTitle(u"root");
     Add(model_.GetRoot(), 0, "a");
     Add(Add(model_.GetRoot(), 1, "b"), 0, "b1");
     Add(model_.GetRoot(), 2, "c");
   }
+
+  TreeViewTest(const TreeViewTest&) = delete;
+  TreeViewTest& operator=(const TreeViewTest&) = delete;
 
   // ViewsTestBase
   void SetUp() override;
@@ -102,9 +109,26 @@ class TreeViewTest : public ViewsTestBase {
 
   std::string TreeViewAccessibilityContentsAsString() const;
 
+  // Gets the selected node from the tree view. The result can be compared with
+  // GetSelectedAccessibilityViewName() to check consistency between the tree
+  // view state and the accessibility data.
   std::string GetSelectedNodeTitle();
 
+  // Finds the selected node via iterative depth first search over the internal
+  // accessibility tree, examining both ignored and unignored nodes. The result
+  // can be compared with GetSelectedNodeTitle() to check consistency between
+  // the tree view state and the accessibility data.
   std::string GetSelectedAccessibilityViewName() const;
+
+  // Gets the active node from the tree view. The result can be compared with
+  // GetSelectedAccessibilityViewName() to check consistency between the tree
+  // view state and the accessibility data.
+  std::string GetActiveNodeTitle();
+
+  // Gets the active node from the tree view's |ViewAccessibility|. The result
+  // can be compared with GetSelectedNodeTitle() to check consistency between
+  // the tree view internal state and the accessibility data.
+  std::string GetActiveAccessibilityViewName() const;
 
   std::string GetEditingNodeTitle();
 
@@ -125,28 +149,27 @@ class TreeViewTest : public ViewsTestBase {
 
   ui::TreeNodeModel<TestNode> model_;
   TreeView* tree_;
-  Widget* widget_;
+  UniqueWidgetPtr widget_;
 
  private:
   std::string InternalNodeAsString(TreeView::InternalNode* node);
 
-  TestNode* GetNodeByTitleImpl(TestNode* node, const base::string16& title);
+  TestNode* GetNodeByTitleImpl(TestNode* node, const std::u16string& title);
 
   // Keeps a record of all accessibility events that have been fired on the tree
   // view.
   AccessibilityEventsVector accessibility_events_;
-
-  DISALLOW_COPY_AND_ASSIGN(TreeViewTest);
 };
 
 void TreeViewTest::SetUp() {
   ViewsTestBase::SetUp();
-  widget_ = new Widget;
-  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  widget_ = std::make_unique<Widget>();
+  Widget::InitParams params =
+      CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.bounds = gfx::Rect(0, 0, 200, 200);
   widget_->Init(std::move(params));
-  tree_ = new TreeView();
-  widget_->GetContentsView()->AddChildView(tree_);
+  tree_ = widget_->SetContentsView(std::make_unique<TreeView>());
+  tree_->RequestFocus();
 
   ViewAccessibility::AccessibilityEventsCallback accessibility_events_callback =
       base::BindRepeating(
@@ -164,8 +187,7 @@ void TreeViewTest::SetUp() {
 }
 
 void TreeViewTest::TearDown() {
-  if (!widget_->IsClosed())
-    widget_->Close();
+  widget_.reset();
   ViewsTestBase::TearDown();
 }
 
@@ -216,7 +238,7 @@ std::string TreeViewTest::GetSelectedAccessibilityViewName() const {
     const AXVirtualView* parent_view = ax_view->virtual_parent_view();
     while (parent_view) {
       size_t sibling_index_in_parent =
-          size_t{parent_view->GetIndexOf(ax_view)} + 1;
+          static_cast<size_t>(parent_view->GetIndexOf(ax_view)) + 1;
       if (sibling_index_in_parent < parent_view->children().size()) {
         ax_view = parent_view->children()[sibling_index_in_parent].get();
         break;
@@ -231,6 +253,20 @@ std::string TreeViewTest::GetSelectedAccessibilityViewName() const {
   }
 
   return {};
+}
+
+std::string TreeViewTest::GetActiveNodeTitle() {
+  TreeModelNode* model_node = tree_->GetActiveNode();
+  return model_node ? base::UTF16ToASCII(model_node->GetTitle())
+                    : std::string();
+}
+
+std::string TreeViewTest::GetActiveAccessibilityViewName() const {
+  const AXVirtualView* ax_view =
+      tree_->GetViewAccessibility().FocusedVirtualChild();
+  return ax_view ? ax_view->GetData().GetStringAttribute(
+                       ax::mojom::StringAttribute::kName)
+                 : std::string();
 }
 
 std::string TreeViewTest::GetEditingNodeTitle() {
@@ -276,7 +312,7 @@ const AXVirtualView* TreeViewTest::GetAccessibilityViewByName(
     const AXVirtualView* parent_view = ax_view->virtual_parent_view();
     while (parent_view) {
       size_t sibling_index_in_parent =
-          size_t{parent_view->GetIndexOf(ax_view)} + 1;
+          static_cast<size_t>(parent_view->GetIndexOf(ax_view)) + 1;
       if (sibling_index_in_parent < parent_view->children().size()) {
         ax_view = parent_view->children()[sibling_index_in_parent].get();
         break;
@@ -294,8 +330,8 @@ const AXVirtualView* TreeViewTest::GetAccessibilityViewByName(
 }
 
 void TreeViewTest::IncrementSelection(bool next) {
-  tree_->IncrementSelection(next ? TreeView::INCREMENT_NEXT
-                                 : TreeView::INCREMENT_PREVIOUS);
+  tree_->IncrementSelection(next ? TreeView::IncrementType::kNext
+                                 : TreeView::IncrementType::kPrevious);
 }
 
 void TreeViewTest::CollapseOrSelectParent() {
@@ -311,7 +347,7 @@ int TreeViewTest::GetRowCount() {
 }
 
 TestNode* TreeViewTest::GetNodeByTitleImpl(TestNode* node,
-                                           const base::string16& title) {
+                                           const std::u16string& title) {
   if (node->GetTitle() == title)
     return node;
   for (auto& child : node->children()) {
@@ -322,8 +358,7 @@ TestNode* TreeViewTest::GetNodeByTitleImpl(TestNode* node,
   return nullptr;
 }
 
-std::string TreeViewTest::InternalNodeAsString(
-    TreeView::InternalNode* node) {
+std::string TreeViewTest::InternalNodeAsString(TreeView::InternalNode* node) {
   std::string result = base::UTF16ToASCII(node->model_node()->GetTitle());
   if (node->is_expanded() && !node->children().empty()) {
     result += std::accumulate(
@@ -335,6 +370,22 @@ std::string TreeViewTest::InternalNodeAsString(
               "]";
   }
   return result;
+}
+
+// Verify properties are accessible via metadata.
+TEST_F(TreeViewTest, MetadataTest) {
+  tree_->SetModel(&model_);
+  test::TestViewMetadata(tree_);
+}
+
+TEST_F(TreeViewTest, TreeViewPaintCoverage) {
+  tree_->SetModel(&model_);
+  SkBitmap bitmap;
+  gfx::Size size = tree_->size();
+  ui::CanvasPainter canvas_painter(&bitmap, size, 1.f, SK_ColorTRANSPARENT,
+                                   false);
+  widget_->GetRootView()->Paint(
+      PaintInfo::CreateRootPaintInfo(canvas_painter.context(), size));
 }
 
 // Verifies setting model correctly updates internal state.
@@ -435,7 +486,7 @@ TEST_F(TreeViewTest, Expand) {
   tree_->Expand(GetNodeByTitle("b1"));
   EXPECT_EQ("root [a b [b1] c]", TreeViewContentsAsString());
   EXPECT_EQ("root [a b [b1] c]", TreeViewAccessibilityContentsAsString());
-  EXPECT_EQ("root",GetSelectedNodeTitle());
+  EXPECT_EQ("root", GetSelectedNodeTitle());
   EXPECT_EQ("root", GetSelectedAccessibilityViewName());
   EXPECT_EQ(5, GetRowCount());
 
@@ -534,7 +585,7 @@ TEST_F(TreeViewTest, TreeNodesAdded) {
   tree_->Expand(GetNodeByTitle("b"));
   EXPECT_EQ("root [a b [b1 b2] B c]", TreeViewContentsAsString());
   EXPECT_EQ("root [a b [b1 b2] B c]", TreeViewAccessibilityContentsAsString());
-  EXPECT_EQ("root",GetSelectedNodeTitle());
+  EXPECT_EQ("root", GetSelectedNodeTitle());
   EXPECT_EQ("root", GetSelectedAccessibilityViewName());
   EXPECT_EQ(7, GetRowCount());
   // Since the added node was not visible when it was added, no extra events
@@ -745,7 +796,7 @@ TEST_F(TreeViewTest, TreeNodeChanged) {
   ClearAccessibilityEvents();
 
   // Change c11, shouldn't do anything.
-  model_.SetTitle(GetNodeByTitle("c11"), ASCIIToUTF16("c11.new"));
+  model_.SetTitle(GetNodeByTitle("c11"), u"c11.new");
   EXPECT_EQ("root [a b c]", TreeViewContentsAsString());
   EXPECT_EQ("root [a b c]", TreeViewAccessibilityContentsAsString());
   EXPECT_EQ("root", GetSelectedNodeTitle());
@@ -755,7 +806,7 @@ TEST_F(TreeViewTest, TreeNodeChanged) {
 
   // Change 'b1', shouldn't do anything.
   ClearAccessibilityEvents();
-  model_.SetTitle(GetNodeByTitle("b1"), ASCIIToUTF16("b1.new"));
+  model_.SetTitle(GetNodeByTitle("b1"), u"b1.new");
   EXPECT_EQ("root [a b c]", TreeViewContentsAsString());
   EXPECT_EQ("root [a b c]", TreeViewAccessibilityContentsAsString());
   EXPECT_EQ("root", GetSelectedNodeTitle());
@@ -765,7 +816,7 @@ TEST_F(TreeViewTest, TreeNodeChanged) {
 
   // Change 'b'.
   ClearAccessibilityEvents();
-  model_.SetTitle(GetNodeByTitle("b"), ASCIIToUTF16("b.new"));
+  model_.SetTitle(GetNodeByTitle("b"), u"b.new");
   EXPECT_EQ("root [a b.new c]", TreeViewContentsAsString());
   EXPECT_EQ("root [a b.new c]", TreeViewAccessibilityContentsAsString());
   EXPECT_EQ("root", GetSelectedNodeTitle());
@@ -892,21 +943,29 @@ TEST_F(TreeViewTest, ExpandOrSelectChild) {
 TEST_F(TreeViewTest, SelectOnKeyStroke) {
   tree_->SetModel(&model_);
   tree_->ExpandAll(model_.GetRoot());
-  selector()->InsertText(ASCIIToUTF16("b"));
+  selector()->InsertText(
+      u"b",
+      ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
   EXPECT_EQ("b", GetSelectedNodeTitle());
   EXPECT_EQ("b", GetSelectedAccessibilityViewName());
-  selector()->InsertText(ASCIIToUTF16("1"));
+  selector()->InsertText(
+      u"1",
+      ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
   EXPECT_EQ("b1", GetSelectedNodeTitle());
   EXPECT_EQ("b1", GetSelectedAccessibilityViewName());
 
   // Invoke OnViewBlur() to reset time.
   selector()->OnViewBlur();
-  selector()->InsertText(ASCIIToUTF16("z"));
+  selector()->InsertText(
+      u"z",
+      ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
   EXPECT_EQ("b1", GetSelectedNodeTitle());
   EXPECT_EQ("b1", GetSelectedAccessibilityViewName());
 
   selector()->OnViewBlur();
-  selector()->InsertText(ASCIIToUTF16("a"));
+  selector()->InsertText(
+      u"a",
+      ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
   EXPECT_EQ("a", GetSelectedNodeTitle());
   EXPECT_EQ("a", GetSelectedAccessibilityViewName());
 }
@@ -919,7 +978,7 @@ TEST_F(TreeViewTest, CommitOnFocusLost) {
   ExpandOrSelectChild();
   tree_->SetEditable(true);
   tree_->StartEditing(GetNodeByTitle("a"));
-  tree_->editor()->SetText(ASCIIToUTF16("a changed"));
+  tree_->editor()->SetText(u"a changed");
   tree_->OnDidChangeFocus(nullptr, nullptr);
   EXPECT_TRUE(GetNodeByTitle("a changed") != nullptr);
 
@@ -929,6 +988,228 @@ TEST_F(TreeViewTest, CommitOnFocusLost) {
       "a changed",
       GetRootAccessibilityView()->children()[0]->GetData().GetStringAttribute(
           ax::mojom::StringAttribute::kName));
+}
+
+// Verifies that virtual accessible actions go to virtual view targets.
+TEST_F(TreeViewTest, VirtualAccessibleAction) {
+  tree_->SetModel(&model_);
+  tree_->Expand(GetNodeByTitle("b1"));
+  EXPECT_EQ("root [a b [b1] c]", TreeViewContentsAsString());
+  EXPECT_EQ("root [a b [b1] c]", TreeViewAccessibilityContentsAsString());
+  EXPECT_EQ(5, GetRowCount());
+
+  // Set to nullptr should clear the selection.
+  tree_->SetSelectedNode(nullptr);
+  EXPECT_EQ(std::string(), GetActiveNodeTitle());
+  EXPECT_EQ(std::string(), GetActiveAccessibilityViewName());
+  EXPECT_EQ(std::string(), GetSelectedNodeTitle());
+  EXPECT_EQ(std::string(), GetSelectedAccessibilityViewName());
+
+  // Test using each virtual view as target.
+  ui::AXActionData data;
+  const std::string test_cases[] = {"root", "a", "b", "b1", "c"};
+  for (const std::string& name : test_cases) {
+    data.target_node_id = GetAccessibilityViewByName(name)->GetData().id;
+    data.action = ax::mojom::Action::kDoDefault;
+    EXPECT_TRUE(tree_->HandleAccessibleAction(data));
+    EXPECT_EQ(name, GetActiveNodeTitle());
+    EXPECT_EQ(name, GetActiveAccessibilityViewName());
+    EXPECT_EQ(name, GetSelectedNodeTitle());
+    EXPECT_EQ(name, GetSelectedAccessibilityViewName());
+  }
+
+  // Do nothing when a valid node id is not provided. This can happen if the
+  // actions target the owner view itself.
+  tree_->SetSelectedNode(GetNodeByTitle("b"));
+  data.target_node_id = -1;
+  data.action = ax::mojom::Action::kDoDefault;
+  EXPECT_FALSE(tree_->HandleAccessibleAction(data));
+  EXPECT_EQ("b", GetActiveNodeTitle());
+  EXPECT_EQ("b", GetActiveAccessibilityViewName());
+  EXPECT_EQ("b", GetSelectedNodeTitle());
+  EXPECT_EQ("b", GetSelectedAccessibilityViewName());
+
+  // Check that the active node is set if assistive technologies set focus.
+  tree_->SetSelectedNode(GetNodeByTitle("b"));
+  data.target_node_id = GetAccessibilityViewByName("a")->GetData().id;
+  data.action = ax::mojom::Action::kFocus;
+  EXPECT_TRUE(tree_->HandleAccessibleAction(data));
+  EXPECT_EQ("a", GetActiveNodeTitle());
+  EXPECT_EQ("a", GetActiveAccessibilityViewName());
+  EXPECT_EQ("a", GetSelectedNodeTitle());
+  EXPECT_EQ("a", GetSelectedAccessibilityViewName());
+
+  // Do not handle accessible actions when no node is selected.
+  tree_->SetSelectedNode(nullptr);
+  data.target_node_id = -1;
+  data.action = ax::mojom::Action::kDoDefault;
+  EXPECT_FALSE(tree_->HandleAccessibleAction(data));
+  EXPECT_EQ(std::string(), GetActiveNodeTitle());
+  EXPECT_EQ(std::string(), GetActiveAccessibilityViewName());
+  EXPECT_EQ(std::string(), GetSelectedNodeTitle());
+  EXPECT_EQ(std::string(), GetSelectedAccessibilityViewName());
+}
+
+// Verifies that accessibility focus events get fired for the correct nodes when
+// the tree view is given focus.
+TEST_F(TreeViewTest, OnFocusAccessibilityEvents) {
+  // Without keyboard focus, model changes should not fire focus events.
+  tree_->GetFocusManager()->ClearFocus();
+  EXPECT_FALSE(tree_->HasFocus());
+  tree_->SetModel(&model_);
+  EXPECT_EQ("root [a b c]", TreeViewContentsAsString());
+  EXPECT_EQ("root [a b c]", TreeViewAccessibilityContentsAsString());
+  EXPECT_EQ("root", GetSelectedNodeTitle());
+  EXPECT_EQ("root", GetSelectedAccessibilityViewName());
+  EXPECT_EQ(4, GetRowCount());
+  EXPECT_EQ((AccessibilityEventsVector{
+                std::make_pair(GetTreeAccessibilityView(),
+                               ax::mojom::Event::kChildrenChanged),
+                std::make_pair(GetTreeAccessibilityView(),
+                               ax::mojom::Event::kChildrenChanged),
+                std::make_pair(GetTreeAccessibilityView(),
+                               ax::mojom::Event::kChildrenChanged),
+                std::make_pair(GetRootAccessibilityView(),
+                               ax::mojom::Event::kSelection)}),
+            accessibility_events());
+
+  // The initial focus should fire a focus event for the active node
+  // (in this case, the root node).
+  ClearAccessibilityEvents();
+  tree_->RequestFocus();
+  EXPECT_TRUE(tree_->HasFocus());
+  EXPECT_EQ((AccessibilityEventsVector{std::make_pair(
+                GetRootAccessibilityView(), ax::mojom::Event::kFocus)}),
+            accessibility_events());
+
+  // Focus clear and restore should fire a focus event for the active node.
+  ClearAccessibilityEvents();
+  tree_->SetSelectedNode(GetNodeByTitle("b"));
+  tree_->SetActiveNode(GetNodeByTitle("a"));
+  EXPECT_EQ("a", GetActiveNodeTitle());
+  EXPECT_EQ("a", GetActiveAccessibilityViewName());
+  EXPECT_EQ("b", GetSelectedNodeTitle());
+  EXPECT_EQ("b", GetSelectedAccessibilityViewName());
+  tree_->GetFocusManager()->ClearFocus();
+  EXPECT_FALSE(tree_->HasFocus());
+  tree_->GetFocusManager()->RestoreFocusedView();
+  EXPECT_TRUE(tree_->HasFocus());
+  EXPECT_EQ("a", GetActiveNodeTitle());
+  EXPECT_EQ("a", GetActiveAccessibilityViewName());
+  EXPECT_EQ("b", GetSelectedNodeTitle());
+  EXPECT_EQ("b", GetSelectedAccessibilityViewName());
+  EXPECT_EQ(
+      (AccessibilityEventsVector{std::make_pair(GetAccessibilityViewByName("b"),
+                                                ax::mojom::Event::kFocus),
+                                 std::make_pair(GetAccessibilityViewByName("b"),
+                                                ax::mojom::Event::kSelection),
+                                 std::make_pair(GetAccessibilityViewByName("a"),
+                                                ax::mojom::Event::kFocus),
+                                 std::make_pair(GetAccessibilityViewByName("a"),
+                                                ax::mojom::Event::kFocus)}),
+      accessibility_events());
+
+  // Without keyboard focus, selection should not fire focus events.
+  ClearAccessibilityEvents();
+  tree_->GetFocusManager()->ClearFocus();
+  tree_->SetSelectedNode(GetNodeByTitle("a"));
+  EXPECT_FALSE(tree_->HasFocus());
+  EXPECT_EQ("a", GetSelectedNodeTitle());
+  EXPECT_EQ("a", GetSelectedAccessibilityViewName());
+  EXPECT_EQ(
+      (AccessibilityEventsVector{std::make_pair(GetAccessibilityViewByName("a"),
+                                                ax::mojom::Event::kSelection)}),
+      accessibility_events());
+
+  // A direct focus action on a tree item should give focus to the tree view but
+  // only fire a focus event for the target node.
+  ui::AXActionData data;
+  const std::string test_cases[] = {"root", "a", "b", "c"};
+  for (const std::string& name : test_cases) {
+    ClearAccessibilityEvents();
+    tree_->GetFocusManager()->ClearFocus();
+    EXPECT_FALSE(tree_->HasFocus());
+    data.target_node_id = GetAccessibilityViewByName(name)->GetData().id;
+    data.action = ax::mojom::Action::kFocus;
+    EXPECT_TRUE(tree_->HandleAccessibleAction(data));
+    EXPECT_TRUE(tree_->HasFocus());
+    EXPECT_EQ(name, GetActiveNodeTitle());
+    EXPECT_EQ(name, GetActiveAccessibilityViewName());
+    EXPECT_EQ(name, GetSelectedNodeTitle());
+    EXPECT_EQ(name, GetSelectedAccessibilityViewName());
+    EXPECT_EQ((AccessibilityEventsVector{
+                  std::make_pair(GetAccessibilityViewByName(name),
+                                 ax::mojom::Event::kSelection),
+                  std::make_pair(GetAccessibilityViewByName(name),
+                                 ax::mojom::Event::kFocus)}),
+              accessibility_events());
+  }
+
+  // A direct focus action on the tree view itself with an active node should
+  // have no effect.
+  ClearAccessibilityEvents();
+  tree_->GetFocusManager()->ClearFocus();
+  tree_->SetSelectedNode(GetNodeByTitle("b"));
+  data.target_node_id = -1;
+  data.action = ax::mojom::Action::kFocus;
+  EXPECT_FALSE(tree_->HandleAccessibleAction(data));
+  EXPECT_FALSE(tree_->HasFocus());
+  EXPECT_EQ("b", GetActiveNodeTitle());
+  EXPECT_EQ("b", GetActiveAccessibilityViewName());
+  EXPECT_EQ("b", GetSelectedNodeTitle());
+  EXPECT_EQ("b", GetSelectedAccessibilityViewName());
+  EXPECT_EQ(
+      (AccessibilityEventsVector{std::make_pair(GetAccessibilityViewByName("b"),
+                                                ax::mojom::Event::kSelection)}),
+      accessibility_events());
+
+  // A direct focus action on a tree view without an active node (i.e. empty
+  // tree) should fire a focus event for the tree view.
+  ClearAccessibilityEvents();
+  tree_->GetFocusManager()->ClearFocus();
+  ui::TreeNodeModel<TestNode> empty_model(std::make_unique<TestNode>());
+  static_cast<TestNode*>(empty_model.GetRoot())->SetTitle(u"root");
+  tree_->SetModel(&empty_model);
+  tree_->SetRootShown(false);
+  data.target_node_id = -1;
+  data.action = ax::mojom::Action::kFocus;
+  EXPECT_TRUE(tree_->HandleAccessibleAction(data));
+  EXPECT_TRUE(tree_->HasFocus());
+  EXPECT_EQ(std::string(), GetActiveNodeTitle());
+  EXPECT_EQ(std::string(), GetActiveAccessibilityViewName());
+  EXPECT_EQ(std::string(), GetSelectedNodeTitle());
+  EXPECT_EQ(std::string(), GetSelectedAccessibilityViewName());
+  EXPECT_EQ((AccessibilityEventsVector{
+                std::make_pair(GetRootAccessibilityView(),
+                               ax::mojom::Event::kSelection),
+                std::make_pair(GetTreeAccessibilityView(),
+                               ax::mojom::Event::kSelection),
+                std::make_pair(GetRootAccessibilityView(),
+                               ax::mojom::Event::kStateChanged),
+                std::make_pair(GetTreeAccessibilityView(),
+                               ax::mojom::Event::kFocus)}),
+            accessibility_events());
+
+  // When a focused empty tree is populated with nodes, it should immediately
+  // hand off focus to one of them and select it.
+  ClearAccessibilityEvents();
+  tree_->SetModel(&model_);
+  EXPECT_EQ("a", GetActiveNodeTitle());
+  EXPECT_EQ("a", GetActiveAccessibilityViewName());
+  EXPECT_EQ("a", GetSelectedNodeTitle());
+  EXPECT_EQ("a", GetSelectedAccessibilityViewName());
+  EXPECT_EQ((AccessibilityEventsVector{
+                std::make_pair(GetTreeAccessibilityView(),
+                               ax::mojom::Event::kChildrenChanged),
+                std::make_pair(GetTreeAccessibilityView(),
+                               ax::mojom::Event::kChildrenChanged),
+                std::make_pair(GetTreeAccessibilityView(),
+                               ax::mojom::Event::kChildrenChanged),
+                std::make_pair(GetAccessibilityViewByName("a"),
+                               ax::mojom::Event::kFocus),
+                std::make_pair(GetAccessibilityViewByName("a"),
+                               ax::mojom::Event::kSelection)}),
+            accessibility_events());
 }
 
 }  // namespace views

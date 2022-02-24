@@ -2,16 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DB_SERVICE_H_
-#define COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DB_SERVICE_H_
+#ifndef COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DB_DATA_OWNER_H_
+#define COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DB_DATA_OWNER_H_
 
 #include <memory>
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
+
+namespace base {
+class Time;
+}
 
 namespace data_reduction_proxy {
 class DataStore;
@@ -31,6 +34,10 @@ using LoadCurrentDataUsageCallback =
 class DBDataOwner {
  public:
   explicit DBDataOwner(std::unique_ptr<DataStore> store);
+
+  DBDataOwner(const DBDataOwner&) = delete;
+  DBDataOwner& operator=(const DBDataOwner&) = delete;
+
   virtual ~DBDataOwner();
 
   // Initializes all the DB objects. Must be called on the DB task runner.
@@ -59,9 +66,7 @@ class DBDataOwner {
   std::unique_ptr<DataUsageStore> data_usage_;
   base::SequenceChecker sequence_checker_;
   base::WeakPtrFactory<DBDataOwner> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(DBDataOwner);
 };
 
 }  // namespace data_reduction_proxy
-#endif  // COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DB_SERVICE_H_
+#endif  // COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DB_DATA_OWNER_H_

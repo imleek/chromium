@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,11 +10,13 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
+#include "build/build_config.h"
 #include "media/gpu/chromeos/fourcc.h"
 #include "media/gpu/chromeos/platform_video_frame_utils.h"
 #include "media/gpu/macros.h"
@@ -25,79 +27,51 @@
 
 namespace media {
 
+#if defined(OS_CHROMEOS)
 namespace {
-// UMA errors that the VaapiImageProcessorBackend class reports.
-enum class VaIPFailure {
-  kVaapiVppError = 0,
-  kMaxValue = kVaapiVppError,
-};
-
-void ReportToUMA(base::RepeatingClosure error_cb, VaIPFailure failure) {
-  base::UmaHistogramEnumeration("Media.VAIP.VppFailure", failure);
-  error_cb.Run();
-}
-
-bool IsSupported(uint32_t input_va_fourcc,
-                 uint32_t output_va_fourcc,
-                 const gfx::Size& input_size,
-                 const gfx::Size& output_size) {
-  if (!VaapiWrapper::IsVppFormatSupported(input_va_fourcc)) {
-    VLOGF(2) << "Unsupported input format: VA_FOURCC_"
-             << FourccToString(input_va_fourcc);
+bool IsSupported(const ImageProcessorBackend::PortConfig& config) {
+  if (!config.fourcc.ToVAFourCC())
+    return false;
+  const uint32_t va_fourcc = *config.fourcc.ToVAFourCC();
+  if (!VaapiWrapper::IsVppFormatSupported(va_fourcc)) {
+    VLOGF(2) << "Unsupported format: VA_FOURCC_" << FourccToString(va_fourcc);
     return false;
   }
-
-  if (!VaapiWrapper::IsVppFormatSupported(output_va_fourcc)) {
-    VLOGF(2) << "Unsupported output format: VA_FOURCC_"
-             << FourccToString(output_va_fourcc);
+  if (!VaapiWrapper::IsVppResolutionAllowed(config.size)) {
+    VLOGF(2) << "Unsupported size: " << config.size.ToString();
     return false;
   }
-
-  if (!VaapiWrapper::IsVppResolutionAllowed(input_size)) {
-    VLOGF(2) << "Unsupported input size: " << input_size.ToString();
+  const gfx::Size& visible_size = config.visible_rect.size();
+  if (!VaapiWrapper::IsVppResolutionAllowed(visible_size)) {
+    VLOGF(2) << "Unsupported visible size: " << visible_size.ToString();
     return false;
   }
-
-  if (!VaapiWrapper::IsVppResolutionAllowed(output_size)) {
-    VLOGF(2) << "Unsupported output size: " << output_size.ToString();
+  if (!gfx::Rect(config.size).Contains(config.visible_rect)) {
+    VLOGF(2) << "The frame size (" << config.size.ToString()
+             << ") does not contain the visible rect ("
+             << config.visible_rect.ToString() << ")";
     return false;
   }
-
   return true;
 }
 
 }  // namespace
+#endif
 
 // static
 std::unique_ptr<ImageProcessorBackend> VaapiImageProcessorBackend::Create(
     const PortConfig& input_config,
     const PortConfig& output_config,
     const std::vector<OutputMode>& preferred_output_modes,
+    VideoRotation relative_rotation,
     ErrorCB error_cb,
     scoped_refptr<base::SequencedTaskRunner> backend_task_runner) {
 // VaapiImageProcessorBackend supports ChromeOS only.
 #if !defined(OS_CHROMEOS)
   return nullptr;
-#endif
-
-  auto input_vafourcc = input_config.fourcc.ToVAFourCC();
-  if (!input_vafourcc) {
-    VLOGF(2) << "Input fourcc " << input_config.fourcc.ToString()
-             << " not compatible with VAAPI.";
+#else
+  if (!IsSupported(input_config) || !IsSupported(output_config))
     return nullptr;
-  }
-
-  auto output_vafourcc = output_config.fourcc.ToVAFourCC();
-  if (!output_vafourcc) {
-    VLOGF(2) << "Output fourcc " << output_config.fourcc.ToString()
-             << " not compatible with VAAPI.";
-    return nullptr;
-  }
-
-  if (!IsSupported(*input_vafourcc, *output_vafourcc, input_config.size,
-                   output_config.size)) {
-    return nullptr;
-  }
 
   if (!base::Contains(input_config.preferred_storage_types,
                       VideoFrame::STORAGE_DMABUFS) &&
@@ -121,20 +95,6 @@ std::unique_ptr<ImageProcessorBackend> VaapiImageProcessorBackend::Create(
     return nullptr;
   }
 
-  auto vaapi_wrapper = VaapiWrapper::Create(
-      VaapiWrapper::kVideoProcess, VAProfileNone,
-      base::BindRepeating(&ReportToUMA, error_cb, VaIPFailure::kVaapiVppError));
-  if (!vaapi_wrapper) {
-    VLOGF(1) << "Failed to create VaapiWrapper";
-    return nullptr;
-  }
-
-  // Size is irrelevant for a VPP context.
-  if (!vaapi_wrapper->CreateContext(gfx::Size())) {
-    VLOGF(1) << "Failed to create context for VPP";
-    return nullptr;
-  }
-
   // We should restrict the acceptable PortConfig for input and output both to
   // the one returned by GetPlatformVideoFrameLayout(). However,
   // ImageProcessorFactory interface doesn't provide information about what
@@ -144,26 +104,71 @@ std::unique_ptr<ImageProcessorBackend> VaapiImageProcessorBackend::Create(
   // TODO(crbug.com/898423): Adjust layout once ImageProcessor provide the use
   // scenario.
   return base::WrapUnique<ImageProcessorBackend>(new VaapiImageProcessorBackend(
-      std::move(vaapi_wrapper), input_config, output_config, OutputMode::IMPORT,
+      input_config, output_config, OutputMode::IMPORT, relative_rotation,
       std::move(error_cb), std::move(backend_task_runner)));
+#endif
 }
 
 VaapiImageProcessorBackend::VaapiImageProcessorBackend(
-    scoped_refptr<VaapiWrapper> vaapi_wrapper,
     const PortConfig& input_config,
     const PortConfig& output_config,
     OutputMode output_mode,
+    VideoRotation relative_rotation,
     ErrorCB error_cb,
     scoped_refptr<base::SequencedTaskRunner> backend_task_runner)
     : ImageProcessorBackend(input_config,
                             output_config,
                             output_mode,
+                            relative_rotation,
                             std::move(error_cb),
-                            std::move(backend_task_runner)),
-      vaapi_wrapper_(std::move(vaapi_wrapper)) {}
+                            std::move(backend_task_runner)) {}
 
 VaapiImageProcessorBackend::~VaapiImageProcessorBackend() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(backend_sequence_checker_);
+
+  DCHECK(vaapi_wrapper_ || allocated_va_surfaces_.empty());
+  if (vaapi_wrapper_) {
+    // To clear |allocated_va_surfaces_|, we have to first DestroyContext().
+    vaapi_wrapper_->DestroyContext();
+    allocated_va_surfaces_.clear();
+  }
+}
+
+const VASurface* VaapiImageProcessorBackend::GetSurfaceForVideoFrame(
+    scoped_refptr<VideoFrame> frame,
+    bool use_protected) {
+  if (!frame->HasGpuMemoryBuffer())
+    return nullptr;
+  DCHECK_EQ(frame->storage_type(), VideoFrame::STORAGE_GPU_MEMORY_BUFFER);
+
+  const gfx::GpuMemoryBufferId gmb_id = frame->GetGpuMemoryBuffer()->GetId();
+  if (base::Contains(allocated_va_surfaces_, gmb_id)) {
+    const VASurface* surface = allocated_va_surfaces_[gmb_id].get();
+    CHECK_EQ(frame->GetGpuMemoryBuffer()->GetSize(), surface->size());
+    const unsigned int format = VaapiWrapper::BufferFormatToVARTFormat(
+        frame->GetGpuMemoryBuffer()->GetFormat());
+    CHECK_NE(format, 0u);
+    CHECK_EQ(format, surface->format());
+    return surface;
+  }
+
+  scoped_refptr<gfx::NativePixmap> pixmap =
+      CreateNativePixmapDmaBuf(frame.get());
+  if (!pixmap) {
+    VLOGF(1) << "Failed to create NativePixmap from VideoFrame";
+    return nullptr;
+  }
+
+  DCHECK(vaapi_wrapper_);
+  auto va_surface = vaapi_wrapper_->CreateVASurfaceForPixmap(std::move(pixmap),
+                                                             use_protected);
+  if (!va_surface) {
+    VLOGF(1) << "Failed to create VASurface from NativePixmap";
+    return nullptr;
+  }
+
+  allocated_va_surfaces_[gmb_id] = std::move(va_surface);
+  return allocated_va_surfaces_[gmb_id].get();
 }
 
 void VaapiImageProcessorBackend::Process(scoped_refptr<VideoFrame> input_frame,
@@ -172,24 +177,123 @@ void VaapiImageProcessorBackend::Process(scoped_refptr<VideoFrame> input_frame,
   DVLOGF(4);
   DCHECK_CALLED_ON_VALID_SEQUENCE(backend_sequence_checker_);
 
-  auto src_va_surface =
-      vaapi_wrapper_->CreateVASurfaceForVideoFrame(input_frame.get());
-  auto dst_va_surface =
-      vaapi_wrapper_->CreateVASurfaceForVideoFrame(output_frame.get());
-  if (!src_va_surface || !dst_va_surface) {
-    // Failed to create VASurface for frames. |cb| isn't executed in the case.
+  if (!vaapi_wrapper_) {
+    // Note that EncryptionScheme::kUnencrypted is fine even for the use case
+    // where the VPP is needed for processing protected content after decoding.
+    // That's because when calling VaapiWrapper::BlitSurface(), we re-use the
+    // protected session ID created at decoding time.
+    auto vaapi_wrapper = VaapiWrapper::Create(
+        VaapiWrapper::kVideoProcess, VAProfileNone,
+        EncryptionScheme::kUnencrypted,
+        base::BindRepeating(&ReportVaapiErrorToUMA,
+                            "Media.VaapiImageProcessorBackend.VAAPIError"));
+    if (!vaapi_wrapper) {
+      VLOGF(1) << "Failed to create VaapiWrapper";
+      error_cb_.Run();
+      return;
+    }
+
+    // Size is irrelevant for a VPP context.
+    if (!vaapi_wrapper->CreateContext(gfx::Size())) {
+      VLOGF(1) << "Failed to create context for VPP";
+      error_cb_.Run();
+      return;
+    }
+
+    // Checks if VA-API driver supports rotation.
+    if (relative_rotation_ != VIDEO_ROTATION_0 &&
+        !vaapi_wrapper->IsRotationSupported()) {
+      VLOGF(1) << "VaapiIP doesn't support rotation";
+      error_cb_.Run();
+      return;
+    }
+
+    vaapi_wrapper_ = std::move(vaapi_wrapper);
+  }
+
+  bool use_protected = false;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  VAProtectedSessionID va_protected_session_id = VA_INVALID_ID;
+  if (input_frame->metadata().hw_va_protected_session_id.has_value()) {
+    static_assert(
+        std::is_same<decltype(input_frame->metadata()
+                                  .hw_va_protected_session_id)::value_type,
+                     VAProtectedSessionID>::value,
+        "The optional type of VideoFrameMetadata::hw_va_protected_session_id "
+        "is "
+        "not VAProtectedSessionID");
+    va_protected_session_id =
+        input_frame->metadata().hw_va_protected_session_id.value();
+    use_protected = va_protected_session_id != VA_INVALID_ID;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+  if (needs_context_ && !vaapi_wrapper_->CreateContext(gfx::Size())) {
+    VLOGF(1) << "Failed to create context for VPP";
+    error_cb_.Run();
     return;
   }
-  // VA-API performs pixel format conversion and scaling without any filters.
-  if (vaapi_wrapper_->BlitSurface(*src_va_surface, *dst_va_surface,
-                                  input_frame->visible_rect(),
-                                  output_frame->visible_rect())) {
-    // Failed to execute BlitSurface(). Since VaapiWrapper has invoked
-    // ReportToUMA(), calling error_cb_ here is not needed.
+  needs_context_ = false;
+
+  DCHECK(input_frame);
+  DCHECK(output_frame);
+  const VASurface* src_va_surface =
+      GetSurfaceForVideoFrame(input_frame, use_protected);
+  if (!src_va_surface) {
+    error_cb_.Run();
+    return;
+  }
+  const VASurface* dst_va_surface =
+      GetSurfaceForVideoFrame(output_frame, use_protected);
+  if (!dst_va_surface) {
+    error_cb_.Run();
     return;
   }
 
+  // VA-API performs pixel format conversion and scaling without any filters.
+  if (!vaapi_wrapper_->BlitSurface(
+          *src_va_surface, *dst_va_surface, input_frame->visible_rect(),
+          output_frame->visible_rect(), relative_rotation_
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+          ,
+          va_protected_session_id
+#endif
+          )) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    if (use_protected &&
+        vaapi_wrapper_->IsProtectedSessionDead(va_protected_session_id)) {
+      DCHECK_NE(va_protected_session_id, VA_INVALID_ID);
+
+      // If the VPP failed because the protected session is dead, we should
+      // still output the frame. That's because we don't want to put the
+      // VideoDecoderPipeline into an unusable error state: the
+      // VaapiVideoDecoder can recover from a dead protected session later and
+      // the compositor should not try to render the frame we output here
+      // anyway.
+      output_frame->set_timestamp(input_frame->timestamp());
+      std::move(cb).Run(std::move(output_frame));
+      return;
+    }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+    error_cb_.Run();
+    return;
+  }
+
+  output_frame->set_timestamp(input_frame->timestamp());
   std::move(cb).Run(std::move(output_frame));
+}
+
+void VaapiImageProcessorBackend::Reset() {
+  DVLOGF(4);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(backend_sequence_checker_);
+
+  DCHECK(vaapi_wrapper_ || allocated_va_surfaces_.empty());
+  if (vaapi_wrapper_) {
+    // To clear |allocated_va_surfaces_|, we have to first DestroyContext().
+    vaapi_wrapper_->DestroyContext();
+    allocated_va_surfaces_.clear();
+  }
+  needs_context_ = true;
 }
 
 }  // namespace media

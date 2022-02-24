@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.webapps;
 
 import android.content.Context;
-import android.os.Build;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -15,6 +14,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowLooper;
 
@@ -37,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE,
         shadows = {CustomShadowAsyncTask.class, ShadowRecordHistogram.class})
+@LooperMode(LooperMode.Mode.LEGACY)
 public class WebappDirectoryManagerTest {
     @Rule
     public MockWebappDataStorageClockRule mClockRule = new MockWebappDataStorageClockRule();
@@ -76,8 +77,6 @@ public class WebappDirectoryManagerTest {
     @Test
     @Feature({"Webapps"})
     public void testDeletesObsoleteDirectories() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
-
         // Seed the base directory with folders that correspond to pre-L web apps.
         File baseDirectory = mContext.getDataDir();
         File webappDirectory = new File(baseDirectory, "app_WebappActivity");

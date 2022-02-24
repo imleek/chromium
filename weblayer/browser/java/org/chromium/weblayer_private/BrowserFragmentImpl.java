@@ -4,12 +4,18 @@
 
 package org.chromium.weblayer_private;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.SystemClock;
+import android.view.ContextThemeWrapper;
 import android.view.View;
+import android.view.ViewGroup;
 
-import org.chromium.base.ObserverList;
+import androidx.annotation.Nullable;
+
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.components.embedder_support.application.ClassLoaderContextWrapperFactory;
 import org.chromium.weblayer_private.interfaces.BrowserFragmentArgs;
 import org.chromium.weblayer_private.interfaces.IBrowser;
@@ -21,66 +27,42 @@ import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 /**
  * Implementation of RemoteFragmentImpl which forwards logic to BrowserImpl.
  */
-public class BrowserFragmentImpl extends RemoteFragmentImpl {
-    /**
-     * Observer interface that can be implemented to observe when the first
-     * fragment requiring WebLayer is attached, and when the last such fragment
-     * is detached.
-     */
-    public static interface Observer {
-        public void onFirstBrowserFragmentAttached();
-        public void onLastBrowserFragmentDetached();
-    }
-
-    private static int sNumAttachedBrowserFragments;
-    private static final ObserverList<Observer> sLifecycleObservers = new ObserverList<Observer>();
+public class BrowserFragmentImpl extends FragmentHostingRemoteFragmentImpl {
+    private static int sResumedCount;
+    private static long sSessionStartTimeMs;
 
     private final ProfileImpl mProfile;
+    private final String mPersistenceId;
 
     private BrowserImpl mBrowser;
-    private Context mContext;
 
-    public static void addObserver(Observer observer) {
-        sLifecycleObservers.addObserver(observer);
-    }
-
-    public static void removeObserver(Observer observer) {
-        sLifecycleObservers.removeObserver(observer);
-    }
+    // The embedder's original context object. Only use this to resolve resource IDs provided by the
+    // embedder.
+    private Context mEmbedderActivityContext;
 
     public BrowserFragmentImpl(
             ProfileManager profileManager, IRemoteFragmentClient client, Bundle fragmentArgs) {
         super(client);
-        mProfile =
-                profileManager.getProfile(fragmentArgs.getString(BrowserFragmentArgs.PROFILE_NAME));
-    }
+        mPersistenceId = fragmentArgs.getString(BrowserFragmentArgs.PERSISTENCE_ID);
+        String name = fragmentArgs.getString(BrowserFragmentArgs.PROFILE_NAME);
 
-    private void incrementBrowserFramentsAndNotifyObservers() {
-        assert sNumAttachedBrowserFragments >= 0;
-        sNumAttachedBrowserFragments++;
-        if (sNumAttachedBrowserFragments != 1) return;
-        for (Observer observer : sLifecycleObservers) {
-            observer.onFirstBrowserFragmentAttached();
+        boolean isIncognito;
+        if (fragmentArgs.containsKey(BrowserFragmentArgs.IS_INCOGNITO)) {
+            isIncognito = fragmentArgs.getBoolean(BrowserFragmentArgs.IS_INCOGNITO, false);
+        } else {
+            isIncognito = "".equals(name);
         }
-    }
-
-    private void decrementBrowserFragmentsAndNotifyObservers() {
-        sNumAttachedBrowserFragments--;
-        if (sNumAttachedBrowserFragments == 0) {
-            for (Observer observer : sLifecycleObservers) {
-                observer.onLastBrowserFragmentDetached();
-            }
-        }
+        mProfile = profileManager.getProfile(name, isIncognito);
     }
 
     @Override
     public void onAttach(Context context) {
         StrictModeWorkaround.apply();
         super.onAttach(context);
-        mContext = ClassLoaderContextWrapperFactory.get(context);
+        mEmbedderActivityContext = context;
         if (mBrowser != null) { // On first creation, onAttach is called before onCreate
-            mBrowser.onFragmentAttached(mContext, new FragmentWindowAndroid(mContext, this));
-            incrementBrowserFramentsAndNotifyObservers();
+            mBrowser.onFragmentAttached(mEmbedderActivityContext,
+                    new FragmentWindowAndroid(getWebLayerContext(), this));
         }
     }
 
@@ -88,15 +70,18 @@ public class BrowserFragmentImpl extends RemoteFragmentImpl {
     public void onCreate(Bundle savedInstanceState) {
         StrictModeWorkaround.apply();
         super.onCreate(savedInstanceState);
-        mBrowser = new BrowserImpl(mProfile, savedInstanceState);
-        if (mContext != null) {
-            mBrowser.onFragmentAttached(mContext, new FragmentWindowAndroid(mContext, this));
-            incrementBrowserFramentsAndNotifyObservers();
-        }
+        // onCreate() is only called once
+        assert mBrowser == null;
+        // onCreate() is always called after onAttach(). onAttach() sets |getWebLayerContext()| and
+        // |mEmbedderContext|.
+        assert getWebLayerContext() != null;
+        assert mEmbedderActivityContext != null;
+        mBrowser = new BrowserImpl(mEmbedderActivityContext, mProfile, mPersistenceId,
+                savedInstanceState, new FragmentWindowAndroid(getWebLayerContext(), this));
     }
 
     @Override
-    public View onCreateView() {
+    public View onCreateView(ViewGroup container, Bundle savedInstanceState) {
         StrictModeWorkaround.apply();
         return mBrowser.getFragmentView();
     }
@@ -120,7 +105,6 @@ public class BrowserFragmentImpl extends RemoteFragmentImpl {
         super.onDestroy();
         mBrowser.destroy();
         mBrowser = null;
-        decrementBrowserFragmentsAndNotifyObservers();
     }
 
     @Override
@@ -129,11 +113,52 @@ public class BrowserFragmentImpl extends RemoteFragmentImpl {
         super.onDetach();
         // mBrowser != null if fragment is retained, otherwise onDestroy is called first.
         if (mBrowser != null) {
-            assert sNumAttachedBrowserFragments > 0;
             mBrowser.onFragmentDetached();
-            decrementBrowserFragmentsAndNotifyObservers();
         }
-        mContext = null;
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        StrictModeWorkaround.apply();
+        mBrowser.onSaveInstanceState(outState);
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        mBrowser.onFragmentStart();
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        Activity activity = getActivity();
+        mBrowser.onFragmentStop(activity != null && activity.getChangingConfigurations() != 0);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        sResumedCount++;
+        if (sResumedCount == 1) sSessionStartTimeMs = SystemClock.uptimeMillis();
+        mBrowser.onFragmentResume();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        sResumedCount--;
+        if (sResumedCount == 0) {
+            long deltaMs = SystemClock.uptimeMillis() - sSessionStartTimeMs;
+            RecordHistogram.recordLongTimesHistogram("Session.TotalDuration", deltaMs);
+        }
+        mBrowser.onFragmentPause();
+    }
+
+    @Nullable
+    public BrowserImpl getBrowser() {
+        return mBrowser;
     }
 
     public IBrowserFragment asIBrowserFragment() {
@@ -154,5 +179,15 @@ public class BrowserFragmentImpl extends RemoteFragmentImpl {
                 return mBrowser;
             }
         };
+    }
+
+    @Override
+    protected FragmentHostingRemoteFragmentImpl.RemoteFragmentContext createRemoteFragmentContext(
+            Context embedderContext) {
+        Context wrappedContext = ClassLoaderContextWrapperFactory.get(embedderContext);
+        Context themedContext =
+                new ContextThemeWrapper(wrappedContext, R.style.Theme_WebLayer_Settings);
+        themedContext.getTheme().applyStyle(R.style.ColorOverlay_WebLayer, /*force=*/true);
+        return new FragmentHostingRemoteFragmentImpl.RemoteFragmentContext(themedContext);
     }
 }

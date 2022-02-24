@@ -9,14 +9,11 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.app.Activity;
-import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
-import android.support.v4.view.MarginLayoutParamsCompat;
-import android.support.v7.widget.Toolbar.OnMenuItemClickListener;
 import android.text.InputFilter;
 import android.text.Spanned;
 import android.text.TextWatcher;
@@ -39,17 +36,19 @@ import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.widget.Toolbar.OnMenuItemClickListener;
+import androidx.core.view.MarginLayoutParamsCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.help.HelpAndFeedback;
+import org.chromium.chrome.browser.autofill.AutofillUiUtils;
+import org.chromium.chrome.browser.autofill.settings.CreditCardNumberFormattingTextWatcher;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.settings.SettingsUtils;
-import org.chromium.chrome.browser.settings.autofill.CreditCardNumberFormattingTextWatcher;
-import org.chromium.chrome.browser.ui.widget.AlwaysDismissedDialog;
-import org.chromium.chrome.browser.ui.widget.TintedDrawable;
-import org.chromium.chrome.browser.ui.widget.animation.Interpolators;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.browser_ui.widget.AlwaysDismissedDialog;
 import org.chromium.components.browser_ui.widget.FadingEdgeScrollView;
+import org.chromium.components.browser_ui.widget.TintedDrawable;
+import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 
 import java.util.ArrayList;
@@ -76,11 +75,10 @@ public class EditorDialog
 
     private static EditorObserverForTest sObserverForTest;
 
-    private final Context mContext;
+    private final Activity mActivity;
     private final Handler mHandler;
     private final TextView.OnEditorActionListener mEditorActionListener;
     private final int mHalfRowMargin;
-    private final int mDropdownTopPadding;
     private final List<EditorFieldView> mFieldViews;
     private final List<EditText> mEditableTextFields;
     private final List<Spinner> mDropdownFields;
@@ -93,6 +91,7 @@ public class EditorDialog
     private EditorModel mEditorModel;
     private Button mDoneButton;
     private boolean mFormWasValid;
+    private boolean mShouldTriggerDoneCallbackBeforeCloseAnimation;
     private ViewGroup mDataView;
     private View mFooter;
     @Nullable
@@ -104,17 +103,19 @@ public class EditorDialog
     @Nullable
     private Runnable mDeleteRunnable;
     private boolean mIsDismissed;
+    private Profile mProfile;
     /**
      * Builds the editor dialog.
      *
      * @param activity        The activity on top of which the UI should be displayed.
      * @param deleteRunnable  The runnable that when called will delete the profile.
+     * @param profile         The current profile that creates EditorDialog.
      */
-    public EditorDialog(Activity activity, Runnable deleteRunnable) {
-        super(activity, R.style.Theme_Chromium_Fullscreen);
+    public EditorDialog(Activity activity, Runnable deleteRunnable, Profile profile) {
+        super(activity, R.style.ThemeOverlay_BrowserUI_Fullscreen);
         // Sets transparent background for animating content view.
         getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        mContext = activity;
+        mActivity = activity;
         mHandler = new Handler();
         mIsDismissed = false;
         mEditorActionListener = new TextView.OnEditorActionListener() {
@@ -137,8 +138,6 @@ public class EditorDialog
 
         mHalfRowMargin = activity.getResources().getDimensionPixelSize(
                 R.dimen.editor_dialog_section_large_spacing);
-        mDropdownTopPadding = activity.getResources().getDimensionPixelSize(
-                R.dimen.payments_section_dropdown_top_padding);
         mFieldViews = new ArrayList<>();
         mEditableTextFields = new ArrayList<>();
         mDropdownFields = new ArrayList<>();
@@ -163,6 +162,7 @@ public class EditorDialog
 
         mCardNumberFormatter = new CreditCardNumberFormattingTextWatcher();
         mDeleteRunnable = deleteRunnable;
+        mProfile = profile;
     }
 
     /** Prevents screenshots of this editor. */
@@ -172,11 +172,13 @@ public class EditorDialog
         getWindow().setAttributes(attributes);
     }
 
-    /** Launches the Autofill help page on top of the current Context. */
-    public static void launchAutofillHelpPage(Context context) {
-        HelpAndFeedback.getInstance().show((Activity) context,
-                context.getString(R.string.help_context_autofill), Profile.getLastUsedProfile(),
-                null);
+    /**
+     * @param shouldTrigger If true, done callback is triggered immediately after the user clicked
+     *         on the done button. Otherwise, by default, it is triggered only after the dialog is
+     *         dismissed with animation.
+     */
+    public void setShouldTriggerDoneCallbackBeforeCloseAnimation(boolean shouldTrigger) {
+        mShouldTriggerDoneCallbackBeforeCloseAnimation = shouldTrigger;
     }
 
     /**
@@ -187,9 +189,10 @@ public class EditorDialog
      */
     private void prepareToolbar() {
         EditorDialogToolbar toolbar = (EditorDialogToolbar) mLayout.findViewById(R.id.action_bar);
-        toolbar.setBackgroundColor(ApiCompatibilityUtils.getColor(
-                toolbar.getResources(), R.color.modern_primary_color));
-        toolbar.setTitleTextAppearance(toolbar.getContext(), R.style.TextAppearance_BlackHeadline);
+        toolbar.setBackgroundColor(
+                ApiCompatibilityUtils.getColor(toolbar.getResources(), R.color.default_bg_color));
+        toolbar.setTitleTextAppearance(
+                toolbar.getContext(), R.style.TextAppearance_Headline_Primary);
         toolbar.setTitle(mEditorModel.getTitle());
         toolbar.setShowDeleteMenuItem(mDeleteRunnable != null);
 
@@ -202,7 +205,7 @@ public class EditorDialog
                     mDeleteRunnable.run();
                     animateOutDialog();
                 } else if (item.getItemId() == R.id.help_menu_id) {
-                    launchAutofillHelpPage(mContext);
+                    AutofillUiUtils.launchAutofillHelpPage(mActivity, mProfile);
                 }
                 return true;
             }
@@ -288,6 +291,10 @@ public class EditorDialog
 
         if (view.getId() == R.id.editor_dialog_done_button) {
             if (validateForm()) {
+                if (mShouldTriggerDoneCallbackBeforeCloseAnimation && mEditorModel != null) {
+                    mEditorModel.done();
+                    mEditorModel = null;
+                }
                 mFormWasValid = true;
                 animateOutDialog();
                 return;
@@ -299,6 +306,10 @@ public class EditorDialog
 
     private void animateOutDialog() {
         if (mDialogInOutAnimator != null || !isShowing()) return;
+
+        if (getCurrentFocus() != null) {
+            KeyboardVisibilityDelegate.getInstance().hideKeyboard(getCurrentFocus());
+        }
 
         Animator dropDown =
                 ObjectAnimator.ofFloat(mLayout, View.TRANSLATION_Y, 0f, mLayout.getHeight());
@@ -347,10 +358,25 @@ public class EditorDialog
         mDoneButton = (Button) mLayout.findViewById(R.id.button_primary);
         mDoneButton.setId(R.id.editor_dialog_done_button);
         mDoneButton.setOnClickListener(this);
+        if (mEditorModel.getCustomDoneButtonText() != null) {
+            mDoneButton.setText(mEditorModel.getCustomDoneButtonText());
+        }
 
         Button cancelButton = (Button) mLayout.findViewById(R.id.button_secondary);
         cancelButton.setId(R.id.payments_edit_cancel_button);
         cancelButton.setOnClickListener(this);
+    }
+
+    private void prepareFooter() {
+        TextView requiredFieldsNotice = mLayout.findViewById(R.id.required_fields_notice);
+        int requiredFieldsNoticeVisibility = View.GONE;
+        for (int i = 0; i < mFieldViews.size(); i++) {
+            if (mFieldViews.get(i).isRequired()) {
+                requiredFieldsNoticeVisibility = View.VISIBLE;
+                break;
+            }
+        }
+        requiredFieldsNotice.setVisibility(requiredFieldsNoticeVisibility);
     }
 
     /**
@@ -383,11 +409,18 @@ public class EditorDialog
                 if (nextFieldModel.isFullLine()) useFullLine = true;
             }
 
+            // Always keep dropdowns and text fields on different lines because of height
+            // differences.
+            if (!isLastField && !useFullLine
+                    && fieldModel.isDropdownField() != nextFieldModel.isDropdownField()) {
+                useFullLine = true;
+            }
+
             if (useFullLine || isLastField) {
                 addFieldViewToEditor(mDataView, fieldModel);
             } else {
                 // Create a LinearLayout to put it and the next view side by side.
-                LinearLayout rowLayout = new LinearLayout(mContext);
+                LinearLayout rowLayout = new LinearLayout(mActivity);
                 mDataView.addView(rowLayout);
 
                 View firstView = addFieldViewToEditor(rowLayout, fieldModel);
@@ -403,15 +436,6 @@ public class EditorDialog
                 MarginLayoutParamsCompat.setMarginEnd(firstParams, mHalfRowMargin);
                 lastParams.width = 0;
                 lastParams.weight = 1;
-
-                // Align the text field and the dropdown field.
-                if ((fieldModel.isTextField() && nextFieldModel.isDropdownField())
-                        || (nextFieldModel.isTextField() && fieldModel.isDropdownField())) {
-                    LinearLayout.LayoutParams dropdownParams =
-                            fieldModel.isDropdownField() ? firstParams : lastParams;
-                    dropdownParams.topMargin = mDropdownTopPadding;
-                    dropdownParams.bottomMargin = 0;
-                }
 
                 i = i + 1;
             }
@@ -438,9 +462,9 @@ public class EditorDialog
         View childView = null;
 
         if (fieldModel.getInputTypeHint() == EditorFieldModel.INPUT_TYPE_HINT_ICONS) {
-            childView = new EditorIconsField(mContext, parent, fieldModel).getLayout();
+            childView = new EditorIconsField(mActivity, parent, fieldModel).getLayout();
         } else if (fieldModel.getInputTypeHint() == EditorFieldModel.INPUT_TYPE_HINT_LABEL) {
-            childView = new EditorLabelField(mContext, parent, fieldModel).getLayout();
+            childView = new EditorLabelField(mActivity, parent, fieldModel).getLayout();
         } else if (fieldModel.getInputTypeHint() == EditorFieldModel.INPUT_TYPE_HINT_DROPDOWN) {
             Runnable prepareEditorRunnable = new Runnable() {
                 @Override
@@ -450,11 +474,12 @@ public class EditorDialog
 
                     // The fields may have changed.
                     prepareEditor();
+                    prepareFooter();
                     if (sObserverForTest != null) sObserverForTest.onEditorReadyToEdit();
                 }
             };
             EditorDropdownField dropdownView =
-                    new EditorDropdownField(mContext, parent, fieldModel, prepareEditorRunnable);
+                    new EditorDropdownField(mActivity, parent, fieldModel, prepareEditorRunnable);
             mFieldViews.add(dropdownView);
             mDropdownFields.add(dropdownView.getDropdown());
 
@@ -464,6 +489,8 @@ public class EditorDialog
             checkbox.setId(R.id.payments_edit_checkbox);
             checkbox.setText(fieldModel.getLabel());
             checkbox.setChecked(fieldModel.isChecked());
+            checkbox.setMinimumHeight(mActivity.getResources().getDimensionPixelSize(
+                    R.dimen.editor_dialog_checkbox_min_height));
             checkbox.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                 @Override
                 public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
@@ -486,7 +513,7 @@ public class EditorDialog
             }
 
             EditorTextField inputLayout = new EditorTextField(
-                    mContext, fieldModel, mEditorActionListener, filter, formatter);
+                    mActivity, fieldModel, mEditorActionListener, filter, formatter);
             mFieldViews.add(inputLayout);
 
             EditText input = inputLayout.getEditText();
@@ -514,20 +541,24 @@ public class EditorDialog
      */
     public void show(EditorModel editorModel) {
         // If an asynchronous task calls show, while the activity is already finishing, return.
-        if (((Activity) mContext).isFinishing()) return;
+        if (mActivity.isFinishing()) return;
 
         setOnShowListener(this);
         setOnDismissListener(this);
         mEditorModel = editorModel;
-        mLayout = LayoutInflater.from(mContext).inflate(R.layout.payment_request_editor, null);
+        mLayout = LayoutInflater.from(mActivity).inflate(R.layout.payment_request_editor, null);
         setContentView(mLayout);
 
-        mFooter = LayoutInflater.from(mContext).inflate(
+        mFooter = LayoutInflater.from(mActivity).inflate(
                 R.layout.editable_option_editor_footer, null, false);
 
         prepareToolbar();
         prepareEditor();
+        prepareFooter();
         prepareButtons();
+
+        // Temporarily hide the content to avoid blink before animation starts.
+        mLayout.setVisibility(View.INVISIBLE);
         show();
     }
 
@@ -550,6 +581,7 @@ public class EditorDialog
             mEditableTextFields.get(i).setEnabled(false);
         }
 
+        mLayout.setVisibility(View.VISIBLE);
         mLayout.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         mLayout.buildLayer();
         Animator popUp =
@@ -568,10 +600,6 @@ public class EditorDialog
                 for (int i = 0; i < mEditableTextFields.size(); i++) {
                     mEditableTextFields.get(i).setEnabled(true);
                 }
-                // Note that keyboard will not show for dropdown field since it's not necessary.
-                if (getCurrentFocus() != null) {
-                    KeyboardVisibilityDelegate.getInstance().showKeyboard(getCurrentFocus());
-                }
                 mDialogInOutAnimator = null;
                 initFocus();
             }
@@ -581,20 +609,26 @@ public class EditorDialog
     }
 
     private void initFocus() {
-        // Immediately focus the first invalid field to make it faster to edit.
-        final List<EditorFieldView> invalidViews = getViewsWithInvalidInformation(false);
-        if (!invalidViews.isEmpty()) {
-            mHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    invalidViews.get(0).scrollToAndFocus();
-                    if (sObserverForTest != null) sObserverForTest.onEditorReadyToEdit();
+        mHandler.post(() -> {
+            List<EditorFieldView> invalidViews = getViewsWithInvalidInformation(false);
+            if (!invalidViews.isEmpty()) {
+                // Immediately focus the first invalid field to make it faster to edit.
+                invalidViews.get(0).scrollToAndFocus();
+            } else {
+                // Trigger default focus as it is not triggered automatically on Android P+.
+                mLayout.requestFocus();
+            }
+            // Note that keyboard will not be shown for dropdown field since it's not necessary.
+            if (getCurrentFocus() != null) {
+                KeyboardVisibilityDelegate.getInstance().showKeyboard(getCurrentFocus());
+                // Put the cursor to the end of the text.
+                if (getCurrentFocus() instanceof EditText) {
+                    EditText focusedEditText = (EditText) getCurrentFocus();
+                    focusedEditText.setSelection(focusedEditText.getText().length());
                 }
-            });
-        } else {
-            // The first field will be focused, we are ready to edit.
+            }
             if (sObserverForTest != null) sObserverForTest.onEditorReadyToEdit();
-        }
+        });
     }
 
     private List<EditorFieldView> getViewsWithInvalidInformation(boolean findAll) {

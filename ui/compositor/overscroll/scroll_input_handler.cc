@@ -6,6 +6,7 @@
 
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
+#include "ui/events/types/scroll_input_type.h"
 
 namespace ui {
 
@@ -64,11 +65,15 @@ bool ScrollInputHandler::OnScrollEvent(const ScrollEvent& event,
 
   // Note: the WHEEL type covers both actual wheels as well as trackpad
   // scrolling.
-  input_handler_weak_ptr_->ScrollBegin(&scroll_state_begin,
-                                       cc::InputHandler::WHEEL);
+  cc::InputHandler::ScrollStatus result = input_handler_weak_ptr_->ScrollBegin(
+      &scroll_state_begin, ui::ScrollInputType::kWheel);
+
+  // Falling back to the main thread should never be required when an explicit
+  // ElementId is provided.
+  DCHECK(!result.needs_main_thread_hit_test);
 
   cc::ScrollState scroll_state = CreateScrollState(event, false);
-  input_handler_weak_ptr_->ScrollBy(&scroll_state);
+  input_handler_weak_ptr_->ScrollUpdate(&scroll_state, base::TimeDelta());
   input_handler_weak_ptr_->ScrollEnd(/*should_snap=*/false);
 
   return true;
@@ -83,9 +88,11 @@ void ScrollInputHandler::Animate(base::TimeTicks time) {}
 
 void ScrollInputHandler::ReconcileElasticOverscrollAndRootScroll() {}
 
+void ScrollInputHandler::SetPrefersReducedMotion(bool prefers_reduced_motion) {}
+
 void ScrollInputHandler::UpdateRootLayerStateForSynchronousInputHandler(
-    const gfx::ScrollOffset& total_scroll_offset,
-    const gfx::ScrollOffset& max_scroll_offset,
+    const gfx::Vector2dF& total_scroll_offset,
+    const gfx::Vector2dF& max_scroll_offset,
     const gfx::SizeF& scrollable_size,
     float page_scale_factor,
     float min_page_scale_factor,

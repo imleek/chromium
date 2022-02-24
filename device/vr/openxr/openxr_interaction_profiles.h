@@ -5,25 +5,19 @@
 #ifndef DEVICE_VR_OPENXR_OPENXR_INTERACTION_PROFILES_H_
 #define DEVICE_VR_OPENXR_OPENXR_INTERACTION_PROFILES_H_
 
+#include "base/containers/flat_map.h"
 #include "base/stl_util.h"
 #include "device/gamepad/public/cpp/gamepad.h"
+#include "device/vr/openxr/openxr_defs.h"
+#include "device/vr/openxr/openxr_interaction_profile_type.h"
 #include "third_party/openxr/src/include/openxr/openxr.h"
 
 namespace device {
 
-constexpr size_t kMaxNumActionMaps = 3;
-
 enum class OpenXrHandednessType {
   kLeft = 0,
   kRight = 1,
-  kCount = 2,
-};
-
-enum class OpenXrInteractionProfileType {
-  kMicrosoftMotion = 0,
-  kKHRSimple = 1,
-  kOculusTouch = 2,
-  kCount = 3,
+  kCount,
 };
 
 enum class OpenXrButtonType {
@@ -34,7 +28,8 @@ enum class OpenXrButtonType {
   kThumbrest = 4,
   kButton1 = 5,
   kButton2 = 6,
-  kMaxValue = 6,
+  kGrasp = 7,
+  kMaxValue = 7,
 };
 
 enum class OpenXrAxisType {
@@ -52,181 +47,82 @@ enum class OpenXrButtonActionType {
 
 struct OpenXrButtonActionPathMap {
   OpenXrButtonActionType type;
-  const char* const path;
+  std::string path;
 };
 
 struct OpenXrButtonPathMap {
   OpenXrButtonType type;
-  OpenXrButtonActionPathMap action_maps[kMaxNumActionMaps];
-  size_t action_map_size;
+  std::vector<OpenXrButtonActionPathMap> action_maps;
+  OpenXrButtonPathMap(OpenXrButtonType type,
+                      std::vector<OpenXrButtonActionPathMap> action_maps);
+  ~OpenXrButtonPathMap();
+  OpenXrButtonPathMap(const OpenXrButtonPathMap& other);
+  OpenXrButtonPathMap& operator=(const OpenXrButtonPathMap& other);
 };
 
 struct OpenXrAxisPathMap {
   OpenXrAxisType type;
-  const char* const path;
+  std::string path;
+};
+
+struct OpenXrSystemInputProfiles {
+  // The system_name is matched against the OpenXR XrSystemProperties systemName
+  // so that different hardware revisions can return a more exact input profile.
+  // A nullptr system_name indicates that this set of input profiles matches any
+  // system that doesn't have an explicit match. Each interaction profile should
+  // have one OpenXrSystemInputProfiles with a system_name of nullptr.
+  std::string system_name;
+  std::vector<std::string> input_profiles;
+
+  OpenXrSystemInputProfiles(std::string system_name,
+                            std::vector<std::string> input_profiles);
+  ~OpenXrSystemInputProfiles();
+  OpenXrSystemInputProfiles(const OpenXrSystemInputProfiles& other);
+  OpenXrSystemInputProfiles& operator=(const OpenXrSystemInputProfiles& other);
 };
 
 struct OpenXrControllerInteractionProfile {
   OpenXrInteractionProfileType type;
-  const char* const path;
+  std::string path;
+  std::string required_extension;
   GamepadMapping mapping;
-  const char* const* const input_profiles;
-  const size_t profile_size;
-  const OpenXrButtonPathMap* left_button_maps;
-  size_t left_button_map_size;
-  const OpenXrButtonPathMap* right_button_maps;
-  size_t right_button_map_size;
-  const OpenXrAxisPathMap* axis_maps;
-  size_t axis_map_size;
+  std::vector<OpenXrButtonPathMap> common_button_maps;
+  std::vector<OpenXrButtonPathMap> left_button_maps;
+  std::vector<OpenXrButtonPathMap> right_button_maps;
+  std::vector<OpenXrAxisPathMap> axis_maps;
+
+  OpenXrControllerInteractionProfile(
+      OpenXrInteractionProfileType type,
+      std::string path,
+      std::string required_extension,
+      GamepadMapping mapping,
+      std::vector<OpenXrButtonPathMap> common_button_maps,
+      std::vector<OpenXrButtonPathMap> left_button_maps,
+      std::vector<OpenXrButtonPathMap> right_button_maps,
+      std::vector<OpenXrAxisPathMap> axis_maps);
+  ~OpenXrControllerInteractionProfile();
+  OpenXrControllerInteractionProfile(
+      const OpenXrControllerInteractionProfile& other);
+  OpenXrControllerInteractionProfile& operator=(
+      const OpenXrControllerInteractionProfile& other);
 };
 
-// TODO(crbug.com/1017513)
 // Currently Supports:
 // Microsoft motion controller.
+// Samsung Odyssey controller
 // Khronos simple controller.
 // Oculus touch controller.
+// Valve index controller.
+// HTC vive controller
+// HP Reverb G2 controller
+// MSFT Hand Interaction
 // Declare OpenXR input profile bindings for other runtimes when they become
 // available.
-constexpr const char* kMicrosoftMotionInputProfiles[] = {
-    "windows-mixed-reality", "generic-trigger-squeeze-touchpad-thumbstick"};
-
-constexpr const char* kGenericButtonInputProfiles[] = {"generic-button"};
-
-constexpr const char* kOculusTouchInputProfiles[] = {
-    "oculus-touch", "generic-trigger-squeeze-thumbstick"};
-
-constexpr OpenXrButtonPathMap kMicrosoftMotionControllerButtonPathMaps[] = {
-    {OpenXrButtonType::kTrigger,
-     {
-         {OpenXrButtonActionType::kPress, "/input/trigger/value"},
-         {OpenXrButtonActionType::kValue, "/input/trigger/value"},
-     },
-     2},
-    {OpenXrButtonType::kSqueeze,
-     {{OpenXrButtonActionType::kPress, "/input/squeeze/click"}},
-     1},
-    {OpenXrButtonType::kThumbstick,
-     {{OpenXrButtonActionType::kPress, "/input/thumbstick/click"}},
-     1},
-    {OpenXrButtonType::kTrackpad,
-     {{OpenXrButtonActionType::kPress, "/input/trackpad/click"},
-      {OpenXrButtonActionType::kTouch, "/input/trackpad/touch"}},
-     2}};
-
-constexpr OpenXrButtonPathMap kKronosSimpleControllerButtonPathMaps[] = {
-    {OpenXrButtonType::kTrigger,
-     {{OpenXrButtonActionType::kPress, "/input/select/click"}},
-     1},
-};
-
-constexpr OpenXrButtonPathMap kOculusTouchLeftControllerButtonPathMaps[] = {
-    {OpenXrButtonType::kTrigger,
-     {{OpenXrButtonActionType::kPress, "/input/trigger/value"},
-      {OpenXrButtonActionType::kValue, "/input/trigger/value"},
-      {OpenXrButtonActionType::kTouch, "/input/trigger/touch"}},
-     3},
-    {OpenXrButtonType::kSqueeze,
-     {{OpenXrButtonActionType::kPress, "/input/squeeze/value"},
-      {OpenXrButtonActionType::kValue, "/input/squeeze/value"}},
-     2},
-    {OpenXrButtonType::kThumbstick,
-     {{OpenXrButtonActionType::kPress, "/input/thumbstick/click"},
-      {OpenXrButtonActionType::kTouch, "/input/thumbstick/touch"}},
-     2},
-    {OpenXrButtonType::kThumbrest,
-     {{OpenXrButtonActionType::kTouch, "/input/thumbrest/touch"}},
-     1},
-    {OpenXrButtonType::kButton1,
-     {{OpenXrButtonActionType::kPress, "/input/x/click"},
-      {OpenXrButtonActionType::kTouch, "/input/x/touch"}},
-     2},
-    {OpenXrButtonType::kButton2,
-     {{OpenXrButtonActionType::kPress, "/input/y/click"},
-      {OpenXrButtonActionType::kTouch, "/input/y/touch"}},
-     2},
-};
-
-constexpr OpenXrButtonPathMap kOculusTouchRightControllerButtonPathMaps[] = {
-    {OpenXrButtonType::kTrigger,
-     {{OpenXrButtonActionType::kPress, "/input/trigger/value"},
-      {OpenXrButtonActionType::kValue, "/input/trigger/value"},
-      {OpenXrButtonActionType::kTouch, "/input/trigger/touch"}},
-     3},
-    {OpenXrButtonType::kSqueeze,
-     {{OpenXrButtonActionType::kPress, "/input/squeeze/value"},
-      {OpenXrButtonActionType::kValue, "/input/squeeze/value"}},
-     2},
-    {OpenXrButtonType::kThumbstick,
-     {{OpenXrButtonActionType::kPress, "/input/thumbstick/click"},
-      {OpenXrButtonActionType::kTouch, "/input/thumbstick/touch"}},
-     2},
-    {OpenXrButtonType::kThumbrest,
-     {{OpenXrButtonActionType::kTouch, "/input/thumbrest/touch"}},
-     1},
-    {OpenXrButtonType::kButton1,
-     {{OpenXrButtonActionType::kPress, "/input/a/click"},
-      {OpenXrButtonActionType::kTouch, "/input/a/touch"}},
-     2},
-    {OpenXrButtonType::kButton2,
-     {{OpenXrButtonActionType::kPress, "/input/b/click"},
-      {OpenXrButtonActionType::kTouch, "/input/b/touch"}},
-     2},
-};
-
-constexpr OpenXrAxisPathMap kMicrosoftMotionControllerAxisPathMaps[] = {
-    {OpenXrAxisType::kTrackpad, "/input/trackpad"},
-    {OpenXrAxisType::kThumbstick, "/input/thumbstick"},
-};
-
-constexpr OpenXrAxisPathMap kOculusTouchControllerAxisPathMaps[] = {
-    {OpenXrAxisType::kThumbstick, "/input/thumbstick"},
-};
-
-constexpr OpenXrControllerInteractionProfile
-    kMicrosoftMotionInteractionProfile = {
-        OpenXrInteractionProfileType::kMicrosoftMotion,
-        "/interaction_profiles/microsoft/motion_controller",
-        GamepadMapping::kXrStandard,
-        kMicrosoftMotionInputProfiles,
-        base::size(kMicrosoftMotionInputProfiles),
-        kMicrosoftMotionControllerButtonPathMaps,
-        base::size(kMicrosoftMotionControllerButtonPathMaps),
-        kMicrosoftMotionControllerButtonPathMaps,
-        base::size(kMicrosoftMotionControllerButtonPathMaps),
-        kMicrosoftMotionControllerAxisPathMaps,
-        base::size(kMicrosoftMotionControllerAxisPathMaps)};
-
-constexpr OpenXrControllerInteractionProfile kKHRSimpleInteractionProfile = {
-    OpenXrInteractionProfileType::kKHRSimple,
-    "/interaction_profiles/khr/simple_controller",
-    GamepadMapping::kNone,
-    kGenericButtonInputProfiles,
-    base::size(kGenericButtonInputProfiles),
-    kKronosSimpleControllerButtonPathMaps,
-    base::size(kKronosSimpleControllerButtonPathMaps),
-    kKronosSimpleControllerButtonPathMaps,
-    base::size(kKronosSimpleControllerButtonPathMaps),
-    nullptr,
-    0};
-
-constexpr OpenXrControllerInteractionProfile kOculusTouchInteractionProfile = {
-    OpenXrInteractionProfileType::kOculusTouch,
-    "/interaction_profiles/oculus/touch_controller",
-    GamepadMapping::kXrStandard,
-    kOculusTouchInputProfiles,
-    base::size(kOculusTouchInputProfiles),
-    kOculusTouchLeftControllerButtonPathMaps,
-    base::size(kOculusTouchLeftControllerButtonPathMaps),
-    kOculusTouchRightControllerButtonPathMaps,
-    base::size(kOculusTouchRightControllerButtonPathMaps),
-    kOculusTouchControllerAxisPathMaps,
-    base::size(kOculusTouchControllerAxisPathMaps)};
-
-constexpr OpenXrControllerInteractionProfile
-    kOpenXrControllerInteractionProfiles[] = {
-        kMicrosoftMotionInteractionProfile, kKHRSimpleInteractionProfile,
-        kOculusTouchInteractionProfile};
-
+const std::vector<OpenXrControllerInteractionProfile>&
+GetOpenXrControllerInteractionProfiles();
+const base::flat_map<OpenXrInteractionProfileType,
+                     std::vector<OpenXrSystemInputProfiles>>&
+GetOpenXrInputProfilesMap();
 }  // namespace device
 
 #endif  // DEVICE_VR_OPENXR_OPENXR_INTERACTION_PROFILES_H_

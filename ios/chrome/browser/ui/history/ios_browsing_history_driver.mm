@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/browsing_data/core/history_notice_utils.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -23,7 +23,7 @@ using history::BrowsingHistoryService;
 #pragma mark - IOSBrowsingHistoryDriver
 
 IOSBrowsingHistoryDriver::IOSBrowsingHistoryDriver(
-    ios::ChromeBrowserState* browser_state,
+    ChromeBrowserState* browser_state,
     id<HistoryConsumer> consumer)
     : browser_state_(browser_state), consumer_(consumer) {
   DCHECK(browser_state_);

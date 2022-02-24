@@ -2,9 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-(function() {
-'use strict';
-
 /**
  * The duration in ms of a background flash when a user touches the fingerprint
  * sensor on this page.
@@ -16,6 +13,7 @@ Polymer({
   is: 'settings-fingerprint-list',
 
   behaviors: [
+    DeepLinkingBehavior,
     I18nBehavior,
     WebUIListenerBehavior,
     settings.RouteObserverBehavior,
@@ -28,6 +26,7 @@ Polymer({
     authToken: {
       type: String,
       value: '',
+      observer: 'onAuthTokenChanged_',
     },
 
     /**
@@ -36,7 +35,7 @@ Polymer({
      */
     fingerprints_: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       }
     },
@@ -53,15 +52,25 @@ Polymer({
       type: Boolean,
       value: true,
     },
+
+    /**
+     * Used by DeepLinkingBehavior to focus this page's deep links.
+     * @type {!Set<!chromeos.settings.mojom.Setting>}
+     */
+    supportedSettingIds: {
+      type: Object,
+      value: () => new Set([
+        chromeos.settings.mojom.Setting.kAddFingerprintV2,
+        chromeos.settings.mojom.Setting.kRemoveFingerprintV2,
+      ]),
+    },
   },
 
   /** @private {?settings.FingerprintBrowserProxy} */
   browserProxy_: null,
 
   /** @override */
-  attached: function() {
-    this.addWebUIListener(
-        'on-fingerprint-attempt-received', this.onAttemptReceived_.bind(this));
+  attached() {
     this.addWebUIListener('on-screen-locked', this.onScreenLocked_.bind(this));
     this.browserProxy_ = settings.FingerprintBrowserProxyImpl.getInstance();
     this.browserProxy_.startAuthentication();
@@ -69,8 +78,21 @@ Polymer({
   },
 
   /** @override */
-  detached: function() {
+  detached() {
     this.browserProxy_.endCurrentAuthentication();
+  },
+
+  /**
+   * @return {boolean} Whether an event was fired to show the password dialog.
+   * @private
+   */
+  requestPasswordIfApplicable_() {
+    const currentRoute = settings.Router.getInstance().getCurrentRoute();
+    if (currentRoute === settings.routes.FINGERPRINT && !this.authToken) {
+      this.fire('password-requested');
+      return true;
+    }
+    return false;
   },
 
   /**
@@ -79,54 +101,30 @@ Polymer({
    * @param {!settings.Route} oldRoute
    * @protected
    */
-  currentRouteChanged: function(newRoute, oldRoute) {
-    if (newRoute != settings.routes.FINGERPRINT) {
+  currentRouteChanged(newRoute, oldRoute) {
+    if (newRoute !== settings.routes.FINGERPRINT) {
       if (this.browserProxy_) {
         this.browserProxy_.endCurrentAuthentication();
       }
-    } else if (oldRoute == settings.routes.LOCK_SCREEN) {
+      this.showSetupFingerprintDialog_ = false;
+      return;
+    }
+
+    if (oldRoute === settings.routes.LOCK_SCREEN) {
       // Start fingerprint authentication when going from LOCK_SCREEN to
       // FINGERPRINT page.
       this.browserProxy_.startAuthentication();
     }
-  },
 
-  /**
-   * Sends a ripple when the user taps the sensor with a registered fingerprint.
-   * @param {!settings.FingerprintAttempt} fingerprintAttempt
-   * @private
-   */
-  onAttemptReceived_: function(fingerprintAttempt) {
-    /** @type {NodeList<!HTMLElement>} */ const listItems =
-        this.$.fingerprintsList.querySelectorAll('.list-item');
-    /** @type {Array<number>} */ const filteredIndexes =
-        fingerprintAttempt.indexes.filter(function(index) {
-          return index >= 0 && index < listItems.length;
-        });
+    if (this.requestPasswordIfApplicable_()) {
+      this.showSetupFingerprintDialog_ = false;
+    }
 
-    // Flash the background and produce a ripple for each list item that
-    // corresponds to the attempted finger.
-    filteredIndexes.forEach(function(index) {
-      const listItem = listItems[index];
-      const ripple = listItem.querySelector('paper-ripple');
-
-      // Activate the ripple.
-      if (ripple) {
-        ripple.simulatedRipple();
-      }
-
-      // Flash the background.
-      listItem.animate(
-          [
-            {backgroundColor: ['var(--google-grey-300)']},
-            {backgroundColor: ['white']}
-          ],
-          FLASH_DURATION_MS);
-    });
+    this.attemptDeepLink();
   },
 
   /** @private */
-  updateFingerprintsList_: function() {
+  updateFingerprintsList_() {
     this.browserProxy_.getFingerprintsList().then(
         this.onFingerprintsChanged_.bind(this));
   },
@@ -135,7 +133,7 @@ Polymer({
    * @param {!settings.FingerprintInfo} fingerprintInfo
    * @private
    */
-  onFingerprintsChanged_: function(fingerprintInfo) {
+  onFingerprintsChanged_(fingerprintInfo) {
     // Update iron-list.
     this.fingerprints_ = fingerprintInfo.fingerprintsList.slice();
     this.$$('.action-button').disabled = fingerprintInfo.isMaxed;
@@ -147,9 +145,10 @@ Polymer({
    * @param {!{model: !{index: !number}}} e
    * @private
    */
-  onFingerprintDeleteTapped_: function(e) {
+  onFingerprintDeleteTapped_(e) {
     this.browserProxy_.removeEnrollment(e.model.index).then(success => {
       if (success) {
+        settings.recordSettingChange();
         this.updateFingerprintsList_();
       }
     });
@@ -159,7 +158,7 @@ Polymer({
    * @param {!{model: !{index: !number, item: !string}}} e
    * @private
    */
-  onFingerprintLabelChanged_: function(e) {
+  onFingerprintLabelChanged_(e) {
     this.browserProxy_.changeEnrollmentLabel(e.model.index, e.model.item)
         .then(success => {
           if (success) {
@@ -172,12 +171,12 @@ Polymer({
    * Opens the setup fingerprint dialog.
    * @private
    */
-  openAddFingerprintDialog_: function() {
+  openAddFingerprintDialog_() {
     this.showSetupFingerprintDialog_ = true;
   },
 
   /** @private */
-  onSetupFingerprintDialogClose_: function() {
+  onSetupFingerprintDialogClose_() {
     this.showSetupFingerprintDialog_ = false;
     cr.ui.focusWithoutInk(assert(this.$$('#addFingerprint')));
     this.browserProxy_.startAuthentication();
@@ -188,10 +187,25 @@ Polymer({
    * @param {boolean} screenIsLocked
    * @private
    */
-  onScreenLocked_: function(screenIsLocked) {
+  onScreenLocked_(screenIsLocked) {
     if (!screenIsLocked &&
-        settings.getCurrentRoute() == settings.routes.FINGERPRINT) {
+        settings.Router.getInstance().getCurrentRoute() ===
+            settings.routes.FINGERPRINT) {
       this.onSetupFingerprintDialogClose_();
+    }
+  },
+
+  /** @private */
+  onAuthTokenChanged_() {
+    if (this.requestPasswordIfApplicable_()) {
+      this.showSetupFingerprintDialog_ = false;
+      return;
+    }
+
+    if (settings.Router.getInstance().getCurrentRoute() ===
+        settings.routes.FINGERPRINT) {
+      // Show deep links again if the user authentication dialog just closed.
+      this.attemptDeepLink();
     }
   },
 
@@ -200,8 +214,7 @@ Polymer({
    * @return {string}
    * @private
    */
-  getButtonAriaLabel_: function(item) {
+  getButtonAriaLabel_(item) {
     return this.i18n('lockScreenDeleteFingerprintLabel', item);
   },
 });
-})();

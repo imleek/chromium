@@ -17,10 +17,12 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
+#include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/task_environment.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/network_change_notifier.h"
@@ -36,6 +38,7 @@
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/test/fake_test_cert_verifier_params_factory.h"
 #include "services/network/test/test_network_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -138,11 +141,11 @@ WARN_UNUSED_RESULT ::testing::AssertionResult VerifyState(
   if (expected_log_capture_mode_known) {
     expected_state.SetString("captureMode", expected_log_capture_mode_string);
   } else {
-    state->Remove("captureMode", nullptr);
+    state->RemoveKey("captureMode");
   }
 
   // Remove "file" field which is only added in debug mode.
-  state->Remove("file", nullptr);
+  state->RemoveKey("file");
 
   std::string expected_state_json_string;
   JSONStringValueSerializer expected_state_serializer(
@@ -190,7 +193,7 @@ WARN_UNUSED_RESULT ::testing::AssertionResult ReadCompleteLogFile(
   // 640 rather than 644.
   int expected_permissions = base::FILE_PERMISSION_READ_BY_USER |
                              base::FILE_PERMISSION_WRITE_BY_USER
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
                              | base::FILE_PERMISSION_READ_BY_GROUP |
                              base::FILE_PERMISSION_READ_BY_OTHERS
 #endif
@@ -294,6 +297,10 @@ class NetExportFileWriterTest : public ::testing::Test {
     ASSERT_TRUE(log_temp_dir_.CreateUniqueTempDir());
     network::mojom::NetworkContextParamsPtr params =
         network::mojom::NetworkContextParams::New();
+    // Use a dummy CertVerifier that always passes cert verification, since
+    // these unittests don't need to test CertVerifier behavior.
+    params->cert_verifier_params =
+        network::FakeTestCertVerifierParamsFactory::GetCertVerifierParams();
     // Use a fixed proxy config, to avoid dependencies on local network
     // configuration.
     params->initial_proxy_config =
@@ -597,8 +604,7 @@ TEST_F(NetExportFileWriterTest, StartClearsFile) {
 
   // Add some junk at the end of the file.
   std::string junk_data("Hello");
-  EXPECT_TRUE(base::AppendToFile(default_log_path(), junk_data.c_str(),
-                                 junk_data.size()));
+  EXPECT_TRUE(base::AppendToFile(default_log_path(), junk_data));
 
   int64_t junk_file_size;
   EXPECT_TRUE(base::GetFileSize(default_log_path(), &junk_file_size));
@@ -796,7 +802,7 @@ TEST_F(NetExportFileWriterTest, StartWithNetworkContextActive) {
   ASSERT_TRUE(root->GetList("events", &events));
 
   // Check there is at least one event as a result of the ongoing request.
-  ASSERT_GE(events->GetSize(), 1u);
+  ASSERT_GE(events->GetList().size(), 1u);
 
   // Check the URL in the params of the first event.
   base::DictionaryValue* event;

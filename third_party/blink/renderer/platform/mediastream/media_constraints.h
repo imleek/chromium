@@ -31,9 +31,6 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_MEDIASTREAM_MEDIA_CONSTRAINTS_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_MEDIASTREAM_MEDIA_CONSTRAINTS_H_
 
-#include <string>
-#include <vector>
-
 #include "third_party/blink/public/platform/web_private_ptr.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -52,7 +49,13 @@ class PLATFORM_EXPORT BaseConstraint {
  public:
   explicit BaseConstraint(const char* name);
   virtual ~BaseConstraint();
-  virtual bool IsEmpty() const = 0;
+
+  bool IsPresent() const { return is_present_ || !IsUnconstrained(); }
+  void SetIsPresent(bool is_present) { is_present_ = is_present; }
+
+  // true if the Cconstraint has neither Mandatory (min/max/exact) not Ideal
+  // values, false otherwise.
+  virtual bool IsUnconstrained() const = 0;
   bool HasMandatory() const;
   virtual bool HasMin() const { return false; }
   virtual bool HasMax() const { return false; }
@@ -62,6 +65,7 @@ class PLATFORM_EXPORT BaseConstraint {
 
  private:
   const char* name_;
+  bool is_present_ = false;
 };
 
 // Note this class refers to the "long" WebIDL definition which is
@@ -91,7 +95,7 @@ class PLATFORM_EXPORT LongConstraint : public BaseConstraint {
   }
 
   bool Matches(int32_t value) const;
-  bool IsEmpty() const override;
+  bool IsUnconstrained() const override;
   bool HasMin() const override { return has_min_; }
   bool HasMax() const override { return has_max_; }
   bool HasExact() const override { return has_exact_; }
@@ -143,7 +147,7 @@ class PLATFORM_EXPORT DoubleConstraint : public BaseConstraint {
   }
 
   bool Matches(double value) const;
-  bool IsEmpty() const override;
+  bool IsUnconstrained() const override;
   bool HasMin() const override { return has_min_; }
   bool HasMax() const override { return has_max_; }
   bool HasExact() const override { return has_exact_; }
@@ -180,7 +184,7 @@ class PLATFORM_EXPORT StringConstraint : public BaseConstraint {
   void SetIdeal(const Vector<String>& ideal) { ideal_ = ideal; }
 
   bool Matches(String value) const;
-  bool IsEmpty() const override;
+  bool IsUnconstrained() const override;
   bool HasExact() const override { return !exact_.IsEmpty(); }
   String ToString() const override;
   bool HasIdeal() const { return !ideal_.IsEmpty(); }
@@ -209,7 +213,7 @@ class PLATFORM_EXPORT BooleanConstraint : public BaseConstraint {
   }
 
   bool Matches(bool value) const;
-  bool IsEmpty() const override;
+  bool IsUnconstrained() const override;
   bool HasExact() const override { return has_exact_; }
   String ToString() const override;
   bool HasIdeal() const { return has_ideal_; }
@@ -221,9 +225,9 @@ class PLATFORM_EXPORT BooleanConstraint : public BaseConstraint {
   unsigned has_exact_ : 1;
 };
 
-struct WebMediaTrackConstraintSet {
+struct MediaTrackConstraintSetPlatform {
  public:
-  PLATFORM_EXPORT WebMediaTrackConstraintSet();
+  PLATFORM_EXPORT MediaTrackConstraintSetPlatform();
 
   LongConstraint width;
   LongConstraint height;
@@ -240,6 +244,9 @@ struct WebMediaTrackConstraintSet {
   LongConstraint channel_count;
   StringConstraint device_id;
   BooleanConstraint disable_local_echo;
+  DoubleConstraint pan;
+  DoubleConstraint tilt;
+  DoubleConstraint zoom;
   StringConstraint group_id;
   // https://w3c.github.io/mediacapture-depth/#mediatrackconstraints
   StringConstraint video_kind;
@@ -262,7 +269,6 @@ struct WebMediaTrackConstraintSet {
   BooleanConstraint voice_activity_detection;
   BooleanConstraint ice_restart;
   BooleanConstraint goog_use_rtp_mux;
-  BooleanConstraint enable_dtls_srtp;
   BooleanConstraint enable_rtp_data_channels;
   BooleanConstraint enable_dscp;
   BooleanConstraint enable_i_pv6;
@@ -271,25 +277,20 @@ struct WebMediaTrackConstraintSet {
   BooleanConstraint goog_combined_audio_video_bwe;
   LongConstraint goog_screencast_min_bitrate;
   BooleanConstraint goog_cpu_overuse_detection;
-  LongConstraint goog_cpu_underuse_threshold;
-  LongConstraint goog_cpu_overuse_threshold;
-  LongConstraint goog_cpu_underuse_encode_rsd_threshold;
-  LongConstraint goog_cpu_overuse_encode_rsd_threshold;
-  BooleanConstraint goog_cpu_overuse_encode_usage;
   LongConstraint goog_high_start_bitrate;
   BooleanConstraint goog_payload_padding;
   LongConstraint goog_latency_ms;
 
-  PLATFORM_EXPORT bool IsEmpty() const;
+  PLATFORM_EXPORT bool IsUnconstrained() const;
   PLATFORM_EXPORT bool HasMandatory() const;
-  PLATFORM_EXPORT bool HasMandatoryOutsideSet(const std::vector<std::string>&,
-                                              std::string&) const;
+  PLATFORM_EXPORT bool HasMandatoryOutsideSet(const Vector<String>&,
+                                              String&) const;
   PLATFORM_EXPORT bool HasMin() const;
   PLATFORM_EXPORT bool HasExact() const;
   PLATFORM_EXPORT String ToString() const;
 
  private:
-  std::vector<const BaseConstraint*> AllConstraints() const;
+  Vector<const BaseConstraint*> AllConstraints() const;
 };
 
 class MediaConstraints {
@@ -307,15 +308,16 @@ class MediaConstraints {
 
   PLATFORM_EXPORT void Reset();
   bool IsNull() const { return private_.IsNull(); }
-  PLATFORM_EXPORT bool IsEmpty() const;
+  PLATFORM_EXPORT bool IsUnconstrained() const;
 
   PLATFORM_EXPORT void Initialize();
   PLATFORM_EXPORT void Initialize(
-      const WebMediaTrackConstraintSet& basic,
-      const Vector<WebMediaTrackConstraintSet>& advanced);
+      const MediaTrackConstraintSetPlatform& basic,
+      const Vector<MediaTrackConstraintSetPlatform>& advanced);
 
-  PLATFORM_EXPORT const WebMediaTrackConstraintSet& Basic() const;
-  PLATFORM_EXPORT const Vector<WebMediaTrackConstraintSet>& Advanced() const;
+  PLATFORM_EXPORT const MediaTrackConstraintSetPlatform& Basic() const;
+  PLATFORM_EXPORT const Vector<MediaTrackConstraintSetPlatform>& Advanced()
+      const;
 
   PLATFORM_EXPORT const String ToString() const;
 

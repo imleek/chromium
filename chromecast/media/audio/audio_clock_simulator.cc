@@ -7,8 +7,8 @@
 #include <algorithm>
 #include <cmath>
 
-#include "base/logging.h"
-#include "media/base/audio_bus.h"
+#include "base/check_op.h"
+#include "base/cxx17_backports.h"
 
 namespace chromecast {
 namespace media {
@@ -23,7 +23,7 @@ AudioClockSimulator::AudioClockSimulator(AudioProvider* provider)
       sample_rate_(provider_->sample_rate()),
       num_channels_(provider_->num_channels()),
       scratch_buffer_(
-          ::media::AudioBus::Create(num_channels_, kInterpolateWindow + 1)) {
+          CastAudioBus::Create(num_channels_, kInterpolateWindow + 1)) {
   DCHECK(provider_);
   DCHECK_GT(sample_rate_, 0);
   DCHECK_GT(num_channels_, 0u);
@@ -43,7 +43,7 @@ int AudioClockSimulator::sample_rate() const {
 }
 
 double AudioClockSimulator::SetRate(double rate) {
-  rate = std::max(kMinRate, std::min(rate, kMaxRate));
+  rate = base::clamp(rate, kMinRate, kMaxRate);
 
   if (clock_rate_ != rate) {
     clock_rate_ = rate;
@@ -77,6 +77,7 @@ int AudioClockSimulator::FillFrames(int num_frames,
       auto result =
           FillDataLengthen(num_frames, playout_timestamp, channel_data, filled);
       filled += result.filled;
+      output_frames_ += result.filled;
       if (!result.complete) {
         break;
       }
@@ -87,6 +88,7 @@ int AudioClockSimulator::FillFrames(int num_frames,
       auto result =
           FillDataShorten(num_frames, playout_timestamp, channel_data, filled);
       filled += result.filled;
+      output_frames_ += result.filled;
       if (!result.complete) {
         break;
       }
@@ -94,8 +96,9 @@ int AudioClockSimulator::FillFrames(int num_frames,
     }
 
     int64_t end_input_frames = input_frames_ + kInterpolateWindow;
-    int64_t end_output_frames = output_frames_ + filled + kInterpolateWindow;
+    int64_t end_output_frames = output_frames_ + kInterpolateWindow;
     int64_t desired_output_frames = std::round(end_input_frames / clock_rate_);
+
     if (end_output_frames > desired_output_frames) {
       state_ = State::kShortening;
       continue;
@@ -113,6 +116,7 @@ int AudioClockSimulator::FillFrames(int num_frames,
     int desired = std::min(num_frames - filled, kInterpolateWindow);
     int provided = provider_->FillFrames(desired, timestamp, channels);
     input_frames_ += provided;
+    output_frames_ += provided;
     filled += provided;
 
     if (provided < desired) {
@@ -120,7 +124,6 @@ int AudioClockSimulator::FillFrames(int num_frames,
     }
   }
 
-  output_frames_ += filled;
   return filled;
 }
 
@@ -152,6 +155,10 @@ AudioClockSimulator::FillResult AudioClockSimulator::FillDataLengthen(
   }
   int64_t timestamp = playout_timestamp + FramesToMicroseconds(offset);
   int provided = provider_->FillFrames(desired_fill, timestamp, channels);
+  if (provided == 0) {
+    return {false, 0};
+  }
+
   input_frames_ += provided;
   InterpolateLonger(provided, channel_data, offset);
 

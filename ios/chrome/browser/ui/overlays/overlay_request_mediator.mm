@@ -3,9 +3,10 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/overlays/overlay_request_mediator.h"
+#import "ios/chrome/browser/ui/overlays/overlay_request_mediator+subclassing.h"
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "ios/chrome/browser/overlays/public/overlay_callback_manager.h"
 #include "ios/chrome/browser/overlays/public/overlay_request.h"
 #include "ios/chrome/browser/overlays/public/overlay_request_support.h"
@@ -48,6 +49,19 @@
   return base::BindOnce(^(OverlayResponse*) {
     weakSelf.request = nullptr;
   });
+}
+
+@end
+
+@implementation OverlayRequestMediator (Subclassing)
+
+- (void)dispatchResponse:(std::unique_ptr<OverlayResponse>)response {
+  if (self.request)
+    self.request->GetCallbackManager()->DispatchResponse(std::move(response));
+}
+
+- (void)dismissOverlay {
+  [self.delegate stopOverlayForMediator:self];
 }
 
 @end

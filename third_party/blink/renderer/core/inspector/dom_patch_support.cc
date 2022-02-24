@@ -57,11 +57,12 @@
 namespace blink {
 
 DOMPatchSupport::DOMPatchSupport(DOMEditor* dom_editor, Document& document)
-    : dom_editor_(dom_editor), document_(document) {}
+    : dom_editor_(dom_editor), document_(&document) {}
 
 void DOMPatchSupport::PatchDocument(const String& markup) {
   Document* new_document = nullptr;
-  DocumentInit init = DocumentInit::Create();
+  DocumentInit init = DocumentInit::Create().WithExecutionContext(
+      GetDocument().GetExecutionContext());
   if (IsA<HTMLDocument>(GetDocument()))
     new_document = MakeGarbageCollected<HTMLDocument>(init);
   else if (GetDocument().IsSVGDocument())
@@ -132,7 +133,7 @@ Node* DOMPatchSupport::PatchNode(Node* node,
     old_list.push_back(CreateDigest(child, nullptr));
 
   // Compose the new list.
-  String markup_copy = markup.DeprecatedLower();
+  String markup_copy = markup.LowerASCII();
   HeapVector<Member<Digest>> new_list;
   for (Node* child = parent_node->firstChild(); child != node;
        child = child->nextSibling())
@@ -532,7 +533,7 @@ void DOMPatchSupport::MarkNodeAsUsed(Digest* digest) {
   }
 }
 
-void DOMPatchSupport::Digest::Trace(blink::Visitor* visitor) {
+void DOMPatchSupport::Digest::Trace(Visitor* visitor) const {
   visitor->Trace(node_);
   visitor->Trace(children_);
 }

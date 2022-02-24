@@ -12,11 +12,16 @@ namespace content {
 
 // This interface is used to create a connection between the storage layer and
 // the embedder layer, where calls to UI code can be made. Embedders should
-// implement this interface as well as a GetStorageNotificationService()
-// function in it's implementation of BrowserContext.
+// vend an instance of this interface in an override of
+// BrowserContext::GetStorageNotificationService().
 class StorageNotificationService {
  public:
   StorageNotificationService() = default;
+
+  StorageNotificationService(const StorageNotificationService&) = delete;
+  StorageNotificationService& operator=(const StorageNotificationService&) =
+      delete;
+
   ~StorageNotificationService() = default;
 
   // This pure virtual function should be implemented in the embedder layer
@@ -24,11 +29,7 @@ class StorageNotificationService {
   // is passed to QuotaManager in StoragePartitionImpl, where it is called
   // when QuotaManager determines appropriate to alert the user that the device
   // is in a state of storage pressure.
-  virtual base::RepeatingCallback<void(const url::Origin)>
-  GetStoragePressureNotificationClosure() = 0;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(StorageNotificationService);
+  virtual void MaybeShowStoragePressureNotification(const url::Origin) = 0;
 };
 
 }  // namespace content

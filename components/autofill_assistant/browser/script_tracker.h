@@ -5,15 +5,12 @@
 #ifndef COMPONENTS_AUTOFILL_ASSISTANT_BROWSER_SCRIPT_TRACKER_H_
 #define COMPONENTS_AUTOFILL_ASSISTANT_BROWSER_SCRIPT_TRACKER_H_
 
-#include <map>
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
-#include "base/macros.h"
+#include "base/containers/flat_set.h"
 #include "base/memory/weak_ptr.h"
-#include "base/time/time.h"
 #include "base/values.h"
 #include "components/autofill_assistant/browser/script.h"
 #include "components/autofill_assistant/browser/script_executor.h"
@@ -58,6 +55,9 @@ class ScriptTracker : public ScriptExecutor::Listener {
   ScriptTracker(ScriptExecutorDelegate* delegate,
                 ScriptTracker::Listener* listener);
 
+  ScriptTracker(const ScriptTracker&) = delete;
+  ScriptTracker& operator=(const ScriptTracker&) = delete;
+
   ~ScriptTracker() override;
 
   // Updates the set of available |scripts|. This interrupts any pending checks,
@@ -82,6 +82,7 @@ class ScriptTracker : public ScriptExecutor::Listener {
   // on top of what's available in the context returned by
   // ScriptExecutorDelegate.
   void ExecuteScript(const std::string& path,
+                     const UserData* user_data,
                      std::unique_ptr<TriggerContext> context,
                      ScriptExecutor::RunScriptCallback callback);
 
@@ -153,14 +154,11 @@ class ScriptTracker : public ScriptExecutor::Listener {
   // SetScripts() reset this.
   std::vector<std::unique_ptr<Script>> interrupts_;
 
-  // List of scripts that have been executed and their corresponding statuses.
-  std::map<std::string, ScriptStatusProto> scripts_state_;
-
   std::unique_ptr<BatchElementChecker> batch_element_checker_;
 
   // Path of the scripts found to be runnable so far, in the current check,
   // represented by |batch_element_checker_|.
-  std::set<std::string> pending_runnable_scripts_;
+  base::flat_set<std::string> pending_runnable_scripts_;
 
   // If a script is currently running, this is the script's executor. Otherwise,
   // this is nullptr.
@@ -170,8 +168,6 @@ class ScriptTracker : public ScriptExecutor::Listener {
   std::string last_script_payload_;
 
   base::WeakPtrFactory<ScriptTracker> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ScriptTracker);
 };
 
 }  // namespace autofill_assistant

@@ -14,6 +14,7 @@
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -48,6 +49,9 @@ class ScopedDevtoolsOpener {
       : ScopedDevtoolsOpener(
             content::DevToolsAgentHost::GetOrCreateFor(web_contents)) {}
 
+  ScopedDevtoolsOpener(const ScopedDevtoolsOpener&) = delete;
+  ScopedDevtoolsOpener& operator=(const ScopedDevtoolsOpener&) = delete;
+
   ~ScopedDevtoolsOpener() { agent_host_->DetachClient(&test_client_); }
 
   void EnableAdBlocking(bool enabled) {
@@ -68,7 +72,6 @@ class ScopedDevtoolsOpener {
  private:
   TestClient test_client_;
   scoped_refptr<content::DevToolsAgentHost> agent_host_;
-  DISALLOW_COPY_AND_ASSIGN(ScopedDevtoolsOpener);
 };
 
 }  // namespace
@@ -83,8 +86,8 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterDevtoolsBrowserTest,
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
 
-  // Should not trigger activation, the URL is not on the blacklist.
-  ui_test_utils::NavigateToURL(browser(), url);
+  // Should not trigger activation, the URL is not on the blocklist.
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
   // Open up devtools and trigger forced activation.
@@ -92,12 +95,12 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterDevtoolsBrowserTest,
     ScopedDevtoolsOpener devtools(web_contents());
     devtools.EnableAdBlocking(true);
 
-    ui_test_utils::NavigateToURL(browser(), url);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
     EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
     // Close devtools, should stop forced activation.
   }
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 }
 
@@ -115,33 +118,32 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterListInsertingBrowserTest,
                        subresource_filter::ActivationList::BETTER_ADS);
   ResetConfiguration(std::move(config));
 
-  // Should not trigger activation, the URL is not on the blacklist.
-  ui_test_utils::NavigateToURL(browser(), url);
+  // Should not trigger activation, the URL is not on the blocklist.
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
-  content::ConsoleObserverDelegate console_observer(
-      web_contents(), kActivationWarningConsoleMessage);
-  web_contents()->SetDelegate(&console_observer);
+  content::WebContentsConsoleObserver console_observer(web_contents());
+  console_observer.SetPattern(kActivationWarningConsoleMessage);
 
   // Open up devtools and trigger forced activation.
   {
     ScopedDevtoolsOpener devtools(web_contents());
     devtools.EnableAdBlocking(true);
-    ui_test_utils::NavigateToURL(browser(), url);
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
     EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
     console_observer.Wait();
-    EXPECT_EQ(console_observer.message(), kActivationWarningConsoleMessage);
+    EXPECT_EQ(kActivationWarningConsoleMessage,
+              console_observer.GetMessageAt(0u));
     // Close devtools, should stop forced activation.
   }
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 }
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterDevtoolsBrowserTest,
                        ForceActivation_SubresourceLogging) {
-  content::ConsoleObserverDelegate console_observer(web_contents(),
-                                                    kActivationConsoleMessage);
-  web_contents()->SetDelegate(&console_observer);
+  content::WebContentsConsoleObserver console_observer(web_contents());
+  console_observer.SetPattern(kActivationConsoleMessage);
   const GURL url(
       GetTestUrl("subresource_filter/frame_with_included_script.html"));
   ASSERT_NO_FATAL_FAILURE(
@@ -149,10 +151,9 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterDevtoolsBrowserTest,
   ScopedDevtoolsOpener devtools(web_contents());
   devtools.EnableAdBlocking(true);
 
-  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
-  EXPECT_FALSE(console_observer.message().empty());
-  console_observer.Wait();
+  EXPECT_FALSE(console_observer.messages().empty());
 }
 
 class SubresourceFilterDevtoolsBrowserTestWithSitePerProcess
@@ -178,12 +179,12 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterDevtoolsBrowserTestWithSitePerProcess,
 
   const GURL frame_with_script =
       GetTestUrl("subresource_filter/frame_with_included_script.html");
-  ui_test_utils::NavigateToURL(browser(), frame_with_script);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), frame_with_script));
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
   const GURL cross_site_frames = embedded_test_server()->GetURL(
       "a.com", "/subresource_filter/frame_cross_site_set.html");
-  ui_test_utils::NavigateToURL(browser(), cross_site_frames);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), cross_site_frames));
 
   // Simulate attaching and detaching subframe clients. The browser should not
   // process any of the ad blocking messages when the frames detach.
@@ -192,7 +193,7 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterDevtoolsBrowserTestWithSitePerProcess,
       ScopedDevtoolsOpener opener(host);
   }
 
-  ui_test_utils::NavigateToURL(browser(), frame_with_script);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), frame_with_script));
   EXPECT_FALSE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 }
 

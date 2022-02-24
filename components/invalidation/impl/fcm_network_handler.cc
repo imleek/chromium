@@ -10,23 +10,27 @@
 #include "base/base64url.h"
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/feature_list.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
+#include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/gcm_driver/instance_id/instance_id.h"
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
+#include "components/invalidation/impl/invalidation_switches.h"
 #include "components/invalidation/impl/status.h"
 #include "components/invalidation/public/invalidator_state.h"
 
 using instance_id::InstanceID;
 
-namespace syncer {
+namespace invalidation {
 
 namespace {
 
@@ -40,6 +44,33 @@ const char kGCMScope[] = "GCM";
 
 // Lower bound time between two token validations when listening.
 const int kTokenValidationPeriodMinutesDefault = 60 * 24;
+
+// Returns the TTL (time-to-live) for the Instance ID token, or 0 if no TTL
+// should be specified.
+base::TimeDelta GetTimeToLive(const std::string& sender_id) {
+  // This magic value is identical to kInvalidationGCMSenderId, i.e. the value
+  // that Sync uses for its invalidations.
+  if (sender_id == "8181035976") {
+    if (!base::FeatureList::IsEnabled(switches::kSyncInstanceIDTokenTTL)) {
+      return base::TimeDelta();
+    }
+
+    return base::Seconds(switches::kSyncInstanceIDTokenTTLSeconds.Get());
+  }
+
+  // This magic value is identical to kPolicyFCMInvalidationSenderID, i.e. the
+  // value that ChromeOS policy uses for its invalidations.
+  if (sender_id == "1013309121859") {
+    if (!base::FeatureList::IsEnabled(switches::kPolicyInstanceIDTokenTTL)) {
+      return base::TimeDelta();
+    }
+
+    return base::Seconds(switches::kPolicyInstanceIDTokenTTLSeconds.Get());
+  }
+
+  // The default for all other FCM clients is no TTL.
+  return base::TimeDelta();
+}
 
 std::string GetValueFromMessage(const gcm::IncomingMessage& message,
                                 const std::string& key) {
@@ -65,12 +96,12 @@ std::string GetValueFromMessage(const gcm::IncomingMessage& message,
 //
 // If the provided sender does not match either pattern, return it unchanged.
 std::string UnpackPrivateTopic(base::StringPiece private_topic) {
-  if (private_topic.starts_with("/topics/private/")) {
-    return private_topic.substr(strlen("/topics")).as_string();
-  } else if (private_topic.starts_with("/topics/")) {
-    return private_topic.substr(strlen("/topics/")).as_string();
+  if (base::StartsWith(private_topic, "/topics/private/")) {
+    return std::string(private_topic.substr(strlen("/topics")));
+  } else if (base::StartsWith(private_topic, "/topics/")) {
+    return std::string(private_topic.substr(strlen("/topics/")));
   } else {
-    return private_topic.as_string();
+    return std::string(private_topic);
   }
 }
 
@@ -138,13 +169,13 @@ FCMNetworkHandler::~FCMNetworkHandler() {
 }
 
 // static
-std::unique_ptr<syncer::FCMNetworkHandler> FCMNetworkHandler::Create(
+std::unique_ptr<FCMNetworkHandler> FCMNetworkHandler::Create(
     gcm::GCMDriver* gcm_driver,
     instance_id::InstanceIDDriver* instance_id_driver,
     const std::string& sender_id,
     const std::string& app_id) {
-  return std::make_unique<syncer::FCMNetworkHandler>(
-      gcm_driver, instance_id_driver, sender_id, app_id);
+  return std::make_unique<FCMNetworkHandler>(gcm_driver, instance_id_driver,
+                                             sender_id, app_id);
 }
 
 void FCMNetworkHandler::StartListening() {
@@ -157,8 +188,7 @@ void FCMNetworkHandler::StartListening() {
 
   diagnostic_info_.instance_id_token_requested = base::Time::Now();
   instance_id_driver_->GetInstanceID(app_id_)->GetToken(
-      sender_id_, kGCMScope,
-      /*options=*/std::map<std::string, std::string>(),
+      sender_id_, kGCMScope, GetTimeToLive(sender_id_),
       /*flags=*/{InstanceID::Flags::kIsLazy},
       base::BindRepeating(&FCMNetworkHandler::DidRetrieveToken,
                           weak_ptr_factory_.GetWeakPtr()));
@@ -206,8 +236,7 @@ void FCMNetworkHandler::ScheduleNextTokenValidation() {
   DCHECK(IsListening());
 
   token_validation_timer_->Start(
-      FROM_HERE,
-      base::TimeDelta::FromMinutes(kTokenValidationPeriodMinutesDefault),
+      FROM_HERE, base::Minutes(kTokenValidationPeriodMinutesDefault),
       base::BindOnce(&FCMNetworkHandler::StartTokenValidation,
                      weak_ptr_factory_.GetWeakPtr()));
 }
@@ -218,10 +247,10 @@ void FCMNetworkHandler::StartTokenValidation() {
   diagnostic_info_.instance_id_token_verification_requested = base::Time::Now();
   diagnostic_info_.token_validation_requested_num++;
   instance_id_driver_->GetInstanceID(app_id_)->GetToken(
-      sender_id_, kGCMScope, std::map<std::string, std::string>(),
+      sender_id_, kGCMScope, GetTimeToLive(sender_id_),
       /*flags=*/{InstanceID::Flags::kIsLazy},
-      base::Bind(&FCMNetworkHandler::DidReceiveTokenForValidation,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&FCMNetworkHandler::DidReceiveTokenForValidation,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void FCMNetworkHandler::DidReceiveTokenForValidation(
@@ -277,10 +306,7 @@ void FCMNetworkHandler::OnMessage(const std::string& app_id,
 
 void FCMNetworkHandler::OnMessagesDeleted(const std::string& app_id) {
   DCHECK_EQ(app_id, app_id_);
-  base::UmaHistogramBoolean("FCMInvalidations.FCMMessagesDeleted", true);
-  // Note: If this actually happens in practice, consider notifying the client
-  // that messages were deleted so it can act on it, e.g. in case of sync by
-  // triggering a GetUpdates.
+  // Note: As of 2020-02, this doesn't actually happen in practice.
 }
 
 void FCMNetworkHandler::OnSendError(
@@ -309,7 +335,8 @@ void FCMNetworkHandler::RequestDetailedStatus(
   callback.Run(diagnostic_info_.CollectDebugData());
 }
 
-FCMNetworkHandler::FCMNetworkHandlerDiagnostic::FCMNetworkHandlerDiagnostic() {}
+FCMNetworkHandler::FCMNetworkHandlerDiagnostic::FCMNetworkHandlerDiagnostic() =
+    default;
 
 base::DictionaryValue
 FCMNetworkHandler::FCMNetworkHandlerDiagnostic::CollectDebugData() const {
@@ -359,4 +386,4 @@ FCMNetworkHandler::FCMNetworkHandlerDiagnostic::RegistrationResultToString(
   }
 }
 
-}  // namespace syncer
+}  // namespace invalidation

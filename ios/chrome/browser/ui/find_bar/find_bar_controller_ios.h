@@ -7,14 +7,17 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/ui/find_bar/find_bar_consumer.h"
+
 @protocol BrowserCommands;
 @class FindBarViewController;
+@protocol FindInPageCommands;
 @class FindInPageModel;
 
-@interface FindBarControllerIOS : NSObject
+@interface FindBarControllerIOS : NSObject <FindBarConsumer>
 
-// The dispatcher for sending browser commands.
-@property(nonatomic, weak) id<BrowserCommands> dispatcher;
+// The command handler for all necessary commands
+@property(nonatomic, weak) id<FindInPageCommands> commandHandler;
 // The view controller containing all the buttons and textfields that is common
 // between iPhone and iPad.
 @property(nonatomic, strong, readonly)

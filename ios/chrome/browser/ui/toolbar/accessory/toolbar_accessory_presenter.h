@@ -18,6 +18,11 @@
 
 - (instancetype)init NS_UNAVAILABLE;
 
+- (BOOL)isPresentingViewController:(UIViewController*)viewController;
+
+// Whether the presenter is currently presenting a view
+@property(nonatomic, readonly, getter=isPresenting) BOOL presenting;
+
 // The main presented view.
 @property(nonatomic, strong, readonly) UIView* backgroundView;
 

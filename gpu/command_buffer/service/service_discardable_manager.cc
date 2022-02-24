@@ -25,7 +25,7 @@ size_t DiscardableCacheSizeLimit() {
 // sizes for 1-1.5 renderers. These will be updated as more types of data are
 // moved to this cache.
 #if defined(OS_ANDROID)
-  const size_t kLowEndCacheSizeBytes = 512 * 1024;
+  const size_t kLowEndCacheSizeBytes = 1024 * 1024;
   const size_t kNormalCacheSizeBytes = 128 * 1024 * 1024;
 #else
   const size_t kNormalCacheSizeBytes = 192 * 1024 * 1024;
@@ -57,8 +57,6 @@ size_t DiscardableCacheSizeLimitForPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
   switch (memory_pressure_level) {
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE:
-      // This function is only called with moderate or critical pressure.
-      NOTREACHED();
       return base_cache_limit;
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE:
       // With moderate pressure, shrink to 1/4 our normal size.
@@ -228,6 +226,18 @@ void ServiceDiscardableManager::OnTextureDeleted(
   found->second.handle.ForceDelete();
   total_size_ -= found->second.size;
   entries_.Erase(found);
+}
+
+void ServiceDiscardableManager::OnContextLost() {
+  auto iter = entries_.begin();
+  while (iter != entries_.end()) {
+    iter->second.handle.ForceDelete();
+    if (iter->second.unlocked_texture_ref)
+      iter->second.unlocked_texture_ref->ForceContextLost();
+
+    total_size_ -= iter->second.size;
+    iter = entries_.Erase(iter);
+  }
 }
 
 void ServiceDiscardableManager::OnTextureSizeChanged(

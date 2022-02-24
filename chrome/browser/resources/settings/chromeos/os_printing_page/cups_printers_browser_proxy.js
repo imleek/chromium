@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
+
 /**
  * @fileoverview A helper object used from the "CUPS printing" section to
  * interact with the browser. Used only on Chrome OS.
@@ -9,13 +11,12 @@
 
 /**
  * @typedef {{
+ *   isManaged: boolean,
  *   ppdManufacturer: string,
  *   ppdModel: string,
  *   printerAddress: string,
  *   printerDescription: string,
  *   printerId: string,
- *   printerManufacturer: string,
- *   printerModel: string,
  *   printerMakeAndModel: string,
  *   printerName: string,
  *   printerPPDPath: string,
@@ -27,20 +28,21 @@
  *   printerProtocol: string,
  *   printerQueue: string,
  *   printerStatus: string,
+ *   printServerUri: string,
  * }}
  *
  * Note: |printerPPDPath| refers to a PPD retrieved from the user at the
  * add-printer-manufacturer-model-dialog. |printerPpdReference| refers to either
  * information retrieved from the printer or resolved via ppd_provider.
  */
-let CupsPrinterInfo;
+export let CupsPrinterInfo;
 
 /**
  * @typedef {{
  *   printerList: !Array<!CupsPrinterInfo>,
  * }}
  */
-let CupsPrintersList;
+export let CupsPrintersList;
 
 /**
  * @typedef {{
@@ -48,7 +50,7 @@ let CupsPrintersList;
  *   manufacturers: Array<string>
  * }}
  */
-let ManufacturersInfo;
+export let ManufacturersInfo;
 
 /**
  * @typedef {{
@@ -56,12 +58,10 @@ let ManufacturersInfo;
  *   models: Array<string>
  * }}
  */
-let ModelsInfo;
+export let ModelsInfo;
 
 /**
  * @typedef {{
- *   manufacturer: string,
- *   model: string,
  *   makeAndModel: string,
  *   autoconf: boolean,
  *   ppdRefUserSuppliedPpdUrl: string,
@@ -69,7 +69,7 @@ let ModelsInfo;
  *   ppdReferenceResolved: boolean
  * }}
  */
-let PrinterMakeModel;
+export let PrinterMakeModel;
 
 /**
  * @typedef {{
@@ -77,14 +77,14 @@ let PrinterMakeModel;
  *   ppdModel: string
  * }}
  */
-let PrinterPpdMakeModel;
+export let PrinterPpdMakeModel;
 
 /**
  *  @enum {number}
  *  These values must be kept in sync with the PrinterSetupResult enum in
  *  chrome/browser/chromeos/printing/printer_configurer.h.
  */
-const PrinterSetupResult = {
+export const PrinterSetupResult = {
   FATAL_ERROR: 0,
   SUCCESS: 1,
   PRINTER_UNREACHABLE: 2,
@@ -102,181 +102,229 @@ const PrinterSetupResult = {
 };
 
 /**
+ *  @enum {number}
+ *  These values must be kept in sync with the PrintServerQueryResult enum in
+ *  /chrome/browser/ash/printing/server_printers_fetcher.h
+ */
+export const PrintServerResult = {
+  NO_ERRORS: 0,
+  INCORRECT_URL: 1,
+  CONNECTION_ERROR: 2,
+  HTTP_ERROR: 3,
+  CANNOT_PARSE_IPP_RESPONSE: 4,
+};
+
+/**
  * @typedef {{
  *   message: string
  * }}
  */
 let QueryFailure;
 
-cr.define('settings', function() {
   /** @interface */
-  class CupsPrintersBrowserProxy {
-    /**
-     * @return {!Promise<!CupsPrintersList>}
-     */
-    getCupsPrintersList() {}
-
-    /**
-     * @param {string} printerId
-     * @param {string} printerName
-     * @return {!Promise<!PrinterSetupResult>}
-     */
-    updateCupsPrinter(printerId, printerName) {}
-
-    /**
-     * @param {string} printerId
-     * @param {string} printerName
-     */
-    removeCupsPrinter(printerId, printerName) {}
-
-    /**
-     * @return {!Promise<string>} The full path of the printer PPD file.
-     */
-    getCupsPrinterPPDPath() {}
-
-    /**
-     * @param {!CupsPrinterInfo} newPrinter
-     * @return {!Promise<!PrinterSetupResult>}
-     */
-    addCupsPrinter(newPrinter) {}
-
-    /**
-     * @param {!CupsPrinterInfo} printer
-     * @return {!Promise<!PrinterSetupResult>}
-     */
-    reconfigureCupsPrinter(printer) {}
-
-    startDiscoveringPrinters() {}
-    stopDiscoveringPrinters() {}
-
-    /**
-     * @return {!Promise<!ManufacturersInfo>}
-     */
-    getCupsPrinterManufacturersList() {}
-
-    /**
-     * @param {string} manufacturer
-     * @return {!Promise<!ModelsInfo>}
-     */
-    getCupsPrinterModelsList(manufacturer) {}
-
-    /**
-     * @param {!CupsPrinterInfo} newPrinter
-     * @return {!Promise<!PrinterMakeModel>}
-     */
-    getPrinterInfo(newPrinter) {}
-
-    /**
-     * @param {string} printerId
-     * @return {!Promise<!PrinterPpdMakeModel>}
-     */
-    getPrinterPpdManufacturerAndModel(printerId) {}
-
-    /**
-     * @param{string} printerId
-     * @return {!Promise<!PrinterSetupResult>}
-     */
-    addDiscoveredPrinter(printerId) {}
-
-    /**
-     * Report to the handler that setup was cancelled.
-     * @param {!CupsPrinterInfo} newPrinter
-     */
-    cancelPrinterSetUp(newPrinter) {}
-
-    /**
-     * @param {string} ppdManufacturer
-     * @param {string} ppdModel
-     * @return {!Promise<string>} Returns the EULA URL of the printer. Returns
-     * an empty string if no EULA is required.
-     */
-    getEulaUrl(ppdManufacturer, ppdModel) {}
-  }
+export class CupsPrintersBrowserProxy {
+  /**
+   * @return {!Promise<!CupsPrintersList>}
+   */
+  getCupsSavedPrintersList() {}
 
   /**
-   * @implements {settings.CupsPrintersBrowserProxy}
+   * @return {!Promise<!CupsPrintersList>}
    */
-  class CupsPrintersBrowserProxyImpl {
-    /** @override */
-    getCupsPrintersList() {
-      return cr.sendWithPromise('getCupsPrintersList');
-    }
+  getCupsEnterprisePrintersList() {}
 
-    /** @override */
-    updateCupsPrinter(printerId, printerName) {
-      return cr.sendWithPromise('updateCupsPrinter', printerId, printerName);
-    }
+  /**
+   * @param {string} printerId
+   * @param {string} printerName
+   * @return {!Promise<!PrinterSetupResult>}
+   */
+  updateCupsPrinter(printerId, printerName) {}
 
-    /** @override */
-    removeCupsPrinter(printerId, printerName) {
-      chrome.send('removeCupsPrinter', [printerId, printerName]);
-    }
+  /**
+   * @param {string} printerId
+   * @param {string} printerName
+   */
+  removeCupsPrinter(printerId, printerName) {}
 
-    /** @override */
-    addCupsPrinter(newPrinter) {
-      return cr.sendWithPromise('addCupsPrinter', newPrinter);
-    }
+  /**
+   * @return {!Promise<string>} The full path of the printer PPD file.
+   */
+  getCupsPrinterPPDPath() {}
 
-    /** @override */
-    reconfigureCupsPrinter(printer) {
-      return cr.sendWithPromise('reconfigureCupsPrinter', printer);
-    }
+  /**
+   * @param {!CupsPrinterInfo} newPrinter
+   * @return {!Promise<!PrinterSetupResult>}
+   */
+  addCupsPrinter(newPrinter) {}
 
-    /** @override */
-    getCupsPrinterPPDPath() {
-      return cr.sendWithPromise('selectPPDFile');
-    }
+  /**
+   * @param {!CupsPrinterInfo} printer
+   * @return {!Promise<!PrinterSetupResult>}
+   */
+  reconfigureCupsPrinter(printer) {}
 
-    /** @override */
-    startDiscoveringPrinters() {
-      chrome.send('startDiscoveringPrinters');
-    }
+  startDiscoveringPrinters() {}
+  stopDiscoveringPrinters() {}
 
-    /** @override */
-    stopDiscoveringPrinters() {
-      chrome.send('stopDiscoveringPrinters');
-    }
+  /**
+   * @return {!Promise<!ManufacturersInfo>}
+   */
+  getCupsPrinterManufacturersList() {}
 
-    /** @override */
-    getCupsPrinterManufacturersList() {
-      return cr.sendWithPromise('getCupsPrinterManufacturersList');
-    }
+  /**
+   * @param {string} manufacturer
+   * @return {!Promise<!ModelsInfo>}
+   */
+  getCupsPrinterModelsList(manufacturer) {}
 
-    /** @override */
-    getCupsPrinterModelsList(manufacturer) {
-      return cr.sendWithPromise('getCupsPrinterModelsList', manufacturer);
-    }
+  /**
+   * @param {!CupsPrinterInfo} newPrinter
+   * @return {!Promise<!PrinterMakeModel>}
+   */
+  getPrinterInfo(newPrinter) {}
 
-    /** @override */
-    getPrinterInfo(newPrinter) {
-      return cr.sendWithPromise('getPrinterInfo', newPrinter);
-    }
+  /**
+   * @param {string} printerId
+   * @return {!Promise<!PrinterPpdMakeModel>}
+   */
+  getPrinterPpdManufacturerAndModel(printerId) {}
 
-    /** @override */
-    getPrinterPpdManufacturerAndModel(printerId) {
-      return cr.sendWithPromise('getPrinterPpdManufacturerAndModel', printerId);
-    }
+  /**
+   * @param{string} printerId
+   * @return {!Promise<!PrinterSetupResult>}
+   */
+  addDiscoveredPrinter(printerId) {}
 
-    /** @override */
-    addDiscoveredPrinter(printerId) {
-      return cr.sendWithPromise('addDiscoveredPrinter', printerId);
-    }
+  /**
+   * Report to the handler that setup was cancelled.
+   * @param {!CupsPrinterInfo} newPrinter
+   */
+  cancelPrinterSetUp(newPrinter) {}
 
-    /** @override */
-    cancelPrinterSetUp(newPrinter) {
-      chrome.send('cancelPrinterSetUp', [newPrinter]);
-    }
+  /**
+   * @param {string} ppdManufacturer
+   * @param {string} ppdModel
+   * @return {!Promise<string>} Returns the EULA URL of the printer. Returns
+   * an empty string if no EULA is required.
+   */
+  getEulaUrl(ppdManufacturer, ppdModel) {}
 
-    /** @override */
-    getEulaUrl(ppdManufacturer, ppdModel) {
-      return cr.sendWithPromise('getEulaUrl', ppdManufacturer, ppdModel);
-    }
+  /**
+   * Attempts to query the |serverUrl| and retrieve printers from the url.
+   * @param {string} serverUrl
+   * @return {!Promise<!CupsPrintersList>}
+   */
+  queryPrintServer(serverUrl) {}
+
+  /**
+   * Opens the print management app in its own window.
+   */
+  openPrintManagementApp() {}
+
+  /**
+   * Opens the Scanning app in its own window.
+   */
+  openScanningApp() {}
+}
+
+/**
+ * @implements {CupsPrintersBrowserProxy}
+ */
+export class CupsPrintersBrowserProxyImpl {
+  /** @override */
+  getCupsSavedPrintersList() {
+    return sendWithPromise('getCupsSavedPrintersList');
   }
 
-  cr.addSingletonGetter(CupsPrintersBrowserProxyImpl);
+  /** @override */
+  getCupsEnterprisePrintersList() {
+    return sendWithPromise('getCupsEnterprisePrintersList');
+  }
 
-  return {
-    CupsPrintersBrowserProxy: CupsPrintersBrowserProxy,
-    CupsPrintersBrowserProxyImpl: CupsPrintersBrowserProxyImpl,
-  };
-});
+  /** @override */
+  updateCupsPrinter(printerId, printerName) {
+    return sendWithPromise('updateCupsPrinter', printerId, printerName);
+  }
+
+  /** @override */
+  removeCupsPrinter(printerId, printerName) {
+    chrome.send('removeCupsPrinter', [printerId, printerName]);
+  }
+
+  /** @override */
+  addCupsPrinter(newPrinter) {
+    return sendWithPromise('addCupsPrinter', newPrinter);
+  }
+
+  /** @override */
+  reconfigureCupsPrinter(printer) {
+    return sendWithPromise('reconfigureCupsPrinter', printer);
+  }
+
+  /** @override */
+  getCupsPrinterPPDPath() {
+    return sendWithPromise('selectPPDFile');
+  }
+
+  /** @override */
+  startDiscoveringPrinters() {
+    chrome.send('startDiscoveringPrinters');
+  }
+
+  /** @override */
+  stopDiscoveringPrinters() {
+    chrome.send('stopDiscoveringPrinters');
+  }
+
+  /** @override */
+  getCupsPrinterManufacturersList() {
+    return sendWithPromise('getCupsPrinterManufacturersList');
+  }
+
+  /** @override */
+  getCupsPrinterModelsList(manufacturer) {
+    return sendWithPromise('getCupsPrinterModelsList', manufacturer);
+  }
+
+  /** @override */
+  getPrinterInfo(newPrinter) {
+    return sendWithPromise('getPrinterInfo', newPrinter);
+  }
+
+  /** @override */
+  getPrinterPpdManufacturerAndModel(printerId) {
+    return sendWithPromise('getPrinterPpdManufacturerAndModel', printerId);
+  }
+
+  /** @override */
+  addDiscoveredPrinter(printerId) {
+    return sendWithPromise('addDiscoveredPrinter', printerId);
+  }
+
+  /** @override */
+  cancelPrinterSetUp(newPrinter) {
+    chrome.send('cancelPrinterSetUp', [newPrinter]);
+  }
+
+  /** @override */
+  getEulaUrl(ppdManufacturer, ppdModel) {
+    return sendWithPromise('getEulaUrl', ppdManufacturer, ppdModel);
+  }
+
+  /** @override */
+  queryPrintServer(serverUrl) {
+    return sendWithPromise('queryPrintServer', serverUrl);
+  }
+
+  /** @override */
+  openPrintManagementApp() {
+    chrome.send('openPrintManagementApp');
+  }
+
+  /** @override */
+  openScanningApp() {
+    chrome.send('openScanningApp');
+  }
+}
+
+addSingletonGetter(CupsPrintersBrowserProxyImpl);

@@ -14,22 +14,20 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
-#include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
-#include "components/invalidation/impl/invalidation_switches.h"
 #include "components/invalidation/public/identity_provider.h"
 #include "components/invalidation/public/invalidation_util.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "google_apis/gaia/gaia_constants.h"
 
-namespace syncer {
+namespace invalidation {
 
 namespace {
 
@@ -48,17 +46,16 @@ const char kActiveRegistrationTokens[] =
 const char kInvalidationRegistrationScope[] =
     "https://firebaseperusertopics-pa.googleapis.com";
 
-const char kFCMOAuthScope[] =
-    "https://www.googleapis.com/auth/firebase.messaging";
-
 // Note: Taking |topic| and |private_topic_name| by value (rather than const
 // ref) because the caller (in practice, SubscriptionEntry) may be destroyed by
 // the callback.
-using SubscriptionFinishedCallback =
-    base::OnceCallback<void(Topic topic,
-                            Status code,
-                            std::string private_topic_name,
-                            PerUserTopicRegistrationRequest::RequestType type)>;
+// This is a RepeatingCallback because in case of failure, the request will get
+// retried, so it might actually run multiple times.
+using SubscriptionFinishedCallback = base::RepeatingCallback<void(
+    Topic topic,
+    Status code,
+    std::string private_topic_name,
+    PerUserTopicSubscriptionRequest::RequestType type)>;
 
 static const net::BackoffEntry::Policy kBackoffPolicy = {
     // Number of initial errors (in sequence) to ignore before applying
@@ -163,32 +160,37 @@ enum class PerUserTopicSubscriptionManager::TokenStateOnSubscriptionRequest {
 struct PerUserTopicSubscriptionManager::SubscriptionEntry {
   SubscriptionEntry(const Topic& topic,
                     SubscriptionFinishedCallback completion_callback,
-                    PerUserTopicRegistrationRequest::RequestType type,
+                    PerUserTopicSubscriptionRequest::RequestType type,
                     bool topic_is_public = false);
+
+  SubscriptionEntry(const SubscriptionEntry&) = delete;
+  SubscriptionEntry& operator=(const SubscriptionEntry&) = delete;
+
+  // Destruction of this object causes cancellation of the request.
   ~SubscriptionEntry();
 
   void SubscriptionFinished(const Status& code,
                             const std::string& private_topic_name);
-  void Cancel();
 
   // The object for which this is the status.
   const Topic topic;
   const bool topic_is_public;
   SubscriptionFinishedCallback completion_callback;
-  PerUserTopicRegistrationRequest::RequestType type;
+  PerUserTopicSubscriptionRequest::RequestType type;
 
   base::OneShotTimer request_retry_timer_;
   net::BackoffEntry request_backoff_;
 
-  std::unique_ptr<PerUserTopicRegistrationRequest> request;
+  std::unique_ptr<PerUserTopicSubscriptionRequest> request;
+  std::string last_request_access_token;
 
-  DISALLOW_COPY_AND_ASSIGN(SubscriptionEntry);
+  bool has_retried_on_auth_error = false;
 };
 
 PerUserTopicSubscriptionManager::SubscriptionEntry::SubscriptionEntry(
     const Topic& topic,
     SubscriptionFinishedCallback completion_callback,
-    PerUserTopicRegistrationRequest::RequestType type,
+    PerUserTopicSubscriptionRequest::RequestType type,
     bool topic_is_public)
     : topic(topic),
       topic_is_public(topic_is_public),
@@ -196,22 +198,17 @@ PerUserTopicSubscriptionManager::SubscriptionEntry::SubscriptionEntry(
       type(type),
       request_backoff_(&kBackoffPolicy) {}
 
-PerUserTopicSubscriptionManager::SubscriptionEntry::~SubscriptionEntry() {}
+PerUserTopicSubscriptionManager::SubscriptionEntry::~SubscriptionEntry() =
+    default;
 
 void PerUserTopicSubscriptionManager::SubscriptionEntry::SubscriptionFinished(
     const Status& code,
     const std::string& topic_name) {
-  if (completion_callback)
-    std::move(completion_callback).Run(topic, code, topic_name, type);
-}
-
-void PerUserTopicSubscriptionManager::SubscriptionEntry::Cancel() {
-  request_retry_timer_.Stop();
-  request.reset();
+  completion_callback.Run(topic, code, topic_name, type);
 }
 
 PerUserTopicSubscriptionManager::PerUserTopicSubscriptionManager(
-    invalidation::IdentityProvider* identity_provider,
+    IdentityProvider* identity_provider,
     PrefService* pref_service,
     network::mojom::URLLoaderFactory* url_loader_factory,
     const std::string& project_id,
@@ -223,12 +220,12 @@ PerUserTopicSubscriptionManager::PerUserTopicSubscriptionManager(
       migrate_prefs_(migrate_prefs),
       request_access_token_backoff_(&kBackoffPolicy) {}
 
-PerUserTopicSubscriptionManager::~PerUserTopicSubscriptionManager() {}
+PerUserTopicSubscriptionManager::~PerUserTopicSubscriptionManager() = default;
 
 // static
 std::unique_ptr<PerUserTopicSubscriptionManager>
 PerUserTopicSubscriptionManager::Create(
-    invalidation::IdentityProvider* identity_provider,
+    IdentityProvider* identity_provider,
     PrefService* pref_service,
     network::mojom::URLLoaderFactory* url_loader_factory,
     const std::string& project_id,
@@ -250,13 +247,12 @@ void PerUserTopicSubscriptionManager::Init() {
 
   std::vector<std::string> keys_to_remove;
   // Load subscribed topics from prefs.
-  for (const auto& it : update->DictItems()) {
+  for (auto it : update->DictItems()) {
     Topic topic = it.first;
-    std::string private_topic_name;
-    if (it.second.GetAsString(&private_topic_name) &&
-        !private_topic_name.empty()) {
-      topic_to_private_topic_[topic] = private_topic_name;
-      private_topic_to_topic_[private_topic_name] = topic;
+    const std::string* private_topic_name = it.second.GetIfString();
+    if (private_topic_name && !private_topic_name->empty()) {
+      topic_to_private_topic_[topic] = *private_topic_name;
+      private_topic_to_topic_[*private_topic_name] = topic;
     } else {
       // Couldn't decode the pref value; remove it.
       keys_to_remove.push_back(topic);
@@ -277,20 +273,25 @@ void PerUserTopicSubscriptionManager::UpdateSubscribedTopics(
   DropAllSavedSubscriptionsOnTokenChange();
 
   for (const auto& topic : topics) {
+    auto it = pending_subscriptions_.find(topic.first);
+    if (it != pending_subscriptions_.end() &&
+        it->second->type == PerUserTopicSubscriptionRequest::SUBSCRIBE) {
+      // Do not update SubscriptionEntry if there is no changes, to not loose
+      // backoff timer.
+      continue;
+    }
+
     // If the topic isn't subscribed yet, schedule the subscription.
     if (topic_to_private_topic_.find(topic.first) ==
         topic_to_private_topic_.end()) {
-      // If there's already a pending request for this topic, cancel it first.
-      auto it = pending_subscriptions_.find(topic.first);
-      if (it != pending_subscriptions_.end())
-        it->second->Cancel();
-
+      // If there was already a pending unsubscription request for this topic,
+      // it'll get destroyed and replaced by the new one.
       pending_subscriptions_[topic.first] = std::make_unique<SubscriptionEntry>(
           topic.first,
-          base::BindOnce(
+          base::BindRepeating(
               &PerUserTopicSubscriptionManager::SubscriptionFinishedForTopic,
               base::Unretained(this)),
-          PerUserTopicRegistrationRequest::SUBSCRIBE, topic.second.is_public);
+          PerUserTopicSubscriptionRequest::SUBSCRIBE, topic.second.is_public);
     }
   }
 
@@ -301,14 +302,20 @@ void PerUserTopicSubscriptionManager::UpdateSubscribedTopics(
        it != topic_to_private_topic_.end();) {
     Topic topic = it->first;
     if (topics.find(topic) == topics.end()) {
-      // TODO(crbug.com/1020117): If there's already a pending request for this
-      // topic, we should probably cancel it first?
+      // Unsubscription request may only replace pending subscription request,
+      // because topic immediately deleted from |topic_to_private_topic_| when
+      // unsubsciption request scheduled.
+      DCHECK(pending_subscriptions_.count(topic) == 0 ||
+             pending_subscriptions_[topic]->type ==
+                 PerUserTopicSubscriptionRequest::SUBSCRIBE);
+      // If there was already a pending request for this topic, it'll get
+      // destroyed and replaced by the new one.
       pending_subscriptions_[topic] = std::make_unique<SubscriptionEntry>(
           topic,
-          base::BindOnce(
+          base::BindRepeating(
               &PerUserTopicSubscriptionManager::SubscriptionFinishedForTopic,
               base::Unretained(this)),
-          PerUserTopicRegistrationRequest::UNSUBSCRIBE);
+          PerUserTopicSubscriptionRequest::UNSUBSCRIBE);
       private_topic_to_topic_.erase(it->second);
       it = topic_to_private_topic_.erase(it);
       // The decision to unsubscribe from invalidations for |topic| was
@@ -320,12 +327,20 @@ void PerUserTopicSubscriptionManager::UpdateSubscribedTopics(
       ++it;
     }
   }
+  // There might be pending subscriptions for topics which are no longer
+  // needed, but they could be in half-completed state (i.e. request already
+  // sent to the server). To reduce subscription leaks they are allowed to
+  // proceed and unsubscription requests will be scheduled by the next
+  // UpdateSubscribedTopics() call after they successfully completed.
 
-  // Kick off the process of actually processing the (un)subscriptions we just
-  // scheduled.
-  // TODO(crbug.com/1020117): Only do this if we actually scheduled anything,
-  // i.e. |pending_subscriptions_| is not empty.
-  RequestAccessToken();
+  if (!pending_subscriptions_.empty()) {
+    // Kick off the process of actually processing the (un)subscriptions we just
+    // scheduled.
+    RequestAccessToken();
+  } else {
+    // No work to be done, emit ENABLED.
+    NotifySubscriptionChannelStateChange(SubscriptionChannelState::ENABLED);
+  }
 }
 
 void PerUserTopicSubscriptionManager::ClearInstanceIDToken() {
@@ -349,10 +364,17 @@ void PerUserTopicSubscriptionManager::StartPendingSubscriptionRequest(
                  << " which is not in the registration map";
     return;
   }
-  PerUserTopicRegistrationRequest::Builder builder;
-  // Resetting request in case it's running.
-  // TODO(crbug.com/1020117): Should probably call it->second->Cancel() instead.
-  it->second->request.reset();
+  if (it->second->request_retry_timer_.IsRunning()) {
+    // A retry is already scheduled for this request; nothing to do.
+    return;
+  }
+  if (it->second->request &&
+      it->second->last_request_access_token == access_token_) {
+    // The request with the same access token was already sent; nothing to do.
+    return;
+  }
+  PerUserTopicSubscriptionRequest::Builder builder;
+  it->second->last_request_access_token = access_token_;
   it->second->request = builder.SetInstanceIdToken(instance_id_token_)
                             .SetScope(kInvalidationRegistrationScope)
                             .SetPublicTopicName(topic)
@@ -372,11 +394,11 @@ void PerUserTopicSubscriptionManager::StartPendingSubscriptionRequest(
 void PerUserTopicSubscriptionManager::ActOnSuccessfulSubscription(
     const Topic& topic,
     const std::string& private_topic_name,
-    PerUserTopicRegistrationRequest::RequestType type) {
+    PerUserTopicSubscriptionRequest::RequestType type) {
   auto it = pending_subscriptions_.find(topic);
   it->second->request_backoff_.InformOfRequest(true);
   pending_subscriptions_.erase(it);
-  if (type == PerUserTopicRegistrationRequest::SUBSCRIBE) {
+  if (type == PerUserTopicSubscriptionRequest::SUBSCRIBE) {
     // If this was a subscription, update the prefs now (if it was an
     // unsubscription, we've already updated the prefs when scheduling the
     // request).
@@ -392,62 +414,83 @@ void PerUserTopicSubscriptionManager::ActOnSuccessfulSubscription(
   // pending.
   bool all_subscriptions_completed = true;
   for (const auto& entry : pending_subscriptions_) {
-    if (entry.second->type == PerUserTopicRegistrationRequest::SUBSCRIBE) {
+    if (entry.second->type == PerUserTopicSubscriptionRequest::SUBSCRIBE) {
       all_subscriptions_completed = false;
     }
   }
-  // Emit ENABLED once we recovered from failed request.
-  if (all_subscriptions_completed &&
-      base::FeatureList::IsEnabled(
-          invalidation::switches::kFCMInvalidationsConservativeEnabling)) {
+  // Emit ENABLED once all requests have finished.
+  if (all_subscriptions_completed) {
     NotifySubscriptionChannelStateChange(SubscriptionChannelState::ENABLED);
   }
 }
 
 void PerUserTopicSubscriptionManager::ScheduleRequestForRepetition(
     const Topic& topic) {
-  pending_subscriptions_[topic]->completion_callback = base::BindOnce(
-      &PerUserTopicSubscriptionManager::SubscriptionFinishedForTopic,
-      base::Unretained(this));
-  // TODO(crbug.com/1020117): We already called InformOfRequest(false) before in
-  // SubscriptionFinishedForTopic(), should probably not call it again here?
   pending_subscriptions_[topic]->request_backoff_.InformOfRequest(false);
+  // Schedule RequestAccessToken() to ensure that request is performed with
+  // fresh access token. There should be no redundant request: the identity
+  // code requests new access token from the network only if the old one
+  // expired; StartPendingSubscriptionRequest() guarantees that no redundant
+  // (un)subscribe requests performed.
   pending_subscriptions_[topic]->request_retry_timer_.Start(
       FROM_HERE,
       pending_subscriptions_[topic]->request_backoff_.GetTimeUntilRelease(),
-      base::BindRepeating(
-          &PerUserTopicSubscriptionManager::StartPendingSubscriptionRequest,
-          base::Unretained(this), topic));
+      base::BindOnce(&PerUserTopicSubscriptionManager::RequestAccessToken,
+                     base::Unretained(this)));
 }
 
 void PerUserTopicSubscriptionManager::SubscriptionFinishedForTopic(
     Topic topic,
     Status code,
     std::string private_topic_name,
-    PerUserTopicRegistrationRequest::RequestType type) {
+    PerUserTopicSubscriptionRequest::RequestType type) {
   if (code.IsSuccess()) {
     ActOnSuccessfulSubscription(topic, private_topic_name, type);
-  } else {
-    auto it = pending_subscriptions_.find(topic);
-    it->second->request_backoff_.InformOfRequest(false);
-    if (code.IsAuthFailure()) {
-      // Re-request access token and try subscription requests again.
-      RequestAccessToken();
-    } else {
-      // If one of the subscription requests failed, emit SUBSCRIPTION_FAILURE.
-      if (type == PerUserTopicRegistrationRequest::SUBSCRIBE &&
-          base::FeatureList::IsEnabled(
-              invalidation::switches::kFCMInvalidationsConservativeEnabling)) {
-        NotifySubscriptionChannelStateChange(
-            SubscriptionChannelState::SUBSCRIPTION_FAILURE);
-      }
-      if (!code.ShouldRetry()) {
-        pending_subscriptions_.erase(it);
-        return;
-      }
-      ScheduleRequestForRepetition(topic);
-    }
+    return;
   }
+
+  auto it = pending_subscriptions_.find(topic);
+  // Reset |request| to make sure it will be rescheduled during the next
+  // attempt.
+  it->second->request.reset();
+  // If this is the first auth error we've encountered, then most likely the
+  // access token has just expired. Get a new one and retry immediately.
+  if (code.IsAuthFailure() && !it->second->has_retried_on_auth_error) {
+    it->second->has_retried_on_auth_error = true;
+    // Invalidate previous token if it's not already refreshed, otherwise
+    // the identity provider will return the same token again.
+    if (!access_token_.empty() &&
+        it->second->last_request_access_token == access_token_) {
+      identity_provider_->InvalidateAccessToken({GaiaConstants::kFCMOAuthScope},
+                                                access_token_);
+      access_token_.clear();
+    }
+    // Re-request access token and try subscription requests again.
+    RequestAccessToken();
+    return;
+  }
+
+  // If one of the subscription requests failed (and we need to either observe
+  // backoff before retrying, or won't retry at all), emit SUBSCRIPTION_FAILURE.
+  if (type == PerUserTopicSubscriptionRequest::SUBSCRIBE) {
+    // TODO(crbug.com/1020117): case !code.ShouldRetry() now leads to
+    // inconsistent behavior depending on requests completion order: if any
+    // request was successful after it, we may have no |pending_subscriptions_|
+    // and emit ENABLED; otherwise, if failed request is the last one, state
+    // would be SUBSCRIPTION_FAILURE.
+    NotifySubscriptionChannelStateChange(
+        SubscriptionChannelState::SUBSCRIPTION_FAILURE);
+  }
+  if (!code.ShouldRetry()) {
+    // Note: This is a pretty bad (and "silent") failure case. The subscription
+    // will generally not be retried until the next Chrome restart (or user
+    // sign-out + re-sign-in).
+    DVLOG(1) << "Got a persistent error while trying to subscribe to topic "
+             << topic << ", giving up.";
+    pending_subscriptions_.erase(it);
+    return;
+  }
+  ScheduleRequestForRepetition(topic);
 }
 
 TopicSet PerUserTopicSubscriptionManager::GetSubscribedTopicsForTest() const {
@@ -467,23 +510,19 @@ void PerUserTopicSubscriptionManager::RemoveObserver(Observer* observer) {
 }
 
 void PerUserTopicSubscriptionManager::RequestAccessToken() {
-  // TODO(crbug.com/1020117): Implement traffic optimisation.
-  // * Before sending request to server ask for access token from identity
-  //   provider (don't invalidate previous token).
-  //   Identity provider will take care of retrieving/caching.
-  // * Only invalidate access token when server didn't accept it.
-
   // Only one active request at a time.
-  if (access_token_fetcher_ != nullptr)
+  if (access_token_fetcher_ != nullptr) {
     return;
-  request_access_token_retry_timer_.Stop();
-  OAuth2AccessTokenManager::ScopeSet oauth2_scopes = {kFCMOAuthScope};
-  // Invalidate previous token, otherwise the identity provider will return the
-  // same token again.
-  identity_provider_->InvalidateAccessToken(oauth2_scopes, access_token_);
+  }
+  if (request_access_token_retry_timer_.IsRunning()) {
+    // Previous access token request failed and new request shouldn't be issued
+    // until backoff timer passed.
+    return;
+  }
+
   access_token_.clear();
   access_token_fetcher_ = identity_provider_->FetchAccessToken(
-      "fcm_invalidation", oauth2_scopes,
+      "fcm_invalidation", {GaiaConstants::kFCMOAuthScope},
       base::BindOnce(
           &PerUserTopicSubscriptionManager::OnAccessTokenRequestCompleted,
           base::Unretained(this)));
@@ -502,12 +541,8 @@ void PerUserTopicSubscriptionManager::OnAccessTokenRequestCompleted(
 void PerUserTopicSubscriptionManager::OnAccessTokenRequestSucceeded(
     const std::string& access_token) {
   // Reset backoff time after successful response.
-  request_access_token_backoff_.Reset();
+  request_access_token_backoff_.InformOfRequest(/*succeeded=*/true);
   access_token_ = access_token;
-  // Emit ENABLED when successfully got the token.
-  // TODO(crbug.com/1020117): This seems wrong; we generally emit ENABLED only
-  // when all subscriptions have successfully completed.
-  NotifySubscriptionChannelStateChange(SubscriptionChannelState::ENABLED);
   StartPendingSubscriptions();
 }
 
@@ -519,8 +554,8 @@ void PerUserTopicSubscriptionManager::OnAccessTokenRequestFailed(
   request_access_token_backoff_.InformOfRequest(false);
   request_access_token_retry_timer_.Start(
       FROM_HERE, request_access_token_backoff_.GetTimeUntilRelease(),
-      base::BindRepeating(&PerUserTopicSubscriptionManager::RequestAccessToken,
-                          base::Unretained(this)));
+      base::BindOnce(&PerUserTopicSubscriptionManager::RequestAccessToken,
+                     base::Unretained(this)));
 }
 
 void PerUserTopicSubscriptionManager::DropAllSavedSubscriptionsOnTokenChange() {
@@ -557,10 +592,6 @@ PerUserTopicSubscriptionManager::DropAllSavedSubscriptionsOnTokenChangeImpl() {
   *update = base::Value(base::Value::Type::DICTIONARY);
   topic_to_private_topic_.clear();
   private_topic_to_topic_.clear();
-  // Also cancel any pending subscription requests.
-  for (const auto& pending_subscription : pending_subscriptions_) {
-    pending_subscription.second->Cancel();
-  }
   pending_subscriptions_.clear();
   return instance_id_token_.empty()
              ? TokenStateOnSubscriptionRequest::kTokenCleared
@@ -594,14 +625,14 @@ base::DictionaryValue PerUserTopicSubscriptionManager::CollectDebugData()
   return status;
 }
 
-base::Optional<Topic>
+absl::optional<Topic>
 PerUserTopicSubscriptionManager::LookupSubscribedPublicTopicByPrivateTopic(
     const std::string& private_topic) const {
   auto it = private_topic_to_topic_.find(private_topic);
   if (it == private_topic_to_topic_.end()) {
-    return base::nullopt;
+    return absl::nullopt;
   }
   return it->second;
 }
 
-}  // namespace syncer
+}  // namespace invalidation

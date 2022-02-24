@@ -10,8 +10,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "base/strings/char_traits.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "components/viz/service/display/static_geometry_binding.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -21,8 +24,8 @@
 
 constexpr base::StringPiece StripLambda(base::StringPiece shader) {
   // Must contain at least "[]() {}".
-  DCHECK(shader.starts_with("[]() {"));
-  DCHECK(shader.ends_with("}"));
+  DCHECK_EQ(shader.substr(0, 6), "[]() {");
+  DCHECK_EQ(shader.back(), '}');
   shader.remove_prefix(6);
   shader.remove_suffix(1);
   return shader;
@@ -630,10 +633,8 @@ void FragmentShader::SetRoundedCornerFunctions(
       "#else\n"
       "  #define RoundedCornerPrecision mediump\n"
       "#endif\n";
-  kUniforms.AppendToString(&shader);
-  kFunctionRcUtility.AppendToString(&shader);
-  kFunctionApplyRoundedCorner.AppendToString(&shader);
-  shader += *shader_string;
+  base::StrAppend(&shader, {kUniforms, kFunctionRcUtility,
+                            kFunctionApplyRoundedCorner, *shader_string});
   *shader_string = std::move(shader);
 }
 
@@ -679,9 +680,8 @@ void FragmentShader::SetBlendModeFunctions(std::string* shader_string) const {
   shader += "precision mediump float;";
   AppendHelperFunctions(&shader);
   AppendBlendFunction(&shader);
-  kUniforms.AppendToString(&shader);
-  function_apply_blend_mode.AppendToString(&shader);
-  shader += *shader_string;
+  base::StrAppend(&shader,
+                  {kUniforms, function_apply_blend_mode, *shader_string});
   *shader_string = std::move(shader);
 }
 
@@ -829,25 +829,27 @@ void FragmentShader::AppendHelperFunctions(std::string* buffer) const {
   switch (blend_mode_) {
     case BLEND_MODE_OVERLAY:
     case BLEND_MODE_HARD_LIGHT:
-      kFunctionHardLight.AppendToString(buffer);
+      buffer->append(kFunctionHardLight.data(), kFunctionHardLight.size());
       return;
     case BLEND_MODE_COLOR_DODGE:
-      kFunctionColorDodgeComponent.AppendToString(buffer);
+      buffer->append(kFunctionColorDodgeComponent.data(),
+                     kFunctionColorDodgeComponent.size());
       return;
     case BLEND_MODE_COLOR_BURN:
-      kFunctionColorBurnComponent.AppendToString(buffer);
+      buffer->append(kFunctionColorBurnComponent.data(),
+                     kFunctionColorBurnComponent.size());
       return;
     case BLEND_MODE_SOFT_LIGHT:
-      kFunctionSoftLightComponentPosDstAlpha.AppendToString(buffer);
+      buffer->append(kFunctionSoftLightComponentPosDstAlpha.data(),
+                     kFunctionSoftLightComponentPosDstAlpha.size());
       return;
     case BLEND_MODE_HUE:
     case BLEND_MODE_SATURATION:
-      kFunctionLum.AppendToString(buffer);
-      kFunctionSat.AppendToString(buffer);
+      base::StrAppend(buffer, {kFunctionLum, kFunctionSat});
       return;
     case BLEND_MODE_COLOR:
     case BLEND_MODE_LUMINOSITY:
-      kFunctionLum.AppendToString(buffer);
+      buffer->append(kFunctionLum.data(), kFunctionLum.size());
       return;
     default:
       return;
@@ -858,8 +860,8 @@ void FragmentShader::AppendBlendFunction(std::string* buffer) const {
   *buffer +=
       "vec4 Blend(vec4 src, vec4 dst) {"
       "    vec4 result;";
-  GetBlendFunctionBodyForAlpha().AppendToString(buffer);
-  GetBlendFunctionBodyForRGB().AppendToString(buffer);
+  base::StrAppend(
+      buffer, {GetBlendFunctionBodyForAlpha(), GetBlendFunctionBodyForRGB()});
   *buffer +=
       "    return result;"
       "}";

@@ -4,8 +4,9 @@
 
 import sys
 
+import mako.runtime
 import mako.template
-
+import mako.util
 
 _MAKO_TEMPLATE_PASS_KEY = object()
 
@@ -38,8 +39,30 @@ class MakoRenderer(object):
     """Represents a renderer object implemented with Mako templates."""
 
     def __init__(self):
+        self._text_buffer = None
+        self._is_invalidated = False
         self._caller_stack = []
         self._caller_stack_on_error = []
+
+    def reset(self):
+        """
+        Resets the rendering states of this object.  Must be called before
+        the first call to |render| or |render_text|.
+        """
+        self._text_buffer = mako.util.FastEncodingBuffer()
+        self._is_invalidated = False
+
+    def is_rendering_complete(self):
+        return not (self._is_invalidated or self._text_buffer is None
+                    or self._caller_stack)
+
+    def invalidate_rendering_result(self):
+        self._is_invalidated = True
+
+    def to_text(self):
+        """Returns the rendering result."""
+        assert self._text_buffer is not None
+        return self._text_buffer.getvalue()
 
     def render(self, caller, template, template_vars):
         """
@@ -63,7 +86,9 @@ class MakoRenderer(object):
         try:
             mako_template = template.mako_template(
                 pass_key=_MAKO_TEMPLATE_PASS_KEY)
-            text = mako_template.render(**template_vars)
+            mako_context = mako.runtime.Context(self._text_buffer,
+                                                **template_vars)
+            mako_template.render_context(mako_context)
         except:
             # Print stacktrace of template rendering.
             sys.stderr.write("\n")
@@ -80,7 +105,7 @@ class MakoRenderer(object):
             on_error = self._caller_stack_on_error
             if (len(current) <= len(on_error)
                     and all(current[i] == on_error[i]
-                            for i in xrange(len(current)))):
+                            for i in range(len(current)))):
                 pass  # Error happened in a deeper caller.
             else:
                 self._caller_stack_on_error = list(self._caller_stack)
@@ -89,7 +114,16 @@ class MakoRenderer(object):
         finally:
             self._caller_stack.pop()
 
-        return text
+    def render_text(self, text):
+        """Renders a plain text as is."""
+        assert isinstance(text, str)
+        self._text_buffer.write(text)
+
+    def push_caller(self, caller):
+        self._caller_stack.append(caller)
+
+    def pop_caller(self):
+        self._caller_stack.pop()
 
     @property
     def callers_from_first_to_last(self):
@@ -132,7 +166,7 @@ def _guess_caller_name(caller):
     """Returns the best-guessed name of |caller|."""
     try:
         # Outer CodeNode may have a binding to the caller.
-        for name, value in caller.outer.template_vars.iteritems():
+        for name, value in caller.outer.template_vars.items():
             if value is caller:
                 return name
         try:

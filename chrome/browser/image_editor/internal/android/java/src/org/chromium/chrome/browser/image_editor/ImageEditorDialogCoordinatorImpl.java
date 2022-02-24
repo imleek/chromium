@@ -4,7 +4,11 @@
 
 package org.chromium.chrome.browser.image_editor;
 
-import android.support.v7.app.AppCompatActivity;
+import android.app.Activity;
+import android.graphics.Bitmap;
+
+import org.chromium.chrome.browser.share.share_sheet.ChromeOptionShareCallback;
+import org.chromium.chrome.browser.tab.Tab;
 
 /**
  * Upstream implementation for ImageEditorDialogCoordinator. Does nothing. Actual implementation
@@ -12,5 +16,6 @@ import android.support.v7.app.AppCompatActivity;
  */
 public class ImageEditorDialogCoordinatorImpl implements ImageEditorDialogCoordinator {
     @Override
-    public void launchEditor(AppCompatActivity activity) {}
+    public void launchEditor(Activity activity, Bitmap image, Tab tab,
+            ChromeOptionShareCallback chromeOptionShareCallback) {}
 }

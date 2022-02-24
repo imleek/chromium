@@ -7,6 +7,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "content/public/test/browser_task_environment.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "storage/browser/blob/blob_storage_context.h"
@@ -25,14 +26,19 @@ constexpr uint64_t kTestBlobStorageMaxDiskSpace = 1000;
 }  // namespace
 
 class WebBundleBlobDataSourceTest : public testing::Test {
+ public:
+  WebBundleBlobDataSourceTest(const WebBundleBlobDataSourceTest&) = delete;
+  WebBundleBlobDataSourceTest& operator=(const WebBundleBlobDataSourceTest&) =
+      delete;
+
  protected:
   WebBundleBlobDataSourceTest() = default;
   ~WebBundleBlobDataSourceTest() override = default;
   void SetUp() override {
     ASSERT_TRUE(data_dir_.CreateUniqueTempDir());
     context_ = std::make_unique<storage::BlobStorageContext>(
-        data_dir_.GetPath(),
-        base::CreateTaskRunner({base::ThreadPool(), base::MayBlock()}));
+        data_dir_.GetPath(), data_dir_.GetPath(),
+        base::ThreadPool::CreateTaskRunner({base::MayBlock()}));
     storage::BlobStorageLimits limits;
     limits.max_ipc_memory_size = kTestBlobStorageMaxBytesDataItemSize;
     limits.max_shared_memory_size = kTestBlobStorageMaxBytesDataItemSize;
@@ -47,12 +53,11 @@ class WebBundleBlobDataSourceTest : public testing::Test {
 
   std::unique_ptr<WebBundleBlobDataSource> CreateTestDataSource(
       const std::string& test_data,
-      mojo::Remote<data_decoder::mojom::BundleDataSource>* remote_source,
-      base::Optional<int64_t> content_length = base::nullopt) {
+      mojo::Remote<web_package::mojom::BundleDataSource>* remote_source,
+      absl::optional<int64_t> content_length = absl::nullopt) {
     mojo::ScopedDataPipeProducerHandle producer;
     mojo::ScopedDataPipeConsumerHandle consumer;
-    CHECK_EQ(MOJO_RESULT_OK,
-             mojo::CreateDataPipe(nullptr, &producer, &consumer));
+    CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, producer, consumer));
     mojo::BlockingCopyFromString(test_data, producer);
     producer.reset();
 
@@ -75,22 +80,21 @@ class WebBundleBlobDataSourceTest : public testing::Test {
 
   base::ScopedTempDir data_dir_;
   BrowserTaskEnvironment task_environment_;
-  DISALLOW_COPY_AND_ASSIGN(WebBundleBlobDataSourceTest);
 };
 
 TEST_F(WebBundleBlobDataSourceTest, Read) {
   const std::string kData = "Test Data";
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(kData, &remote_source);
 
   base::RunLoop run_loop;
-  base::Optional<std::vector<uint8_t>> read_result;
+  absl::optional<std::vector<uint8_t>> read_result;
   remote_source->Read(
       1, 3,
       base::BindOnce(
           [](base::OnceClosure closure,
-             base::Optional<std::vector<uint8_t>>* read_result,
-             const base::Optional<std::vector<uint8_t>>& result) {
+             absl::optional<std::vector<uint8_t>>* read_result,
+             const absl::optional<std::vector<uint8_t>>& result) {
             *read_result = result;
             std::move(closure).Run();
           },
@@ -105,17 +109,17 @@ TEST_F(WebBundleBlobDataSourceTest, Read) {
 
 TEST_F(WebBundleBlobDataSourceTest, Read_EndOfSourceReached) {
   const std::string kData = "Test Data";
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(kData, &remote_source);
 
   base::RunLoop run_loop;
-  base::Optional<std::vector<uint8_t>> read_result;
+  absl::optional<std::vector<uint8_t>> read_result;
   remote_source->Read(
       6, 100,
       base::BindOnce(
           [](base::OnceClosure closure,
-             base::Optional<std::vector<uint8_t>>* read_result,
-             const base::Optional<std::vector<uint8_t>>& result) {
+             absl::optional<std::vector<uint8_t>>* read_result,
+             const absl::optional<std::vector<uint8_t>>& result) {
             *read_result = result;
             std::move(closure).Run();
           },
@@ -129,17 +133,17 @@ TEST_F(WebBundleBlobDataSourceTest, Read_EndOfSourceReached) {
 
 TEST_F(WebBundleBlobDataSourceTest, Read_OutOfRangeError) {
   const std::string kData = "Test Data";
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(kData, &remote_source);
 
   base::RunLoop run_loop;
-  base::Optional<std::vector<uint8_t>> read_result;
+  absl::optional<std::vector<uint8_t>> read_result;
   remote_source->Read(
       10, 100,
       base::BindOnce(
           [](base::OnceClosure closure,
-             base::Optional<std::vector<uint8_t>>* read_result,
-             const base::Optional<std::vector<uint8_t>>& result) {
+             absl::optional<std::vector<uint8_t>>* read_result,
+             const absl::optional<std::vector<uint8_t>>& result) {
             *read_result = result;
             std::move(closure).Run();
           },
@@ -150,17 +154,17 @@ TEST_F(WebBundleBlobDataSourceTest, Read_OutOfRangeError) {
 
 TEST_F(WebBundleBlobDataSourceTest, Read_ContentLengthTooSmall) {
   const std::string kData = "Test Data";
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(kData, &remote_source, kData.size() - 1);
 
   base::RunLoop run_loop;
-  base::Optional<std::vector<uint8_t>> read_result;
+  absl::optional<std::vector<uint8_t>> read_result;
   remote_source->Read(
       0, kData.size(),
       base::BindOnce(
           [](base::OnceClosure closure,
-             base::Optional<std::vector<uint8_t>>* read_result,
-             const base::Optional<std::vector<uint8_t>>& result) {
+             absl::optional<std::vector<uint8_t>>* read_result,
+             const absl::optional<std::vector<uint8_t>>& result) {
             *read_result = result;
             std::move(closure).Run();
           },
@@ -173,17 +177,17 @@ TEST_F(WebBundleBlobDataSourceTest, Read_ContentLengthTooSmall) {
 
 TEST_F(WebBundleBlobDataSourceTest, Read_ContentLengthTooLarge) {
   const std::string kData = "Test Data";
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(kData, &remote_source, kData.size() + 1);
 
   base::RunLoop run_loop;
-  base::Optional<std::vector<uint8_t>> read_result;
+  absl::optional<std::vector<uint8_t>> read_result;
   remote_source->Read(
       0, kData.size() + 1,
       base::BindOnce(
           [](base::OnceClosure closure,
-             base::Optional<std::vector<uint8_t>>* read_result,
-             const base::Optional<std::vector<uint8_t>>& result) {
+             absl::optional<std::vector<uint8_t>>* read_result,
+             const absl::optional<std::vector<uint8_t>>& result) {
             *read_result = result;
             std::move(closure).Run();
           },
@@ -198,17 +202,17 @@ TEST_F(WebBundleBlobDataSourceTest, Read_NoStorage) {
   std::string content = "Test Data";
   // Make the content larger than the disk space.
   content.resize(kTestBlobStorageMaxDiskSpace + 1, ' ');
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(content, &remote_source);
 
   base::RunLoop run_loop;
-  base::Optional<std::vector<uint8_t>> read_result;
+  absl::optional<std::vector<uint8_t>> read_result;
   remote_source->Read(
       1, 100,
       base::BindOnce(
           [](base::OnceClosure closure,
-             base::Optional<std::vector<uint8_t>>* read_result,
-             const base::Optional<std::vector<uint8_t>>& result) {
+             absl::optional<std::vector<uint8_t>>* read_result,
+             const absl::optional<std::vector<uint8_t>>& result) {
             *read_result = result;
             std::move(closure).Run();
           },
@@ -219,14 +223,14 @@ TEST_F(WebBundleBlobDataSourceTest, Read_NoStorage) {
 
 TEST_F(WebBundleBlobDataSourceTest, ReadToDataPipe) {
   const std::string kData = "Test Data";
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(kData, &remote_source);
 
   base::RunLoop run_loop;
 
   mojo::ScopedDataPipeProducerHandle producer;
   mojo::ScopedDataPipeConsumerHandle consumer;
-  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, &producer, &consumer));
+  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, producer, consumer));
 
   net::Error read_response_body_result = net::ERR_FAILED;
   source->ReadToDataPipe(
@@ -249,14 +253,14 @@ TEST_F(WebBundleBlobDataSourceTest, ReadToDataPipe) {
 
 TEST_F(WebBundleBlobDataSourceTest, ReadToDataPipe_EndOfSourceReached) {
   const std::string kData = "Test Data";
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(kData, &remote_source);
 
   base::RunLoop run_loop;
 
   mojo::ScopedDataPipeProducerHandle producer;
   mojo::ScopedDataPipeConsumerHandle consumer;
-  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, &producer, &consumer));
+  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, producer, consumer));
 
   net::Error read_response_body_result = net::ERR_FAILED;
   source->ReadToDataPipe(
@@ -278,14 +282,14 @@ TEST_F(WebBundleBlobDataSourceTest, ReadToDataPipe_EndOfSourceReached) {
 
 TEST_F(WebBundleBlobDataSourceTest, ReadToDataPipe_OutOfRangeError) {
   const std::string kData = "Test Data";
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(kData, &remote_source);
 
   base::RunLoop run_loop;
 
   mojo::ScopedDataPipeProducerHandle producer;
   mojo::ScopedDataPipeConsumerHandle consumer;
-  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, &producer, &consumer));
+  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, producer, consumer));
 
   net::Error read_response_body_result = net::ERR_FAILED;
   source->ReadToDataPipe(
@@ -303,14 +307,14 @@ TEST_F(WebBundleBlobDataSourceTest, ReadToDataPipe_OutOfRangeError) {
 
 TEST_F(WebBundleBlobDataSourceTest, ReadToDataPipe_ContentLengthTooSmall) {
   const std::string kData = "Test Data";
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(kData, &remote_source, kData.size() - 1);
 
   base::RunLoop run_loop;
 
   mojo::ScopedDataPipeProducerHandle producer;
   mojo::ScopedDataPipeConsumerHandle consumer;
-  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, &producer, &consumer));
+  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, producer, consumer));
 
   net::Error read_response_body_result = net::OK;
   source->ReadToDataPipe(
@@ -332,14 +336,14 @@ TEST_F(WebBundleBlobDataSourceTest, ReadToDataPipe_ContentLengthTooSmall) {
 
 TEST_F(WebBundleBlobDataSourceTest, ReadToDataPipe_ContentLengthTooLarge) {
   const std::string kData = "Test Data";
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(kData, &remote_source, kData.size() + 1);
 
   base::RunLoop run_loop;
 
   mojo::ScopedDataPipeProducerHandle producer;
   mojo::ScopedDataPipeConsumerHandle consumer;
-  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, &producer, &consumer));
+  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, producer, consumer));
 
   net::Error read_response_body_result = net::OK;
   source->ReadToDataPipe(
@@ -363,14 +367,14 @@ TEST_F(WebBundleBlobDataSourceTest, ReadToDataPipe_NoStorage) {
   std::string content = "Test Data";
   // Make the content larger than the disk space.
   content.resize(kTestBlobStorageMaxDiskSpace + 1, ' ');
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(content, &remote_source);
 
   base::RunLoop run_loop;
 
   mojo::ScopedDataPipeProducerHandle producer;
   mojo::ScopedDataPipeConsumerHandle consumer;
-  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, &producer, &consumer));
+  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, producer, consumer));
 
   net::Error read_response_body_result = net::OK;
   source->ReadToDataPipe(
@@ -388,14 +392,14 @@ TEST_F(WebBundleBlobDataSourceTest, ReadToDataPipe_NoStorage) {
 
 TEST_F(WebBundleBlobDataSourceTest, ReadToDataPipe_Destructed) {
   const std::string kData = "Test Data";
-  mojo::Remote<data_decoder::mojom::BundleDataSource> remote_source;
+  mojo::Remote<web_package::mojom::BundleDataSource> remote_source;
   auto source = CreateTestDataSource(kData, &remote_source);
 
   base::RunLoop run_loop;
 
   mojo::ScopedDataPipeProducerHandle producer;
   mojo::ScopedDataPipeConsumerHandle consumer;
-  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, &producer, &consumer));
+  CHECK_EQ(MOJO_RESULT_OK, mojo::CreateDataPipe(nullptr, producer, consumer));
 
   net::Error read_response_body_result = net::OK;
   source->ReadToDataPipe(

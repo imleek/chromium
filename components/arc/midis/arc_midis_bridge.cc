@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "base/memory/singleton.h"
-#include "chromeos/dbus/arc_midis_client.h"
+#include "chromeos/dbus/arc/arc_midis_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/session/arc_bridge_service.h"
@@ -46,6 +46,12 @@ ArcMidisBridge* ArcMidisBridge::GetForBrowserContext(
   return ArcMidisBridgeFactory::GetForBrowserContext(context);
 }
 
+// static
+ArcMidisBridge* ArcMidisBridge::GetForBrowserContextForTesting(
+    content::BrowserContext* context) {
+  return ArcMidisBridgeFactory::GetForBrowserContextForTesting(context);
+}
+
 ArcMidisBridge::ArcMidisBridge(content::BrowserContext* context,
                                ArcBridgeService* bridge_service)
     : arc_bridge_service_(bridge_service) {
@@ -57,8 +63,8 @@ ArcMidisBridge::~ArcMidisBridge() {
 }
 
 void ArcMidisBridge::OnBootstrapMojoConnection(
-    mojom::MidisServerRequest request,
-    mojom::MidisClientPtr client_ptr,
+    mojo::PendingReceiver<mojom::MidisServer> receiver,
+    mojo::PendingRemote<mojom::MidisClient> client_remote,
     bool result) {
   if (!result) {
     LOG(ERROR) << "ArcMidisBridge had a failure in D-Bus with the daemon.";
@@ -70,14 +76,15 @@ void ArcMidisBridge::OnBootstrapMojoConnection(
     return;
   }
   DVLOG(1) << "ArcMidisBridge succeeded with Mojo bootstrapping.";
-  midis_host_remote_->Connect(std::move(request), std::move(client_ptr));
+  midis_host_remote_->Connect(std::move(receiver), std::move(client_remote));
 }
 
-void ArcMidisBridge::Connect(mojom::MidisServerRequest request,
-                             mojom::MidisClientPtr client_ptr) {
+void ArcMidisBridge::Connect(
+    mojo::PendingReceiver<mojom::MidisServer> receiver,
+    mojo::PendingRemote<mojom::MidisClient> client_remote) {
   if (midis_host_remote_.is_bound()) {
     DVLOG(1) << "Re-using bootstrap connection for MidisServer Connect.";
-    midis_host_remote_->Connect(std::move(request), std::move(client_ptr));
+    midis_host_remote_->Connect(std::move(receiver), std::move(client_remote));
     return;
   }
   DVLOG(1) << "Bootstrapping the Midis connection via D-Bus.";
@@ -101,8 +108,8 @@ void ArcMidisBridge::Connect(mojom::MidisServerRequest request,
       ->BootstrapMojoConnection(
           channel.TakeRemoteEndpoint().TakePlatformHandle().TakeFD(),
           base::BindOnce(&ArcMidisBridge::OnBootstrapMojoConnection,
-                         weak_factory_.GetWeakPtr(), std::move(request),
-                         std::move(client_ptr)));
+                         weak_factory_.GetWeakPtr(), std::move(receiver),
+                         std::move(client_remote)));
 }
 
 void ArcMidisBridge::OnMojoConnectionError() {

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,27 +7,35 @@
 
 #include <memory>
 
-#include "base/macros.h"
+#include "base/containers/small_map.h"
 #include "media/gpu/chromeos/image_processor_backend.h"
 #include "media/gpu/media_gpu_export.h"
+#include "ui/gfx/gpu_memory_buffer.h"
 
 namespace media {
 
 class VaapiWrapper;
+class VASurface;
 
 // ImageProcessor that is hardware accelerated with VA-API. This ImageProcessor
-// supports DmaBuf only for both input and output.
+// supports only dma-buf and GpuMemoryBuffer VideoFrames for both input and
+// output.
 class VaapiImageProcessorBackend : public ImageProcessorBackend {
  public:
-  // Factory method to create VaapiImageProcessorBackend for a buffer conversion
-  // specified by |input_config| and |output_config|. Provided |error_cb| will
-  // be posted to the same thread that executes Create(), if an error occurs
+  VaapiImageProcessorBackend(const VaapiImageProcessorBackend&) = delete;
+  VaapiImageProcessorBackend& operator=(const VaapiImageProcessorBackend&) =
+      delete;
+
+  // Factory method to create a VaapiImageProcessorBackend for processing frames
+  // as specified by |input_config| and |output_config|. The provided |error_cb|
+  // will be posted to the same thread that executes Create() if an error occurs
   // after initialization.
-  // Returns nullptr if it fails to create VaapiImageProcessorBackend.
+  // Returns nullptr if it fails to create a VaapiImageProcessorBackend.
   static std::unique_ptr<ImageProcessorBackend> Create(
       const PortConfig& input_config,
       const PortConfig& output_config,
       const std::vector<OutputMode>& preferred_output_modes,
+      VideoRotation relative_rotation,
       ErrorCB error_cb,
       scoped_refptr<base::SequencedTaskRunner> backend_task_runner);
 
@@ -35,20 +43,31 @@ class VaapiImageProcessorBackend : public ImageProcessorBackend {
   void Process(scoped_refptr<VideoFrame> input_frame,
                scoped_refptr<VideoFrame> output_frame,
                FrameReadyCB cb) override;
+  void Reset() override;
 
  private:
   VaapiImageProcessorBackend(
-      scoped_refptr<VaapiWrapper> vaapi_wrapper,
       const PortConfig& input_config,
       const PortConfig& output_config,
       OutputMode output_mode,
+      VideoRotation relative_rotation,
       ErrorCB error_cb,
       scoped_refptr<base::SequencedTaskRunner> backend_task_runner);
   ~VaapiImageProcessorBackend() override;
 
-  const scoped_refptr<VaapiWrapper> vaapi_wrapper_;
+  const VASurface* GetSurfaceForVideoFrame(scoped_refptr<VideoFrame> frame,
+                                           bool use_protected);
 
-  DISALLOW_COPY_AND_ASSIGN(VaapiImageProcessorBackend);
+  scoped_refptr<VaapiWrapper> vaapi_wrapper_;
+  bool needs_context_ = false;
+
+  // VASurfaces are created via importing dma-bufs into libva using
+  // |vaapi_wrapper_|->CreateVASurfaceForPixmap(). The following map keeps those
+  // VASurfaces for reuse according to the expectations of libva
+  // vaDestroySurfaces(): "Surfaces can only be destroyed after all contexts
+  // using these surfaces have been destroyed."
+  base::small_map<std::map<gfx::GpuMemoryBufferId, scoped_refptr<VASurface>>>
+      allocated_va_surfaces_;
 };
 
 }  // namespace media

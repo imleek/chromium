@@ -6,7 +6,8 @@ package org.chromium.weblayer.test;
 
 import android.os.Bundle;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
+
+import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -108,14 +109,34 @@ public class CrashReporterTest {
             crashReporterController.checkForPendingCrashReports();
         });
         // Expect that a Bundle containing { "foo": "bar" } is returned.
-        callbackHelper.waitForCallback(callbackHelper.getCallCount());
+        callbackHelper.waitForFirst();
         Bundle crashKeys = callbackHelper.getResult();
         Assert.assertArrayEquals(crashKeys.keySet().toArray(new String[0]), new String[] {"foo"});
         Assert.assertEquals(crashKeys.getString("foo"), "bar");
 
         // Expect that the crash report and its sidecar are deleted.
-        deleteHelper.waitForCallback(deleteHelper.getCallCount());
+        deleteHelper.waitForFirst();
         Assert.assertFalse(mCrashReport.exists());
         Assert.assertFalse(mCrashSidecar.exists());
+    }
+
+    @MinWebLayerVersion(88) // Fix first appeared in 88.
+    @Test
+    @SmallTest
+    public void testBogusCrashId() throws Exception {
+        CallbackHelper callbackHelper = new CallbackHelper();
+        InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl("about:blank");
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            CrashReporterController crashReporterController =
+                    CrashReporterController.getInstance(activity);
+            crashReporterController.registerCallback(new CrashReporterCallback() {
+                @Override
+                public void onCrashUploadFailed(String localId, String message) {
+                    callbackHelper.notifyCalled();
+                }
+            });
+            crashReporterController.uploadCrash("bogus-crash-id");
+        });
+        callbackHelper.waitForFirst();
     }
 }

@@ -10,7 +10,6 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
-#include "base/task/post_task.h"
 #include "base/values.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -41,7 +40,6 @@ HeadlessDevToolsClient::CreateWithExternalHost(ExternalHost* external_host) {
 HeadlessDevToolsClientImpl::HeadlessDevToolsClientImpl()
     : accessibility_domain_(this),
       animation_domain_(this),
-      application_cache_domain_(this),
       browser_domain_(this),
       cache_storage_domain_(this),
       console_domain_(this),
@@ -86,8 +84,7 @@ void HeadlessDevToolsClientImpl::AttachToExternalHost(
 }
 
 void HeadlessDevToolsClientImpl::InitBrowserMainThread() {
-  browser_main_thread_ =
-      base::CreateSingleThreadTaskRunner({content::BrowserThread::UI});
+  browser_main_thread_ = content::GetUIThreadTaskRunner({});
 }
 
 void HeadlessDevToolsClientImpl::ChannelClosed() {
@@ -322,10 +319,6 @@ animation::Domain* HeadlessDevToolsClientImpl::GetAnimation() {
   return &animation_domain_;
 }
 
-application_cache::Domain* HeadlessDevToolsClientImpl::GetApplicationCache() {
-  return &application_cache_domain_;
-}
-
 browser::Domain* HeadlessDevToolsClientImpl::GetBrowser() {
   return &browser_domain_;
 }
@@ -490,7 +483,7 @@ void HeadlessDevToolsClientImpl::SendMessageWithParams(
     CallbackType callback) {
   base::DictionaryValue message;
   message.SetString("method", method);
-  message.Set("params", std::move(params));
+  message.SetKey("params", base::Value::FromUniquePtrValue(std::move(params)));
   FinalizeAndSendMessage(&message, std::move(callback));
 }
 

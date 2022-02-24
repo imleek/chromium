@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #include "base/command_line.h"
-#include "base/stl_util.h"
+#include "base/cxx17_backports.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
@@ -3120,7 +3120,8 @@ TEST_P(GLES2DecoderTest, CreateAndTexStorage2DSharedImageCHROMIUM) {
       GetSharedImageManager()->Register(
           std::make_unique<TestSharedImageBacking>(
               mailbox, viz::ResourceFormat::RGBA_8888, gfx::Size(10, 10),
-              gfx::ColorSpace(), 0, 0, kNewServiceId),
+              gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
+              0, 0, kNewServiceId),
           &memory_tracker);
 
   auto& cmd = *GetImmediateAs<
@@ -3181,7 +3182,8 @@ TEST_P(GLES2DecoderTest,
       GetSharedImageManager()->Register(
           std::make_unique<TestSharedImageBacking>(
               mailbox, viz::ResourceFormat::RGBA_8888, gfx::Size(10, 10),
-              gfx::ColorSpace(), 0, 0, kNewServiceId),
+              gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
+              0, 0, kNewServiceId),
           &memory_tracker);
 
   auto& cmd = *GetImmediateAs<
@@ -3204,7 +3206,8 @@ TEST_P(GLES2DecoderTest, BeginEndSharedImageAccessCRHOMIUM) {
       GetSharedImageManager()->Register(
           std::make_unique<TestSharedImageBacking>(
               mailbox, viz::ResourceFormat::RGBA_8888, gfx::Size(10, 10),
-              gfx::ColorSpace(), 0, 0, kNewServiceId),
+              gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
+              0, 0, kNewServiceId),
           &memory_tracker);
 
   auto& cmd = *GetImmediateAs<
@@ -3262,7 +3265,8 @@ TEST_P(GLES2DecoderTest, BeginSharedImageAccessDirectCHROMIUMCantBeginAccess) {
   Mailbox mailbox = Mailbox::GenerateForSharedImage();
   auto shared_image_backing = std::make_unique<TestSharedImageBacking>(
       mailbox, viz::ResourceFormat::RGBA_8888, gfx::Size(10, 10),
-      gfx::ColorSpace(), 0, 0, kNewServiceId);
+      gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, 0, 0,
+      kNewServiceId);
   // Set the shared image to fail BeginAccess.
   shared_image_backing->set_can_access(false);
   std::unique_ptr<SharedImageRepresentationFactoryRef> shared_image =
@@ -3625,14 +3629,6 @@ class MockGLImage : public gl::GLImage {
   MOCK_METHOD1(CopyTexImage, bool(unsigned));
   MOCK_METHOD3(CopyTexSubImage,
                bool(unsigned, const gfx::Point&, const gfx::Rect&));
-  MOCK_METHOD7(ScheduleOverlayPlane,
-               bool(gfx::AcceleratedWidget,
-                    int,
-                    gfx::OverlayTransform,
-                    const gfx::Rect&,
-                    const gfx::RectF&,
-                    bool,
-                    std::unique_ptr<gfx::GpuFence> gpu_fence));
   MOCK_METHOD1(SetColorSpace, void(const gfx::ColorSpace&));
   MOCK_METHOD0(Flush, void());
   MOCK_METHOD3(OnMemoryDump,
@@ -4020,23 +4016,20 @@ TEST_P(GLES2DecoderManualInitTest, TexImage2DFloatConvertsFormatDesktop) {
                                     GL_LUMINANCE_ALPHA32F_ARB);
 }
 
-TEST_P(GLES2DecoderManualInitTest, TexImage2Dnorm16OnGLES2) {
-  InitState init;
-  init.extensions = "GL_EXT_texture_norm16";
-  init.gl_version = "OpenGL ES 2.0";
-  InitDecoder(init);
-  DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
-  DoTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 16, 17, 0, GL_RED, GL_UNSIGNED_SHORT,
-               0, 0);
-}
-
 TEST_P(GLES2DecoderManualInitTest, TexImage2Dnorm16OnGLES3) {
   InitState init;
   init.extensions = "GL_EXT_texture_norm16";
   init.gl_version = "OpenGL ES 3.0";
+  init.context_type = CONTEXT_TYPE_OPENGLES3;
   InitDecoder(init);
   DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
   DoTexImage2D(GL_TEXTURE_2D, 0, GL_R16_EXT, 16, 17, 0, GL_RED,
+               GL_UNSIGNED_SHORT, 0, 0);
+  DoTexImage2D(GL_TEXTURE_2D, 0, GL_RG16_EXT, 16, 17, 0, GL_RG,
+               GL_UNSIGNED_SHORT, 0, 0);
+  DoTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16_EXT, 16, 17, 0, GL_RGB,
+               GL_UNSIGNED_SHORT, 0, 0);
+  DoTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16_EXT, 16, 17, 0, GL_RGBA,
                GL_UNSIGNED_SHORT, 0, 0);
 }
 
@@ -4158,6 +4151,22 @@ TEST_P(GLES2DecoderCompressedFormatsTest, GetCompressedTextureFormatsASTC) {
   CheckFormats("GL_KHR_texture_compression_astc_ldr", formats, 28);
 }
 
+TEST_P(GLES2DecoderCompressedFormatsTest, GetCompressedTextureFormatsBPTC) {
+  const GLenum formats[] = {GL_COMPRESSED_RGBA_BPTC_UNORM_EXT,
+                            GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_EXT,
+                            GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_EXT,
+                            GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT};
+  CheckFormats("GL_EXT_texture_compression_bptc", formats, 4);
+}
+
+TEST_P(GLES2DecoderCompressedFormatsTest, GetCompressedTextureFormatsRGTC) {
+  const GLenum formats[] = {GL_COMPRESSED_RED_RGTC1_EXT,
+                            GL_COMPRESSED_SIGNED_RED_RGTC1_EXT,
+                            GL_COMPRESSED_RED_GREEN_RGTC2_EXT,
+                            GL_COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT};
+  CheckFormats("GL_EXT_texture_compression_rgtc", formats, 4);
+}
+
 TEST_P(GLES2DecoderManualInitTest, GetNoCompressedTextureFormats) {
   InitState init;
   init.bind_generates_resource = true;
@@ -4204,7 +4213,7 @@ TEST_P(GLES2DecoderManualInitTest, TexStorageInvalidLevels) {
   cmds::TexStorage2DEXT cmd;
   cmd.Init(GL_TEXTURE_RECTANGLE_ARB, 2, GL_RGBA8, 4, 4);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_INVALID_VALUE, GetGLError());
+  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
 }
 
 TEST_P(GLES2DecoderManualInitTest, TexStorageInvalidSize) {

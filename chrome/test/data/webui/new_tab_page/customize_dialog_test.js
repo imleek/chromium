@@ -2,256 +2,182 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://new-tab-page/customize_dialog.js';
+import 'chrome://new-tab-page/lazy_load.js';
 
-import {BrowserProxy} from 'chrome://new-tab-page/browser_proxy.js';
-import {assertStyle, TestProxy} from 'chrome://test/new_tab_page/test_support.js';
-import {flushTasks} from 'chrome://test/test_util.m.js';
+import {CustomizeDialogPage, NewTabPageProxy} from 'chrome://new-tab-page/new_tab_page.js';
+import {installMock} from 'chrome://test/new_tab_page/test_support.js';
+import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.js';
+import {flushTasks, waitAfterNextRender} from 'chrome://test/test_util.js';
 
 suite('NewTabPageCustomizeDialogTest', () => {
-  /** @type {TestProxy} */
-  let testProxy;
+  /** @type {!CustomizeDialogElement} */
+  let customizeDialog;
 
-  /** @return {!CustomizeDialogElement} */
-  function createCustomizeDialog() {
-    const customizeDialog = document.createElement('ntp-customize-dialog');
-    document.body.appendChild(customizeDialog);
-    return customizeDialog;
-  }
-
-
-  /** @return {!CustomizeDialogElement} */
-  function createCustomizeDialogWithThemes(themes) {
-    const customizeInfo = Promise.resolve({
-      info: {
-        currentTheme: {type: newTabPage.mojom.ThemeType.DEFAULT},
-        chromeThemes: themes,
-      },
-    });
-    testProxy.handler.setResultFor('getCustomizeInfo', customizeInfo);
-    return createCustomizeDialog();
-  }
+  /** @type {!TestBrowserProxy} */
+  let handler;
 
   setup(() => {
     PolymerTest.clearBody();
 
-    testProxy = new TestProxy();
-    BrowserProxy.instance_ = testProxy;
-  });
-
-  test('opening dialog shows theme tiles', async () => {
-    // Act.
-    const themes = [
-      {
-        id: 0,
-        label: 'theme_0',
-        colors: {
-          frame: {value: 0x000000},      // white.
-          activeTab: {value: 0x0000ff},  // blue.
-        },
-      },
-      {
-        id: 1,
-        label: 'theme_1',
-        colors: {
-          frame: {value: 0xff0000},      // red.
-          activeTab: {value: 0x00ff00},  // green.
-        },
-      },
-    ];
-    testProxy.handler.setResultFor('getCustomizeInfo', Promise.resolve({
-      info: {
-        currentTheme: {type: newTabPage.mojom.ThemeType.DEFAULT},
-        chromeThemes: themes
-      }
+    handler = installMock(
+        newTabPage.mojom.PageHandlerRemote,
+        mock => NewTabPageProxy.setInstance(
+            mock, new newTabPage.mojom.PageCallbackRouter()));
+    handler.setResultFor('getMostVisitedSettings', Promise.resolve({
+      customLinksEnabled: false,
+      shortcutsVisible: false,
     }));
-    const getCustomizeInfoCalled =
-        testProxy.handler.whenCalled('getCustomizeInfo');
+    handler.setResultFor('getBackgroundCollections', Promise.resolve({
+      collections: [],
+    }));
+    handler.setResultFor('getBackgroundImages', Promise.resolve({
+      images: [],
+    }));
 
+    customizeDialog = document.createElement('ntp-customize-dialog');
+    document.body.appendChild(customizeDialog);
+    return flushTasks();
+  });
+
+  test('creating customize dialog opens cr dialog', () => {
+    // Assert.
+    assertTrue(customizeDialog.$.dialog.open);
+  });
+
+  test('background page selected at start', () => {
+    // Assert.
+    const shownPages =
+        customizeDialog.shadowRoot.querySelectorAll('#pages .iron-selected');
+    assertEquals(shownPages.length, 1);
+    assertEquals(
+        shownPages[0].getAttribute('page-name'),
+        CustomizeDialogPage.BACKGROUNDS);
+  });
+
+  test('selecting page shows page', () => {
     // Act.
-    const customizeDialog = createCustomizeDialogWithThemes(themes);
-    await getCustomizeInfoCalled;
+    customizeDialog.selectedPage = CustomizeDialogPage.MODULES;
+
+    // Assert.
+    const shownPages =
+        customizeDialog.shadowRoot.querySelectorAll('#pages .iron-selected');
+    assertEquals(shownPages.length, 1);
+    assertEquals(
+        shownPages[0].getAttribute('page-name'), CustomizeDialogPage.MODULES);
+  });
+
+  test('selecting menu item shows page', async () => {
+    // Act.
+    customizeDialog.$.menu.querySelector('[page-name=themes]').click();
     await flushTasks();
 
     // Assert.
-    const tiles = customizeDialog.shadowRoot.querySelectorAll('ntp-theme-icon');
-    assertEquals(tiles.length, 4);
-    assertEquals(tiles[2].getAttribute('title'), 'theme_0');
-    assertStyle(tiles[2], '--ntp-theme-icon-frame-color', 'rgb(0, 0, 0)');
-    assertStyle(
-        tiles[2], '--ntp-theme-icon-active-tab-color', 'rgb(0, 0, 255)');
-    assertEquals(tiles[3].getAttribute('title'), 'theme_1');
-    assertStyle(tiles[3], '--ntp-theme-icon-frame-color', 'rgb(255, 0, 0)');
-    assertStyle(
-        tiles[3], '--ntp-theme-icon-active-tab-color', 'rgb(0, 255, 0)');
-  });
-
-  test('clicking default theme calls applying default theme', async () => {
-    // Arrange.
-    const customizeDialog = createCustomizeDialog();
-    const applyDefaultThemeCalled =
-        testProxy.handler.whenCalled('applyDefaultTheme');
-
-    // Act.
-    customizeDialog.$.defaultTheme.click();
-
-    // Assert.
-    await applyDefaultThemeCalled;
-  });
-
-  test('selecting color calls applying autogenerated theme', async () => {
-    // Arrange.
-    const customizeDialog = createCustomizeDialog();
-    const applyAutogeneratedThemeCalled =
-        testProxy.handler.whenCalled('applyAutogeneratedTheme');
-
-    // Act.
-    customizeDialog.$.colorPicker.value = '#ff0000';
-    customizeDialog.$.colorPicker.dispatchEvent(new Event('change'));
-
-    // Assert.
-    const {value} = await applyAutogeneratedThemeCalled;
-    assertEquals(value, 0xffff0000);
-  });
-
-  test('setting autogenerated theme selects and updates icon', async () => {
-    // Arrange.
-    const customizeDialog = createCustomizeDialog();
-
-    // Act.
-    testProxy.callbackRouterRemote.setTheme({
-      type: newTabPage.mojom.ThemeType.AUTOGENERATED,
-      info: {
-        autogeneratedThemeColors: {
-          frame: {value: 0xff0000},
-          activeTab: {value: 0x0000ff},
-        },
-      },
-    });
-    await testProxy.callbackRouterRemote.$.flushForTesting();
-
-    // Assert.
-    const selectedIcons =
-        customizeDialog.shadowRoot.querySelectorAll('ntp-theme-icon[selected]');
-    assertEquals(selectedIcons.length, 1);
-    assertEquals(selectedIcons[0], customizeDialog.$.autogeneratedTheme);
-    assertStyle(
-        selectedIcons[0], '--ntp-theme-icon-frame-color', 'rgb(255, 0, 0)');
-    assertStyle(
-        selectedIcons[0], '--ntp-theme-icon-active-tab-color',
-        'rgb(0, 0, 255)');
-  });
-
-  test('setting default theme selects and updates icon', async () => {
-    // Arrange.
-    const customizeDialog = createCustomizeDialog();
-
-    // Act.
-    testProxy.callbackRouterRemote.setTheme({
-      type: newTabPage.mojom.ThemeType.DEFAULT,
-      info: {chromeThemeId: 0},
-    });
-    await testProxy.callbackRouterRemote.$.flushForTesting();
-
-    // Assert.
-    const selectedIcons =
-        customizeDialog.shadowRoot.querySelectorAll('ntp-theme-icon[selected]');
-    assertEquals(selectedIcons.length, 1);
-    assertEquals(selectedIcons[0], customizeDialog.$.defaultTheme);
-  });
-
-  test('setting Chrome theme selects and updates icon', async () => {
-    // Arrange.
-    const themes = [
-      {
-        id: 0,
-        label: 'foo',
-        colors: {
-          frame: {value: 0x000000},
-          activeTab: {value: 0x0000ff},
-        },
-      },
-    ];
-    const customizeDialog = createCustomizeDialogWithThemes(themes);
-
-    // Act.
-    testProxy.callbackRouterRemote.setTheme({
-      type: newTabPage.mojom.ThemeType.CHROME,
-      info: {chromeThemeId: 0},
-    });
-    await testProxy.callbackRouterRemote.$.flushForTesting();
-    await flushTasks();
-
-    // Assert.
-    const selectedIcons =
-        customizeDialog.shadowRoot.querySelectorAll('ntp-theme-icon[selected]');
-    assertEquals(selectedIcons.length, 1);
-    assertEquals(selectedIcons[0].getAttribute('title'), 'foo');
-  });
-
-  test('setting third-party theme shows uninstall UI', async () => {
-    // Arrange.
-    const customizeDialog = createCustomizeDialog();
-
-    // Act.
-    testProxy.callbackRouterRemote.setTheme({
-      type: newTabPage.mojom.ThemeType.THIRD_PARTY,
-      info: {
-        thirdPartyThemeInfo: {
-          id: 'foo',
-          name: 'bar',
-        },
-      }
-    });
-    await testProxy.callbackRouterRemote.$.flushForTesting();
-
-    // Assert.
-    assertStyle(customizeDialog.$.thirdPartyThemeContainer, 'display', 'block');
+    const shownPages =
+        customizeDialog.shadowRoot.querySelectorAll('#pages .iron-selected');
+    assertEquals(shownPages.length, 1);
     assertEquals(
-        customizeDialog.$.thirdPartyThemeName.textContent.trim(), 'bar');
-    assertEquals(
-        customizeDialog.$.thirdPartyLink.getAttribute('href'),
-        'https://chrome.google.com/webstore/detail/foo');
+        shownPages[0].getAttribute('page-name'), CustomizeDialogPage.THEMES);
   });
 
-  test('setting non-third-party theme hides uninstall UI', async () => {
-    // Arrange.
-    const customizeDialog = createCustomizeDialog();
+  suite('scroll borders', () => {
+    /**
+     * @param {!HTMLElement} container
+     * @private
+     */
+    async function testScrollBorders(container) {
+      const assertHidden = el => {
+        assertTrue(el.matches('[scroll-border]:not([show])'));
+      };
+      const assertShown = el => {
+        assertTrue(el.matches('[scroll-border][show]'));
+      };
+      const {firstElementChild: top, lastElementChild: bottom} = container;
+      const scrollableElement = top.nextSibling;
+      const dialogBody =
+          customizeDialog.shadowRoot.querySelector('div[slot=body]');
+      const heightWithBorders = `${scrollableElement.scrollHeight + 2}px`;
+      dialogBody.style.height = heightWithBorders;
+      assertHidden(top);
+      assertHidden(bottom);
+      dialogBody.style.height = '50px';
+      await waitAfterNextRender();
+      assertHidden(top);
+      assertShown(bottom);
+      scrollableElement.scrollTop = 1;
+      await waitAfterNextRender();
+      assertShown(top);
+      assertShown(bottom);
+      scrollableElement.scrollTop = scrollableElement.scrollHeight;
+      await waitAfterNextRender();
+      assertShown(top);
+      assertHidden(bottom);
+      dialogBody.style.height = heightWithBorders;
+      await waitAfterNextRender();
+      assertHidden(top);
+      assertHidden(bottom);
+    }
 
-    // Act.
-    testProxy.callbackRouterRemote.setTheme({
-      type: newTabPage.mojom.ThemeType.DEFAULT,
-      info: {chromeThemeId: 0},
+    // Disabled for flakiness, see https://crbug.com/1066459.
+    test.skip('menu', () => testScrollBorders(customizeDialog.$.menuContainer));
+    test.skip(
+        'pages', () => testScrollBorders(customizeDialog.$.pagesContainer));
+  });
+
+  suite('backgrounds', () => {
+    setup(() => {
+      customizeDialog.theme = {
+        dailyRefreshCollectionId: 'landscape',
+        backgroundImageUrl: {url: 'https://example.com/image.png'},
+      };
     });
-    await testProxy.callbackRouterRemote.$.flushForTesting();
 
-    // Assert.
-    assertStyle(customizeDialog.$.thirdPartyThemeContainer, 'display', 'none');
-  });
+    test('daily refresh toggle in sync with theme', () => {
+      assertFalse(customizeDialog.$.refreshToggle.checked);
+      customizeDialog.$.backgrounds.selectedCollection = {id: 'landscape'};
+      assertTrue(customizeDialog.$.refreshToggle.checked);
+      customizeDialog.$.backgrounds.selectedCollection = {id: 'abstract'};
+      assertFalse(customizeDialog.$.refreshToggle.checked);
+      customizeDialog.$.backgrounds.selectedCollection = {id: 'landscape'};
+      assertTrue(customizeDialog.$.refreshToggle.checked);
+    });
 
-  test('uninstalling third-party theme sets default theme', async () => {
-    // Arrange.
-    const customizeDialog = createCustomizeDialog();
-    testProxy.callbackRouterRemote.setTheme({
-      type: newTabPage.mojom.ThemeType.THIRD_PARTY,
-      info: {
-        thirdPartyThemeInfo: {
-          id: 'foo',
-          name: 'bar',
-        },
+    test('daily refresh toggle set to new value', () => {
+      customizeDialog.$.backgrounds.selectedCollection = {id: 'abstract'};
+      assertFalse(customizeDialog.$.refreshToggle.checked);
+      customizeDialog.$.refreshToggle.click();
+      assertTrue(customizeDialog.$.refreshToggle.checked);
+      customizeDialog.$.backgrounds.selectedCollection = {id: 'landscape'};
+      assertEquals(1, handler.getCallCount('setDailyRefreshCollectionId'));
+    });
+
+    test('clicking back', () => {
+      customizeDialog.$.backgrounds.selectedCollection = {id: 'landscape'};
+      customizeDialog.$.pages.scrollTop = 100;
+      customizeDialog.shadowRoot.querySelector('.icon-arrow-back').click();
+      assertEquals(customizeDialog.$.pages.scrollTop, 0);
+    });
+
+    test('clicking cancel', () => {
+      customizeDialog.$.backgrounds.selectedCollection = {id: 'landscape'};
+      assertTrue(customizeDialog.$.refreshToggle.checked);
+      customizeDialog.shadowRoot.querySelector('.cancel-button').click();
+      assertEquals(1, handler.getCallCount('revertBackgroundChanges'));
+    });
+
+    suite('clicking done', () => {
+      function done() {
+        customizeDialog.shadowRoot.querySelector('.action-button').click();
       }
+
+      test('sets daily refresh', async () => {
+        customizeDialog.$.backgrounds.selectedCollection = {id: 'abstract'};
+        customizeDialog.$.refreshToggle.click();
+        assertEquals(1, handler.getCallCount('setDailyRefreshCollectionId'));
+        done();
+        assertEquals(
+            'abstract',
+            await handler.whenCalled('setDailyRefreshCollectionId'));
+      });
     });
-    await testProxy.callbackRouterRemote.$.flushForTesting();
-    const applyDefaultThemeCalled =
-        testProxy.handler.whenCalled('applyDefaultTheme');
-    const confirmThemeChangesCalled =
-        testProxy.handler.whenCalled('confirmThemeChanges');
-
-    // Act.
-    customizeDialog.$.uninstallThirdPartyButton.click();
-
-    // Assert.
-    await applyDefaultThemeCalled;
-    await confirmThemeChangesCalled;
   });
 });

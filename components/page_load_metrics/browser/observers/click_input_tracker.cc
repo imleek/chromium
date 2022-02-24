@@ -17,7 +17,7 @@ const int kMaxCountForUkm = 50;
 ClickInputTracker::ClickInputTracker() {
   // Set thresholds per Feature parameters as appropriate.
   time_delta_threshold_ =
-      base::TimeDelta::FromMilliseconds(base::GetFieldTrialParamByFeatureAsInt(
+      base::Milliseconds(base::GetFieldTrialParamByFeatureAsInt(
           kClickInputTracker, "time_delta_threshold_ms", 500));
   position_delta_threshold_ = base::GetFieldTrialParamByFeatureAsInt(
       kClickInputTracker, "position_delta_threshold", 10);
@@ -31,17 +31,17 @@ void ClickInputTracker::OnUserInput(const blink::WebInputEvent& event) {
   if (!base::FeatureList::IsEnabled(kClickInputTracker))
     return;
 
-  if (event.GetType() != blink::WebInputEvent::kGestureTap &&
-      event.GetType() != blink::WebInputEvent::kMouseUp) {
+  if (event.GetType() != blink::WebInputEvent::Type::kGestureTap &&
+      event.GetType() != blink::WebInputEvent::Type::kMouseUp) {
     return;
   }
 
   gfx::PointF position;
-  if (event.GetType() == blink::WebInputEvent::kGestureTap) {
+  if (event.GetType() == blink::WebInputEvent::Type::kGestureTap) {
     const blink::WebGestureEvent& gesture =
         static_cast<const blink::WebGestureEvent&>(event);
     position = gesture.PositionInScreen();
-  } else if (event.GetType() == blink::WebInputEvent::kMouseUp) {
+  } else if (event.GetType() == blink::WebInputEvent::Type::kMouseUp) {
     const blink::WebMouseEvent& mouse_click =
         static_cast<const blink::WebMouseEvent&>(event);
     position = mouse_click.PositionInScreen();

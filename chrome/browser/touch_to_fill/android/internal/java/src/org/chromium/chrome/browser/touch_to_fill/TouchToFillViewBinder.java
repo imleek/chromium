@@ -9,16 +9,14 @@ import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.Cr
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.FORMATTED_ORIGIN;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.ON_CLICK_LISTENER;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.DISMISS_HANDLER;
-import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.FooterProperties.BRANDING_MESSAGE_ID;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.FORMATTED_URL;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.ORIGIN_SECURE;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.SINGLE_CREDENTIAL;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.ON_CLICK_MANAGE;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.SHEET_ITEMS;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.VISIBLE;
-import static org.chromium.chrome.browser.util.UrlUtilities.stripScheme;
+import static org.chromium.components.embedder_support.util.UrlUtilities.stripScheme;
 
-import android.content.Context;
 import android.text.method.PasswordTransformationMethod;
 import android.view.View;
 import android.view.ViewGroup;
@@ -27,11 +25,11 @@ import android.widget.TextView;
 
 import androidx.annotation.StringRes;
 
-import org.chromium.chrome.browser.favicon.FaviconUtils;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.ItemType;
 import org.chromium.chrome.browser.touch_to_fill.data.Credential;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
+import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -89,9 +87,6 @@ class TouchToFillViewBinder {
             case ItemType.FILL_BUTTON:
                 return new TouchToFillViewHolder(parent, R.layout.touch_to_fill_fill_button,
                         TouchToFillViewBinder::bindFillButtonView);
-            case ItemType.FOOTER:
-                return new TouchToFillViewHolder(parent, R.layout.touch_to_fill_footer,
-                        TouchToFillViewBinder::bindFooterView);
         }
         assert false : "Cannot create view for ItemType: " + itemType;
         return null;
@@ -131,16 +126,14 @@ class TouchToFillViewBinder {
         } else if (propertyKey == FORMATTED_ORIGIN) {
             TextView pslOriginText = view.findViewById(R.id.credential_origin);
             pslOriginText.setText(model.get(FORMATTED_ORIGIN));
-            pslOriginText.setVisibility(
-                    credential.isPublicSuffixMatch() ? View.VISIBLE : View.GONE);
+            pslOriginText.setVisibility(credential.isExactMatch() ? View.GONE : View.VISIBLE);
         } else if (propertyKey == CREDENTIAL) {
             TextView pslOriginText = view.findViewById(R.id.credential_origin);
             String formattedOrigin = stripScheme(credential.getOriginUrl());
             formattedOrigin =
                     formattedOrigin.replaceFirst("/$", ""); // Strip possibly trailing slash.
             pslOriginText.setText(formattedOrigin);
-            pslOriginText.setVisibility(
-                    credential.isPublicSuffixMatch() ? View.VISIBLE : View.GONE);
+            pslOriginText.setVisibility(credential.isExactMatch() ? View.GONE : View.VISIBLE);
 
             TextView usernameText = view.findViewById(R.id.username);
             usernameText.setText(credential.getFormattedUsername());
@@ -198,23 +191,6 @@ class TouchToFillViewBinder {
                         String.format(view.getContext().getString(
                                               R.string.touch_to_fill_sheet_subtitle_not_secure),
                                 model.get(FORMATTED_URL)));
-            }
-        } else {
-            assert false : "Unhandled update to property:" + key;
-        }
-    }
-
-    private static void bindFooterView(PropertyModel model, View view, PropertyKey key) {
-        if (key == BRANDING_MESSAGE_ID) {
-            TextView brandingMessage = view.findViewById(R.id.touch_to_fill_branding_message);
-            @StringRes
-            int messageId = model.get(BRANDING_MESSAGE_ID);
-            if (messageId == 0) {
-                brandingMessage.setVisibility(View.GONE);
-            } else {
-                Context context = view.getContext();
-                brandingMessage.setText(String.format(context.getString(messageId),
-                        context.getString(org.chromium.chrome.R.string.app_name)));
             }
         } else {
             assert false : "Unhandled update to property:" + key;

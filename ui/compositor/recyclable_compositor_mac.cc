@@ -37,12 +37,10 @@ scoped_refptr<base::SingleThreadTaskRunner> GetCompositorTaskRunner() {
 // RecyclableCompositorMac
 
 RecyclableCompositorMac::RecyclableCompositorMac(
-    ui::ContextFactory* context_factory,
-    ui::ContextFactoryPrivate* context_factory_private)
+    ui::ContextFactory* context_factory)
     : accelerated_widget_mac_(new ui::AcceleratedWidgetMac()),
-      compositor_(context_factory_private->AllocateFrameSinkId(),
+      compositor_(context_factory->AllocateFrameSinkId(),
                   context_factory,
-                  context_factory_private,
                   GetCompositorTaskRunner(),
                   ui::IsPixelCanvasRecordingEnabled()) {
   g_recyclable_compositor_count += 1;
@@ -70,19 +68,19 @@ void RecyclableCompositorMac::Unsuspend() {
 void RecyclableCompositorMac::UpdateSurface(
     const gfx::Size& size_pixels,
     float scale_factor,
-    const gfx::ColorSpace& color_space) {
+    const gfx::DisplayColorSpaces& display_color_spaces) {
   if (size_pixels != size_pixels_ || scale_factor != scale_factor_) {
     size_pixels_ = size_pixels;
     scale_factor_ = scale_factor;
     local_surface_id_allocator_.GenerateId();
-    viz::LocalSurfaceIdAllocation local_surface_id_allocation =
-        local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation();
+    viz::LocalSurfaceId local_surface_id =
+        local_surface_id_allocator_.GetCurrentLocalSurfaceId();
     compositor()->SetScaleAndSize(scale_factor_, size_pixels_,
-                                  local_surface_id_allocation);
+                                  local_surface_id);
   }
-  if (color_space != color_space_) {
-    color_space_ = color_space;
-    compositor()->SetDisplayColorSpace(color_space_);
+  if (display_color_spaces != display_color_spaces_) {
+    display_color_spaces_ = display_color_spaces;
+    compositor()->SetDisplayColorSpaces(display_color_spaces_);
   }
 }
 
@@ -90,11 +88,11 @@ void RecyclableCompositorMac::InvalidateSurface() {
   size_pixels_ = gfx::Size();
   scale_factor_ = 1.f;
   local_surface_id_allocator_.Invalidate();
-  color_space_ = gfx::ColorSpace();
+  display_color_spaces_ = gfx::DisplayColorSpaces();
   compositor()->SetScaleAndSize(
       scale_factor_, size_pixels_,
-      local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation());
-  compositor()->SetDisplayColorSpace(color_space_);
+      local_surface_id_allocator_.GetCurrentLocalSurfaceId());
+  compositor()->SetDisplayColorSpaces(gfx::DisplayColorSpaces());
 }
 
 void RecyclableCompositorMac::OnCompositingDidCommit(
@@ -115,20 +113,16 @@ RecyclableCompositorMacFactory* RecyclableCompositorMacFactory::Get() {
 std::unique_ptr<RecyclableCompositorMac>
 RecyclableCompositorMacFactory::CreateCompositor(
     ui::ContextFactory* context_factory,
-    ui::ContextFactoryPrivate* context_factory_private,
     bool force_new_compositor) {
   if (!compositors_.empty() && !force_new_compositor) {
     std::unique_ptr<RecyclableCompositorMac> result;
     result = std::move(compositors_.back());
     compositors_.pop_back();
-    if (result->compositor()->context_factory() == context_factory &&
-        result->compositor()->context_factory_private() ==
-            context_factory_private) {
+    if (result->compositor()->context_factory() == context_factory) {
       return result;
     }
   }
-  return std::make_unique<RecyclableCompositorMac>(context_factory,
-                                                   context_factory_private);
+  return std::make_unique<RecyclableCompositorMac>(context_factory);
 }
 
 void RecyclableCompositorMacFactory::RecycleCompositor(
@@ -136,6 +130,8 @@ void RecyclableCompositorMacFactory::RecycleCompositor(
   if (recycling_disabled_)
     return;
 
+  // Invalidate the surface before suspending it.
+  compositor->InvalidateSurface();
   compositor->accelerated_widget_mac_->SetSuspended(true);
 
   // Make this RecyclableCompositorMac recyclable for future instances.
@@ -160,7 +156,10 @@ void RecyclableCompositorMacFactory::RecycleCompositor(
 }
 
 RecyclableCompositorMacFactory::RecyclableCompositorMacFactory()
-    : weak_factory_(this) {}
+    : weak_factory_(this) {
+  if (features::IsUsingSkiaRenderer())
+    recycling_disabled_ = true;
+}
 
 RecyclableCompositorMacFactory::~RecyclableCompositorMacFactory() = default;
 

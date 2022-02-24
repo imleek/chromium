@@ -5,12 +5,13 @@
 #include "components/dom_distiller/core/task_tracker.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/auto_reset.h"
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/dom_distiller/core/distilled_content_store.h"
 #include "components/dom_distiller/core/proto/distilled_article.pb.h"
@@ -85,7 +86,7 @@ void TaskTracker::AddSaveCallback(SaveCallback callback) {
 
 std::unique_ptr<ViewerHandle> TaskTracker::AddViewer(
     ViewRequestDelegate* delegate) {
-  viewers_.push_back(delegate);
+  viewers_.AddObserver(delegate);
   if (content_ready_) {
     // Distillation for this task has already completed, and so the delegate can
     // be immediately told of the result.
@@ -115,7 +116,7 @@ bool TaskTracker::HasUrl(const GURL& url) const {
 }
 
 void TaskTracker::RemoveViewer(ViewRequestDelegate* delegate) {
-  base::Erase(viewers_, delegate);
+  viewers_.RemoveObserver(delegate);
   if (viewers_.empty()) {
     MaybeCancel();
   }
@@ -193,7 +194,7 @@ void TaskTracker::ContentSourceFinished() {
   if (content_ready_) {
     CancelPendingSources();
   } else if (!IsAnySourceRunning()) {
-    distilled_article_.reset(new DistilledArticleProto());
+    distilled_article_ = std::make_unique<DistilledArticleProto>();
     NotifyViewersAndCallbacks();
   }
 }
@@ -202,7 +203,7 @@ void TaskTracker::DistilledArticleReady(
     std::unique_ptr<DistilledArticleProto> distilled_article) {
   DCHECK(!content_ready_);
 
-  if (distilled_article->pages_size() == 0) {
+  if (distilled_article->pages().empty()) {
     return;
   }
 
@@ -211,16 +212,16 @@ void TaskTracker::DistilledArticleReady(
   distilled_article_ = std::move(distilled_article);
   entry_.title = distilled_article_->title();
   entry_.pages.clear();
-  for (int i = 0; i < distilled_article_->pages_size(); ++i) {
-    entry_.pages.push_back(GURL(distilled_article_->pages(i).url()));
+  for (const auto& page : distilled_article_->pages()) {
+    entry_.pages.push_back(GURL(page.url()));
   }
 
   NotifyViewersAndCallbacks();
 }
 
 void TaskTracker::NotifyViewersAndCallbacks() {
-  for (size_t i = 0; i < viewers_.size(); ++i) {
-    NotifyViewer(viewers_[i]);
+  for (auto& viewer : viewers_) {
+    NotifyViewer(&viewer);
   }
 
   // Already inside a callback run SaveCallbacks directly.
@@ -242,8 +243,8 @@ void TaskTracker::DoSaveCallbacks(bool success) {
 
 void TaskTracker::OnArticleDistillationUpdated(
     const ArticleDistillationUpdate& article_update) {
-  for (size_t i = 0; i < viewers_.size(); ++i) {
-    viewers_[i]->OnArticleUpdated(article_update);
+  for (auto& viewer : viewers_) {
+    viewer.OnArticleUpdated(article_update);
   }
 }
 

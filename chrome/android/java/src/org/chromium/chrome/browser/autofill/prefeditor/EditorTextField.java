@@ -5,8 +5,6 @@
 package org.chromium.chrome.browser.autofill.prefeditor;
 
 import android.content.Context;
-import android.support.v4.view.ViewCompat;
-import android.support.v7.content.res.AppCompatResources;
 import android.text.Editable;
 import android.text.InputFilter;
 import android.text.InputType;
@@ -26,10 +24,16 @@ import android.widget.TextView.OnEditorActionListener;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.view.ViewCompat;
+
+import com.google.android.material.textfield.TextInputLayout;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ui.widget.TintedDrawable;
-import org.chromium.chrome.browser.widget.ChromeTextInputLayout;
+import org.chromium.components.browser_ui.widget.TintedDrawable;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /** Handles validation and display of one field from the {@link EditorFieldModel}. */
 @VisibleForTesting
@@ -39,7 +43,7 @@ public class EditorTextField extends FrameLayout implements EditorFieldView, Vie
 
     private EditorFieldModel mEditorFieldModel;
     private OnEditorActionListener mEditorActionListener;
-    private ChromeTextInputLayout mInputLayout;
+    private TextInputLayout mInputLayout;
     private AutoCompleteTextView mInput;
     private View mIconsLayer;
     private ImageView mActionIcon;
@@ -56,7 +60,7 @@ public class EditorTextField extends FrameLayout implements EditorFieldView, Vie
         mEditorActionListener = actionListener;
 
         LayoutInflater.from(context).inflate(R.layout.payments_request_editor_textview, this, true);
-        mInputLayout = (ChromeTextInputLayout) findViewById(R.id.text_input_layout);
+        mInputLayout = (TextInputLayout) findViewById(R.id.text_input_layout);
 
         // Build up the label.  Required fields are indicated by appending a '*'.
         CharSequence label = fieldModel.getLabel();
@@ -95,7 +99,8 @@ public class EditorTextField extends FrameLayout implements EditorFieldView, Vie
         if (fieldModel.getActionIconAction() != null) {
             mActionIcon = (ImageView) mIconsLayer.findViewById(R.id.action_icon);
             mActionIcon.setImageDrawable(TintedDrawable.constructTintedDrawable(context,
-                    fieldModel.getActionIconResourceId(), R.color.default_icon_color_blue));
+                    fieldModel.getActionIconResourceId(),
+                    R.color.default_icon_color_accent1_tint_list));
             mActionIcon.setContentDescription(context.getResources().getString(
                     fieldModel.getActionIconDescriptionForAccessibility()));
             mActionIcon.setOnClickListener(this);
@@ -107,13 +112,19 @@ public class EditorTextField extends FrameLayout implements EditorFieldView, Vie
             mValueIcon.setVisibility(VISIBLE);
         }
 
-        // Validate the field when the user de-focuses it.
-        mInputLayout.addEditTextOnFocusChangeListener((v, hasFocus) -> {
-            if (hasFocus) {
-                mHasFocusedAtLeastOnce = true;
-            } else if (mHasFocusedAtLeastOnce) {
-                // Show no errors until the user has already tried to edit the field once.
-                updateDisplayedError(!mEditorFieldModel.isValid());
+        mInput.setOnFocusChangeListener(new OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                // Validate the field when the user de-focuses it.
+                if (hasFocus) {
+                    mHasFocusedAtLeastOnce = true;
+                } else if (mHasFocusedAtLeastOnce) {
+                    // Show no errors until the user has already tried to edit the field once.
+                    updateDisplayedError(!mEditorFieldModel.isValid());
+                }
+                if (mEditorFieldModel.hasLengthCounter()) {
+                    mInputLayout.setCounterEnabled(hasFocus);
+                }
             }
         });
 
@@ -154,7 +165,16 @@ public class EditorTextField extends FrameLayout implements EditorFieldView, Vie
             mInput.setThreshold(0);
         }
 
-        if (filter != null) mInput.setFilters(new InputFilter[] {filter});
+        List<InputFilter> filters = new ArrayList<>();
+        if (filter != null) filters.add(filter);
+        if (mEditorFieldModel.hasLengthCounter()) {
+            // Limit input length for field and counter.
+            filters.add(new InputFilter.LengthFilter(mEditorFieldModel.getLengthCounterLimit()));
+            mInputLayout.setCounterMaxLength(mEditorFieldModel.getLengthCounterLimit());
+        }
+        InputFilter[] filtersArr = new InputFilter[filters.size()];
+        filters.toArray(filtersArr);
+        mInput.setFilters(filtersArr);
         if (formatter != null) {
             mInput.addTextChangedListener(formatter);
             formatter.afterTextChanged(mInput.getText());
@@ -250,6 +270,11 @@ public class EditorTextField extends FrameLayout implements EditorFieldView, Vie
     @Override
     public boolean isValid() {
         return mEditorFieldModel.isValid();
+    }
+
+    @Override
+    public boolean isRequired() {
+        return mEditorFieldModel.isRequired();
     }
 
     @Override

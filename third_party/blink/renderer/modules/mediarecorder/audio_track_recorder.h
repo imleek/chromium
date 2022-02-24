@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_audio_sink.h"
-#include "third_party/blink/public/platform/web_media_stream_track.h"
+#include "third_party/blink/renderer/modules/mediarecorder/track_recorder.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 
 namespace media {
@@ -31,7 +31,8 @@ class Thread;
 // the "capture thread"). It owns an internal thread to use for encoding, on
 // which lives an AudioTrackEncoder with its own threading subtleties, see the
 // implementation file.
-class MODULES_EXPORT AudioTrackRecorder : public WebMediaStreamAudioSink {
+class MODULES_EXPORT AudioTrackRecorder
+    : public TrackRecorder<WebMediaStreamAudioSink> {
  public:
   enum class CodecId {
     // Do not change the order of codecs. Add new ones right before LAST.
@@ -39,6 +40,8 @@ class MODULES_EXPORT AudioTrackRecorder : public WebMediaStreamAudioSink {
     PCM,  // 32-bit little-endian float.
     LAST
   };
+
+  enum class BitrateMode { CONSTANT, VARIABLE };
 
   using OnEncodedAudioCB =
       base::RepeatingCallback<void(const media::AudioParameters& params,
@@ -50,7 +53,13 @@ class MODULES_EXPORT AudioTrackRecorder : public WebMediaStreamAudioSink {
   AudioTrackRecorder(CodecId codec,
                      MediaStreamComponent* track,
                      OnEncodedAudioCB on_encoded_audio_cb,
-                     int32_t bits_per_second);
+                     base::OnceClosure on_track_source_ended_cb,
+                     int32_t bits_per_second,
+                     BitrateMode bitrate_mode);
+
+  AudioTrackRecorder(const AudioTrackRecorder&) = delete;
+  AudioTrackRecorder& operator=(const AudioTrackRecorder&) = delete;
+
   ~AudioTrackRecorder() override;
 
   // Implement MediaStreamAudioSink.
@@ -67,7 +76,8 @@ class MODULES_EXPORT AudioTrackRecorder : public WebMediaStreamAudioSink {
   static scoped_refptr<AudioTrackEncoder> CreateAudioEncoder(
       CodecId codec,
       OnEncodedAudioCB on_encoded_audio_cb,
-      int32_t bits_per_second);
+      int32_t bits_per_second,
+      BitrateMode bitrate_mode);
 
   void ConnectToTrack();
   void DisconnectFromTrack();
@@ -94,7 +104,8 @@ class MODULES_EXPORT AudioTrackRecorder : public WebMediaStreamAudioSink {
 
   scoped_refptr<base::SingleThreadTaskRunner> encoder_task_runner_;
 
-  DISALLOW_COPY_AND_ASSIGN(AudioTrackRecorder);
+  // Number of frames per chunked buffer passed to the encoder.
+  int frames_per_chunk_ = 0;
 };
 
 }  // namespace blink

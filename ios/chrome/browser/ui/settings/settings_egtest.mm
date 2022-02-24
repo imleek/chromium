@@ -8,9 +8,11 @@
 #include <memory>
 
 #include "base/mac/foundation_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "build/branding_buildflags.h"
 #include "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_app_interface.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -20,23 +22,13 @@
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
-#import "ios/web/public/test/http_server/http_server.h"
-#include "ios/web/public/test/http_server/http_server_util.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-#if defined(CHROME_EARL_GREY_2)
-// TODO(crbug.com/1015113): The EG2 macro is breaking indexing for some reason
-// without the trailing semicolon.  For now, disable the extra semi warning
-// so Xcode indexing works for the egtest.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wc++98-compat-extra-semi"
-GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(SettingsAppInterface);
-#endif  // defined(CHROME_EARL_GREY_2)
 
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::ClearBrowsingDataButton;
@@ -52,10 +44,6 @@ using chrome_test_util::SettingsMenuPrivacyButton;
 
 namespace {
 
-const char kUrl[] = "http://foo/browsing";
-const char kUrlWithSetCookie[] = "http://foo/set_cookie";
-const char kResponse[] = "bar";
-const char kResponseWithSetCookie[] = "bar with set cookie";
 NSString* const kCookieName = @"name";
 NSString* const kCookieValue = @"value";
 
@@ -255,94 +243,27 @@ id<GREYMatcher> ClearBrowsingDataCell() {
 }
 
 - (void)assertsMetricsPrefsForService:(MetricsServiceType)serviceType {
-  // Two preferences, each with two values - on or off.  Check all four
-  // combinations:
-  // kMetricsReportingEnabled OFF and kMetricsReportingWifiOnly OFF
+  // kMetricsReportingEnabled OFF
   //  - Services do not record data and do not upload data.
+  [SettingsAppInterface setMetricsReportingEnabled:NO];
 
-  // kMetricsReportingEnabled OFF and kMetricsReportingWifiOnly ON
-  //  - Services do not record data and do not upload data.
-  //    Note that if kMetricsReportingEnabled is OFF, the state of
-  //    kMetricsReportingWifiOnly does not matter.
-
-  // kMetricsReportingEnabled ON and kMetricsReportingWifiOnly ON
-  //  - Services record data and upload data only when the device is using
-  //    a wifi connection.  Note:  rather than checking for wifi, the code
-  //    checks for a cellular network (wwan).  wwan != wifi.  So if wwan is
-  //    true, services do not upload any data.
-
-  // kMetricsReportingEnabled ON and kMetricsReportingWifiOnly OFF
-  //  - Services record data and upload data.
-
-  if ([ChromeEarlGrey isUMACellularEnabled]) {
-    // kMetricsReportingEnabled OFF
-    [SettingsAppInterface setMetricsReportingEnabled:NO];
-  } else {
-    // kMetricsReportingEnabled OFF and kMetricsReportingWifiOnly OFF
-    [SettingsAppInterface setMetricsReportingEnabled:NO wifiOnly:NO];
-  }
   // Service should be completely disabled.
   // I.e. no recording of data, and no uploading of what's been recorded.
   [self assertMetricsServiceDisabled:serviceType];
 
-  if ([ChromeEarlGrey isUMACellularEnabled]) {
-    // kMetricsReportingEnabled OFF
-    [SettingsAppInterface setMetricsReportingEnabled:NO];
-  } else {
-    // kMetricsReportingEnabled OFF and kMetricsReportingWifiOnly ON
-    [SettingsAppInterface setMetricsReportingEnabled:NO wifiOnly:YES];
-  }
-  // If kMetricsReportingEnabled is OFF, any service should remain completely
-  // disabled, i.e. no uploading even if kMetricsReportingWifiOnly is ON.
-  [self assertMetricsServiceDisabled:serviceType];
-
-// Split here:  Official build vs. Development build.
-// Official builds allow recording and uploading of data, honoring the
-// metrics prefs.  Development builds should never record or upload data.
+  // kMetricsReportingEnabled ON
+  //  - Services record data and upload data.
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  // Official build.
-  // The values of the prefs and the wwan vs wifi state should be honored by
-  // the services, turning on and off according to the rules laid out above.
-
-  if (![ChromeEarlGrey isUMACellularEnabled]) {
-    // kMetricsReportingEnabled ON and kMetricsReportingWifiOnly ON.
-    [SettingsAppInterface setMetricsReportingEnabled:YES wifiOnly:YES];
-    // Service should be enabled.
-    [self assertMetricsServiceEnabled:serviceType];
-
-    // Set the network to use a cellular network, which should disable uploading
-    // when the wifi-only flag is set.
-    [SettingsAppInterface setCellularNetworkEnabled:YES];
-    [self assertMetricsServiceEnabledButNotUploading:serviceType];
-
-    // Turn off cellular network usage, which should enable uploading.
-    [SettingsAppInterface setCellularNetworkEnabled:NO];
-    [self assertMetricsServiceEnabled:serviceType];
-
-    // kMetricsReportingEnabled ON and kMetricsReportingWifiOnly OFF
-    [SettingsAppInterface setMetricsReportingEnabled:YES wifiOnly:NO];
-    [self assertMetricsServiceEnabled:serviceType];
-  }
-
+  // Official builds allow recording and uploading of data, honoring the
+  // metrics prefs.  Development builds should never record or upload data.
+  [SettingsAppInterface setMetricsReportingEnabled:YES];
+  // Service should be enabled.
+  [self assertMetricsServiceEnabled:serviceType];
 #else
   // Development build.  Do not allow any recording or uploading of data.
-  // Specifically, the kMetricsReportingEnabled preference is completely
-  // disregarded for non-official builds, and checking its value always returns
-  // false (NO).
-  // This tests that no matter the state change, pref or network connection,
-  // services remain disabled.
-
-  if (![ChromeEarlGrey isUMACellularEnabled]) {
-    // kMetricsReportingEnabled ON and kMetricsReportingWifiOnly ON
-    [SettingsAppInterface setMetricsReportingEnabled:YES wifiOnly:YES];
-    // Service should remain disabled.
-    [self assertMetricsServiceDisabled:serviceType];
-
-    // kMetricsReportingEnabled ON and kMetricsReportingWifiOnly OFF
-    [SettingsAppInterface setMetricsReportingEnabled:YES wifiOnly:NO];
-    // Service should remain disabled.
-    [self assertMetricsServiceDisabled:serviceType];
-  }
+  [SettingsAppInterface setMetricsReportingEnabled:YES];
+  // Service should remain disabled.
+  [self assertMetricsServiceDisabled:serviceType];
 #endif
 }
 
@@ -351,37 +272,23 @@ id<GREYMatcher> ClearBrowsingDataCell() {
 // Tests that clearing the cookies through the UI does clear all of them. Use a
 // local server to navigate to a page that sets then tests a cookie, and then
 // clears the cookie and tests it is not set.
-// TODO(crbug.com/1036133): [ChromeEarlGrey cookies] does not work correctly in
-// this test.
-// TODO(crbug.com/1038398): This test crashes flakily.
-- (void)DISABLED_testClearCookies {
-  // Creates a map of canned responses and set up the test HTML server.
-  std::map<GURL, std::pair<std::string, std::string>> response;
-
-  NSString* cookieForURL =
-      [NSString stringWithFormat:@"%@=%@", kCookieName, kCookieValue];
-
-  response[web::test::HttpServer::MakeUrl(kUrlWithSetCookie)] =
-      std::pair<std::string, std::string>(base::SysNSStringToUTF8(cookieForURL),
-                                          kResponseWithSetCookie);
-  response[web::test::HttpServer::MakeUrl(kUrl)] =
-      std::pair<std::string, std::string>("", kResponse);
-
-  web::test::SetUpSimpleHttpServerWithSetCookies(response);
+- (void)testClearCookies {
+  GREYAssertTrue(self.testServer->Start(), @"Server did not start.");
 
   // Load |kUrl| and check that cookie is not set.
-  [ChromeEarlGrey loadURL:web::test::HttpServer::MakeUrl(kUrl)];
-  [ChromeEarlGrey waitForWebStateContainingText:kResponse];
+  [ChromeEarlGrey loadURL:self.testServer->GetURL("/echo")];
 
   NSDictionary* cookies = [ChromeEarlGrey cookies];
   GREYAssertEqual(0U, cookies.count, @"No cookie should be found.");
 
-  // Visit |kUrlWithSetCookie| to set a cookie and then load |kUrl| to check it
-  // is still set.
-  [ChromeEarlGrey loadURL:web::test::HttpServer::MakeUrl(kUrlWithSetCookie)];
-  [ChromeEarlGrey waitForWebStateContainingText:kResponseWithSetCookie];
-  [ChromeEarlGrey loadURL:web::test::HttpServer::MakeUrl(kUrl)];
-  [ChromeEarlGrey waitForWebStateContainingText:kResponse];
+  // Visit "/set-cookie" to set a cookie and then load another page to check
+  // that it is still set.
+  std::string setCookiePath = base::StringPrintf(
+      "/set-cookie?%s=%s", base::SysNSStringToUTF8(kCookieName).c_str(),
+      base::SysNSStringToUTF8(kCookieValue).c_str());
+  [ChromeEarlGrey loadURL:self.testServer->GetURL(setCookiePath)];
+
+  [ChromeEarlGrey loadURL:self.testServer->GetURL("/echo")];
 
   cookies = [ChromeEarlGrey cookies];
   GREYAssertEqualObjects(kCookieValue, cookies[kCookieName],
@@ -398,8 +305,7 @@ id<GREYMatcher> ClearBrowsingDataCell() {
   [self clearCookiesAndSiteData];
 
   // Reload and test that there are no cookies left.
-  [ChromeEarlGrey loadURL:web::test::HttpServer::MakeUrl(kUrl)];
-  [ChromeEarlGrey waitForWebStateContainingText:kResponse];
+  [ChromeEarlGrey loadURL:self.testServer->GetURL("/echo")];
 
   cookies = [ChromeEarlGrey cookies];
   GREYAssertEqual(0U, cookies.count, @"No cookie should be found.");
@@ -408,14 +314,13 @@ id<GREYMatcher> ClearBrowsingDataCell() {
 }
 
 // Verifies that metrics reporting works properly under possible settings of the
-// preferences kMetricsReportingEnabled and kMetricsReportingWifiOnly.
+// preference kMetricsReportingEnabled.
 - (void)testMetricsReporting {
   [self assertsMetricsPrefsForService:kMetrics];
 }
 
 // Verifies that breakpad reporting works properly under possible settings of
-// the preferences |kMetricsReportingEnabled| and |kMetricsReportingWifiOnly|
-// for non-first-launch runs.
+// the preference |kMetricsReportingEnabled|.
 // NOTE: breakpad only allows uploading for non-first-launch runs.
 - (void)testBreakpadReporting {
   [self setTearDownHandler:^{
@@ -428,8 +333,7 @@ id<GREYMatcher> ClearBrowsingDataCell() {
 }
 
 // Verifies that breakpad reporting works properly under possible settings of
-// the preferences |kMetricsReportingEnabled| and |kMetricsReportingWifiOnly|
-// for first-launch runs.
+// the preference |kMetricsReportingEnabled|.
 // NOTE: breakpad only allows uploading for non-first-launch runs.
 - (void)testBreakpadReportingFirstLaunch {
   [self setTearDownHandler:^{
@@ -457,20 +361,19 @@ id<GREYMatcher> ClearBrowsingDataCell() {
                                        grey_sufficientlyVisible(), nil);
   [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
   // Wait for UI to finish loading the Sign-in screen.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGreyUI waitForAppToIdle];
 
   // Verify that the Settings register keyboard commands.
   GREYAssertFalse([SettingsAppInterface settingsRegisteredKeyboardCommands],
                   @"Settings should not register key commands when presented.");
 
   // Cancel the sign-in operation.
-  [[EarlGrey selectElementWithMatcher:
-                 grey_buttonTitle([l10n_util::GetNSString(
-                     IDS_IOS_ACCOUNT_CONSISTENCY_SETUP_SKIP_BUTTON)
-                     uppercaseString])] performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kSkipSigninAccessibilityIdentifier)]
+      performAction:grey_tap()];
 
   // Wait for UI to finish closing the Sign-in screen.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGreyUI waitForAppToIdle];
 
   // Verify that the Settings register keyboard commands.
   GREYAssertTrue([SettingsAppInterface settingsRegisteredKeyboardCommands],

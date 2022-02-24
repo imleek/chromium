@@ -9,15 +9,15 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace dom_distiller {
 namespace test {
 
-MockDistillerFactory::MockDistillerFactory() {}
-MockDistillerFactory::~MockDistillerFactory() {}
+MockDistillerFactory::MockDistillerFactory() = default;
+MockDistillerFactory::~MockDistillerFactory() = default;
 
 FakeDistiller::FakeDistiller(bool execute_callback)
     : execute_callback_(execute_callback), destruction_allowed_(true) {

@@ -7,11 +7,36 @@
  * existing printer's information and re-configure it.
  */
 
+import '//resources/cr_elements/cr_button/cr_button.m.js';
+import '//resources/cr_elements/cr_input/cr_input.m.js';
+import '//resources/cr_elements/cr_searchable_drop_down/cr_searchable_drop_down.js';
+import '//resources/cr_elements/shared_style_css.m.js';
+import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
+import '//resources/cr_components/chromeos/localized_link/localized_link.js';
+import './cups_add_printer_dialog.js';
+import './cups_printer_dialog_error.js';
+import './cups_printer_shared_css.js';
+
+import {MojoInterfaceProvider, MojoInterfaceProviderImpl} from '//resources/cr_components/chromeos/network/mojo_interface_provider.m.js';
+import {NetworkListenerBehavior} from '//resources/cr_components/chromeos/network/network_listener_behavior.m.js';
+import {OncMojo} from '//resources/cr_components/chromeos/network/onc_mojo.m.js';
+import {CrScrollableBehavior} from '//resources/cr_elements/cr_scrollable_behavior.m.js';
+import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+
+import {loadTimeData} from '../../i18n_setup.js';
+import {recordClick, recordNavigation, recordPageBlur, recordPageFocus, recordSearch, recordSettingChange, setUserActionRecorderForTesting} from '../metrics_recorder.m.js';
+
+import {getBaseName, getErrorText, getPrintServerErrorText, isNameAndAddressValid, isNetworkProtocol, isPPDInfoValid, matchesSearchTerm, sortPrinters} from './cups_printer_dialog_util.js';
+import {CupsPrinterInfo, CupsPrintersBrowserProxy, CupsPrintersBrowserProxyImpl, CupsPrintersList, ManufacturersInfo, ModelsInfo, PrinterMakeModel, PrinterPpdMakeModel, PrinterSetupResult, PrintServerResult} from './cups_printers_browser_proxy.js';
+
 Polymer({
+  _template: html`{__html_template__}`,
   is: 'settings-cups-edit-printer-dialog',
 
   behaviors: [
-    CrScrollableBehavior,
+    I18nBehavior,
     NetworkListenerBehavior,
   ],
 
@@ -149,29 +174,28 @@ Polymer({
   networkConfig_: null,
 
   /** @override */
-  created: function() {
-    this.networkConfig_ = network_config.MojoInterfaceProviderImpl.getInstance()
-                              .getMojoServiceRemote();
+  created() {
+    this.networkConfig_ =
+        MojoInterfaceProviderImpl.getInstance().getMojoServiceRemote();
   },
 
   /** @override */
-  attached: function() {
+  attached() {
     // Create a copy of activePrinter so that we can modify its fields.
     this.pendingPrinter_ = /** @type{CupsPrinterInfo} */
         (Object.assign({}, this.activePrinter));
 
     this.refreshNetworks_();
 
-    settings.CupsPrintersBrowserProxyImpl.getInstance()
+    CupsPrintersBrowserProxyImpl.getInstance()
         .getPrinterPpdManufacturerAndModel(this.pendingPrinter_.printerId)
         .then(
             this.onGetPrinterPpdManufacturerAndModel_.bind(this),
             this.onGetPrinterPpdManufacturerAndModelFailed_.bind(this));
-    settings.CupsPrintersBrowserProxyImpl.getInstance()
+    CupsPrintersBrowserProxyImpl.getInstance()
         .getCupsPrinterManufacturersList()
         .then(this.manufacturerListChanged_.bind(this));
-    this.userPPD_ =
-        settings.printing.getBaseName(this.pendingPrinter_.printerPPDPath);
+    this.userPPD_ = getBaseName(this.pendingPrinter_.printerPPDPath);
   },
 
   /**
@@ -180,7 +204,7 @@ Polymer({
    *     networks
    * @private
    */
-  onActiveNetworksChanged: function(networks) {
+  onActiveNetworksChanged(networks) {
     this.isOnline_ = networks.some(function(network) {
       return OncMojo.connectionStateIsConnected(network.connectionState);
     });
@@ -190,8 +214,8 @@ Polymer({
    * @param {!{path: string, value: string}} change
    * @private
    */
-  printerPathChanged_: function(change) {
-    if (change.path != 'pendingPrinter_.printerName') {
+  printerPathChanged_(change) {
+    if (change.path !== 'pendingPrinter_.printerName') {
       this.needsReconfigured_ = true;
     }
   },
@@ -200,18 +224,18 @@ Polymer({
    * @param {!Event} event
    * @private
    */
-  onProtocolChange_: function(event) {
+  onProtocolChange_(event) {
     this.set('pendingPrinter_.printerProtocol', event.target.value);
     this.onPrinterInfoChange_();
   },
 
   /** @private */
-  onPrinterInfoChange_: function() {
+  onPrinterInfoChange_() {
     this.printerInfoChanged_ = true;
   },
 
   /** @private */
-  onCancelTap_: function() {
+  onCancelTap_() {
     this.$$('add-printer-dialog').close();
   },
 
@@ -220,7 +244,7 @@ Polymer({
    * @param {!PrinterSetupResult} result
    * @private
    */
-  onPrinterEditSucceeded_: function(result) {
+  onPrinterEditSucceeded_(result) {
     this.fire(
         'show-cups-printer-toast',
         {resultCode: result, printerName: this.activePrinter.printerName});
@@ -232,30 +256,41 @@ Polymer({
    * @param {*} result
    * @private
    */
-  onPrinterEditFailed_: function(result) {
-    this.errorText_ = settings.printing.getErrorText(
+  onPrinterEditFailed_(result) {
+    this.errorText_ = getErrorText(
         /** @type {PrinterSetupResult} */ (result));
   },
 
   /** @private */
-  onSaveTap_: function() {
+  onSaveTap_() {
     this.updateActivePrinter_();
     if (!this.needsReconfigured_ || !this.isOnline_) {
       // If we don't need to reconfigure or we are offline, just update the
       // printer name.
-      settings.CupsPrintersBrowserProxyImpl.getInstance()
+      CupsPrintersBrowserProxyImpl.getInstance()
           .updateCupsPrinter(
               this.activePrinter.printerId, this.activePrinter.printerName)
           .then(
               this.onPrinterEditSucceeded_.bind(this),
               this.onPrinterEditFailed_.bind(this));
     } else {
-      settings.CupsPrintersBrowserProxyImpl.getInstance()
+      CupsPrintersBrowserProxyImpl.getInstance()
           .reconfigureCupsPrinter(this.activePrinter)
           .then(
               this.onPrinterEditSucceeded_.bind(this),
               this.onPrinterEditFailed_.bind(this));
     }
+    recordSettingChange();
+  },
+
+  /**
+   * @return {string} The i18n string for the dialog title.
+   * @private
+   */
+  getDialogTitle_() {
+    return this.pendingPrinter_.isManaged ?
+        this.i18n('viewPrinterDialogTitle') :
+        this.i18n('editPrinterDialogTitle');
   },
 
   /**
@@ -263,7 +298,7 @@ Polymer({
    * @return {string} The printer's URI that displays in the UI
    * @private
    */
-  getPrinterURI_: function(printer) {
+  getPrinterURI_(printer) {
     if (!printer) {
       return '';
     } else if (
@@ -283,7 +318,7 @@ Polymer({
    * @param {!PrinterPpdMakeModel} info
    * @private
    */
-  onGetPrinterPpdManufacturerAndModel_: function(info) {
+  onGetPrinterPpdManufacturerAndModel_(info) {
     this.set('pendingPrinter_.ppdManufacturer', info.ppdManufacturer);
     this.set('pendingPrinter_.ppdModel', info.ppdModel);
 
@@ -296,7 +331,7 @@ Polymer({
    * Handler for getPrinterPpdManufacturerAndModel() failure case.
    * @private
    */
-  onGetPrinterPpdManufacturerAndModelFailed_: function() {
+  onGetPrinterPpdManufacturerAndModelFailed_() {
     this.needsReconfigured_ = false;
   },
 
@@ -305,15 +340,15 @@ Polymer({
    * @return {boolean} Whether |protocol| is a network protocol
    * @private
    */
-  isNetworkProtocol_: function(protocol) {
-    return settings.printing.isNetworkProtocol(protocol);
+  isNetworkProtocol_(protocol) {
+    return isNetworkProtocol(protocol);
   },
 
   /**
    * @return {boolean} Whether the current printer was auto configured.
    * @private
    */
-  isAutoconfPrinter_: function() {
+  isAutoconfPrinter_() {
     return this.pendingPrinter_.printerPpdReference.autoconf;
   },
 
@@ -321,7 +356,7 @@ Polymer({
    * @return {boolean} Whether the Save button is enabled.
    * @private
    */
-  canSavePrinter_: function() {
+  canSavePrinter_() {
     return this.printerInfoChanged_ &&
         (this.isPrinterConfigured_() || !this.isOnline_) &&
         !this.isManufacturerInvalid_ && !this.isModelInvalid_;
@@ -332,12 +367,12 @@ Polymer({
    *     models.
    * @private
    */
-  selectedEditManufacturerChanged_: function(manufacturer) {
+  selectedEditManufacturerChanged_(manufacturer) {
     // Reset model if manufacturer is changed.
     this.set('pendingPrinter_.ppdModel', '');
     this.modelList = [];
-    if (!!manufacturer && manufacturer.length != 0) {
-      settings.CupsPrintersBrowserProxyImpl.getInstance()
+    if (!!manufacturer && manufacturer.length !== 0) {
+      CupsPrintersBrowserProxyImpl.getInstance()
           .getCupsPrinterModelsList(manufacturer)
           .then(this.modelListChanged_.bind(this));
     }
@@ -348,7 +383,7 @@ Polymer({
    * attempts to get the EULA Url if the selected printer has one.
    * @private
    */
-  onModelChanged_: function() {
+  onModelChanged_() {
     if (this.arePrinterFieldsInitialized_) {
       this.printerInfoChanged_ = true;
     }
@@ -368,28 +403,27 @@ Polymer({
    * @param {string} eulaUrl The URL for the printer's EULA.
    * @private
    */
-  onGetEulaUrlCompleted_: function(eulaUrl) {
+  onGetEulaUrlCompleted_(eulaUrl) {
     this.eulaUrl_ = eulaUrl;
   },
 
   /** @private */
-  onBrowseFile_: function() {
-    settings.CupsPrintersBrowserProxyImpl.getInstance()
-        .getCupsPrinterPPDPath()
-        .then(this.printerPPDPathChanged_.bind(this));
+  onBrowseFile_() {
+    CupsPrintersBrowserProxyImpl.getInstance().getCupsPrinterPPDPath().then(
+        this.printerPPDPathChanged_.bind(this));
   },
 
   /**
    * @param {!ManufacturersInfo} manufacturersInfo
    * @private
    */
-  manufacturerListChanged_: function(manufacturersInfo) {
+  manufacturerListChanged_(manufacturersInfo) {
     if (!manufacturersInfo.success) {
       return;
     }
     this.manufacturerList = manufacturersInfo.manufacturers;
-    if (this.pendingPrinter_.ppdManufacturer.length != 0) {
-      settings.CupsPrintersBrowserProxyImpl.getInstance()
+    if (this.pendingPrinter_.ppdManufacturer.length !== 0) {
+      CupsPrintersBrowserProxyImpl.getInstance()
           .getCupsPrinterModelsList(this.pendingPrinter_.ppdManufacturer)
           .then(this.modelListChanged_.bind(this));
     }
@@ -399,7 +433,7 @@ Polymer({
    * @param {!ModelsInfo} modelsInfo
    * @private
    */
-  modelListChanged_: function(modelsInfo) {
+  modelListChanged_(modelsInfo) {
     if (modelsInfo.success) {
       this.modelList = modelsInfo.models;
       // ModelListChanged_ is the final step of initializing pendingPrinter.
@@ -415,14 +449,14 @@ Polymer({
    * @param {string} path The full path to the selected PPD file
    * @private
    */
-  printerPPDPathChanged_: function(path) {
+  printerPPDPathChanged_(path) {
     this.set('pendingPrinter_.printerPPDPath', path);
     this.invalidPPD_ = !path;
     if (!this.invalidPPD_) {
       // A new valid PPD file should be treated as a saveable change.
       this.onPrinterInfoChange_();
     }
-    this.userPPD_ = settings.printing.getBaseName(path);
+    this.userPPD_ = getBaseName(path);
   },
 
   /**
@@ -431,10 +465,10 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  isPrinterConfigured_: function() {
-    return settings.printing.isNameAndAddressValid(this.pendingPrinter_) &&
+  isPrinterConfigured_() {
+    return isNameAndAddressValid(this.pendingPrinter_) &&
         (this.isAutoconfPrinter_() ||
-         settings.printing.isPPDInfoValid(
+         isPPDInfoValid(
              this.pendingPrinter_.ppdManufacturer,
              this.pendingPrinter_.ppdModel,
              this.pendingPrinter_.printerPPDPath));
@@ -444,7 +478,7 @@ Polymer({
    * Helper function to copy over modified fields to activePrinter.
    * @private
    */
-  updateActivePrinter_: function() {
+  updateActivePrinter_() {
     if (!this.isOnline_) {
       // If we are not online, only copy over the printerName.
       this.activePrinter.printerName = this.pendingPrinter_.printerName;
@@ -462,7 +496,7 @@ Polymer({
    * Callback function when networks change.
    * @private
    */
-  refreshNetworks_: function() {
+  refreshNetworks_() {
     this.networkConfig_
         .getNetworkStateList({
           filter: chromeos.networkConfig.mojom.FilterType.kActive,
@@ -479,7 +513,20 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  protocolSelectEnabled: function() {
+  protocolSelectEnabled_() {
+    if (this.pendingPrinter_) {
+      // Print server printer's protocol should not be editable; disable the
+      // drop down if the printer is from a print server.
+      if (this.pendingPrinter_.printServerUri) {
+        return false;
+      }
+
+      // Managed printers are not editable.
+      if (this.pendingPrinter_.isManaged) {
+        return false;
+      }
+    }
+
     return this.isOnline_ && this.networkProtocolActive_;
   },
 
@@ -488,16 +535,40 @@ Polymer({
    * |ppdManufacturer| and |ppdModel|.
    * @private
    */
-  attemptPpdEulaFetch_: function() {
+  attemptPpdEulaFetch_() {
     if (!this.pendingPrinter_.ppdManufacturer ||
         !this.pendingPrinter_.ppdModel) {
       return;
     }
 
-    settings.CupsPrintersBrowserProxyImpl.getInstance()
+    CupsPrintersBrowserProxyImpl.getInstance()
         .getEulaUrl(
             this.pendingPrinter_.ppdManufacturer, this.pendingPrinter_.ppdModel)
         .then(this.onGetEulaUrlCompleted_.bind(this));
+  },
+
+  /**
+   * @return {boolean} True if we're on an active network and the printer
+   * is not from a print server. If true, the input field is enabled.
+   * @private
+   */
+  isInputFieldEnabled_() {
+    // Print server printers should not be editable (except for the name field).
+    // Return false to disable the field.
+    if (this.pendingPrinter_.printServerUri) {
+      return false;
+    }
+
+    return this.networkProtocolActive_;
+  },
+
+  /**
+   * @return {boolean} True if the printer is managed or not online.
+   * @private
+   */
+  isInputFieldReadonly_() {
+    return !this.isOnline_ ||
+        (this.pendingPrinter_ && this.pendingPrinter_.isManaged);
   },
 
 });

@@ -9,7 +9,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 
 namespace content {
 
@@ -26,12 +26,16 @@ class FakeNetworkURLLoaderFactory final
                               const std::string& body,
                               bool network_accessed,
                               net::Error error_code);
+
+  FakeNetworkURLLoaderFactory(const FakeNetworkURLLoaderFactory&) = delete;
+  FakeNetworkURLLoaderFactory& operator=(const FakeNetworkURLLoaderFactory&) =
+      delete;
+
   ~FakeNetworkURLLoaderFactory() override;
 
   // network::mojom::URLLoaderFactory implementation.
   void CreateLoaderAndStart(
       mojo::PendingReceiver<network::mojom::URLLoader> receiver,
-      int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& url_request,
@@ -45,8 +49,6 @@ class FakeNetworkURLLoaderFactory final
  private:
   FakeNetwork fake_network_;
   mojo::ReceiverSet<network::mojom::URLLoaderFactory> receivers_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeNetworkURLLoaderFactory);
 };
 
 }  // namespace content

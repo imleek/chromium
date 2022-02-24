@@ -7,7 +7,8 @@
 
 #include <map>
 
-#include "base/scoped_observer.h"
+#include "base/scoped_multi_source_observation.h"
+#include "base/scoped_observation.h"
 #include "components/infobars/core/infobar_manager.h"
 #include "ios/chrome/browser/infobars/infobar_ios.h"
 #import "ios/chrome/browser/infobars/infobar_type.h"
@@ -27,6 +28,9 @@ class WebState;
 class InfobarBadgeTabHelper
     : public web::WebStateUserData<InfobarBadgeTabHelper> {
  public:
+  InfobarBadgeTabHelper(const InfobarBadgeTabHelper&) = delete;
+  InfobarBadgeTabHelper& operator=(const InfobarBadgeTabHelper&) = delete;
+
   ~InfobarBadgeTabHelper() override;
 
   // Sets the InfobarBadgeTabHelperDelegate to |delegate|.
@@ -64,9 +68,10 @@ class InfobarBadgeTabHelper
     explicit InfobarAcceptanceObserver(InfobarBadgeTabHelper* tab_helper);
     ~InfobarAcceptanceObserver() override;
 
-    // Returns a reference to the scoped observer.
-    ScopedObserver<InfoBarIOS, InfoBarIOS::Observer>& scoped_observer() {
-      return scoped_observer_;
+    // Returns a reference to the scoped observations.
+    base::ScopedMultiSourceObservation<InfoBarIOS, InfoBarIOS::Observer>&
+    scoped_observations() {
+      return scoped_observations_;
     }
 
    private:
@@ -77,7 +82,8 @@ class InfobarBadgeTabHelper
     // The owning tab helper.
     InfobarBadgeTabHelper* tab_helper_ = nullptr;
     // Scoped observer that facilitates observing InfoBarIOS objects.
-    ScopedObserver<InfoBarIOS, InfoBarIOS::Observer> scoped_observer_;
+    base::ScopedMultiSourceObservation<InfoBarIOS, InfoBarIOS::Observer>
+        scoped_observations_{this};
   };
 
   // Helper object that updates state and adds an InfobarAcceptanceObserver
@@ -93,6 +99,8 @@ class InfobarBadgeTabHelper
     // InfoBarManagerObserver:
     void OnInfoBarAdded(infobars::InfoBar* infobar) override;
     void OnInfoBarRemoved(infobars::InfoBar* infobar, bool animate) override;
+    void OnInfoBarReplaced(infobars::InfoBar* old_infobar,
+                           infobars::InfoBar* new_infobar) override;
     void OnManagerShuttingDown(infobars::InfoBarManager* manager) override;
 
     // The owning tab helper.
@@ -101,8 +109,9 @@ class InfobarBadgeTabHelper
     // in the observed manager.
     InfobarAcceptanceObserver* infobar_accept_observer_ = nullptr;
     // Scoped observer that facilitates observing an InfoBarManager.
-    ScopedObserver<infobars::InfoBarManager, infobars::InfoBarManager::Observer>
-        scoped_observer_;
+    base::ScopedObservation<infobars::InfoBarManager,
+                            infobars::InfoBarManager::Observer>
+        scoped_observation_{this};
   };
 
   // Delegate which displays the Infobar badge.
@@ -111,11 +120,12 @@ class InfobarBadgeTabHelper
   InfobarAcceptanceObserver infobar_accept_observer_;
   // The infobar manager observer.
   InfobarManagerObserver infobar_manager_observer_;
+  // The WebState this TabHelper is scoped to.
+  web::WebState* web_state_;
   // Map storing the badge models for each InfobarType.
   std::map<InfobarType, InfobarBadgeModel*> infobar_badge_models_;
 
   WEB_STATE_USER_DATA_KEY_DECL();
-  DISALLOW_COPY_AND_ASSIGN(InfobarBadgeTabHelper);
 };
 
 #endif  // IOS_CHROME_BROWSER_INFOBARS_INFOBAR_BADGE_TAB_HELPER_H_

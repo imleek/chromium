@@ -2,17 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {MultiDeviceSettingsMode, MultiDeviceFeature, MultiDeviceFeatureState, MultiDevicePageContentData, PhoneHubNotificationAccessStatus} from './multidevice_constants.m.js';
+// #import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+// clang-format on
+
 /**
  * @fileoverview Polymer behavior for dealing with MultiDevice features. It is
  * intended to facilitate passing data between elements in the MultiDevice page
  * cleanly and concisely. It includes some constants and utility methods.
  */
-cr.exportPath('settings');
 
 /** @polymerBehavior */
 const MultiDeviceFeatureBehaviorImpl = {
   properties: {
-    /** @type {!MultiDevicePageContentData} */
+    /** @type {!settings.MultiDevicePageContentData} */
     pageContentData: Object,
 
     /**
@@ -30,7 +34,7 @@ const MultiDeviceFeatureBehaviorImpl = {
    * on.
    * @return {boolean}
    */
-  isSuiteOn: function() {
+  isSuiteOn() {
     return !!this.pageContentData &&
         this.pageContentData.betterTogetherState ===
         settings.MultiDeviceFeatureState.ENABLED_BY_USER;
@@ -41,7 +45,7 @@ const MultiDeviceFeatureBehaviorImpl = {
    * allowed by policy.
    * @return {boolean}
    */
-  isSuiteAllowedByPolicy: function() {
+  isSuiteAllowedByPolicy() {
     return !!this.pageContentData &&
         this.pageContentData.betterTogetherState !==
         settings.MultiDeviceFeatureState.PROHIBITED_BY_POLICY;
@@ -52,7 +56,7 @@ const MultiDeviceFeatureBehaviorImpl = {
    * @param {!settings.MultiDeviceFeature} feature
    * @return {boolean}
    */
-  isFeatureAllowedByPolicy: function(feature) {
+  isFeatureAllowedByPolicy(feature) {
     return this.getFeatureState(feature) !==
         settings.MultiDeviceFeatureState.PROHIBITED_BY_POLICY;
   },
@@ -61,10 +65,42 @@ const MultiDeviceFeatureBehaviorImpl = {
    * @param {!settings.MultiDeviceFeature} feature
    * @return {boolean}
    */
-  isFeatureSupported: function(feature) {
+  isFeatureSupported(feature) {
     return ![settings.MultiDeviceFeatureState.NOT_SUPPORTED_BY_CHROMEBOOK,
              settings.MultiDeviceFeatureState.NOT_SUPPORTED_BY_PHONE,
     ].includes(this.getFeatureState(feature));
+  },
+
+  /**
+   * Whether the top-level Phone Hub feature is enabled.
+   * @return {boolean}
+   */
+  isPhoneHubOn() {
+    return this.getFeatureState(settings.MultiDeviceFeature.PHONE_HUB) ===
+        settings.MultiDeviceFeatureState.ENABLED_BY_USER;
+  },
+
+  /**
+   * @param {!settings.MultiDeviceFeature} feature
+   * @return {boolean}
+   */
+  isPhoneHubSubFeature(feature) {
+    return [
+      settings.MultiDeviceFeature.PHONE_HUB_CAMERA_ROLL,
+      settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS,
+      settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION,
+      settings.MultiDeviceFeature.ECHE
+    ].includes(feature);
+  },
+
+  /**
+   * @return {boolean} Whether or not Phone Hub notification access is
+   *     prohibited (i.e., due to the user having a work profile).
+   */
+  isPhoneHubNotificationAccessProhibited() {
+    return this.pageContentData &&
+        this.pageContentData.notificationAccessStatus ===
+        settings.PhoneHubNotificationAccessStatus.PROHIBITED;
   },
 
   /**
@@ -73,11 +109,24 @@ const MultiDeviceFeatureBehaviorImpl = {
    * @param {!settings.MultiDeviceFeature} feature
    * @return {boolean}
    */
-  isFeatureStateEditable: function(feature) {
+  isFeatureStateEditable(feature) {
     // The suite is off and the toggle corresponds to an individual feature
     // (as opposed to the full suite).
     if (feature !== settings.MultiDeviceFeature.BETTER_TOGETHER_SUITE &&
         !this.isSuiteOn()) {
+      return false;
+    }
+
+    // Cannot edit Phone Hub sub-feature toggles if the top-level Phone Hub
+    // feature is not enabled.
+    if (this.isPhoneHubSubFeature(feature) && !this.isPhoneHubOn()) {
+      return false;
+    }
+
+    // Cannot edit the Phone Hub notification toggle if notification access is
+    // prohibited.
+    if (feature === settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS &&
+        this.isPhoneHubNotificationAccessProhibited()) {
       return false;
     }
 
@@ -92,7 +141,7 @@ const MultiDeviceFeatureBehaviorImpl = {
    * @param {!settings.MultiDeviceFeature} feature
    * @return {string}
    */
-  getFeatureName: function(feature) {
+  getFeatureName(feature) {
     switch (feature) {
       case settings.MultiDeviceFeature.BETTER_TOGETHER_SUITE:
         return this.i18n('multideviceSetupItemHeading');
@@ -102,6 +151,18 @@ const MultiDeviceFeatureBehaviorImpl = {
         return this.i18n('multideviceAndroidMessagesItemTitle');
       case settings.MultiDeviceFeature.SMART_LOCK:
         return this.i18n('multideviceSmartLockItemTitle');
+      case settings.MultiDeviceFeature.PHONE_HUB:
+        return this.i18n('multidevicePhoneHubItemTitle');
+      case settings.MultiDeviceFeature.PHONE_HUB_CAMERA_ROLL:
+        return this.i18n('multidevicePhoneHubCameraRollItemTitle');
+      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
+        return this.i18n('multidevicePhoneHubNotificationsItemTitle');
+      case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
+        return this.i18n('multidevicePhoneHubTaskContinuationItemTitle');
+      case settings.MultiDeviceFeature.WIFI_SYNC:
+        return this.i18n('multideviceWifiSyncItemTitle');
+      case settings.MultiDeviceFeature.ECHE:
+        return this.i18n('multidevicePhoneHubAppsItemTitle');
       default:
         return '';
     }
@@ -113,7 +174,7 @@ const MultiDeviceFeatureBehaviorImpl = {
    * @param {!settings.MultiDeviceFeature} feature
    * @return {string}
    */
-  getIconName: function(feature) {
+  getIconName(feature) {
     switch (feature) {
       case settings.MultiDeviceFeature.BETTER_TOGETHER_SUITE:
         return 'os-settings:multidevice-better-together-suite';
@@ -121,6 +182,14 @@ const MultiDeviceFeatureBehaviorImpl = {
         return 'os-settings:multidevice-messages';
       case settings.MultiDeviceFeature.SMART_LOCK:
         return 'os-settings:multidevice-smart-lock';
+      case settings.MultiDeviceFeature.PHONE_HUB:
+      case settings.MultiDeviceFeature.PHONE_HUB_CAMERA_ROLL:
+      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
+      case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
+      case settings.MultiDeviceFeature.ECHE:
+        return 'os-settings:multidevice-better-together-suite';
+      case settings.MultiDeviceFeature.WIFI_SYNC:
+        return 'os-settings:multidevice-wifi-sync';
       default:
         return '';
     }
@@ -132,7 +201,7 @@ const MultiDeviceFeatureBehaviorImpl = {
    * @param {!settings.MultiDeviceFeature} feature
    * @return {string}
    */
-  getFeatureSummaryHtml: function(feature) {
+  getFeatureSummaryHtml(feature) {
     switch (feature) {
       case settings.MultiDeviceFeature.SMART_LOCK:
         return this.i18nAdvanced('multideviceSmartLockItemSummary');
@@ -140,6 +209,19 @@ const MultiDeviceFeatureBehaviorImpl = {
         return this.i18nAdvanced('multideviceInstantTetheringItemSummary');
       case settings.MultiDeviceFeature.MESSAGES:
         return this.i18nAdvanced('multideviceAndroidMessagesItemSummary');
+      case settings.MultiDeviceFeature.PHONE_HUB:
+        return this.i18nAdvanced('multidevicePhoneHubItemSummary');
+      case settings.MultiDeviceFeature.PHONE_HUB_CAMERA_ROLL:
+        return this.i18nAdvanced('multidevicePhoneHubCameraRollItemSummary');
+      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
+        return this.i18nAdvanced('multidevicePhoneHubNotificationsItemSummary');
+      case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
+        return this.i18nAdvanced(
+            'multidevicePhoneHubTaskContinuationItemSummary');
+      case settings.MultiDeviceFeature.WIFI_SYNC:
+        return this.i18nAdvanced('multideviceWifiSyncItemSummary');
+      case settings.MultiDeviceFeature.ECHE:
+        return this.i18nAdvanced('multidevicePhoneHubAppsItemSummary');
       default:
         return '';
     }
@@ -152,7 +234,7 @@ const MultiDeviceFeatureBehaviorImpl = {
    * @param {!settings.MultiDeviceFeature} feature
    * @return {?settings.MultiDeviceFeatureState}
    */
-  getFeatureState: function(feature) {
+  getFeatureState(feature) {
     if (!this.pageContentData) {
       return null;
     }
@@ -166,6 +248,18 @@ const MultiDeviceFeatureBehaviorImpl = {
         return this.pageContentData.messagesState;
       case settings.MultiDeviceFeature.SMART_LOCK:
         return this.pageContentData.smartLockState;
+      case settings.MultiDeviceFeature.PHONE_HUB:
+        return this.pageContentData.phoneHubState;
+      case settings.MultiDeviceFeature.PHONE_HUB_CAMERA_ROLL:
+        return this.pageContentData.phoneHubCameraRollState;
+      case settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS:
+        return this.pageContentData.phoneHubNotificationsState;
+      case settings.MultiDeviceFeature.PHONE_HUB_TASK_CONTINUATION:
+        return this.pageContentData.phoneHubTaskContinuationState;
+      case settings.MultiDeviceFeature.WIFI_SYNC:
+        return this.pageContentData.wifiSyncState;
+      case settings.MultiDeviceFeature.ECHE:
+        return this.pageContentData.phoneHubAppsState;
       default:
         return null;
     }
@@ -175,7 +269,7 @@ const MultiDeviceFeatureBehaviorImpl = {
    * Whether a host phone has been set by the user (not necessarily verified).
    * @return {boolean}
    */
-  isHostSet: function() {
+  isHostSet() {
     return [
       settings.MultiDeviceSettingsMode.HOST_SET_WAITING_FOR_SERVER,
       settings.MultiDeviceSettingsMode.HOST_SET_WAITING_FOR_VERIFICATION,
@@ -185,7 +279,7 @@ const MultiDeviceFeatureBehaviorImpl = {
 };
 
 /** @polymerBehavior */
-const MultiDeviceFeatureBehavior = [
+/* #export */ const MultiDeviceFeatureBehavior = [
   I18nBehavior,
   MultiDeviceFeatureBehaviorImpl,
 ];

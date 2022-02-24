@@ -33,7 +33,7 @@ namespace xpath {
 
 EvaluationContext::EvaluationContext(Node& context_node,
                                      bool& had_type_conversion_error)
-    : node(context_node),
+    : node(&context_node),
       size(1),
       position(1),
       had_type_conversion_error(had_type_conversion_error) {}
@@ -45,7 +45,7 @@ Expression::Expression()
 
 Expression::~Expression() = default;
 
-void Expression::Trace(blink::Visitor* visitor) {
+void Expression::Trace(Visitor* visitor) const {
   visitor->Trace(sub_expressions_);
   ParseNode::Trace(visitor);
 }

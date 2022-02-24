@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -18,6 +17,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/dns/mock_host_resolver.h"
@@ -29,6 +29,9 @@ class ThirdPartyNTPUiTest : public InProcessBrowserTest,
  public:
   ThirdPartyNTPUiTest() = default;
 
+  ThirdPartyNTPUiTest(const ThirdPartyNTPUiTest&) = delete;
+  ThirdPartyNTPUiTest& operator=(const ThirdPartyNTPUiTest&) = delete;
+
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
   }
@@ -38,9 +41,6 @@ class ThirdPartyNTPUiTest : public InProcessBrowserTest,
     host_resolver()->AddRule("*", "127.0.0.1");
     ASSERT_TRUE(https_test_server().Start());
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ThirdPartyNTPUiTest);
 };
 
 // Verifies that Chrome won't steal focus from the Omnibox and focus the tab
@@ -50,8 +50,7 @@ IN_PROC_BROWSER_TEST_F(ThirdPartyNTPUiTest, Reloads) {
       https_test_server().GetURL("ntp.com", "/instant_extended.html");
   GURL ntp_url =
       https_test_server().GetURL("ntp.com", "/instant_extended_ntp.html");
-  InstantTestBase::Init(base_url, ntp_url, false);
-  SetupInstant(browser());
+  SetupInstant(browser()->profile(), base_url, ntp_url);
 
   // Verify that at the start of the test the tab contents has focus.
   browser()->tab_strip_model()->GetActiveWebContents()->Focus();

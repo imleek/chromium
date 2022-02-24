@@ -6,8 +6,8 @@
 
 #include "base/bind.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/component_updater/soda_component_installer.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
@@ -15,7 +15,12 @@
 #include "chrome/common/pref_names.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/language/core/browser/pref_names.h"
-#include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
+#include "components/live_caption/pref_names.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_pref_names.h"
+#endif
 
 namespace {
 
@@ -52,6 +57,11 @@ const char* const kWebPrefsToObserve[] = {
     prefs::kWebkitTabsToLinks,
     prefs::kWebKitTextAreasAreResizable,
     prefs::kWebKitWebSecurityEnabled,
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    ash::prefs::kAccessibilityFocusHighlightEnabled,
+#else
+    prefs::kAccessibilityFocusHighlightEnabled,
+#endif
 };
 
 const int kWebPrefsToObserveLength = base::size(kWebPrefsToObserve);
@@ -74,24 +84,20 @@ PrefWatcher::PrefWatcher(Profile* profile) : profile_(profile) {
                                      renderer_callback);
   profile_pref_change_registrar_.Add(prefs::kEnableEncryptedMedia,
                                      renderer_callback);
-  profile_pref_change_registrar_.Add(prefs::kWebRTCMultipleRoutesEnabled,
-                                     renderer_callback);
-  profile_pref_change_registrar_.Add(prefs::kWebRTCNonProxiedUdpEnabled,
-                                     renderer_callback);
   profile_pref_change_registrar_.Add(prefs::kWebRTCIPHandlingPolicy,
                                      renderer_callback);
   profile_pref_change_registrar_.Add(prefs::kWebRTCUDPPortRange,
                                      renderer_callback);
 
-#if !defined(OS_MACOSX)
-  profile_pref_change_registrar_.Add(prefs::kFullscreenAllowed,
+#if !defined(OS_ANDROID)
+  profile_pref_change_registrar_.Add(prefs::kCaretBrowsingEnabled,
                                      renderer_callback);
 #endif
 
-  profile_pref_change_registrar_.Add(
-      prefs::kLiveCaptionEnabled,
-      base::BindRepeating(&PrefWatcher::OnLiveCaptionEnabledPrefChanged,
-                          base::Unretained(this)));
+#if !defined(OS_MAC)
+  profile_pref_change_registrar_.Add(prefs::kFullscreenAllowed,
+                                     renderer_callback);
+#endif
 
   PrefChangeRegistrar::NamedChangeCallback webkit_callback =
       base::BindRepeating(&PrefWatcher::OnWebPrefChanged,
@@ -105,6 +111,8 @@ PrefWatcher::PrefWatcher(Profile* profile) : profile_(profile) {
     local_state_pref_change_registrar_.Init(g_browser_process->local_state());
     local_state_pref_change_registrar_.Add(prefs::kAllowCrossOriginAuthPrompt,
                                            renderer_callback);
+    local_state_pref_change_registrar_.Add(
+        prefs::kExplicitlyAllowedNetworkPorts, renderer_callback);
   }
 }
 
@@ -132,26 +140,15 @@ void PrefWatcher::UpdateRendererPreferences() {
   for (auto* helper : tab_helpers_)
     helper->UpdateRendererPreferences();
 
-  blink::mojom::RendererPreferences prefs;
+  blink::RendererPreferences prefs;
   renderer_preferences_util::UpdateFromSystemSettings(&prefs, profile_);
   for (auto& watcher : renderer_preference_watchers_)
-    watcher->NotifyUpdate(prefs.Clone());
+    watcher->NotifyUpdate(prefs);
 }
 
 void PrefWatcher::OnWebPrefChanged(const std::string& pref_name) {
   for (auto* helper : tab_helpers_)
     helper->OnWebPrefChanged(pref_name);
-}
-
-void PrefWatcher::OnLiveCaptionEnabledPrefChanged(
-    const std::string& pref_name) {
-  PrefService* profile_prefs = profile_->GetPrefs();
-  if (profile_prefs->GetBoolean(prefs::kLiveCaptionEnabled)) {
-    component_updater::RegisterSODAComponent(
-        g_browser_process->component_updater(), profile_prefs,
-        base::BindOnce(&component_updater::SODAComponentInstallerPolicy::
-                           UpdateSODAComponentOnDemand));
-  }
 }
 
 // static

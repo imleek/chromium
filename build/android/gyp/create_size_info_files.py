@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Copyright 2018 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
@@ -7,22 +7,45 @@
 """Creates size-info/*.info files used by SuperSize."""
 
 import argparse
+import collections
 import os
+import re
 import sys
 import zipfile
 
 from util import build_utils
 from util import jar_info_utils
-from util import md5_check
+
+
+_AAR_VERSION_PATTERN = re.compile(r'/[^/]*?(\.aar/|\.jar/)')
+
+
+def _RemoveDuplicatesFromList(source_list):
+  return collections.OrderedDict.fromkeys(source_list).keys()
+
+
+def _TransformAarPaths(path):
+  # .aar files within //third_party/android_deps have a version suffix.
+  # The suffix changes each time .aar files are updated, which makes size diffs
+  # hard to compare (since the before/after have different source paths).
+  # Rather than changing how android_deps works, we employ this work-around
+  # to normalize the paths.
+  # From: .../androidx_appcompat_appcompat/appcompat-1.1.0.aar/res/...
+  #   To: .../androidx_appcompat_appcompat.aar/res/...
+  # https://crbug.com/1056455
+  if 'android_deps' not in path:
+    return path
+  return _AAR_VERSION_PATTERN.sub(r'\1', path)
 
 
 def _MergeResInfoFiles(res_info_path, info_paths):
   # Concatenate them all.
   # only_if_changed=False since no build rules depend on this as an input.
-  with build_utils.AtomicOutput(res_info_path, only_if_changed=False) as dst:
+  with build_utils.AtomicOutput(res_info_path, only_if_changed=False,
+                                mode='w+') as dst:
     for p in info_paths:
       with open(p) as src:
-        dst.write(src.read())
+        dst.writelines(_TransformAarPaths(l) for l in src)
 
 
 def _PakInfoPathsForAssets(assets):
@@ -33,9 +56,10 @@ def _MergePakInfoFiles(merged_path, pak_infos):
   info_lines = set()
   for pak_info_path in pak_infos:
     with open(pak_info_path, 'r') as src_info_file:
-      info_lines.update(src_info_file.readlines())
+      info_lines.update(_TransformAarPaths(x) for x in src_info_file)
   # only_if_changed=False since no build rules depend on this as an input.
-  with build_utils.AtomicOutput(merged_path, only_if_changed=False) as f:
+  with build_utils.AtomicOutput(merged_path, only_if_changed=False,
+                                mode='w+') as f:
     f.writelines(sorted(info_lines))
 
 
@@ -93,8 +117,8 @@ def _MergeJarInfoFiles(output, inputs):
         for name in zip_info.namelist():
           fully_qualified_name = _FullJavaNameFromClassFilePath(name)
           if fully_qualified_name:
-            info_data[fully_qualified_name] = '{}/{}'.format(
-                attributed_path, name)
+            info_data[fully_qualified_name] = _TransformAarPaths('{}/{}'.format(
+                attributed_path, name))
 
   # only_if_changed=False since no build rules depend on this as an input.
   with build_utils.AtomicOutput(output, only_if_changed=False) as f:
@@ -151,27 +175,20 @@ def main(args):
   options.uncompressed_assets = build_utils.ParseGnList(
       options.uncompressed_assets)
 
-  jar_inputs = _FindJarInputs(set(options.jar_files))
+  jar_inputs = _FindJarInputs(_RemoveDuplicatesFromList(options.jar_files))
   pak_inputs = _PakInfoPathsForAssets(options.assets +
                                       options.uncompressed_assets)
   res_inputs = options.in_res_info_path
 
-  # Don't bother re-running if no .info files have changed (saves ~250ms).
-  md5_check.CallAndRecordIfStale(
-      lambda: _MergeJarInfoFiles(options.jar_info_path, jar_inputs),
-      input_paths=jar_inputs + [__file__],
-      output_paths=[options.jar_info_path])
-
-  # Always recreate these (just as fast as md5 checking them).
+  # Just create the info files every time. See https://crbug.com/1045024
+  _MergeJarInfoFiles(options.jar_info_path, jar_inputs)
   _MergePakInfoFiles(options.pak_info_path, pak_inputs)
   _MergeResInfoFiles(options.res_info_path, res_inputs)
 
   all_inputs = jar_inputs + pak_inputs + res_inputs
-  build_utils.WriteDepfile(
-      options.depfile,
-      options.jar_info_path,
-      inputs=all_inputs,
-      add_pydeps=False)
+  build_utils.WriteDepfile(options.depfile,
+                           options.jar_info_path,
+                           inputs=all_inputs)
 
 
 if __name__ == '__main__':

@@ -6,46 +6,44 @@ package org.chromium.chrome.browser.homepage;
 
 import android.content.Intent;
 import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
-import android.support.v7.preference.Preference;
-import android.support.v7.preference.PreferenceFragmentCompat;
 import android.view.View;
 
+import androidx.test.filters.MediumTest;
+
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.flags.FeatureUtilities;
-import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.homepage.settings.HomepageMetricsEnums.HomepageLocationType;
+import org.chromium.chrome.browser.homepage.settings.HomepageSettings;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
-import org.chromium.chrome.browser.settings.ChromeSwitchPreference;
-import org.chromium.chrome.browser.settings.SettingsActivity;
-import org.chromium.chrome.browser.settings.homepage.HomepageSettings;
+import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.browser.toolbar.HomeButton;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.TabLoadObserver;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
-import org.chromium.policy.test.annotations.Policies;
 
 /**
  * Integration test for {@link HomepagePolicyManager}.
@@ -55,7 +53,6 @@ import org.chromium.policy.test.annotations.Policies;
 // clang-format off
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@Features.EnableFeatures(ChromeFeatureList.HOMEPAGE_LOCATION_POLICY)
 @Policies.Add({
     @Policies.Item(key = "HomepageLocation", string = HomepagePolicyIntegrationTest.TEST_URL)
 })
@@ -64,23 +61,29 @@ public class HomepagePolicyIntegrationTest {
     public static final String TEST_URL = "http://127.0.0.1:8000/foo.html";
     public static final String GOOGLE_HTML = "/chrome/test/data/android/google.html";
 
+    private static final String METRICS_HOMEPAGE_LOCATION_TYPE = "Settings.Homepage.LocationType";
+
     private EmbeddedTestServer mTestServer;
 
-    @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
+    public SettingsActivityTestRule<HomepageSettings> mSettingsActivityTestRule =
+            new SettingsActivityTestRule<>(HomepageSettings.class);
+
+    // SettingsActivity has to be finished before the outer CTA can be finished or trying to finish
+    // CTA won't work.
+    @Rule
+    public final RuleChain mRuleChain =
+            RuleChain.outerRule(mActivityTestRule).around(mSettingsActivityTestRule);
+
+    @Rule
+    public HomepageTestRule mHomepageTestRule = new HomepageTestRule();
 
     @Before
     public void setUp() {
-        // Disable Histogram for tests.
-        RecordHistogram.setDisabledForTests(true);
-        FeatureUtilities.setHomepageLocationPolicyEnabledForTesting(true);
 
         // Give some user pref setting, simulate user that have their customized preference.
         // Use shared preference manager, not to change the order object created in tests.
-        SharedPreferencesManager manager = SharedPreferencesManager.getInstance();
-        manager.writeBoolean(ChromePreferenceKeys.HOMEPAGE_ENABLED, true);
-        manager.writeString(ChromePreferenceKeys.HOMEPAGE_CUSTOM_URI, GOOGLE_HTML);
-        manager.writeBoolean(ChromePreferenceKeys.HOMEPAGE_USE_DEFAULT_URI, false);
+        mHomepageTestRule.useCustomizedHomepageForTest(GOOGLE_HTML);
 
         mActivityTestRule.startMainActivityFromLauncher();
 
@@ -90,14 +93,13 @@ public class HomepagePolicyIntegrationTest {
 
     @After
     public void tearDown() {
-        mTestServer.stopAndDestroyServer();
-        RecordHistogram.setDisabledForTests(false);
-        FeatureUtilities.setHomepageLocationPolicyEnabledForTesting(null);
+        if (mTestServer != null) mTestServer.stopAndDestroyServer();
     }
 
     @Test
     @MediumTest
     @Feature({"Homepage"})
+    @FlakyTest(message = "crbug.com/1075804")
     public void testStartUpPage() {
         TestThreadUtils.runOnUiThreadBlocking(
                 ()
@@ -112,11 +114,17 @@ public class HomepagePolicyIntegrationTest {
                 SharedPreferencesManager.getInstance().readString(
                         ChromePreferenceKeys.HOMEPAGE_LOCATION_POLICY, ""));
 
+        // METRICS_HOMEPAGE_LOCATION_TYPE is recorded once in deferred start up tasks.
+        Assert.assertEquals("Settings.Homepage.LocationType should record POLICY_OTHER once.", 1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        METRICS_HOMEPAGE_LOCATION_TYPE, HomepageLocationType.POLICY_OTHER));
+
         // Start the page again. This time, the homepage should be set to what policy is.
         destroyAndRestartActivity();
 
         Assert.assertEquals("Start up homepage should be the same as the policy setting", TEST_URL,
-                mActivityTestRule.getActivity().getActivityTab().getUrl());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
     }
 
     @Test
@@ -128,59 +136,32 @@ public class HomepagePolicyIntegrationTest {
                 .fullyLoadUrl(anotherUrl);
 
         Assert.assertNotEquals("Did not switch to a different URL", TEST_URL,
-                mActivityTestRule.getActivity().getActivityTab().getUrl());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
+
+        CriteriaHelper.pollUiThread(() -> {
+            ToolbarManager toolbarManager = mActivityTestRule.getActivity().getToolbarManager();
+            Criteria.checkThat(toolbarManager, Matchers.notNullValue());
+
+            HomeButton homeButton = toolbarManager.getHomeButtonForTesting();
+            Criteria.checkThat(homeButton, Matchers.notNullValue());
+            Criteria.checkThat("Home Button should be visible", homeButton.getVisibility(),
+                    Matchers.is(View.VISIBLE));
+            Criteria.checkThat("Long press for home button should be disabled",
+                    homeButton.isLongClickable(), Matchers.is(false));
+        });
 
         ChromeTabUtils.waitForTabPageLoaded(
                 mActivityTestRule.getActivity().getActivityTab(), TEST_URL, () -> {
                     ToolbarManager toolbarManager =
                             mActivityTestRule.getActivity().getToolbarManager();
-                    if (toolbarManager != null) {
-                        HomeButton homeButton = toolbarManager.getHomeButtonForTesting();
-                        if (homeButton != null) {
-                            Assert.assertEquals("Home Button should be visible", View.VISIBLE,
-                                    homeButton.getVisibility());
-
-                            // Context menu is disabled by checking long clickable
-                            Assert.assertFalse("Long press for home button should be disabled",
-                                    homeButton.isLongClickable());
-                            TouchCommon.singleClickView(homeButton);
-                        }
-                    }
+                    HomeButton homeButton = toolbarManager.getHomeButtonForTesting();
+                    TouchCommon.singleClickView(homeButton);
                 });
 
         Assert.assertEquals("After clicking HomeButton, URL should be back to Homepage", TEST_URL,
-                mActivityTestRule.getActivity().getActivityTab().getUrl());
-    }
-
-    @Test
-    @MediumTest
-    @Feature({"Homepage"})
-    public void testHomepagePreference() {
-        // Launch homepage preference page
-        SettingsActivity homepagePreferenceActivity =
-                mActivityTestRule.startSettingsActivity(HomepageSettings.class.getName());
-        PreferenceFragmentCompat fragment =
-                (PreferenceFragmentCompat) homepagePreferenceActivity.getSupportFragmentManager()
-                        .findFragmentById(android.R.id.content);
-        Assert.assertNotNull(fragment);
-
-        ChromeSwitchPreference homepageSwitch = (ChromeSwitchPreference) fragment.findPreference(
-                HomepageSettings.PREF_HOMEPAGE_SWITCH);
-
-        Preference homepageEdit = fragment.findPreference(HomepageSettings.PREF_HOMEPAGE_EDIT);
-
-        Assert.assertNotNull(homepageSwitch);
-        Assert.assertNotNull(homepageEdit);
-
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertFalse("Switch should be disabled", homepageSwitch.isEnabled());
-            Assert.assertTrue("Switch should be checked", homepageSwitch.isChecked());
-
-            Assert.assertFalse(
-                    "Homepage Edit should be disabled under policy", homepageEdit.isEnabled());
-            Assert.assertEquals("Homepage Url should be set as policy setting",
-                    homepageEdit.getSummary(), TEST_URL);
-        });
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
     }
 
     private void destroyAndRestartActivity() {
@@ -196,17 +177,15 @@ public class HomepagePolicyIntegrationTest {
                 () -> { activity.getTabModelSelector().closeAllTabs(); });
 
         activity.finish();
-        CriteriaHelper.pollUiThread(new Criteria("Activity should be destroyed, current state: "
-                + ApplicationStatus.getStateForActivity(activity)) {
-            @Override
-            public boolean isSatisfied() {
-                return ApplicationStatus.getStateForActivity(activity) == ActivityState.DESTROYED;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(ApplicationStatus.getStateForActivity(activity),
+                    Matchers.is(ActivityState.DESTROYED));
         });
 
         // Start a new ChromeActivity.
         mActivityTestRule.startActivityCompletely(intent);
         Assert.assertEquals("Start up page is not homepage", HomepageManager.getHomepageUri(),
-                mActivityTestRule.getActivity().getActivityTab().getUrl());
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mActivityTestRule.getActivity().getActivityTab()));
     }
 }

@@ -11,8 +11,8 @@
 #include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/strings/string16.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
 
 namespace content {
@@ -52,11 +52,9 @@ class PrinterHandler {
 #if defined(OS_CHROMEOS)
   using GetEulaUrlCallback =
       base::OnceCallback<void(const std::string& license)>;
+  using PrinterStatusRequestCallback =
+      base::OnceCallback<void(const base::Value& cups_printer_status)>;
 #endif
-
-  // Creates an instance of a PrinterHandler for cloud printers.
-  // Note: Implementation currently empty, see https://crbug.com/829414
-  static std::unique_ptr<PrinterHandler> CreateForCloudPrinters();
 
   // Creates an instance of a PrinterHandler for extension printers.
   static std::unique_ptr<PrinterHandler> CreateForExtensionPrinters(
@@ -71,12 +69,6 @@ class PrinterHandler {
   static std::unique_ptr<PrinterHandler> CreateForLocalPrinters(
       content::WebContents* preview_web_contents,
       Profile* profile);
-
-#if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
-  // Creates an instance of a PrinterHandler for privet printers.
-  static std::unique_ptr<PrinterHandler> CreateForPrivetPrinters(
-      Profile* profile);
-#endif
 
   virtual ~PrinterHandler() {}
 
@@ -114,7 +106,7 @@ class PrinterHandler {
   // |settings|: The print job settings.
   // |print_data|: The document bytes to print.
   // |callback| should be called in the response to the request.
-  virtual void StartPrint(const base::string16& job_title,
+  virtual void StartPrint(const std::u16string& job_title,
                           base::Value settings,
                           scoped_refptr<base::RefCountedMemory> print_data,
                           PrintCallback callback) = 0;
@@ -125,6 +117,12 @@ class PrinterHandler {
   // |callback| should be called in response to the request.
   virtual void StartGetEulaUrl(const std::string& destination_id,
                                GetEulaUrlCallback callback);
+
+  // Initiates a status request for specified printer.
+  // |printer_id|: Printer id.
+  // |callback|: should be called in response to the request.
+  virtual void StartPrinterStatusRequest(const std::string& printer_id,
+                                         PrinterStatusRequestCallback callback);
 #endif
 };
 

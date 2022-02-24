@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import os.path
 import posixpath
 
 import web_idl
@@ -14,8 +15,14 @@ class PathManager(object):
     """
     Provides a variety of paths such as Blink headers and output files.  Unless
     explicitly specified, returned paths are relative to the project's root
-    directory or the root directory of generated files.
-    e.g. "third_party/blink/renderer/..."
+    directory or the root directory of generated files, e.g.
+    "third_party/blink/renderer/..."
+
+    Relative paths are represented in POSIX style so that it fits nicely in
+    generated code, e.g. #include "third_party/blink/renderer/...", while
+    absolute paths are represented in a platform-specific style so that it works
+    well with a platform-specific notion, e.g. a drive letter in Windows path
+    such as "C:\\chromium\\src\\...".
 
     About output files, there are two cases.
     - cross-components case:
@@ -47,43 +54,55 @@ class PathManager(object):
         cls._blink_path_prefix = posixpath.sep + posixpath.join(
             "third_party", "blink", "renderer", "")
 
-        cls._root_src_dir = posixpath.abspath(root_src_dir)
-        cls._root_gen_dir = posixpath.abspath(root_gen_dir)
+        cls._root_src_dir = os.path.abspath(root_src_dir)
+        cls._root_gen_dir = os.path.abspath(root_gen_dir)
         cls._component_reldirs = {
             component: posixpath.normpath(rel_dir)
-            for component, rel_dir in component_reldirs.iteritems()
+            for component, rel_dir in component_reldirs.items()
         }
         cls._is_initialized = True
 
-    @staticmethod
-    def gen_path_to(path):
+    @classmethod
+    def component_path(cls, component, filepath):
+        """
+        Returns the relative path to |filepath| in |component|'s directory.
+        """
+        assert cls._is_initialized, cls._REQUIRE_INIT_MESSAGE
+        return posixpath.join(cls._component_reldirs[component], filepath)
+
+    @classmethod
+    def gen_path_to(cls, path):
         """
         Returns the absolute path of |path| that must be relative to the root
         directory of generated files.
         """
-        assert PathManager._is_initialized, PathManager._REQUIRE_INIT_MESSAGE
-        return posixpath.abspath(
-            posixpath.join(PathManager._root_gen_dir, path))
+        assert cls._is_initialized, cls._REQUIRE_INIT_MESSAGE
+        return os.path.abspath(os.path.join(cls._root_gen_dir, path))
 
     @classmethod
-    def relpath_to_project_root(cls, path):
-        index = path.find(cls._blink_path_prefix)
-        if index < 0:
-            assert path.startswith(cls._blink_path_prefix[1:])
-            return path
-        return path[index + 1:]
+    def src_path_to(cls, path):
+        """
+        Returns the absolute path of |path| that must be relative to the
+        project root directory.
+        """
+        assert cls._is_initialized, cls._REQUIRE_INIT_MESSAGE
+        return os.path.abspath(os.path.join(cls._root_src_dir, path))
 
     def __init__(self, idl_definition):
         assert self._is_initialized, self._REQUIRE_INIT_MESSAGE
 
-        idl_path = PathManager.relpath_to_project_root(
-            posixpath.normpath(idl_definition.debug_info.location.filepath))
-        idl_basepath, _ = posixpath.splitext(idl_path)
-        self._idl_dir, self._idl_basename = posixpath.split(idl_basepath)
-
         components = sorted(idl_definition.components)  # "core" < "modules"
 
-        if len(components) == 1:
+        if len(components) == 0:
+            assert isinstance(idl_definition,
+                              (web_idl.ObservableArray, web_idl.Union))
+            # Compound types of built-in types, e.g. ObservableArray<long> and
+            # (double or DOMString), do not have a component.
+            self._is_cross_components = False
+            default_component = web_idl.Component("core")
+            self._api_component = default_component
+            self._impl_component = default_component
+        elif len(components) == 1:
             component = components[0]
             self._is_cross_components = False
             self._api_component = component
@@ -92,33 +111,52 @@ class PathManager(object):
             assert components[0] == "core"
             assert components[1] == "modules"
             self._is_cross_components = True
-            self._api_component = components[0]
+            # ObservableArray and union types do not support cross-component
+            # code generation because clients of IDL observable array and IDL
+            # union types must be on an upper or same layer to any of element
+            # type and union members.
+            if isinstance(idl_definition,
+                          (web_idl.ObservableArray, web_idl.Union)):
+                self._api_component = components[1]
+            else:
+                self._api_component = components[0]
             self._impl_component = components[1]
         else:
             assert False
 
         self._api_dir = self._component_reldirs[self._api_component]
         self._impl_dir = self._component_reldirs[self._impl_component]
-        self._v8_bind_basename = name_style.file("v8",
+        if isinstance(idl_definition, web_idl.ObservableArray):
+            self._api_basename = name_style.file("v8",
                                                  idl_definition.identifier)
-
-        self._blink_dir = self._idl_dir
-        self._blink_basename = name_style.file(
-            blink_class_name(idl_definition))
-
-    @property
-    def idl_dir(self):
-        return self._idl_dir
-
-    def blink_path(self, filename=None, ext=None):
-        """
-        Returns a path to a Blink implementation file relative to the project
-        root directory, e.g. "third_party/blink/renderer/..."
-        """
-        return self._join(
-            dirpath=self._blink_dir,
-            filename=(filename or self._blink_basename),
-            ext=ext)
+            self._impl_basename = name_style.file("v8",
+                                                  idl_definition.identifier)
+            self._blink_dir = None
+            self._blink_basename = None
+        elif isinstance(idl_definition, web_idl.Union):
+            # In case of IDL unions, underscore is used as a separator of union
+            # members, so we don't want any underscore inside a union member.
+            # For example, (Foo or Bar or Baz) and (FooBar or Baz) are defined
+            # in v8_union_foo_bar_baz.ext and v8_union_foobar_baz.ext
+            # respectively.
+            #
+            # Avoid name_style.file not to make "Int32Array" into
+            # "int_32_array".
+            filename = "v8_union_{}".format("_".join(
+                idl_definition.member_tokens)).lower()
+            self._api_basename = filename
+            self._impl_basename = filename
+            self._blink_dir = None
+            self._blink_basename = None
+        else:
+            self._api_basename = name_style.file("v8",
+                                                 idl_definition.identifier)
+            self._impl_basename = name_style.file("v8",
+                                                  idl_definition.identifier)
+            idl_path = idl_definition.debug_info.location.filepath
+            self._blink_dir = posixpath.dirname(idl_path)
+            self._blink_basename = name_style.file(
+                blink_class_name(idl_definition))
 
     @property
     def is_cross_components(self):
@@ -135,7 +173,7 @@ class PathManager(object):
     def api_path(self, filename=None, ext=None):
         return self._join(
             dirpath=self.api_dir,
-            filename=(filename or self._v8_bind_basename),
+            filename=(filename or self._api_basename),
             ext=ext)
 
     @property
@@ -149,12 +187,18 @@ class PathManager(object):
     def impl_path(self, filename=None, ext=None):
         return self._join(
             dirpath=self.impl_dir,
-            filename=(filename or self._v8_bind_basename),
+            filename=(filename or self._impl_basename),
             ext=ext)
 
-    # TODO(crbug.com/1034398): Remove this API
-    def dict_path(self, filename=None, ext=None):
-        return self.blink_path(filename, ext)
+    @property
+    def blink_dir(self):
+        return self._blink_dir
+
+    def blink_path(self, filename=None, ext=None):
+        return self._join(
+            dirpath=self.blink_dir,
+            filename=(filename or self._blink_basename),
+            ext=ext)
 
     @staticmethod
     def _join(dirpath, filename, ext=None):

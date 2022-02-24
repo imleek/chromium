@@ -4,12 +4,15 @@
 
 from page_sets.login_helpers import login_utils
 
+from page_sets.helpers import override_online
+
 
 def _LoginAccount(action_runner, credential, credentials_path):
   account_name, password = login_utils.GetAccountNameAndPassword(
       credential, credentials_path=credentials_path)
 
-  action_runner.Navigate('https://www.pinterest.co.uk/login/')
+  action_runner.Navigate('https://www.pinterest.co.uk/login/',
+                         override_online.ALWAYS_ONLINE)
   action_runner.Wait(1) # Error page happens if this wait is not here.
   action_runner.WaitForElement(selector='button[type=submit]')
 
@@ -56,6 +59,13 @@ def LoginMobileAccount(action_runner, credential,
     exceptions.Error: See ExecuteJavaScript()
     for a detailed list of possible exceptions.
   """
+  wait_for_local_storage = """
+  (function() {
+    try {
+      const state = JSON.parse(window.localStorage.REDUX_STATE);
+      return state.users[state.session.userId].login_state;
+    } catch(e) { return false; }
+  })()
+  """
   _LoginAccount(action_runner, credential, credentials_path)
-  action_runner.WaitForElement(selector='svg[aria-label="Search"]')
-
+  action_runner.WaitForJavaScriptCondition(wait_for_local_storage, timeout=20)

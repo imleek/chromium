@@ -37,25 +37,26 @@ public class IdentityMutator {
     }
 
     /**
-     * Marks the account with |account_id| as the primary account, and returns whether the operation
+     * Marks the account with |accountId| as the primary account, and returns whether the operation
      * succeeded or not. To succeed, this requires that:
      *   - the account is known by the IdentityManager.
      *   - setting the primary account is allowed,
      *   - the account username is allowed by policy,
      *   - there is not already a primary account set.
      */
-    public boolean setPrimaryAccount(CoreAccountId accountId) {
-        return IdentityMutatorJni.get().setPrimaryAccount(mNativeIdentityMutator, accountId);
+    public boolean setPrimaryAccount(CoreAccountId accountId, @ConsentLevel int consentLevel) {
+        return IdentityMutatorJni.get().setPrimaryAccount(
+                mNativeIdentityMutator, accountId, consentLevel);
     }
 
     /**
-     * Clears the primary account, and returns whether the operation succeeded or not. Depending on
-     * |action|, the other accounts known to the IdentityManager may be deleted.
+     * Clears the primary account, revokes all consent, removes all accounts and returns whether the
+     * operation succeeded .
      */
-    public boolean clearPrimaryAccount(@ClearAccountsAction int action,
+    public boolean clearPrimaryAccount(
             @SignoutReason int sourceMetric, @SignoutDelete int deleteMetric) {
         return IdentityMutatorJni.get().clearPrimaryAccount(
-                mNativeIdentityMutator, action, sourceMetric, deleteMetric);
+                mNativeIdentityMutator, sourceMetric, deleteMetric);
     }
 
     /**
@@ -69,10 +70,10 @@ public class IdentityMutator {
 
     @NativeMethods
     interface Natives {
-        public boolean setPrimaryAccount(long nativeJniIdentityMutator, CoreAccountId accountId);
+        public boolean setPrimaryAccount(long nativeJniIdentityMutator, CoreAccountId accountId,
+                @ConsentLevel int consentLevel);
         public boolean clearPrimaryAccount(long nativeJniIdentityMutator,
-                @ClearAccountsAction int action, @SignoutReason int sourceMetric,
-                @SignoutDelete int deleteMetric);
+                @SignoutReason int sourceMetric, @SignoutDelete int deleteMetric);
         public void reloadAllAccountsFromSystemWithPrimaryAccount(
                 long nativeJniIdentityMutator, @Nullable CoreAccountId accountId);
     }

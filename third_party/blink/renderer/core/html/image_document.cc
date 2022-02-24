@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/dom/raw_data_document_parser.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
+#include "third_party/blink/renderer/core/events/touch_event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
@@ -68,7 +69,7 @@ class ImageEventListener : public NativeEventListener {
 
   void Invoke(ExecutionContext*, Event*) override;
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(doc_);
     NativeEventListener::Trace(visitor);
   }
@@ -92,13 +93,14 @@ struct DowncastTraits<ImageEventListener> {
 class ImageDocumentParser : public RawDataDocumentParser {
  public:
   ImageDocumentParser(ImageDocument* document)
-      : RawDataDocumentParser(document) {}
+      : RawDataDocumentParser(document),
+        world_(document->GetExecutionContext()->GetCurrentWorld()) {}
 
   ImageDocument* GetDocument() const {
     return To<ImageDocument>(RawDataDocumentParser::GetDocument());
   }
 
-  void Trace(Visitor* visitor) override {
+  void Trace(Visitor* visitor) const override {
     visitor->Trace(image_resource_);
     RawDataDocumentParser::Trace(visitor);
   }
@@ -108,6 +110,7 @@ class ImageDocumentParser : public RawDataDocumentParser {
   void Finish() override;
 
   Member<ImageResource> image_resource_;
+  const scoped_refptr<const DOMWrapperWorld> world_;
 };
 
 // --------
@@ -118,9 +121,9 @@ static String ImageTitle(const String& filename, const IntSize& size) {
   result.Append(" (");
   // FIXME: Localize numbers. Safari/OSX shows localized numbers with group
   // separaters. For example, "1,920x1,080".
-  result.AppendNumber(size.Width());
+  result.AppendNumber(size.width());
   result.Append(static_cast<UChar>(0xD7));  // U+00D7 (multiplication sign)
-  result.AppendNumber(size.Height());
+  result.AppendNumber(size.height());
   result.Append(')');
   return result.ToString();
 }
@@ -143,7 +146,7 @@ void ImageDocumentParser::AppendBytes(const char* data, size_t length) {
   if (!image_resource_) {
     ResourceRequest request(GetDocument()->Url());
     request.SetCredentialsMode(network::mojom::CredentialsMode::kOmit);
-    image_resource_ = ImageResource::Create(request);
+    image_resource_ = ImageResource::Create(request, world_);
     image_resource_->NotifyStartLoad();
 
     GetDocument()->CreateDocumentStructure(image_resource_->GetContent());
@@ -174,13 +177,15 @@ void ImageDocumentParser::Finish() {
         loader->GetTiming().ResponseEnd(),
         GetDocument()->GetTaskRunner(TaskType::kInternalLoading).get());
 
-    GetDocument()->UpdateTitle();
+    if (GetDocument()->CachedImage()) {
+      GetDocument()->UpdateTitle();
 
-    if (IsDetached())
-      return;
+      if (IsDetached())
+        return;
 
-    GetDocument()->ImageUpdated();
-    GetDocument()->ImageLoaded();
+      GetDocument()->ImageUpdated();
+      GetDocument()->ImageLoaded();
+    }
   }
 
   if (!IsDetached()) {
@@ -199,11 +204,10 @@ ImageDocument::ImageDocument(const DocumentInit& initializer)
       did_shrink_image_(false),
       should_shrink_image_(ShouldShrinkToFit()),
       image_is_loaded_(false),
-      style_mouse_cursor_mode_(kDefault),
       shrink_to_fit_mode_(GetFrame()->GetSettings()->GetViewportEnabled()
                               ? kViewport
                               : kDesktop) {
-  SetCompatibilityMode(kQuirksMode);
+  SetCompatibilityMode(kNoQuirksMode);
   LockCompatibilityMode();
 }
 
@@ -222,6 +226,8 @@ IntSize ImageDocument::ImageSize() const {
 void ImageDocument::CreateDocumentStructure(
     ImageResourceContent* image_content) {
   auto* root_element = MakeGarbageCollected<HTMLHtmlElement>(*this);
+  root_element->SetInlineStyleProperty(
+      CSSPropertyID::kHeight, 100, CSSPrimitiveValue::UnitType::kPercentage);
   AppendChild(root_element);
   root_element->InsertedByParser();
 
@@ -240,7 +246,7 @@ void ImageDocument::CreateDocumentStructure(
   if (ShouldShrinkToFit()) {
     // Display the image prominently centered in the frame.
     body->setAttribute(html_names::kStyleAttr,
-                       "margin: 0px; background: #0e0e0e;");
+                       "margin: 0px; background: #0e0e0e; height: 100%");
 
     // See w3c example on how to center an element:
     // https://www.w3.org/Style/Examples/007/center.en.html
@@ -252,7 +258,7 @@ void ImageDocument::CreateDocumentStructure(
                                "min-width: min-content;"
                                "height: 100%;"
                                "width: 100%;");
-    HTMLSlotElement* slot = HTMLSlotElement::CreateUserAgentDefaultSlot(*this);
+    HTMLSlotElement* slot = MakeGarbageCollected<HTMLSlotElement>(*this);
     div_element_->AppendChild(slot);
 
     // Adding a UA shadow root here is because the container <div> should be
@@ -262,7 +268,7 @@ void ImageDocument::CreateDocumentStructure(
     ShadowRoot& shadow_root = body->EnsureUserAgentShadowRoot();
     shadow_root.AppendChild(div_element_);
   } else {
-    body->setAttribute(html_names::kStyleAttr, "margin: 0px;");
+    body->setAttribute(html_names::kStyleAttr, "margin: 0px; height: 100%");
   }
 
   WillInsertBody();
@@ -301,7 +307,7 @@ void ImageDocument::UpdateTitle() {
   // level.  At a zoom level of 1 the image is guaranteed to have an integer
   // size.
   IntSize size = ImageSize();
-  if (!size.Width())
+  if (!size.width())
     return;
   // Compute the title, we use the decoded filename of the resource, falling
   // back on the (decoded) hostname if there is no path.
@@ -329,8 +335,8 @@ float ImageDocument::Scale() const {
   // page in (but not when the zoom is coming from device scale).
   const float viewport_zoom =
       view->GetChromeClient()->WindowToViewportScalar(GetFrame(), 1.f);
-  float width_scale = view->Width() / (viewport_zoom * image_size.Width());
-  float height_scale = view->Height() / (viewport_zoom * image_size.Height());
+  float width_scale = view->Width() / (viewport_zoom * image_size.width());
+  float height_scale = view->Height() / (viewport_zoom * image_size.height());
 
   return std::min(width_scale, height_scale);
 }
@@ -343,8 +349,8 @@ void ImageDocument::ResizeImageToFit() {
   IntSize image_size = ImageSize();
   image_size.Scale(Scale());
 
-  image_element_->setWidth(image_size.Width());
-  image_element_->setHeight(image_size.Height());
+  image_element_->setWidth(image_size.width());
+  image_element_->setHeight(image_size.height());
 
   UpdateImageStyle();
 }
@@ -367,7 +373,7 @@ void ImageDocument::ImageClicked(int x, int y) {
 
     RestoreImageSize();
 
-    UpdateStyleAndLayout();
+    UpdateStyleAndLayout(DocumentUpdateReason::kInput);
 
     double scale = Scale();
     double device_scale_factor =
@@ -380,17 +386,24 @@ void ImageDocument::ImageClicked(int x, int y) {
                      static_cast<float>(GetFrame()->View()->Height()) / 2;
 
     GetFrame()->View()->LayoutViewport()->SetScrollOffset(
-        ScrollOffset(scroll_x, scroll_y), kProgrammaticScroll);
+        ScrollOffset(scroll_x, scroll_y),
+        mojom::blink::ScrollType::kProgrammatic);
   }
 }
 
 void ImageDocument::ImageLoaded() {
   image_is_loaded_ = true;
+  UpdateImageStyle();
+}
 
-  if (ShouldShrinkToFit()) {
-    // The checkerboard background needs to be inserted.
-    UpdateImageStyle();
-  }
+ImageDocument::MouseCursorMode ImageDocument::ComputeMouseCursorMode() const {
+  if (!image_is_loaded_)
+    return kDefault;
+  if (shrink_to_fit_mode_ != kDesktop || !ShouldShrinkToFit())
+    return kDefault;
+  if (ImageFitsInWindow())
+    return kDefault;
+  return should_shrink_image_ ? kZoomIn : kZoomOut;
 }
 
 void ImageDocument::UpdateImageStyle() {
@@ -401,33 +414,20 @@ void ImageDocument::UpdateImageStyle() {
     if (shrink_to_fit_mode_ == kViewport)
       image_style.Append("max-width: 100%;");
     image_style.Append("margin: auto;");
+  }
 
+  MouseCursorMode cursor_mode = ComputeMouseCursorMode();
+  if (cursor_mode == kZoomIn)
+    image_style.Append("cursor: zoom-in;");
+  else if (cursor_mode == kZoomOut)
+    image_style.Append("cursor: zoom-out;");
+
+  if (GetFrame()->IsMainFrame()) {
     if (image_is_loaded_) {
-      MouseCursorMode new_cursor_mode = kDefault;
-
-      if (shrink_to_fit_mode_ != kViewport) {
-        // In desktop mode, the user can click on the image to zoom in or out.
-        DCHECK_EQ(shrink_to_fit_mode_, kDesktop);
-        if (ImageFitsInWindow()) {
-          new_cursor_mode = kDefault;
-        } else {
-          new_cursor_mode = should_shrink_image_ ? kZoomIn : kZoomOut;
-        }
-      }
-
-      // The only thing that can differ between updates is
-      // the type of cursor being displayed.
-      if (new_cursor_mode == style_mouse_cursor_mode_) {
-        return;
-      }
-      style_mouse_cursor_mode_ = new_cursor_mode;
-
-      if (shrink_to_fit_mode_ == kDesktop) {
-        if (style_mouse_cursor_mode_ == kZoomIn)
-          image_style.Append("cursor: zoom-in;");
-        else if (style_mouse_cursor_mode_ == kZoomOut)
-          image_style.Append("cursor: zoom-out;");
-      }
+      image_style.Append("background-color: hsl(0, 0%, 90%);");
+      image_style.Append("transition: background-color 300ms;");
+    } else if (image_size_is_known_) {
+      image_style.Append("background-color: hsl(0, 0%, 25%);");
     }
   }
 
@@ -446,6 +446,7 @@ void ImageDocument::ImageUpdated() {
     return;
 
   image_size_is_known_ = true;
+  UpdateImageStyle();
 
   if (ShouldShrinkToFit()) {
     // Force resizing of the image
@@ -461,8 +462,8 @@ void ImageDocument::RestoreImageSize() {
     return;
 
   IntSize image_size = ImageSize();
-  image_element_->setWidth(image_size.Width());
-  image_element_->setHeight(image_size.Height());
+  image_element_->setWidth(image_size.width());
+  image_element_->setHeight(image_size.height());
   UpdateImageStyle();
 
   did_shrink_image_ = false;
@@ -482,13 +483,13 @@ int ImageDocument::CalculateDivWidth() {
   //   of the frame.
   // * Images smaller in either dimension are centered along that axis.
   int viewport_width =
-      GetFrame()->GetPage()->GetVisualViewport().Size().Width() /
+      GetFrame()->GetPage()->GetVisualViewport().Size().width() /
       GetFrame()->PageZoomFactor();
 
   // For huge images, minimum-scale=0.1 is still too big on small screens.
   // Set the <div> width so that the image will shrink to fit the width of the
   // screen when the scale is minimum.
-  int max_width = std::min(ImageSize().Width(), viewport_width * 10);
+  int max_width = std::min(ImageSize().width(), viewport_width * 10);
   return std::max(viewport_width, max_width);
 }
 
@@ -511,7 +512,7 @@ void ImageDocument::WindowSizeChanged() {
     // the URL bar is showing, but won't fill the new space when the URL bar
     // hides.
     float aspect_ratio = View()->GetLayoutSize().AspectRatio();
-    int div_height = std::max(ImageSize().Height(),
+    int div_height = std::max(ImageSize().height(),
                               static_cast<int>(div_width / aspect_ratio));
     div_element_->SetInlineStyleProperty(CSSPropertyID::kHeight, div_height,
                                          CSSPrimitiveValue::UnitType::kPixels);
@@ -558,7 +559,7 @@ bool ImageDocument::ShouldShrinkToFit() const {
   return GetFrame()->IsMainFrame() && !is_wrap_content_web_view;
 }
 
-void ImageDocument::Trace(Visitor* visitor) {
+void ImageDocument::Trace(Visitor* visitor) const {
   visitor->Trace(div_element_);
   visitor->Trace(image_element_);
   HTMLDocument::Trace(visitor);
@@ -567,15 +568,14 @@ void ImageDocument::Trace(Visitor* visitor) {
 // --------
 
 void ImageEventListener::Invoke(ExecutionContext*, Event* event) {
+  auto* mouse_event = DynamicTo<MouseEvent>(event);
   if (event->type() == event_type_names::kResize) {
     doc_->WindowSizeChanged();
-  } else if (event->type() == event_type_names::kClick &&
-             event->IsMouseEvent()) {
-    MouseEvent* mouse_event = ToMouseEvent(event);
+  } else if (event->type() == event_type_names::kClick && mouse_event) {
     doc_->ImageClicked(mouse_event->x(), mouse_event->y());
   } else if ((event->type() == event_type_names::kTouchend ||
               event->type() == event_type_names::kTouchcancel) &&
-             event->IsTouchEvent()) {
+             IsA<TouchEvent>(event)) {
     doc_->UpdateImageStyle();
   }
 }

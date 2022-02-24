@@ -9,7 +9,6 @@
 
 #include "ash/assistant/ui/main_stage/assistant_ui_element_view.h"
 #include "base/component_export.h"
-#include "base/macros.h"
 
 namespace views {
 class Label;
@@ -18,6 +17,7 @@ class Label;
 namespace ash {
 
 class AssistantTextElement;
+class ElementAnimator;
 
 // AssistantTextElementView is the visual representation of an
 // AssistantTextElement. It is a child view of UiElementContainerView.
@@ -25,6 +25,12 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AssistantTextElementView
     : public AssistantUiElementView {
  public:
   explicit AssistantTextElementView(const AssistantTextElement* text_element);
+
+  explicit AssistantTextElementView(const std::string& text);
+
+  AssistantTextElementView(const AssistantTextElementView&) = delete;
+  AssistantTextElementView& operator=(const AssistantTextElementView&) = delete;
+
   ~AssistantTextElementView() override;
 
   // AssistantUiElementView:
@@ -32,13 +38,15 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AssistantTextElementView
   ui::Layer* GetLayerForAnimating() override;
   std::string ToStringForTesting() const override;
   void ChildPreferredSizeChanged(views::View* child) override;
+  std::unique_ptr<ElementAnimator> CreateAnimator() override;
+
+  // views:View:
+  void OnThemeChanged() override;
 
  private:
-  void InitLayout(const AssistantTextElement* text_element);
+  void InitLayout(const std::string& text);
 
   views::Label* label_;  // Owned by view hierarchy.
-
-  DISALLOW_COPY_AND_ASSIGN(AssistantTextElementView);
 };
 
 }  // namespace ash

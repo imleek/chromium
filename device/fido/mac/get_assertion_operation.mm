@@ -13,13 +13,11 @@
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_logging.h"
 #include "base/mac/scoped_cftyperef.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/mac/credential_metadata.h"
-#include "device/fido/mac/keychain.h"
 #include "device/fido/mac/util.h"
 #include "device/fido/public_key_credential_descriptor.h"
 #include "device/fido/public_key_credential_user_entity.h"
@@ -32,14 +30,14 @@ namespace mac {
 
 using base::ScopedCFTypeRef;
 
-GetAssertionOperation::GetAssertionOperation(CtapGetAssertionRequest request,
-                                             std::string metadata_secret,
-                                             std::string keychain_access_group,
-                                             Callback callback)
-    : metadata_secret_(std::move(metadata_secret)),
-      keychain_access_group_(std::move(keychain_access_group)),
-      request_(std::move(request)),
+GetAssertionOperation::GetAssertionOperation(
+    CtapGetAssertionRequest request,
+    TouchIdCredentialStore* credential_store,
+    Callback callback)
+    : request_(std::move(request)),
+      credential_store_(credential_store),
       callback_(std::move(callback)) {}
+
 GetAssertionOperation::~GetAssertionOperation() = default;
 
 void GetAssertionOperation::Run() {
@@ -54,53 +52,51 @@ void GetAssertionOperation::Run() {
 void GetAssertionOperation::PromptTouchIdDone(bool success) {
   if (!success) {
     std::move(callback_).Run(CtapDeviceResponseCode::kCtap2ErrOperationDenied,
-                             base::nullopt);
+                             absl::nullopt);
     return;
   }
-  std::set<std::vector<uint8_t>> allowed_credential_ids =
-      FilterInapplicableEntriesFromAllowList(request_);
-  if (allowed_credential_ids.empty() && !request_.allow_list.empty()) {
-    // The caller checking
-    // TouchIdAuthenticator::HasCredentialForGetAssertionRequest() should have
-    // caught this.
-    NOTREACHED();
-    std::move(callback_).Run(CtapDeviceResponseCode::kCtap2ErrNoCredentials,
-                             base::nullopt);
-    return;
-  }
+
+  // Setting an authentication context authorizes credentials returned from the
+  // credential store for signing without triggering yet another Touch ID
+  // prompt.
+  credential_store_->set_authentication_context(
+      touch_id_context_->authentication_context());
+
   const bool empty_allow_list = request_.allow_list.empty();
-
-  std::list<Credential> credentials =
+  absl::optional<std::list<Credential>> credentials =
       empty_allow_list
-          ? FindResidentCredentialsInKeychain(
-                keychain_access_group_, metadata_secret_, request_.rp_id,
-                touch_id_context_->authentication_context())
-          : FindCredentialsInKeychain(
-                keychain_access_group_, metadata_secret_, request_.rp_id,
-                allowed_credential_ids,
-                touch_id_context_->authentication_context());
+          ? credential_store_->FindResidentCredentials(request_.rp_id)
+          : credential_store_->FindCredentialsFromCredentialDescriptorList(
+                request_.rp_id, request_.allow_list);
 
-  if (credentials.empty()) {
+  if (!credentials) {
+    FIDO_LOG(ERROR) << "FindCredentialsFromCredentialDescriptorList() failed";
+    std::move(callback_).Run(CtapDeviceResponseCode::kCtap2ErrOther,
+                             absl::nullopt);
+    return;
+  }
+
+  if (credentials->empty()) {
     // TouchIdAuthenticator::HasCredentialForGetAssertionRequest() is
     // invoked first to ensure this doesn't occur.
     NOTREACHED();
     std::move(callback_).Run(CtapDeviceResponseCode::kCtap2ErrNoCredentials,
-                             base::nullopt);
+                             absl::nullopt);
     return;
   }
 
-  base::Optional<AuthenticatorGetAssertionResponse> response =
-      ResponseForCredential(credentials.front());
+  absl::optional<AuthenticatorGetAssertionResponse> response =
+      ResponseForCredential(credentials->front());
   if (!response) {
     std::move(callback_).Run(CtapDeviceResponseCode::kCtap2ErrNoCredentials,
-                             base::nullopt);
+                             absl::nullopt);
     return;
   }
 
   if (empty_allow_list) {
-    response->SetNumCredentials(credentials.size());
-    credentials.pop_front();
-    matching_credentials_ = std::move(credentials);
+    response->num_credentials = credentials->size();
+    credentials->pop_front();
+    matching_credentials_ = std::move(*credentials);
   }
 
   std::move(callback_).Run(CtapDeviceResponseCode::kSuccess,
@@ -115,53 +111,39 @@ void GetAssertionOperation::GetNextAssertion(Callback callback) {
   if (!response) {
     NOTREACHED();
     std::move(callback).Run(CtapDeviceResponseCode::kCtap2ErrOther,
-                            base::nullopt);
+                            absl::nullopt);
     return;
   }
   std::move(callback).Run(CtapDeviceResponseCode::kSuccess,
                           std::move(*response));
 }
 
-base::Optional<AuthenticatorGetAssertionResponse>
+absl::optional<AuthenticatorGetAssertionResponse>
 GetAssertionOperation::ResponseForCredential(const Credential& credential) {
-  base::Optional<CredentialMetadata> metadata = UnsealCredentialId(
-      metadata_secret_, request_.rp_id, credential.credential_id);
+  absl::optional<CredentialMetadata> metadata =
+      credential_store_->UnsealMetadata(request_.rp_id, credential);
   if (!metadata) {
     // The keychain query already filtered for the RP ID encoded under this
     // operation's metadata secret, so the credential id really should have
     // been decryptable.
-    FIDO_LOG(ERROR) << "UnsealCredentialId failed";
-    return base::nullopt;
+    FIDO_LOG(ERROR) << "UnsealMetadata failed";
+    return absl::nullopt;
   }
 
   AuthenticatorData authenticator_data = MakeAuthenticatorData(
-      request_.rp_id, /*attested_credential_data=*/base::nullopt);
-  base::Optional<std::vector<uint8_t>> signature = GenerateSignature(
+      request_.rp_id, /*attested_credential_data=*/absl::nullopt);
+  absl::optional<std::vector<uint8_t>> signature = GenerateSignature(
       authenticator_data, request_.client_data_hash, credential.private_key);
   if (!signature) {
     FIDO_LOG(ERROR) << "GenerateSignature failed";
-    return base::nullopt;
+    return absl::nullopt;
   }
   AuthenticatorGetAssertionResponse response(std::move(authenticator_data),
                                              std::move(*signature));
-  response.SetCredential(PublicKeyCredentialDescriptor(
-      CredentialType::kPublicKey, credential.credential_id));
-  response.SetUserEntity(metadata->ToPublicKeyCredentialUserEntity());
+  response.credential = PublicKeyCredentialDescriptor(
+      CredentialType::kPublicKey, credential.credential_id);
+  response.user_entity = metadata->ToPublicKeyCredentialUserEntity();
   return response;
-}
-
-std::set<std::vector<uint8_t>> FilterInapplicableEntriesFromAllowList(
-    const CtapGetAssertionRequest& request) {
-  std::set<std::vector<uint8_t>> allowed_credential_ids;
-  for (const auto& credential_descriptor : request.allow_list) {
-    if (credential_descriptor.credential_type() == CredentialType::kPublicKey &&
-        (credential_descriptor.transports().empty() ||
-         base::Contains(credential_descriptor.transports(),
-                        FidoTransportProtocol::kInternal))) {
-      allowed_credential_ids.insert(credential_descriptor.id());
-    }
-  }
-  return allowed_credential_ids;
 }
 
 }  // namespace mac

@@ -40,7 +40,8 @@ SVGLength* SVGLengthInterpolationType::ResolveInterpolableSVGLength(
     bool negative_values_forbidden) {
   const InterpolableLength& length = To<InterpolableLength>(interpolable_value);
   const CSSPrimitiveValue* primitive_value = length.CreateCSSValue(
-      negative_values_forbidden ? kValueRangeNonNegative : kValueRangeAll);
+      negative_values_forbidden ? Length::ValueRange::kNonNegative
+                                : Length::ValueRange::kAll);
 
   // We optimise for the common case where only one unit type is involved.
   if (primitive_value->IsNumericLiteralValue())
@@ -70,7 +71,7 @@ InterpolationValue SVGLengthInterpolationType::MaybeConvertSVGValue(
   if (svg_value.GetType() != kAnimatedLength)
     return nullptr;
 
-  return MaybeConvertSVGLength(ToSVGLength(svg_value));
+  return MaybeConvertSVGLength(To<SVGLength>(svg_value));
 }
 
 SVGPropertyBase* SVGLengthInterpolationType::AppliedSVGValue(

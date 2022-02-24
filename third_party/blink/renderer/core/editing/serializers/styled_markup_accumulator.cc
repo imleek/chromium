@@ -91,7 +91,8 @@ void StyledMarkupAccumulator::AppendText(Text& text) {
     }
   }
   MarkupFormatter::AppendCharactersReplacingEntities(
-      result_, str, start, length, formatter_.EntityMaskForText(text));
+      result_, StringView(str, start, length),
+      formatter_.EntityMaskForText(text));
 }
 
 void StyledMarkupAccumulator::AppendTextWithInlineStyle(
@@ -107,9 +108,8 @@ void StyledMarkupAccumulator::AppendTextWithInlineStyle(
     DCHECK(document_);
 
     result_.Append("<span style=\"");
-    MarkupFormatter::AppendAttributeValue(result_,
-                                          inline_style->Style()->AsText(),
-                                          IsA<HTMLDocument>(document_.Get()));
+    MarkupFormatter::AppendAttributeValue(
+        result_, inline_style->Style()->AsText(), IsA<HTMLDocument>(document_));
     result_.Append("\">");
   }
   if (!ShouldAnnotate()) {
@@ -120,8 +120,8 @@ void StyledMarkupAccumulator::AppendTextWithInlineStyle(
     String content =
         use_rendered_text ? RenderedText(text) : StringValueForRange(text);
     StringBuilder buffer;
-    MarkupFormatter::AppendCharactersReplacingEntities(
-        buffer, content, 0, content.length(), kEntityMaskInPCDATA);
+    MarkupFormatter::AppendCharactersReplacingEntities(buffer, content,
+                                                       kEntityMaskInPCDATA);
     // Keep collapsible white spaces as is during markup sanitization.
     const String text_to_append =
         IsForMarkupSanitization()
@@ -196,7 +196,7 @@ void StyledMarkupAccumulator::WrapWithStyleNode(CSSPropertyValueSet* style) {
   StringBuilder open_tag;
   open_tag.Append("<div style=\"");
   MarkupFormatter::AppendAttributeValue(open_tag, style->AsText(),
-                                        IsA<HTMLDocument>(document_.Get()));
+                                        IsA<HTMLDocument>(document_));
   open_tag.Append("\">");
   reversed_preceding_markup_.push_back(open_tag.ToString());
 

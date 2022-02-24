@@ -5,26 +5,31 @@
 #ifndef CHROME_BROWSER_UI_COLOR_CHROME_COLOR_ID_H_
 #define CHROME_BROWSER_UI_COLOR_CHROME_COLOR_ID_H_
 
-#include "ui/color/color_buildflags.h"
 #include "ui/color/color_id.h"
-
-#if !BUILDFLAG(USE_COLOR_PIPELINE)
-#include "chrome/browser/themes/theme_properties.h"  // nogncheck
-#endif
 
 // TODO(pkasting): Add the rest of the colors.
 
 // clang-format off
 #define CHROME_COLOR_IDS \
+  /* Bookmark Bar output colors. */ \
+  E(kColorBookmarkText, ThemeProperties::COLOR_BOOKMARK_TEXT, \
+    kChromeColorsStart) \
+  /* Download Shelf output colors. */ \
+  E(kColorDownloadShelf, ThemeProperties::COLOR_DOWNLOAD_SHELF) \
+  E(kColorDownloadShelfButtonBackground, \
+    ThemeProperties::COLOR_DOWNLOAD_SHELF_BUTTON_BACKGROUND) \
+  E(kColorDownloadShelfButtonText, \
+    ThemeProperties::COLOR_DOWNLOAD_SHELF_BUTTON_TEXT) \
   /* Omnibox output colors. */ \
-  E(kColorOmniboxBackground, \
-    ThemeProperties::COLOR_OMNIBOX_BACKGROUND, kChromeColorsStart) \
+  E(kColorOmniboxBackground, ThemeProperties::COLOR_OMNIBOX_BACKGROUND) \
   E(kColorOmniboxBackgroundHovered, \
     ThemeProperties::COLOR_OMNIBOX_BACKGROUND_HOVERED) \
   E(kColorOmniboxBubbleOutline, \
     ThemeProperties::COLOR_OMNIBOX_BUBBLE_OUTLINE) \
   E(kColorOmniboxBubbleOutlineExperimentalKeywordMode, \
     ThemeProperties::COLOR_OMNIBOX_BUBBLE_OUTLINE_EXPERIMENTAL_KEYWORD_MODE) \
+  E(kColorOmniboxKeywordSelected, \
+    ThemeProperties::COLOR_OMNIBOX_SELECTED_KEYWORD) \
   E(kColorOmniboxResultsBackground, \
     ThemeProperties::COLOR_OMNIBOX_RESULTS_BG) \
   E(kColorOmniboxResultsBackgroundHovered, \
@@ -49,12 +54,13 @@
     ThemeProperties::COLOR_OMNIBOX_SECURITY_CHIP_DEFAULT) \
   E(kColorOmniboxSecurityChipSecure, \
     ThemeProperties::COLOR_OMNIBOX_SECURITY_CHIP_SECURE) \
-  E(kColorOmniboxSelectedKeyword, \
-    ThemeProperties::COLOR_OMNIBOX_SELECTED_KEYWORD) \
   E(kColorOmniboxText, ThemeProperties::COLOR_OMNIBOX_TEXT) \
   E(kColorOmniboxTextDimmed, ThemeProperties::COLOR_OMNIBOX_TEXT_DIMMED) \
-  \
-  E(kColorToolbar, ThemeProperties::COLOR_TOOLBAR)
+  /* Toolbar output colors. */ \
+  E(kColorToolbar, ThemeProperties::COLOR_TOOLBAR) \
+  E(kColorToolbarButtonIcon, ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON) \
+  E(kColorToolbarContentAreaSeparator, \
+    ThemeProperties::COLOR_TOOLBAR_CONTENT_AREA_SEPARATOR)
 
 #include "ui/color/color_id_macros.inc"
 
@@ -73,12 +79,10 @@ enum ChromeColorIds : ui::ColorId {
 static_assert(ui::ColorId{kChromeColorsEnd} <= ui::ColorId{ui::kUiColorsLast},
               "Embedder colors must not exceed allowed space");
 
-#if BUILDFLAG(USE_COLOR_PIPELINE)
 enum ChromeColorSetIds : ui::ColorSetId {
   kColorSetCustomTheme = ui::kUiColorSetsEnd,
 
   kChromeColorSetsEnd,
 };
-#endif  // BUILDFLAG(USE_COLOR_PIPELINE)
 
 #endif  // CHROME_BROWSER_UI_COLOR_CHROME_COLOR_ID_H_

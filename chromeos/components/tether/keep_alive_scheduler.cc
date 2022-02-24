@@ -57,7 +57,7 @@ void KeepAliveScheduler::OnActiveHostChanged(
     DCHECK(change_info.new_wifi_network_guid.empty());
 
     keep_alive_operation_.reset();
-    active_host_device_ = base::nullopt;
+    active_host_device_ = absl::nullopt;
     timer_->Stop();
     return;
   }
@@ -65,10 +65,9 @@ void KeepAliveScheduler::OnActiveHostChanged(
   if (change_info.new_status == ActiveHost::ActiveHostStatus::CONNECTED) {
     DCHECK(change_info.new_active_host);
     active_host_device_ = change_info.new_active_host;
-    timer_->Start(FROM_HERE,
-                  base::TimeDelta::FromMinutes(kKeepAliveIntervalMinutes),
-                  base::Bind(&KeepAliveScheduler::SendKeepAliveTickle,
-                             weak_ptr_factory_.GetWeakPtr()));
+    timer_->Start(FROM_HERE, base::Minutes(kKeepAliveIntervalMinutes),
+                  base::BindRepeating(&KeepAliveScheduler::SendKeepAliveTickle,
+                                      weak_ptr_factory_.GetWeakPtr()));
     SendKeepAliveTickle();
   }
 }
@@ -118,7 +117,7 @@ void KeepAliveScheduler::OnOperationFinished(
 void KeepAliveScheduler::SendKeepAliveTickle() {
   DCHECK(active_host_device_);
 
-  keep_alive_operation_ = KeepAliveOperation::Factory::NewInstance(
+  keep_alive_operation_ = KeepAliveOperation::Factory::Create(
       *active_host_device_, device_sync_client_, secure_channel_client_);
   keep_alive_operation_->AddObserver(this);
   keep_alive_operation_->Initialize();

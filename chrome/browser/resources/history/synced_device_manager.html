@@ -49,10 +49,16 @@
       #synced-device-list {
         padding-top: var(--first-card-padding-top);
       }
+
+      history-synced-device-card {
+        margin-block-end: var(--card-padding-between);
+      }
     </style>
-    <div id="synced-device-list" hidden="[[!syncedDevices_.length]]">
+    <div id="synced-device-list" class="history-cards"
+        hidden="[[!syncedDevices_.length]]">
       <template is="dom-repeat" items="[[syncedDevices_]]" as="syncedDevice">
-        <history-synced-device-card device="[[syncedDevice.device]]"
+        <history-synced-device-card
+            device="[[syncedDevice.device]]"
             last-update-time="[[syncedDevice.lastUpdateTime]]"
             tabs="[[syncedDevice.tabs]]"
             separator-indexes="[[syncedDevice.separatorIndexes]]"
@@ -68,7 +74,8 @@
       [[noSyncedTabsMessage(fetchingSyncedTabs_, searchTerm)]]
     </div>
     <div id="sign-in-guide"
-        hidden="[[!showSignInGuide(signInState, guestSession_)]]">
+        hidden="[[!showSignInGuide(signInState, guestSession_,
+                                   signInAllowed_)]]">
       <div id="illustration"></div>
       <div id="sign-in-promo">$i18n{signInPromo}</div>
       <div id="sign-in-promo-desc">$i18n{signInPromoDesc}</div>

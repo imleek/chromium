@@ -5,6 +5,7 @@
 #ifndef CONTENT_PUBLIC_TEST_SLOW_DOWNLOAD_HTTP_RESPONSE_H_
 #define CONTENT_PUBLIC_TEST_SLOW_DOWNLOAD_HTTP_RESPONSE_H_
 
+#include "base/strings/string_split.h"
 #include "content/public/test/slow_http_response.h"
 
 namespace content {
@@ -13,21 +14,29 @@ namespace content {
 class SlowDownloadHttpResponse : public SlowHttpResponse {
  public:
   // Test URLs.
+  static const char kSlowResponseHostName[];
   static const char kUnknownSizeUrl[];
   static const char kKnownSizeUrl[];
 
+  // Helper to handle requests that should reply with SlowDownloadHttpResponse.
+  // NOTE: This helper makes use of a global so only one such request/response
+  // in flight at a time will be able to be finished by navigating to
+  // `kFinishSlowResponseUrl`.
   static std::unique_ptr<net::test_server::HttpResponse>
   HandleSlowDownloadRequest(const net::test_server::HttpRequest& request);
 
-  SlowDownloadHttpResponse(const std::string& url);
+  SlowDownloadHttpResponse(const std::string& url,
+                           GotRequestCallback got_request);
   ~SlowDownloadHttpResponse() override;
 
   SlowDownloadHttpResponse(const SlowDownloadHttpResponse&) = delete;
   SlowDownloadHttpResponse& operator=(const SlowDownloadHttpResponse&) = delete;
 
   // SlowHttpResponse:
-  bool IsHandledUrl() override;
-  void AddResponseHeaders(std::string* response) override;
+  base::StringPairs ResponseHeaders() override;
+
+ private:
+  std::string url_;
 };
 
 }  // namespace content

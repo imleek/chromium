@@ -23,10 +23,8 @@ namespace {
 
 using quic::CryptoHandshakeMessage;
 using quic::ParsedQuicVersion;
-using quic::PROTOCOL_TLS1_3;
-using quic::QUIC_VERSION_99;
 using quic::QuicChromiumClock;
-using quic::QuicCryptoServerStream;
+using quic::QuicCryptoServerStreamBase;
 using quic::QuicSocketAddress;
 using quic::QuicTransportSimpleServerSession;
 
@@ -35,10 +33,21 @@ constexpr size_t kMaxReadsPerEvent = 32;
 constexpr size_t kMaxNewConnectionsPerEvent = 32;
 constexpr int kReadBufferSize = 2 * quic::kMaxIncomingPacketSize;
 
+// TODO(vasilvv): move this into the shared code.
+quic::ParsedQuicVersionVector AllVersionsValidForQuicTransport() {
+  quic::ParsedQuicVersionVector result;
+  for (quic::ParsedQuicVersion version : quic::AllSupportedVersions()) {
+    if (!quic::IsVersionValidForQuicTransport(version))
+      continue;
+    result.push_back(version);
+  }
+  return result;
+}
+
 }  // namespace
 
 class QuicTransportSimpleServerSessionHelper
-    : public QuicCryptoServerStream::Helper {
+    : public QuicCryptoServerStreamBase::Helper {
  public:
   bool CanAcceptClientHello(const CryptoHandshakeMessage& /*message*/,
                             const QuicSocketAddress& /*client_address*/,
@@ -50,11 +59,11 @@ class QuicTransportSimpleServerSessionHelper
 };
 
 QuicTransportSimpleServer::QuicTransportSimpleServer(
-    int port,
+    uint16_t port,
     std::vector<url::Origin> accepted_origins,
     std::unique_ptr<quic::ProofSource> proof_source)
     : port_(port),
-      version_manager_({ParsedQuicVersion{PROTOCOL_TLS1_3, QUIC_VERSION_99}}),
+      version_manager_(AllVersionsValidForQuicTransport()),
       clock_(QuicChromiumClock::GetInstance()),
       crypto_config_(kSourceAddressTokenSecret,
                      quic::QuicRandom::GetInstance(),
@@ -121,7 +130,9 @@ void QuicTransportSimpleServer::ProcessReadPacket(int result) {
     LOG(ERROR) << "QuicTransportSimpleServer read failed: "
                << ErrorToString(result);
     dispatcher_.Shutdown();
-    exit(EXIT_FAILURE);
+    if (read_error_callback_) {
+      std::move(read_error_callback_).Run(result);
+    }
     return;
   }
 

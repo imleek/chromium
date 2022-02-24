@@ -3,11 +3,8 @@
 // found in the LICENSE file.
 package org.chromium.android_webview.services;
 
-import android.content.ComponentName;
 import android.content.ContentProvider;
 import android.content.ContentValues;
-import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
@@ -55,22 +52,9 @@ public final class DeveloperModeContentProvider extends ContentProvider {
                 boolean enabled = entry.getValue();
                 cursor.addRow(new Object[] {flagName, enabled ? 1 : 0});
             }
-            if (flagOverrides.isEmpty()) {
-                disableDeveloperMode();
-            }
             return cursor;
         }
         return null;
-    }
-
-    private void disableDeveloperMode() {
-        ComponentName developerModeContentProvider =
-                new ComponentName(getContext(), DeveloperModeContentProvider.class.getName());
-        getContext().getPackageManager().setComponentEnabledSetting(developerModeContentProvider,
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
-
-        // Stop the service explicitly, in case it's running. NOOP if the service is not running.
-        getContext().stopService(new Intent(getContext(), DeveloperUiService.class));
     }
 
     @Override

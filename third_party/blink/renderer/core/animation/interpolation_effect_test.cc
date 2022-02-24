@@ -4,7 +4,7 @@
 
 #include <memory>
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/renderer/core/animation/animation_test_helper.h"
+#include "third_party/blink/renderer/core/animation/animation_test_helpers.h"
 #include "third_party/blink/renderer/core/animation/css_number_interpolation_type.h"
 #include "third_party/blink/renderer/core/animation/interpolation_effect.h"
 #include "third_party/blink/renderer/core/animation/transition_interpolation.h"
@@ -17,7 +17,7 @@ double GetInterpolableNumber(Interpolation* value) {
   auto* interpolation = To<TransitionInterpolation>(value);
   std::unique_ptr<TypedInterpolationValue> interpolated_value =
       interpolation->GetInterpolatedValue();
-  return ToInterpolableNumber(interpolated_value->GetInterpolableValue())
+  return To<InterpolableNumber>(interpolated_value->GetInterpolableValue())
       .Value();
 }
 

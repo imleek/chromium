@@ -27,6 +27,9 @@
         "background:tools:gmail": {
             "DEFAULT": "system_health_mobile_043.wprgo"
         },
+        "background:tools:gmail:2019": {
+            "DEFAULT": "system_health_mobile_8da411a0f4.wprgo"
+        },
         "browse:chrome:newtab": {
             "DEFAULT": "system_health_mobile_056.wprgo"
         },
@@ -60,16 +63,25 @@
         "browse:media:imgur:2019": {
             "DEFAULT": "system_health_mobile_96a8c80910.wprgo"
         },
+        "browse:media:tiktok_infinite_scroll:2021": {
+            "DEFAULT": "system_health_mobile_aa314c8f73.wprgo"
+        },
         "browse:media:youtube": {
             "DEFAULT": "system_health_mobile_037.wprgo"
         },
         "browse:media:youtube:2019": {
             "DEFAULT": "system_health_mobile_e3bcdb3230.wprgo"
         },
+        "browse:news:businessinsider:2021": {
+            "DEFAULT": "system_health_mobile_48dc279cfd.wprgo"
+        },
+        "browse:news:businessinsider:loading:2021": {
+            "DEFAULT": "system_health_mobile_48dc279cfd.wprgo"
+        },
         "browse:news:cnn": {
             "DEFAULT": "system_health_mobile_014.wprgo"
         },
-        "browse:news:cnn:2018": {
+        "browse:news:cnn:2021": {
             "DEFAULT": "system_health_mobile_066.wprgo"
         },
         "browse:news:cricbuzz": {
@@ -127,13 +139,13 @@
             "DEFAULT": "system_health_mobile_d7a7409e72.wprgo"
         },
         "browse:shopping:amazon": {
-            "DEFAULT": "system_health_mobile_053.wprgo"
+            "DEFAULT": "system_health_mobile_7bd6160490.wprgo"
         },
         "browse:shopping:amazon:2019": {
             "DEFAULT": "system_health_mobile_5f3fefb816.wprgo"
         },
         "browse:shopping:avito": {
-            "DEFAULT": "system_health_mobile_053.wprgo"
+            "DEFAULT": "system_health_mobile_7bd6160490.wprgo"
         },
         "browse:shopping:avito:2019": {
             "DEFAULT": "system_health_mobile_e3a51d0666.wprgo"
@@ -141,8 +153,11 @@
         "browse:shopping:flipkart": {
             "DEFAULT": "system_health_mobile_061.wprgo"
         },
+        "browse:shopping:flipkart:2019": {
+            "DEFAULT": "system_health_mobile_605f2323f8.wprgo"
+        },
         "browse:shopping:lazada": {
-            "DEFAULT": "system_health_mobile_053.wprgo"
+            "DEFAULT": "system_health_mobile_7bd6160490.wprgo"
         },
         "browse:shopping:lazada:2019": {
             "DEFAULT": "system_health_mobile_8df98214f9.wprgo"
@@ -168,8 +183,8 @@
         "browse:social:pinterest_infinite_scroll": {
             "DEFAULT": "system_health_mobile_063.wprgo"
         },
-        "browse:social:pinterest_infinite_scroll:2019": {
-            "DEFAULT": "system_health_mobile_d8fcf4e2bf.wprgo"
+        "browse:social:pinterest_infinite_scroll:2021": {
+            "DEFAULT": "system_health_mobile_807128ffeb.wprgo"
         },
         "browse:social:tumblr_infinite_scroll": {
             "DEFAULT": "system_health_mobile_062.wprgo"
@@ -198,8 +213,8 @@
         "load:games:bubbles": {
             "DEFAULT": "system_health_mobile_005.wprgo"
         },
-        "load:games:bubbles:2019": {
-            "DEFAULT": "system_health_mobile_43f2372bc8.wprgo"
+        "load:games:bubbles:2020": {
+            "DEFAULT": "system_health_mobile_568190fad9.wprgo"
         },
         "load:games:lazors": {
             "DEFAULT": "system_health_mobile_005.wprgo"
@@ -219,11 +234,17 @@
         "load:media:dailymotion:2019": {
             "DEFAULT": "system_health_mobile_eb4a1d8292.wprgo"
         },
+        "load:media:facebook_feed:mobile:2020": {
+            "DEFAULT": "system_health_mobile_b419f6ee29.wprgo"
+        },
         "load:media:facebook_photos": {
             "DEFAULT": "system_health_mobile_040.wprgo"
         },
         "load:media:facebook_photos:2019": {
             "DEFAULT": "system_health_mobile_6fb624f9e6.wprgo"
+        },
+        "load:media:facebook_photos:mobile:2020": {
+            "DEFAULT": "system_health_mobile_93a1b4b4b9.wprgo"
         },
         "load:media:flickr": {
             "DEFAULT": "system_health_mobile_003.wprgo"
@@ -264,7 +285,7 @@
         "load:news:cnn": {
             "DEFAULT": "system_health_mobile_006.wprgo"
         },
-        "load:news:cnn:2018": {
+        "load:news:cnn:2020": {
             "DEFAULT": "system_health_mobile_f70e9f436d.wprgo"
         },
         "load:news:flipboard": {
@@ -275,6 +296,9 @@
         },
         "load:news:irctc": {
             "DEFAULT": "system_health_mobile_058.wprgo"
+        },
+        "load:news:irctc:2019": {
+            "DEFAULT": "system_health_mobile_941a515134.wprgo"
         },
         "load:news:nytimes": {
             "DEFAULT": "system_health_mobile_009.wprgo"
@@ -395,6 +419,9 @@
         },
         "load:tools:gmail": {
             "DEFAULT": "system_health_mobile_048.wprgo"
+        },
+        "load:tools:gmail:2019": {
+            "DEFAULT": "system_health_mobile_b8a3bd8e6d.wprgo"
         },
         "load:tools:maps": {
             "DEFAULT": "system_health_mobile_004.wprgo"

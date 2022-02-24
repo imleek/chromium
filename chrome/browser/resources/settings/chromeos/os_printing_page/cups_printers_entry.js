@@ -6,9 +6,25 @@
  * @fileoverview 'settings-cups-printers-entry' is a component that holds a
  * printer.
  */
+import '//resources/cr_elements/cr_button/cr_button.m.js';
+import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
+import '../../settings_shared_css.js';
+
+import {FocusRowBehavior} from '//resources/js/cr/ui/focus_row_behavior.m.js';
+import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {loadTimeData} from '../../i18n_setup.js';
+
+import {PrinterListEntry, PrinterType} from './cups_printer_types.js';
+import {CupsPrinterInfo, CupsPrintersBrowserProxy, CupsPrintersBrowserProxyImpl, CupsPrintersList, ManufacturersInfo, ModelsInfo, PrinterMakeModel, PrinterPpdMakeModel, PrinterSetupResult, PrintServerResult} from './cups_printers_browser_proxy.js';
+
 Polymer({
+  _template: html`{__html_template__}`,
   is: 'settings-cups-printers-entry',
 
+  behaviors: [
+    FocusRowBehavior,
+  ],
   properties: {
     /** @type {!PrinterListEntry} */
     printerEntry: Object,
@@ -20,57 +36,94 @@ Polymer({
      * @type {string}
      */
     subtext: {type: String, value: ''},
+
+    /**
+     * This value is set to true if the printer is in saving mode.
+     */
+    savingPrinter: Boolean,
+
+    /**
+     * This value is set to true if UserPrintersAllowed policy is enabled.
+     */
+    userPrintersAllowed: {
+      type: Boolean,
+      value: false,
+    }
   },
 
   /**
    * Fires a custom event when the menu button is clicked. Sends the details of
    * the printer and where the menu should appear.
    */
-  onOpenActionMenuTap_: function(e) {
+  onOpenActionMenuTap_(e) {
     this.fire('open-action-menu', {
       target: e.target,
       item: this.printerEntry,
     });
   },
 
-  onAddDiscoveredPrinterTap_: function(e) {
+  /** @private */
+  onAddDiscoveredPrinterTap_(e) {
     this.fire('query-discovered-printer', {item: this.printerEntry});
   },
 
-  onAddAutomaticPrinterTap_: function() {
+  /** @private */
+  onAddAutomaticPrinterTap_() {
     this.fire('add-automatic-printer', {item: this.printerEntry});
   },
 
-  /**
-   * @return {boolean}
-   * @private
-   */
-  isSavedPrinter_: function() {
-    return this.printerEntry.printerType == PrinterType.SAVED;
+  /** @private */
+  onAddServerPrinterTap_: function() {
+    this.fire('add-print-server-printer', {item: this.printerEntry});
   },
 
   /**
    * @return {boolean}
    * @private
    */
-  isDiscoveredPrinter_: function() {
-    return this.printerEntry.printerType == PrinterType.DISCOVERED;
+  showActionsMenu_() {
+    return this.printerEntry.printerType === PrinterType.SAVED ||
+        this.printerEntry.printerType === PrinterType.ENTERPRISE;
   },
 
   /**
    * @return {boolean}
    * @private
    */
-  isAutomaticPrinter_: function() {
-    return this.printerEntry.printerType == PrinterType.AUTOMATIC;
+  isDiscoveredPrinter_() {
+    return this.printerEntry.printerType === PrinterType.DISCOVERED;
   },
 
-  getSaveButtonAria_: function() {
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isAutomaticPrinter_() {
+    return this.printerEntry.printerType === PrinterType.AUTOMATIC;
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isPrintServerPrinter_() {
+    return this.printerEntry.printerType === PrinterType.PRINTSERVER;
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isConfigureDisabled_() {
+    return !this.userPrintersAllowed || this.savingPrinter;
+  },
+
+  getSaveButtonAria_() {
     return loadTimeData.getStringF(
         'savePrinterAria', this.printerEntry.printerInfo.printerName);
   },
 
-  getSetupButtonAria_: function() {
+  getSetupButtonAria_() {
     return loadTimeData.getStringF(
         'setupPrinterAria', this.printerEntry.printerInfo.printerName);
   },

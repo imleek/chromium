@@ -7,13 +7,13 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
-#include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/history/core/browser/web_history_service.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
 #include "components/version_info/version_info.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace {
 
@@ -60,7 +60,7 @@ void ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
   if (!sync_service || !sync_service->IsSyncFeatureActive() ||
       !sync_service->GetActiveDataTypes().Has(
           syncer::HISTORY_DELETE_DIRECTIVES) ||
-      sync_service->GetUserSettings()->IsUsingSecondaryPassphrase() ||
+      sync_service->GetUserSettings()->IsUsingExplicitPassphrase() ||
       !history_service) {
     std::move(callback).Run(false);
     return;
@@ -103,7 +103,7 @@ void ShouldPopupDialogAboutOtherFormsOfBrowsingHistory(
   if (!sync_service || !sync_service->IsSyncFeatureActive() ||
       !sync_service->GetActiveDataTypes().Has(
           syncer::HISTORY_DELETE_DIRECTIVES) ||
-      sync_service->GetUserSettings()->IsUsingSecondaryPassphrase() ||
+      sync_service->GetUserSettings()->IsUsingExplicitPassphrase() ||
       !history_service) {
     std::move(callback).Run(false);
     return;
@@ -114,6 +114,7 @@ void ShouldPopupDialogAboutOtherFormsOfBrowsingHistory(
   // after processing both callbacks.
   MergeBooleanCallbacks* merger =
       new MergeBooleanCallbacks(2, std::move(callback));
+
   net::PartialNetworkTrafficAnnotationTag partial_traffic_annotation =
       net::DefinePartialNetworkTrafficAnnotation("history_notice_utils_popup",
                                                  "web_history_service", R"(

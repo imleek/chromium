@@ -23,9 +23,11 @@
 
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
 
+#include "services/network/public/cpp/web_sandbox_flags.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/binding_security.h"
+#include "third_party/blink/renderer/bindings/core/v8/js_event_handler_for_content_attribute.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -43,13 +45,14 @@
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
 
 HTMLFrameElementBase::HTMLFrameElementBase(const QualifiedName& tag_name,
                                            Document& document)
     : HTMLFrameOwnerElement(tag_name, document),
-      scrolling_mode_(ScrollbarMode::kAuto),
+      scrollbar_mode_(mojom::blink::ScrollbarMode::kAuto),
       margin_width_(-1),
       margin_height_(-1) {}
 
@@ -64,7 +67,7 @@ bool HTMLFrameElementBase::IsURLAllowed() const {
     // frame. NB: This check can be invoked without any JS on the stack for some
     // parser operations. In such case, we use the origin of the frame element's
     // containing document as the caller context.
-    v8::Isolate* isolate = GetDocument().GetIsolate();
+    v8::Isolate* isolate = GetExecutionContext()->GetIsolate();
     LocalDOMWindow* accessing_window = isolate->InContext()
                                            ? CurrentDOMWindow(isolate)
                                            : GetDocument().domWindow();
@@ -93,15 +96,12 @@ void HTMLFrameElementBase::OpenURL(bool replace_current_item) {
   // URL at this point, *and* the base URL is a data URL, assume |url_| was
   // relative and give a warning.
   if (!url.IsValid() && GetDocument().BaseURL().ProtocolIsData()) {
-    if (LocalDOMWindow* window = GetDocument().ExecutingWindow()) {
-      if (LocalFrame* frame = window->GetFrame()) {
-        frame->Console().AddMessage(
-            ConsoleMessage::Create(mojom::ConsoleMessageSource::kRendering,
-                                   mojom::ConsoleMessageLevel::kWarning,
-                                   "Invalid relative frame source URL (" +
-                                       url_ + ") within data URL."));
-      }
-    }
+    GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::ConsoleMessageSource::kRendering,
+            mojom::ConsoleMessageLevel::kWarning,
+            "Invalid relative frame source URL (" + url_ +
+                ") within data URL."));
   }
   LoadOrRedirectSubframe(url, frame_name_, replace_current_item);
 }
@@ -133,19 +133,24 @@ void HTMLFrameElementBase::ParseAttribute(
   } else if (name == html_names::kMarginheightAttr) {
     SetMarginHeight(value.ToInt());
   } else if (name == html_names::kScrollingAttr) {
-    // Auto and yes both simply mean "allow scrolling." No means "don't allow
-    // scrolling."
-    if (DeprecatedEqualIgnoringCase(value, "auto") ||
-        DeprecatedEqualIgnoringCase(value, "yes"))
-      SetScrollingMode(ScrollbarMode::kAuto);
-    else if (DeprecatedEqualIgnoringCase(value, "no"))
-      SetScrollingMode(ScrollbarMode::kAlwaysOff);
+    // https://html.spec.whatwg.org/multipage/rendering.html#the-page:
+    // If [the scrolling] attribute's value is an ASCII
+    // case-insensitive match for the string "off", "noscroll", or "no", then
+    // the user agent is expected to prevent any scrollbars from being shown for
+    // the viewport of the Document's browsing context, regardless of the
+    // 'overflow' property that applies to that viewport.
+    if (EqualIgnoringASCIICase(value, "off") ||
+        EqualIgnoringASCIICase(value, "noscroll") ||
+        EqualIgnoringASCIICase(value, "no"))
+      SetScrollbarMode(mojom::blink::ScrollbarMode::kAlwaysOff);
+    else
+      SetScrollbarMode(mojom::blink::ScrollbarMode::kAuto);
   } else if (name == html_names::kOnbeforeunloadAttr) {
     // FIXME: should <frame> elements have beforeunload handlers?
     SetAttributeEventListener(
         event_type_names::kBeforeunload,
-        CreateAttributeEventListener(
-            this, name, value,
+        JSEventHandlerForContentAttribute::Create(
+            GetExecutionContext(), name, value,
             JSEventHandler::HandlerType::kOnBeforeUnloadEventHandler));
   } else {
     HTMLFrameOwnerElement::ParseAttribute(params);
@@ -153,17 +158,19 @@ void HTMLFrameElementBase::ParseAttribute(
 }
 
 scoped_refptr<const SecurityOrigin>
-HTMLFrameElementBase::GetOriginForFeaturePolicy() const {
+HTMLFrameElementBase::GetOriginForPermissionsPolicy() const {
   // Sandboxed frames have a unique origin.
-  if ((GetFramePolicy().sandbox_flags & WebSandboxFlags::kOrigin) !=
-      WebSandboxFlags::kNone)
+  if ((GetFramePolicy().sandbox_flags &
+       network::mojom::blink::WebSandboxFlags::kOrigin) !=
+      network::mojom::blink::WebSandboxFlags::kNone) {
     return SecurityOrigin::CreateUniqueOpaque();
+  }
 
   // If the frame will inherit its origin from the owner, then use the owner's
   // origin when constructing the container policy.
   KURL url = GetDocument().CompleteURL(url_);
   if (Document::ShouldInheritSecurityOriginFromOwner(url))
-    return GetDocument().GetSecurityOrigin();
+    return GetExecutionContext()->GetSecurityOrigin();
 
   // Other frames should use the origin defined by the absolute URL (this will
   // be a unique origin for data: URLs)
@@ -219,7 +226,8 @@ int HTMLFrameElementBase::DefaultTabIndex() const {
   return 0;
 }
 
-void HTMLFrameElementBase::SetFocused(bool received, WebFocusType focus_type) {
+void HTMLFrameElementBase::SetFocused(bool received,
+                                      mojom::blink::FocusType focus_type) {
   HTMLFrameOwnerElement::SetFocused(received, focus_type);
   if (Page* page = GetDocument().GetPage()) {
     if (received) {
@@ -249,15 +257,17 @@ bool HTMLFrameElementBase::IsHTMLContentAttribute(
          HTMLFrameOwnerElement::IsHTMLContentAttribute(attribute);
 }
 
-void HTMLFrameElementBase::SetScrollingMode(ScrollbarMode scrollbar_mode) {
-  if (scrolling_mode_ == scrollbar_mode)
+void HTMLFrameElementBase::SetScrollbarMode(
+    mojom::blink::ScrollbarMode scrollbar_mode) {
+  if (scrollbar_mode_ == scrollbar_mode)
     return;
 
   if (contentDocument()) {
     contentDocument()->WillChangeFrameOwnerProperties(
-        margin_width_, margin_height_, scrollbar_mode, IsDisplayNone());
+        margin_width_, margin_height_, scrollbar_mode, IsDisplayNone(),
+        GetColorScheme());
   }
-  scrolling_mode_ = scrollbar_mode;
+  scrollbar_mode_ = scrollbar_mode;
   FrameOwnerPropertiesChanged();
 }
 
@@ -267,7 +277,8 @@ void HTMLFrameElementBase::SetMarginWidth(int margin_width) {
 
   if (contentDocument()) {
     contentDocument()->WillChangeFrameOwnerProperties(
-        margin_width, margin_height_, scrolling_mode_, IsDisplayNone());
+        margin_width, margin_height_, scrollbar_mode_, IsDisplayNone(),
+        GetColorScheme());
   }
   margin_width_ = margin_width;
   FrameOwnerPropertiesChanged();
@@ -279,7 +290,8 @@ void HTMLFrameElementBase::SetMarginHeight(int margin_height) {
 
   if (contentDocument()) {
     contentDocument()->WillChangeFrameOwnerProperties(
-        margin_width_, margin_height, scrolling_mode_, IsDisplayNone());
+        margin_width_, margin_height, scrollbar_mode_, IsDisplayNone(),
+        GetColorScheme());
   }
   margin_height_ = margin_height;
   FrameOwnerPropertiesChanged();

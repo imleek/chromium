@@ -6,26 +6,11 @@
 #define MEDIA_MOJO_MOJOM_VIDEO_ENCODER_INFO_MOJOM_TRAITS_H_
 
 #include "base/containers/span.h"
-#include "media/mojo/mojom/video_encoder_info.mojom.h"
+#include "media/mojo/mojom/video_encoder_info.mojom-shared.h"
 #include "media/video/video_encoder_info.h"
 #include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
 
 namespace mojo {
-
-template <>
-class StructTraits<media::mojom::ScalingSettingsDataView,
-                   media::ScalingSettings> {
- public:
-  static int32_t min_qp(const media::ScalingSettings& scaling_settings) {
-    return scaling_settings.min_qp;
-  }
-  static int32_t max_qp(const media::ScalingSettings& scaling_settings) {
-    return scaling_settings.max_qp;
-  }
-
-  static bool Read(media::mojom::ScalingSettingsDataView data,
-                   media::ScalingSettings* out);
-};
 
 template <>
 class StructTraits<media::mojom::ResolutionBitrateLimitDataView,
@@ -74,10 +59,6 @@ class StructTraits<media::mojom::VideoEncoderInfoDataView,
   static bool supports_simulcast(
       const media::VideoEncoderInfo& video_encoder_info) {
     return video_encoder_info.supports_simulcast;
-  }
-  static const media::ScalingSettings& scaling_settings(
-      const media::VideoEncoderInfo& video_encoder_info) {
-    return video_encoder_info.scaling_settings;
   }
   static base::span<const std::vector<uint8_t>,
                     media::VideoEncoderInfo::kMaxSpatialLayers>

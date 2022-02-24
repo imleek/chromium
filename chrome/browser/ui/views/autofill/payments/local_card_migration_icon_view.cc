@@ -15,8 +15,10 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/animation/ink_drop.h"
 
 namespace autofill {
 
@@ -39,7 +41,7 @@ LocalCardMigrationIconView::LocalCardMigrationIconView(
 
 LocalCardMigrationIconView::~LocalCardMigrationIconView() {}
 
-views::BubbleDialogDelegateView* LocalCardMigrationIconView::GetBubble() const {
+views::BubbleDialogDelegate* LocalCardMigrationIconView::GetBubble() const {
   ManageMigrationUiController* controller = GetController();
   if (!controller)
     return nullptr;
@@ -118,7 +120,13 @@ void LocalCardMigrationIconView::UpdateImpl() {
         break;
     }
   } else {
-    SetHighlighted(false);
+    // Fade out inkdrop but only if icon was actually highlighted. Calling
+    // SetHighlighted() can result in a spurious fade-out animation and visual
+    // glitches.
+    // TODO(pbos): Fix this and remove check. Calling SetHighlighted(false) with
+    // !GetHighighted() should be a no-op.
+    if (views::InkDrop::Get(this)->GetHighlighted())
+      SetHighlighted(false);
     // Handle corner cases where users navigate away or close the tab.
     UnpauseAnimation();
   }
@@ -135,7 +143,7 @@ const gfx::VectorIcon& LocalCardMigrationIconView::GetVectorIconBadge() const {
   ManageMigrationUiController* controller = GetController();
   if (controller && controller->GetFlowStep() ==
                         LocalCardMigrationFlowStep::MIGRATION_FAILED) {
-    return kBlockedBadgeIcon;
+    return vector_icons::kBlockedBadgeIcon;
   }
   return gfx::kNoneIcon;
 }
@@ -144,7 +152,7 @@ const char* LocalCardMigrationIconView::GetClassName() const {
   return "LocalCardMigrationIconView";
 }
 
-base::string16 LocalCardMigrationIconView::GetTextForTooltipAndAccessibleName()
+std::u16string LocalCardMigrationIconView::GetTextForTooltipAndAccessibleName()
     const {
   return l10n_util::GetStringUTF16(IDS_TOOLTIP_MIGRATE_LOCAL_CARD);
 }

@@ -16,21 +16,23 @@ namespace blink {
 class MockConstraintFactory {
  public:
   MockConstraintFactory();
+
+  MockConstraintFactory(const MockConstraintFactory&) = delete;
+  MockConstraintFactory& operator=(const MockConstraintFactory&) = delete;
+
   ~MockConstraintFactory();
 
   MediaConstraints CreateMediaConstraints() const;
-  WebMediaTrackConstraintSet& basic() { return basic_; }
-  WebMediaTrackConstraintSet& AddAdvanced();
+  MediaTrackConstraintSetPlatform& basic() { return basic_; }
+  MediaTrackConstraintSetPlatform& AddAdvanced();
 
   void DisableDefaultAudioConstraints();
   void DisableAecAudioConstraints();
   void Reset();
 
  private:
-  WebMediaTrackConstraintSet basic_;
-  Vector<WebMediaTrackConstraintSet> advanced_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockConstraintFactory);
+  MediaTrackConstraintSetPlatform basic_;
+  Vector<MediaTrackConstraintSetPlatform> advanced_;
 };
 
 }  // namespace blink

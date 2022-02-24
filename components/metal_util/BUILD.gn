@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+assert(is_mac)
+
 import("//testing/test.gni")
 
 component("metal_util") {
@@ -14,7 +16,11 @@ component("metal_util") {
     "device.mm",
     "device_removal.h",
     "device_removal.mm",
+    "hdr_copier_layer.h",
+    "hdr_copier_layer.mm",
     "metal_util_export.h",
+    "switches.cc",
+    "switches.h",
     "test_shader.h",
     "test_shader.mm",
     "types.h",
@@ -22,10 +28,29 @@ component("metal_util") {
 
   deps = [
     "//base",
+    "//components/crash/core/common:crash_key",
+    "//skia:skcms",
+    "//ui/gfx",
   ]
 
-  libs = [
+  frameworks = [
     "Cocoa.framework",
+    "IOSurface.framework",
+    "QuartzCore.framework",
+  ]
+
+  weak_frameworks = [
     "Metal.framework",
+    "MetalKit.framework",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [ "test_shader_unittest.cc" ]
+  deps = [
+    ":metal_util",
+    "//base",
+    "//testing/gtest",
   ]
 }

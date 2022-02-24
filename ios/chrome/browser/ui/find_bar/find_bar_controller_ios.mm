@@ -13,6 +13,7 @@
 #import "ios/chrome/browser/find_in_page/find_in_page_controller.h"
 #import "ios/chrome/browser/find_in_page/find_in_page_model.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/find_in_page_commands.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_constants.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_view.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_view_controller.h"
@@ -21,9 +22,8 @@
 #include "ios/chrome/browser/ui/util/rtl_geometry.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/dynamic_color_util.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -89,7 +89,7 @@ const NSTimeInterval kSearchShortDelay = 0.100;
                 action:@selector(editingChanged)
       forControlEvents:UIControlEventEditingChanged];
   [_findBarViewController.findBarView.nextButton
-             addTarget:self.dispatcher
+             addTarget:self.commandHandler
                 action:@selector(findNextStringInPage)
       forControlEvents:UIControlEventTouchUpInside];
   [_findBarViewController.findBarView.nextButton
@@ -97,7 +97,7 @@ const NSTimeInterval kSearchShortDelay = 0.100;
                 action:@selector(hideKeyboard:)
       forControlEvents:UIControlEventTouchUpInside];
   [_findBarViewController.findBarView.previousButton
-             addTarget:self.dispatcher
+             addTarget:self.commandHandler
                 action:@selector(findPreviousStringInPage)
       forControlEvents:UIControlEventTouchUpInside];
   [_findBarViewController.findBarView.previousButton
@@ -105,7 +105,7 @@ const NSTimeInterval kSearchShortDelay = 0.100;
                 action:@selector(hideKeyboard:)
       forControlEvents:UIControlEventTouchUpInside];
   [_findBarViewController.findBarView.closeButton
-             addTarget:self.dispatcher
+             addTarget:self.commandHandler
                 action:@selector(closeFindInPage)
       forControlEvents:UIControlEventTouchUpInside];
 
@@ -203,7 +203,7 @@ const NSTimeInterval kSearchShortDelay = 0.100;
   [self.delayTimer invalidate];
   NSUInteger length = [[self searchTerm] length];
   if (length == 0) {
-    [self.dispatcher searchFindInPage];
+    [self.commandHandler searchFindInPage];
     return;
   }
 
@@ -214,7 +214,7 @@ const NSTimeInterval kSearchShortDelay = 0.100;
       (length > kSearchDelayChars) ? kSearchShortDelay : kSearchLongDelay;
   self.delayTimer =
       [NSTimer scheduledTimerWithTimeInterval:delay
-                                       target:self.dispatcher
+                                       target:self.commandHandler
                                      selector:@selector(searchFindInPage)
                                      userInfo:nil
                                       repeats:NO];

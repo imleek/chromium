@@ -24,7 +24,9 @@ namespace net {
 // received to the dispatcher.
 class QuicTransportSimpleServer {
  public:
-  QuicTransportSimpleServer(int port,
+  using ReadErrorCallback = base::OnceCallback<void(int)>;
+
+  QuicTransportSimpleServer(uint16_t port,
                             std::vector<url::Origin> accepted_origins,
                             std::unique_ptr<quic::ProofSource> proof_source);
   ~QuicTransportSimpleServer();
@@ -32,6 +34,10 @@ class QuicTransportSimpleServer {
   int Start();
 
   IPEndPoint server_address() const { return server_address_; }
+
+  void set_read_error_callback(ReadErrorCallback callback) {
+    read_error_callback_ = std::move(callback);
+  }
 
  private:
   // Schedules a ReadPackets() call on the next iteration of the event loop.
@@ -43,7 +49,9 @@ class QuicTransportSimpleServer {
   // Passes the most recently read packet into the dispatcher.
   void ProcessReadPacket(int result);
 
-  const int port_;
+  const uint16_t port_;
+
+  ReadErrorCallback read_error_callback_;
 
   quic::QuicVersionManager version_manager_;
   quic::QuicChromiumClock* clock_;  // Not owned.

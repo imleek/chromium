@@ -10,8 +10,6 @@
  * information relevant to the individual feature, such as a route to the
  * feature's autonomous page if there is one.
  */
-cr.exportPath('settings');
-
 Polymer({
   is: 'settings-multidevice-feature-item',
 
@@ -30,45 +28,112 @@ Polymer({
     subpageRoute: Object,
 
     /**
+     * A tooltip to show over an info icon. If unset, no info icon is shown.
+     */
+    infoTooltip: String,
+
+    /**
      * URLSearchParams for subpage route. No param is provided if it is
      * undefined.
      * @type {URLSearchParams|undefined}
      */
     subpageRouteUrlSearchParams: Object,
+
+    /** Whether if the feature is a sub-feature */
+    isSubFeature: {
+      type: Boolean,
+      value: false,
+      reflectToAttribute: true,
+    },
+
+    /** Whether feature icon is present next to text in row */
+    isFeatureIconHidden: {
+      type: Boolean,
+      value: false,
+    }
   },
 
   /** settings.RouteOriginBehavior override */
   route_: settings.routes.MULTIDEVICE_FEATURES,
 
-  ready: function() {
+  ready() {
     this.addFocusConfig_(this.subpageRoute, '#subpageButton');
+  },
+
+  /** @override */
+  focus() {
+    const slot = this.$$('slot[name="feature-controller"]');
+    const elems = slot.assignedElements({flatten: true});
+    assert(elems.length > 0);
+    // Elems contains any elements that override the feature controller. If none
+    // exist, contains the default toggle elem.
+    elems[0].focus();
   },
 
   /**
    * @return {boolean}
    * @private
    */
-  hasSubpageClickHandler_: function() {
+  isRowClickable_() {
+    return this.hasSubpageClickHandler_() ||
+        this.isFeatureStateEditable(this.feature);
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  hasSubpageClickHandler_() {
     return !!this.subpageRoute && this.isFeatureAllowedByPolicy(this.feature);
   },
 
-  /** @private */
-  handleItemClick_: function(event) {
-    if (!this.hasSubpageClickHandler_()) {
-      return;
-    }
+  /**
+   * @return {boolean}
+   * @private
+   */
+  shouldShowSeparator_() {
+    return this.hasSubpageClickHandler_() || !!this.infoTooltip;
+  },
 
+  /** @private */
+  handleItemClick_(event) {
     // We do not navigate away if the click was on a link.
     if (event.path[0].tagName === 'A') {
       event.stopPropagation();
       return;
     }
 
+    if (!this.hasSubpageClickHandler_()) {
+      if (this.isFeatureStateEditable(this.feature)) {
+        // Toggle the editable feature if the feature is editable and does not
+        // link to a subpage.
+        const toggleButton =
+            /** @type{SettingsMultideviceFeatureToggleElement} */
+            (this.shadowRoot.querySelector(
+                'settings-multidevice-feature-toggle'));
+        toggleButton.toggleFeature();
+      }
+      return;
+    }
+
     // Remove the search term when navigating to avoid potentially having any
     // visible search term reappear at a later time. See
     // https://crbug.com/989119.
-    settings.navigateTo(
-        this.subpageRoute, this.subpageRouteUrlSearchParams,
-        true /* opt_removeSearch */);
+    settings.Router.getInstance().navigateTo(
+        /** @type {!settings.Route} */ (this.subpageRoute),
+        this.subpageRouteUrlSearchParams, true /* opt_removeSearch */);
+  },
+
+
+  /**
+   * The class name used for given multidevice feature item text container
+   * Checks if icon is present next to text to determine if class 'middle'
+   * applies
+   * @param {boolean} isFeatureIconHidden
+   * @return {string}
+   * @private
+   */
+  getItemTextContainerClassName_(isFeatureIconHidden) {
+    return isFeatureIconHidden ? 'start' : 'middle';
   },
 });

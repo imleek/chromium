@@ -6,9 +6,11 @@
 
 #include <algorithm>
 #include <utility>
+#include <vector>
 
 #include "base/base64.h"
 #include "base/bind.h"
+#include "base/containers/flat_set.h"
 #include "components/autofill_assistant/browser/script.h"
 #include "components/autofill_assistant/browser/script_executor.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
@@ -27,8 +29,8 @@ void SortScripts(std::vector<std::unique_ptr<Script>>* scripts) {
         // Order of scripts with the same priority is arbitrary. Fallback
         // to ordering by name and path, arbitrarily, for the behavior to
         // be consistent across runs.
-        return std::tie(a->priority, a->handle.chip.text, a->handle.path) <
-               std::tie(b->priority, b->handle.chip.text, a->handle.path);
+        return std::tie(a->priority, a->handle.path) <
+               std::tie(b->priority, a->handle.path);
       });
 }
 
@@ -79,20 +81,18 @@ void ScriptTracker::CheckScripts() {
   GURL url = delegate_->GetCurrentURL();
   batch_element_checker_ = std::make_unique<BatchElementChecker>();
   for (const std::unique_ptr<Script>& script : available_scripts_) {
-    if (script->handle.chip.empty() && script->handle.direct_action.empty() &&
-        !script->handle.autostart)
+    if (script->handle.direct_action.empty() && !script->handle.autostart)
       continue;
 
     script->precondition->Check(
         url, batch_element_checker_.get(), *delegate_->GetTriggerContext(),
-        scripts_state_,
         base::BindOnce(&ScriptTracker::OnPreconditionCheck,
                        weak_ptr_factory_.GetWeakPtr(), script->handle.path));
   }
   if (batch_element_checker_->empty() && pending_runnable_scripts_.empty() &&
       !available_scripts_.empty()) {
-    DVLOG(1) << __func__ << ": No runnable scripts for " << url << " out of "
-             << available_scripts_.size() << " available.";
+    VLOG(1) << __func__ << ": No runnable scripts for " << url << " out of "
+            << available_scripts_.size() << " available.";
     // There are no runnable scripts, even though we haven't checked the DOM
     // yet. Report it all immediately.
     UpdateRunnableScriptsIfNecessary();
@@ -106,11 +106,17 @@ void ScriptTracker::CheckScripts() {
 }
 
 void ScriptTracker::ExecuteScript(const std::string& script_path,
+                                  const UserData* user_data,
                                   std::unique_ptr<TriggerContext> context,
                                   ScriptExecutor::RunScriptCallback callback) {
   if (running()) {
+#ifdef NDEBUG
+    VLOG(1) << "Unexpected call while another script is running.";
+#else
     DVLOG(1) << "Do not expect executing the script (" << script_path
              << " when there is a script running.";
+#endif
+
     ScriptExecutor::Result result;
     result.success = false;
     std::move(callback).Run(result);
@@ -120,12 +126,12 @@ void ScriptTracker::ExecuteScript(const std::string& script_path,
   executor_ = std::make_unique<ScriptExecutor>(
       script_path, std::move(context), last_global_payload_,
       last_script_payload_,
-      /* listener= */ this, &scripts_state_, &interrupts_, delegate_);
+      /* listener= */ this, &interrupts_, delegate_);
   ScriptExecutor::RunScriptCallback run_script_callback = base::BindOnce(
       &ScriptTracker::OnScriptRun, weak_ptr_factory_.GetWeakPtr(), script_path,
       std::move(callback));
   TerminatePendingChecks();
-  executor_->Run(std::move(run_script_callback));
+  executor_->Run(user_data, std::move(run_script_callback));
 }
 
 void ScriptTracker::StopScript() {
@@ -147,14 +153,6 @@ base::Value ScriptTracker::GetDebugContext() const {
   base::Base64Encode(last_script_payload_js, &last_script_payload_js);
   dict.SetKey("last-script-payload", base::Value(last_script_payload_js));
 
-  std::vector<base::Value> scripts_state_js;
-  for (const auto& entry : scripts_state_) {
-    base::Value script_js = base::Value(base::Value::Type::DICTIONARY);
-    script_js.SetKey(entry.first, base::Value(entry.second));
-    scripts_state_js.push_back(std::move(script_js));
-  }
-  dict.SetKey("executed-scripts", base::Value(scripts_state_js));
-
   std::vector<base::Value> available_scripts_js;
   for (const std::unique_ptr<Script>& script : available_scripts_)
     available_scripts_js.push_back(base::Value(script->handle.path));
@@ -163,11 +161,8 @@ base::Value ScriptTracker::GetDebugContext() const {
   std::vector<base::Value> runnable_scripts_js;
   for (const auto& entry : runnable_scripts_) {
     base::Value script_js = base::Value(base::Value::Type::DICTIONARY);
-    script_js.SetKey("name", base::Value(entry.chip.text));
     script_js.SetKey("path", base::Value(entry.path));
-    script_js.SetKey("initial_prompt", base::Value(entry.initial_prompt));
     script_js.SetKey("autostart", base::Value(entry.autostart));
-    script_js.SetKey("chip_type", base::Value(entry.chip.type));
 
     base::Value direct_action_js = base::Value(base::Value::Type::DICTIONARY);
     direct_action_js.SetKey("names", ToValueArray(entry.direct_action.names));
@@ -228,10 +223,12 @@ bool ScriptTracker::RunnablesHaveChanged() {
   if (runnable_scripts_.size() != pending_runnable_scripts_.size())
     return true;
 
-  std::set<std::string> current_paths;
+  std::vector<std::string> all_current_paths;
   for (const auto& handle : runnable_scripts_) {
-    current_paths.insert(handle.path);
+    all_current_paths.emplace_back(handle.path);
   }
+  auto current_paths =
+      base::flat_set<std::string>(std::move(all_current_paths));
   return pending_runnable_scripts_ != current_paths;
 }
 

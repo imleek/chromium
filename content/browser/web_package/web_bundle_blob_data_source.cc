@@ -9,7 +9,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -28,6 +27,10 @@ class MojoBlobReaderDelegate : public storage::MojoBlobReader::Delegate {
   using CompletionCallback = base::OnceCallback<void(net::Error net_error)>;
   explicit MojoBlobReaderDelegate(CompletionCallback completion_callback)
       : completion_callback_(std::move(completion_callback)) {}
+
+  MojoBlobReaderDelegate(const MojoBlobReaderDelegate&) = delete;
+  MojoBlobReaderDelegate& operator=(const MojoBlobReaderDelegate&) = delete;
+
   ~MojoBlobReaderDelegate() override = default;
   RequestSideData DidCalculateSize(uint64_t total_size,
                                    uint64_t content_size) override {
@@ -41,17 +44,15 @@ class MojoBlobReaderDelegate : public storage::MojoBlobReader::Delegate {
 
  private:
   CompletionCallback completion_callback_;
-  DISALLOW_COPY_AND_ASSIGN(MojoBlobReaderDelegate);
 };
 
-void OnReadComplete(
-    data_decoder::mojom::BundleDataSource::ReadCallback callback,
-    std::unique_ptr<storage::BlobReader> blob_reader,
-    scoped_refptr<net::IOBufferWithSize> io_buf,
-    int bytes_read) {
+void OnReadComplete(web_package::mojom::BundleDataSource::ReadCallback callback,
+                    std::unique_ptr<storage::BlobReader> blob_reader,
+                    scoped_refptr<net::IOBufferWithSize> io_buf,
+                    int bytes_read) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (bytes_read != io_buf->size()) {
-    std::move(callback).Run(base::nullopt);
+    std::move(callback).Run(absl::nullopt);
     return;
   }
   std::vector<uint8_t> vec;
@@ -63,21 +64,21 @@ void OnReadComplete(
 void OnCalculateSizeComplete(
     uint64_t offset,
     uint64_t length,
-    data_decoder::mojom::BundleDataSource::ReadCallback callback,
+    web_package::mojom::BundleDataSource::ReadCallback callback,
     std::unique_ptr<storage::BlobReader> blob_reader,
     int net_error) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (net_error != net::OK) {
-    std::move(callback).Run(base::nullopt);
+    std::move(callback).Run(absl::nullopt);
     return;
   }
   if (offset >= blob_reader->total_size()) {
-    std::move(callback).Run(base::nullopt);
+    std::move(callback).Run(absl::nullopt);
     return;
   }
   uint64_t offset_plus_length;
   if (!base::CheckAdd(offset, length).AssignIfValid(&offset_plus_length)) {
-    std::move(callback).Run(base::nullopt);
+    std::move(callback).Run(absl::nullopt);
     return;
   }
   if (offset_plus_length > blob_reader->total_size())
@@ -86,19 +87,20 @@ void OnCalculateSizeComplete(
   auto set_read_range_status = blob_reader->SetReadRange(offset, length);
   if (set_read_range_status != storage::BlobReader::Status::DONE) {
     DCHECK_EQ(set_read_range_status, storage::BlobReader::Status::NET_ERROR);
-    std::move(callback).Run(base::nullopt);
+    std::move(callback).Run(absl::nullopt);
     return;
   }
   auto* raw_blob_reader = blob_reader.get();
   auto io_buf =
       base::MakeRefCounted<net::IOBufferWithSize>(static_cast<size_t>(length));
-  auto on_read_callback = base::AdaptCallbackForRepeating(base::BindOnce(
+  auto split_callback = base::SplitOnceCallback(base::BindOnce(
       &OnReadComplete, std::move(callback), std::move(blob_reader), io_buf));
   int bytes_read;
-  storage::BlobReader::Status read_status = raw_blob_reader->Read(
-      io_buf.get(), io_buf->size(), &bytes_read, on_read_callback);
+  storage::BlobReader::Status read_status =
+      raw_blob_reader->Read(io_buf.get(), io_buf->size(), &bytes_read,
+                            std::move(split_callback.first));
   if (read_status != storage::BlobReader::Status::IO_PENDING) {
-    on_read_callback.Run(bytes_read);
+    std::move(split_callback.second).Run(bytes_read);
   }
 }
 
@@ -110,8 +112,8 @@ WebBundleBlobDataSource::WebBundleBlobDataSource(
     network::mojom::URLLoaderClientEndpointsPtr endpoints,
     BrowserContext::BlobContextGetter blob_context_getter) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&WebBundleBlobDataSource::CreateCoreOnIO,
                      weak_factory_.GetWeakPtr(), length_hint,
                      std::move(outer_response_body), std::move(endpoints),
@@ -121,7 +123,7 @@ WebBundleBlobDataSource::WebBundleBlobDataSource(
 WebBundleBlobDataSource::~WebBundleBlobDataSource() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (core_)
-    base::DeleteSoon(FROM_HERE, {BrowserThread::IO}, std::move(core_));
+    GetIOThreadTaskRunner({})->DeleteSoon(FROM_HERE, std::move(core_));
 
   auto tasks = std::move(pending_get_core_tasks_);
   for (auto& task : tasks) {
@@ -130,7 +132,7 @@ WebBundleBlobDataSource::~WebBundleBlobDataSource() {
 }
 
 void WebBundleBlobDataSource::AddReceiver(
-    mojo::PendingReceiver<data_decoder::mojom::BundleDataSource>
+    mojo::PendingReceiver<web_package::mojom::BundleDataSource>
         pending_receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   WaitForCore(base::BindOnce(&WebBundleBlobDataSource::AddReceiverImpl,
@@ -139,12 +141,12 @@ void WebBundleBlobDataSource::AddReceiver(
 }
 
 void WebBundleBlobDataSource::AddReceiverImpl(
-    mojo::PendingReceiver<data_decoder::mojom::BundleDataSource>
+    mojo::PendingReceiver<web_package::mojom::BundleDataSource>
         pending_receiver) {
   if (!core_)
     return;
-  base::PostTask(FROM_HERE, {BrowserThread::IO},
-                 base::BindOnce(&BlobDataSourceCore::AddReceiver, weak_core_,
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&BlobDataSourceCore::AddReceiver, weak_core_,
                                 std::move(pending_receiver)));
 }
 
@@ -160,8 +162,8 @@ void WebBundleBlobDataSource::CreateCoreOnIO(
       length_hint, std::move(endpoints), std::move(blob_context_getter));
   core->Start(std::move(outer_response_body));
   auto weak_core = core->GetWeakPtr();
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&WebBundleBlobDataSource::SetCoreOnUI, std::move(weak_ptr),
                      std::move(weak_core), std::move(core)));
 }
@@ -175,7 +177,7 @@ void WebBundleBlobDataSource::SetCoreOnUI(
   if (!weak_ptr) {
     // This happens when the WebBundleBlobDataSource was deleted before
     // SetCoreOnUI() is called.
-    base::DeleteSoon(FROM_HERE, {BrowserThread::IO}, std::move(core));
+    GetIOThreadTaskRunner({})->DeleteSoon(FROM_HERE, std::move(core));
     return;
   }
   weak_ptr->SetCoreOnUIImpl(std::move(weak_core), std::move(core));
@@ -228,12 +230,12 @@ void WebBundleBlobDataSource::ReadToDataPipeImpl(
   CompletionCallback wrapped_callback = base::BindOnce(
       [](CompletionCallback callback, net::Error net_error) {
         DCHECK_CURRENTLY_ON(BrowserThread::IO);
-        base::PostTask(FROM_HERE, {BrowserThread::UI},
-                       base::BindOnce(std::move(callback), net_error));
+        GetUIThreadTaskRunner({})->PostTask(
+            FROM_HERE, base::BindOnce(std::move(callback), net_error));
       },
       std::move(callback));
-  base::PostTask(FROM_HERE, {BrowserThread::IO},
-                 base::BindOnce(&BlobDataSourceCore::ReadToDataPipe, weak_core_,
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&BlobDataSourceCore::ReadToDataPipe, weak_core_,
                                 offset, length, std::move(producer_handle),
                                 std::move(wrapped_callback)));
 }
@@ -274,7 +276,7 @@ void WebBundleBlobDataSource::BlobDataSourceCore::Start(
 }
 
 void WebBundleBlobDataSource::BlobDataSourceCore::AddReceiver(
-    mojo::PendingReceiver<data_decoder::mojom::BundleDataSource>
+    mojo::PendingReceiver<web_package::mojom::BundleDataSource>
         pending_receiver) {
   receivers_.Add(this, std::move(pending_receiver));
 }
@@ -336,19 +338,20 @@ void WebBundleBlobDataSource::BlobDataSourceCore::OnBlobReadyForRead(
     ReadCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!blob_) {
-    std::move(callback).Run(base::nullopt);
+    std::move(callback).Run(absl::nullopt);
     return;
   }
   auto blob_reader = blob_->CreateReader();
   auto* raw_blob_reader = blob_reader.get();
-  auto on_calculate_complete = base::AdaptCallbackForRepeating(
+  auto split_callback = base::SplitOnceCallback(
       base::BindOnce(&OnCalculateSizeComplete, offset, length,
                      std::move(callback), std::move(blob_reader)));
-  auto status = raw_blob_reader->CalculateSize(on_calculate_complete);
+  auto status = raw_blob_reader->CalculateSize(std::move(split_callback.first));
   if (status != storage::BlobReader::Status::IO_PENDING) {
-    on_calculate_complete.Run(status == storage::BlobReader::Status::NET_ERROR
-                                  ? raw_blob_reader->net_error()
-                                  : net::OK);
+    std::move(split_callback.second)
+        .Run(status == storage::BlobReader::Status::NET_ERROR
+                 ? raw_blob_reader->net_error()
+                 : net::OK);
   }
 }
 

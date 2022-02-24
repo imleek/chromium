@@ -2,7 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-(function() {
+import '//resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import '//resources/cr_elements/cr_button/cr_button.m.js';
+import '//resources/cr_elements/cr_radio_button/cr_radio_button.m.js';
+import '//resources/cr_elements/cr_radio_group/cr_radio_group.m.js';
+import '//resources/polymer/v3_0/iron-selector/iron-selector.js';
+import '../../settings_shared_css.js';
+
+import {assert, assertNotReached} from '//resources/js/assert.m.js';
+import {loadTimeData} from '//resources/js/load_time_data.m.js';
+import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {AboutPageBrowserProxy, AboutPageBrowserProxyImpl, AboutPageUpdateInfo, BrowserChannel, browserChannelToI18nId, ChannelInfo, isTargetChannelMoreStable, RegulatoryInfo, TPMFirmwareUpdateStatusChangedEvent, UpdateStatus, UpdateStatusChangedEvent, VersionInfo} from './about_page_browser_proxy.js';
+
 
 /**
  */
@@ -20,6 +32,7 @@ const WarningMessage = {
  * release channel to notify parents of this dialog.
  */
 Polymer({
+  _template: html`{__html_template__}`,
   is: 'settings-channel-switcher-dialog',
 
   properties: {
@@ -45,12 +58,12 @@ Polymer({
     },
   },
 
-  /** @private {?settings.AboutPageBrowserProxy} */
+  /** @private {?AboutPageBrowserProxy} */
   browserProxy_: null,
 
   /** @override */
-  ready: function() {
-    this.browserProxy_ = settings.AboutPageBrowserProxyImpl.getInstance();
+  ready() {
+    this.browserProxy_ = AboutPageBrowserProxyImpl.getInstance();
     this.browserProxy_.getChannelInfo().then(info => {
       this.currentChannel_ = info.currentChannel;
       this.targetChannel_ = info.targetChannel;
@@ -62,17 +75,17 @@ Polymer({
   },
 
   /** @override */
-  attached: function() {
+  attached() {
     this.$.dialog.showModal();
   },
 
   /** @private */
-  onCancelTap_: function() {
+  onCancelTap_() {
     this.$.dialog.close();
   },
 
   /** @private */
-  onChangeChannelTap_: function() {
+  onChangeChannelTap_() {
     const selectedChannel = this.$$('cr-radio-group').selected;
     this.browserProxy_.setChannel(selectedChannel, false);
     this.$.dialog.close();
@@ -80,7 +93,7 @@ Polymer({
   },
 
   /** @private */
-  onChangeChannelAndPowerwashTap_: function() {
+  onChangeChannelAndPowerwashTap_() {
     const selectedChannel = this.$$('cr-radio-group').selected;
     this.browserProxy_.setChannel(selectedChannel, true);
     this.$.dialog.close();
@@ -94,10 +107,10 @@ Polymer({
    *     changeChannelAndPowerwash button should be visible.
    * @private
    */
-  updateButtons_: function(changeChannel, changeChannelAndPowerwash) {
+  updateButtons_(changeChannel, changeChannelAndPowerwash) {
     if (changeChannel || changeChannelAndPowerwash) {
       // Ensure that at most one button is visible at any given time.
-      assert(changeChannel != changeChannelAndPowerwash);
+      assert(changeChannel !== changeChannelAndPowerwash);
     }
 
     this.shouldShowButtons_ = {
@@ -107,11 +120,11 @@ Polymer({
   },
 
   /** @private */
-  onChannelSelectionChanged_: function() {
+  onChannelSelectionChanged_() {
     const selectedChannel = this.$$('cr-radio-group').selected;
 
     // Selected channel is the same as the target channel so only show 'cancel'.
-    if (selectedChannel == this.targetChannel_) {
+    if (selectedChannel === this.targetChannel_) {
       this.shouldShowButtons_ = null;
       this.$.warningSelector.select(WarningMessage.NONE);
       return;
@@ -119,14 +132,13 @@ Polymer({
 
     // Selected channel is the same as the current channel, allow the user to
     // change without warnings.
-    if (selectedChannel == this.currentChannel_) {
+    if (selectedChannel === this.currentChannel_) {
       this.updateButtons_(true, false);
       this.$.warningSelector.select(WarningMessage.NONE);
       return;
     }
 
-    if (settings.isTargetChannelMoreStable(
-            this.currentChannel_, selectedChannel)) {
+    if (isTargetChannelMoreStable(this.currentChannel_, selectedChannel)) {
       // More stable channel selected. For non managed devices, notify the user
       // about powerwash.
       if (loadTimeData.getBoolean('aboutEnterpriseManaged')) {
@@ -137,7 +149,7 @@ Polymer({
         this.updateButtons_(false, true);
       }
     } else {
-      if (selectedChannel == BrowserChannel.DEV) {
+      if (selectedChannel === BrowserChannel.DEV) {
         // Dev channel selected, warn the user.
         this.$.warningSelector.select(WarningMessage.UNSTABLE);
       } else {
@@ -153,8 +165,7 @@ Polymer({
    * @return {string}
    * @private
    */
-  substituteString_: function(format, replacement) {
+  substituteString_(format, replacement) {
     return loadTimeData.substituteString(format, replacement);
   },
 });
-})();

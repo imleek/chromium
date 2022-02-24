@@ -4,12 +4,13 @@
 
 #include "weblayer/test/weblayer_browser_test.h"
 
-#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "weblayer/browser/tab_impl.h"
 #include "weblayer/shell/browser/shell.h"
 #include "weblayer/test/weblayer_browser_test_utils.h"
 
@@ -40,10 +41,19 @@ void OnReceivedFormDataFromRenderer(base::OnceClosure quit_closure,
 class AutofillBrowserTest : public WebLayerBrowserTest {
  public:
   AutofillBrowserTest() = default;
+
+  AutofillBrowserTest(const AutofillBrowserTest&) = delete;
+  AutofillBrowserTest& operator=(const AutofillBrowserTest&) = delete;
+
   ~AutofillBrowserTest() override = default;
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(AutofillBrowserTest);
+  void SetUp() override {
+#if defined(OS_ANDROID)
+    TabImpl::DisableAutofillSystemIntegrationForTesting();
+#endif
+
+    WebLayerBrowserTest::SetUp();
+  }
 };
 
 // Tests that the renderer detects a password form and passes the appropriate
@@ -71,15 +81,15 @@ IN_PROC_BROWSER_TEST_F(AutofillBrowserTest, TestPasswordFormDetection) {
   run_loop.Run();
 
   // Verify that that the form data matches that of the document.
-  EXPECT_EQ(base::ASCIIToUTF16("testform"), observed_form.name);
+  EXPECT_EQ(u"testform", observed_form.name);
   EXPECT_EQ(password_form_url.spec(), observed_form.url);
 
   auto fields = observed_form.fields;
   EXPECT_EQ(2u, fields.size());
   autofill::FormFieldData username_field = fields[0];
-  EXPECT_EQ(base::ASCIIToUTF16("username_field"), username_field.name);
+  EXPECT_EQ(u"username_field", username_field.name);
   autofill::FormFieldData password_field = fields[1];
-  EXPECT_EQ(base::ASCIIToUTF16("password_field"), password_field.name);
+  EXPECT_EQ(u"password_field", password_field.name);
 }
 
 }  // namespace weblayer

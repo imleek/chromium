@@ -6,7 +6,7 @@
 #define UI_COMPOSITOR_TEST_DIRECT_LAYER_TREE_FRAME_SINK_H_
 
 #include "base/memory/read_only_shared_memory_region.h"
-#include "base/single_thread_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
@@ -51,38 +51,43 @@ class DirectLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   void SubmitCompositorFrame(viz::CompositorFrame frame,
                              bool hit_test_data_changed,
                              bool show_hit_test_borders) override;
-  void DidNotProduceFrame(const viz::BeginFrameAck& ack) override;
+  void DidNotProduceFrame(const viz::BeginFrameAck& ack,
+                          cc::FrameSkippedReason reason) override;
   void DidAllocateSharedBitmap(base::ReadOnlySharedMemoryRegion region,
                                const viz::SharedBitmapId& id) override;
   void DidDeleteSharedBitmap(const viz::SharedBitmapId& id) override;
 
   // viz::DisplayClient implementation.
   void DisplayOutputSurfaceLost() override;
-  void DisplayWillDrawAndSwap(bool will_draw_and_swap,
-                              viz::RenderPassList* render_passes) override;
+  void DisplayWillDrawAndSwap(
+      bool will_draw_and_swap,
+      viz::AggregatedRenderPassList* render_passes) override;
   void DisplayDidDrawAndSwap() override {}
   void DisplayDidReceiveCALayerParams(
       const gfx::CALayerParams& ca_layer_params) override {}
   void DisplayDidCompleteSwapWithSize(const gfx::Size& pixel_size) override {}
+  void SetWideColorEnabled(bool enabled) override {}
   void SetPreferredFrameInterval(base::TimeDelta interval) override {}
   base::TimeDelta GetPreferredFrameIntervalForFrameSinkId(
-      const viz::FrameSinkId& id) override;
+      const viz::FrameSinkId& id,
+      viz::mojom::CompositorFrameSinkType* type) override;
 
  private:
   // viz::mojom::CompositorFrameSinkClient implementation:
   void DidReceiveCompositorFrameAck(
-      const std::vector<viz::ReturnedResource>& resources) override;
+      std::vector<viz::ReturnedResource> resources) override;
   void OnBeginFrame(const viz::BeginFrameArgs& args,
                     const viz::FrameTimingDetailsMap& timing_details) override;
-  void ReclaimResources(
-      const std::vector<viz::ReturnedResource>& resources) override;
+  void ReclaimResources(std::vector<viz::ReturnedResource> resources) override;
   void OnBeginFramePausedChanged(bool paused) override;
+  void OnCompositorFrameTransitionDirectiveProcessed(
+      uint32_t sequence_id) override {}
 
   // viz::ExternalBeginFrameSourceClient implementation:
   void OnNeedsBeginFrames(bool needs_begin_frames) override;
 
   void DidReceiveCompositorFrameAckInternal(
-      const std::vector<viz::ReturnedResource>& resources);
+      std::vector<viz::ReturnedResource> resources);
 
   // This class is only meant to be used on a single thread.
   THREAD_CHECKER(thread_checker_);

@@ -15,9 +15,9 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -25,7 +25,6 @@
 #include "components/dom_distiller/core/distiller_url_fetcher.h"
 #include "components/dom_distiller/core/proto/distilled_article.pb.h"
 #include "components/dom_distiller/core/proto/distilled_page.pb.h"
-#include "net/url_request/url_request_context_getter.h"
 
 namespace {
 // Maximum number of distilled pages in an article.
@@ -254,20 +253,24 @@ void DistillerImpl::OnPageDistillationFinished(
       GURL next_page_url(pagination_info.next_page());
       if (next_page_url.is_valid()) {
         // The pages should be in same origin.
-        DCHECK_EQ(next_page_url.GetOrigin(), page_url.GetOrigin());
-        AddToDistillationQueue(page_num + 1, next_page_url);
-        page_data->distilled_page_proto->data.mutable_pagination_info()
-            ->set_next_page(next_page_url.spec());
+        if (next_page_url.DeprecatedGetOriginAsURL() ==
+            page_url.DeprecatedGetOriginAsURL()) {
+          AddToDistillationQueue(page_num + 1, next_page_url);
+          page_data->distilled_page_proto->data.mutable_pagination_info()
+              ->set_next_page(next_page_url.spec());
+        }
       }
     }
 
     if (pagination_info.has_prev_page()) {
       GURL prev_page_url(pagination_info.prev_page());
       if (prev_page_url.is_valid()) {
-        DCHECK_EQ(prev_page_url.GetOrigin(), page_url.GetOrigin());
-        AddToDistillationQueue(page_num - 1, prev_page_url);
-        page_data->distilled_page_proto->data.mutable_pagination_info()
-            ->set_prev_page(prev_page_url.spec());
+        if (prev_page_url.DeprecatedGetOriginAsURL() ==
+            page_url.DeprecatedGetOriginAsURL()) {
+          AddToDistillationQueue(page_num - 1, prev_page_url);
+          page_data->distilled_page_proto->data.mutable_pagination_info()
+              ->set_prev_page(prev_page_url.spec());
+        }
       }
     }
 

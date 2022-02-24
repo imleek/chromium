@@ -32,7 +32,6 @@ class CORE_EXPORT FragmentAnchor : public GarbageCollected<FragmentAnchor> {
   // will be performed, for example, setting/clearing :target and svgView().
   static FragmentAnchor* TryCreate(const KURL& url,
                                    LocalFrame& frame,
-                                   bool same_document_navigation,
                                    bool should_scroll);
 
   FragmentAnchor() = default;
@@ -49,7 +48,7 @@ class CORE_EXPORT FragmentAnchor : public GarbageCollected<FragmentAnchor> {
   // anchor to perform some initialization.
   virtual void Installed() = 0;
 
-  virtual void DidScroll(ScrollType type) = 0;
+  virtual void DidScroll(mojom::blink::ScrollType type) = 0;
   virtual void PerformPreRafActions() = 0;
 
   // Dismissing the fragment anchor removes indicators of the anchor, such as
@@ -57,7 +56,9 @@ class CORE_EXPORT FragmentAnchor : public GarbageCollected<FragmentAnchor> {
   // dismissed and can be disposed.
   virtual bool Dismiss() = 0;
 
-  virtual void Trace(blink::Visitor*) {}
+  virtual void Trace(Visitor*) const {}
+
+  virtual bool IsTextFragmentAnchor() = 0;
 };
 
 }  // namespace blink

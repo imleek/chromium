@@ -5,13 +5,14 @@
 #ifndef DEVICE_FIDO_MAC_GET_ASSERTION_OPERATION_H_
 #define DEVICE_FIDO_MAC_GET_ASSERTION_OPERATION_H_
 
+#include <os/availability.h>
+
 #include "base/callback.h"
 #include "base/component_export.h"
-#include "base/mac/availability.h"
 #include "base/macros.h"
 #include "device/fido/authenticator_get_assertion_response.h"
 #include "device/fido/ctap_get_assertion_request.h"
-#include "device/fido/mac/keychain.h"
+#include "device/fido/mac/credential_store.h"
 #include "device/fido/mac/operation.h"
 #include "device/fido/mac/touch_id_context.h"
 
@@ -33,12 +34,15 @@ class API_AVAILABLE(macosx(10.12.2))
  public:
   using Callback = base::OnceCallback<void(
       CtapDeviceResponseCode,
-      base::Optional<AuthenticatorGetAssertionResponse>)>;
+      absl::optional<AuthenticatorGetAssertionResponse>)>;
 
   GetAssertionOperation(CtapGetAssertionRequest request,
-                        std::string metadata_secret,
-                        std::string keychain_access_group,
+                        TouchIdCredentialStore* credential_store,
                         Callback callback);
+
+  GetAssertionOperation(const GetAssertionOperation&) = delete;
+  GetAssertionOperation& operator=(const GetAssertionOperation&) = delete;
+
   ~GetAssertionOperation() override;
 
   // Operation:
@@ -50,28 +54,17 @@ class API_AVAILABLE(macosx(10.12.2))
 
  private:
   void PromptTouchIdDone(bool success);
-  base::Optional<AuthenticatorGetAssertionResponse> ResponseForCredential(
+  absl::optional<AuthenticatorGetAssertionResponse> ResponseForCredential(
       const Credential& credential);
-
-  // The secret parameter passed to |CredentialMetadata| operations to encrypt
-  // or encode credential metadata for storage in the macOS keychain.
-  const std::string metadata_secret_;
-  const std::string keychain_access_group_;
 
   const std::unique_ptr<TouchIdContext> touch_id_context_ =
       TouchIdContext::Create();
 
   const CtapGetAssertionRequest request_;
+  TouchIdCredentialStore* const credential_store_;
   Callback callback_;
   std::list<Credential> matching_credentials_;
-
-  DISALLOW_COPY_AND_ASSIGN(GetAssertionOperation);
 };
-
-// Returns request.allow_list without entries that have an in inapplicable
-// |transports| field or a |type| other than "public-key".
-std::set<std::vector<uint8_t>> FilterInapplicableEntriesFromAllowList(
-    const CtapGetAssertionRequest& request);
 
 }  // namespace mac
 }  // namespace fido

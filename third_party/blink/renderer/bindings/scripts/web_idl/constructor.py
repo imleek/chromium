@@ -22,19 +22,21 @@ from .make_copy import make_copy
 class Constructor(FunctionLike, WithExtendedAttributes, WithCodeGeneratorInfo,
                   WithExposure, WithOwner, WithOwnerMixin, WithComponent,
                   WithDebugInfo):
-    """https://heycam.github.io/webidl/#idl-constructors"""
+    """https://webidl.spec.whatwg.org/#idl-constructors"""
 
     class IR(FunctionLike.IR, WithExtendedAttributes, WithCodeGeneratorInfo,
              WithExposure, WithOwnerMixin, WithComponent, WithDebugInfo):
         def __init__(self,
+                     identifier,
                      arguments,
                      return_type,
                      extended_attributes=None,
                      component=None,
                      debug_info=None):
+            assert identifier is None or isinstance(identifier, Identifier)
             FunctionLike.IR.__init__(
                 self,
-                identifier=Identifier('constructor'),
+                identifier=(identifier or Identifier('constructor')),
                 arguments=arguments,
                 return_type=return_type)
             WithExtendedAttributes.__init__(self, extended_attributes)

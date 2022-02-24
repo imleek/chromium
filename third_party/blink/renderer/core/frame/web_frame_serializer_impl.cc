@@ -320,7 +320,7 @@ void WebFrameSerializerImpl::OpenTagToString(Element* element,
   // Find out if we need to do frame-specific link rewriting.
   WebFrame* frame = nullptr;
   if (auto* frame_owner_element = DynamicTo<HTMLFrameOwnerElement>(element)) {
-    frame = WebFrame::FromFrame(frame_owner_element->ContentFrame());
+    frame = WebFrame::FromCoreFrame(frame_owner_element->ContentFrame());
   }
   WebString rewritten_frame_link;
   bool should_rewrite_frame_src =
@@ -420,16 +420,19 @@ void WebFrameSerializerImpl::EndTagToString(Element* element,
 void WebFrameSerializerImpl::BuildContentForNode(Node* node,
                                                  SerializeDomParam* param) {
   switch (node->getNodeType()) {
-    case Node::kElementNode:
+    case Node::kElementNode: {
+      auto* element = To<Element>(node);
       // Process open tag of element.
-      OpenTagToString(To<Element>(node), param);
+      OpenTagToString(element, param);
       // Walk through the children nodes and process it.
-      for (Node* child = node->firstChild(); child;
-           child = child->nextSibling())
+      for (Node* child = element->firstChild(); child;
+           child = child->nextSibling()) {
         BuildContentForNode(child, param);
+      }
       // Process end tag of element.
-      EndTagToString(To<Element>(node), param);
+      EndTagToString(element, param);
       break;
+    }
     case Node::kTextNode:
       SaveHTMLContentToBuffer(CreateMarkup(node), param);
       break;

@@ -8,14 +8,14 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/strings/string_util.h"
 #include "base/test/task_environment.h"
 #include "base/values.h"
-#include "chromeos/dbus/shill/shill_clients.h"
 #include "chromeos/dbus/shill/shill_manager_client.h"
 #include "chromeos/network/network_handler.h"
+#include "chromeos/network/network_handler_test_helper.h"
 #include "chromeos/network/onc/onc_utils.h"
 #include "components/onc/onc_pref_names.h"
 #include "components/prefs/testing_pref_service.h"
@@ -106,28 +106,20 @@ class UIProxyConfigServiceTest : public testing::Test {
   }
 
   void SetUp() override {
-    shill_clients::InitializeFakes();
-    NetworkHandler::Initialize();
     ConfigureService(kTestUserWifiConfig);
     ConfigureService(kTestSharedWifiConfig);
     ConfigureService(kTestUnconfiguredWifiConfig);
   }
 
-  void TearDown() override {
-    NetworkHandler::Shutdown();
-    shill_clients::Shutdown();
-  }
-
   ~UIProxyConfigServiceTest() override = default;
 
   void ConfigureService(const std::string& shill_json_string) {
-    std::unique_ptr<base::DictionaryValue> shill_json_dict =
-        base::DictionaryValue::From(
-            onc::ReadDictionaryFromJson(shill_json_string));
-    ASSERT_TRUE(shill_json_dict);
+    base::Value shill_json_dict =
+        onc::ReadDictionaryFromJson(shill_json_string);
+    ASSERT_TRUE(shill_json_dict.is_dict());
     ShillManagerClient::Get()->ConfigureService(
-        *shill_json_dict, base::DoNothing(),
-        base::Bind([](const std::string& name, const std::string& msg) {}));
+        shill_json_dict, base::DoNothing(),
+        base::BindOnce([](const std::string& name, const std::string& msg) {}));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -150,6 +142,7 @@ class UIProxyConfigServiceTest : public testing::Test {
 
  private:
   base::test::TaskEnvironment task_environment_;
+  NetworkHandlerTestHelper network_handler_test_helper_;
 };
 
 TEST_F(UIProxyConfigServiceTest, UnknownNetwork) {

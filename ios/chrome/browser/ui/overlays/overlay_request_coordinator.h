@@ -14,7 +14,8 @@ class OverlayRequest;
 // Coordinator superclass used to present UI for an OverlayRequest.
 @interface OverlayRequestCoordinator : ChromeCoordinator
 
-// Returns the request support for this coordinator.
+// Returns the request support for this coordinator.  Must return a non-null
+// value.
 @property(class, nonatomic, readonly)
     const OverlayRequestSupport* requestSupport;
 
@@ -29,10 +30,7 @@ class OverlayRequest;
                                   delegate:(OverlayRequestCoordinatorDelegate*)
                                                delegate
     NS_DESIGNATED_INITIALIZER;
-- (instancetype)initWithBaseViewController:(UIViewController*)viewController
-                              browserState:
-                                  (ios::ChromeBrowserState*)browserState
-    NS_UNAVAILABLE;
+
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser NS_UNAVAILABLE;
 
@@ -40,7 +38,7 @@ class OverlayRequest;
 // communicate when the overlay UI is finished being presented and dismissed.
 // Overlay UI presentation and dismissal may occur after |-start| and |-stop|,
 // even if the overlay is stopped without animation.
-@property(nonatomic, readonly) OverlayRequestCoordinatorDelegate* delegate;
+@property(nonatomic, assign) OverlayRequestCoordinatorDelegate* delegate;
 
 // The request used to configure the overlay UI.
 @property(nonatomic, readonly) OverlayRequest* request;

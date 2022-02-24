@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/modules/webgl/webgl_compressed_texture_astc.h"
 
-#include "base/stl_util.h"
+#include "base/cxx17_backports.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h"
 
 namespace blink {
@@ -31,6 +31,9 @@ WebGLCompressedTextureASTC::WebGLCompressedTextureASTC(
     : WebGLExtension(context) {
   context->ExtensionsUtil()->EnsureExtensionEnabled(
       "GL_KHR_texture_compression_astc_ldr");
+
+  supports_hdr = context->ExtensionsUtil()->EnsureExtensionEnabled(
+      "GL_KHR_texture_compression_astc_hdr");
 
   const int kAlphaFormatGap =
       GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR - GL_COMPRESSED_RGBA_ASTC_4x4_KHR;
@@ -59,9 +62,15 @@ bool WebGLCompressedTextureASTC::Supported(WebGLRenderingContextBase* context) {
 }
 
 const char* WebGLCompressedTextureASTC::ExtensionName() {
-  // TODO(cyzero.kim): implement extension for
-  // GL_KHR_texture_compression_astc_hdr.
   return "WEBGL_compressed_texture_astc";
+}
+
+Vector<String> WebGLCompressedTextureASTC::getSupportedProfiles() {
+  Vector<String> result = {"ldr"};
+  if (supports_hdr) {
+    result.emplace_back("hdr");
+  }
+  return result;
 }
 
 }  // namespace blink

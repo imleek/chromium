@@ -19,6 +19,8 @@ Polymer({
     /** @type {!settings.MultiDeviceFeature} */
     feature: Number,
 
+    toggleAriaLabel: String,
+
     /** @private {boolean} */
     checked_: Boolean,
   },
@@ -32,6 +34,26 @@ Polymer({
   // this.feature is defined by the time of the observer's first call.
   observers: ['resetChecked_(feature, pageContentData)'],
 
+  /** @override */
+  focus() {
+    this.$.toggle.focus();
+  },
+
+  /**
+   * Callback for clicking on the toggle itself, or a row containing a toggle
+   * without other links. It attempts to toggle the feature's status if the user
+   * is allowed.
+   */
+  toggleFeature() {
+    this.resetChecked_();
+
+    // Pass the negation of |this.checked_|: this indicates that if the toggle
+    // is checked, the intent is for it to be unchecked, and vice versa.
+    this.fire(
+        'feature-toggle-clicked',
+        {feature: this.feature, enabled: !this.checked_});
+  },
+
   /**
    * Because MultiDevice prefs are only meant to be controlled via the
    * MultiDevice mojo service, we need the cr-toggle to appear not to change
@@ -39,7 +61,14 @@ Polymer({
    * user.
    * @private
    */
-  resetChecked_: function() {
+  resetChecked_() {
+    // If Phone Hub notification access is prohibited, the toggle is always off.
+    if (this.feature === settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS &&
+        this.isPhoneHubNotificationAccessProhibited()) {
+      this.checked_ = false;
+      return;
+    }
+
     this.checked_ = this.getFeatureState(this.feature) ===
         settings.MultiDeviceFeatureState.ENABLED_BY_USER;
   },
@@ -55,22 +84,15 @@ Polymer({
    * click from unintentionally bubbling up the tree.
    * @private
    */
-  onDisabledInnerToggleClick_: function(event) {
+  onDisabledInnerToggleClick_(event) {
     event.stopPropagation();
   },
 
   /**
-   * Callback for clicking on the toggle. It attempts to toggle the feature's
-   * status if the user is allowed.
+   * Returns the A11y label for the toggle.
    * @private
    */
-  onChange_: function() {
-    this.resetChecked_();
-
-    // Pass the negation of |this.checked_|: this indicates that if the toggle
-    // is checked, the intent is for it to be unchecked, and vice versa.
-    this.fire(
-        'feature-toggle-clicked',
-        {feature: this.feature, enabled: !this.checked_});
-  },
+  getToggleA11yLabel_() {
+    return this.toggleAriaLabel || this.getFeatureName(this.feature);
+  }
 });

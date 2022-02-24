@@ -8,8 +8,8 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "components/dom_distiller/content/browser/distillability_driver.h"
@@ -51,6 +51,13 @@ void IsDistillablePageForDetector(content::WebContents* web_contents,
       base::BindOnce(OnExtractFeaturesJsResult, detector, std::move(callback)));
 }
 
+bool operator==(const DistillabilityResult& first,
+                const DistillabilityResult& second) {
+  return first.is_distillable == second.is_distillable &&
+         first.is_last == second.is_last &&
+         first.is_mobile_friendly == second.is_mobile_friendly;
+}
+
 std::ostream& operator<<(std::ostream& os, const DistillabilityResult& result) {
   os << "DistillabilityResult: { is_distillable: " << result.is_distillable
      << ", is_last: " << result.is_last
@@ -90,7 +97,7 @@ void RemoveObserver(content::WebContents* web_contents,
   }
 }
 
-base::Optional<DistillabilityResult> GetLatestResult(
+absl::optional<DistillabilityResult> GetLatestResult(
     content::WebContents* web_contents) {
   CHECK(web_contents);
   DistillabilityDriver::CreateForWebContents(web_contents);

@@ -33,8 +33,14 @@
 
 #include <string.h>
 
+#include <memory>
+
+#include "base/notreached.h"
 #include "base/time/time.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/common_export.h"
+#include "third_party/blink/public/mojom/input/input_event.mojom-shared.h"
+#include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
@@ -42,7 +48,7 @@ namespace blink {
 
 // WebInputEvent --------------------------------------------------------------
 
-class WebInputEvent {
+class BLINK_COMMON_EXPORT WebInputEvent {
  public:
   // When we use an input method (or an input method editor), we receive
   // two events for a keypress. The former event is a keydown, which
@@ -68,119 +74,7 @@ class WebInputEvent {
   // TODO(hbono): Issue 18064: remove the KeyDown type since it isn't
   // used in Chrome any longer.
 
-  // A Java counterpart will be generated for this enum.
-  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.blink_public.web
-  // GENERATED_JAVA_CLASS_NAME_OVERRIDE: WebInputEventType
-  enum Type {
-    kUndefined = -1,
-    kTypeFirst = kUndefined,
-
-    // WebMouseEvent
-    kMouseDown,
-    kMouseTypeFirst = kMouseDown,
-    kMouseUp,
-    kMouseMove,
-    kMouseEnter,
-    kMouseLeave,
-    kContextMenu,
-    kMouseTypeLast = kContextMenu,
-
-    // WebMouseWheelEvent
-    kMouseWheel,
-
-    // WebKeyboardEvent
-    kRawKeyDown,
-    kKeyboardTypeFirst = kRawKeyDown,
-    // KeyDown is a single event combining RawKeyDown and Char.  If KeyDown is
-    // sent for a given keystroke, those two other events will not be sent.
-    // Platforms tend to prefer sending in one format (Android uses KeyDown,
-    // Windows uses RawKeyDown+Char, for example), but this is a weakly held
-    // property as tools like WebDriver/DevTools might still send the other
-    // format.
-    kKeyDown,
-    kKeyUp,
-    kChar,
-    kKeyboardTypeLast = kChar,
-
-    // WebGestureEvent - input interpreted semi-semantically, most commonly from
-    // touchscreen but also used for touchpad, mousewheel, and gamepad
-    // scrolling.
-    kGestureScrollBegin,
-    kGestureTypeFirst = kGestureScrollBegin,
-    kGestureScrollEnd,
-    kGestureScrollUpdate,
-    // Fling is a high-velocity and quickly released finger movement.
-    // FlingStart is sent once and kicks off a scroll animation.
-    kGestureFlingStart,
-    kGestureFlingCancel,
-    // Pinch is two fingers moving closer or farther apart.
-    kGesturePinchBegin,
-    kGesturePinchTypeFirst = kGesturePinchBegin,
-    kGesturePinchEnd,
-    kGesturePinchUpdate,
-    kGesturePinchTypeLast = kGesturePinchUpdate,
-
-    // The following types are variations and subevents of single-taps.
-    //
-    // Sent the moment the user's finger hits the screen.
-    kGestureTapDown,
-    // Sent a short interval later, after it seems the finger is staying in
-    // place.  It's used to activate the link highlight ("show the press").
-    kGestureShowPress,
-    // Sent on finger lift for a simple, static, quick finger tap.  This is the
-    // "main" event which maps to a synthetic mouse click event.
-    kGestureTap,
-    // Sent when a GestureTapDown didn't turn into any variation of GestureTap
-    // (likely it turned into a scroll instead).
-    kGestureTapCancel,
-    // Sent as soon as the long-press timeout fires, while the finger is still
-    // down.
-    kGestureLongPress,
-    // Sent when the finger is lifted following a GestureLongPress.
-    kGestureLongTap,
-    // Sent on finger lift when two fingers tapped at the same time without
-    // moving.
-    kGestureTwoFingerTap,
-    // A rare event sent in place of GestureTap on desktop pages viewed on an
-    // Android phone.  This tap could not yet be resolved into a GestureTap
-    // because it may still turn into a GestureDoubleTap.
-    kGestureTapUnconfirmed,
-
-    // On Android, double-tap is two single-taps spread apart in time, like a
-    // double-click. This event is only sent on desktop pages, and is always
-    // preceded by GestureTapUnconfirmed. It's an instruction to Blink to
-    // perform a PageScaleAnimation zoom onto the double-tapped content. (It's
-    // treated differently from GestureTap with tapCount=2, which can also
-    // happen.)
-    // On desktop, this event may be used for a double-tap with two fingers on
-    // a touchpad, as the desired effect is similar to Android's double-tap.
-    kGestureDoubleTap,
-
-    kGestureTypeLast = kGestureDoubleTap,
-
-    // WebTouchEvent - raw touch pointers not yet classified into gestures.
-    kTouchStart,
-    kTouchTypeFirst = kTouchStart,
-    kTouchMove,
-    kTouchEnd,
-    kTouchCancel,
-    // TODO(nzolghadr): This event should be replaced with
-    // kPointerCausedUaAction
-    kTouchScrollStarted,
-    kTouchTypeLast = kTouchScrollStarted,
-
-    // WebPointerEvent: work in progress
-    kPointerDown,
-    kPointerTypeFirst = kPointerDown,
-    kPointerUp,
-    kPointerMove,
-    kPointerRawUpdate,  // To be only used within blink.
-    kPointerCancel,
-    kPointerCausedUaAction,
-    kPointerTypeLast = kPointerCausedUaAction,
-
-    kTypeLast = kPointerTypeLast
-  };
+  using Type = blink::mojom::EventType;
 
   // The modifier constants cannot change their values since pepper
   // does a 1-1 mapping of its values; see
@@ -246,6 +140,12 @@ class WebInputEvent {
     // ancestor frames moved within its embedding page's viewport recently.
     kTargetFrameMovedRecently = 1 << 24,
 
+    // When an event is forwarded to the main thread, this modifier will tell if
+    // the event was already handled by the compositor thread or not. Based on
+    // this, the decision of whether or not the main thread should handle this
+    // event for the scrollbar can then be made.
+    kScrollbarManipulationHandledOnCompositorThread = 1 << 25,
+
     // The set of non-stateful modifiers that specifically change the
     // interpretation of the key being pressed. For example; IsLeft,
     // IsRight, IsComposing don't change the meaning of the key
@@ -253,26 +153,11 @@ class WebInputEvent {
     // and don't indicate explicit depressed state.
     kKeyModifiers = kSymbolKey | kFnKey | kAltGrKey | kMetaKey | kAltKey |
                     kControlKey | kShiftKey,
+
     kNoModifiers = 0,
   };
 
-  // Indicates whether the browser needs to block on the ACK result for
-  // this event, and if not, why (for metrics/diagnostics purposes).
-  // These values are direct mappings of the values in PlatformEvent
-  // so the values can be cast between the enumerations. static_asserts
-  // checking this are in web/WebInputEventConversion.cpp.
-  enum DispatchType {
-    // Event can be canceled.
-    kBlocking,
-    // Event can not be canceled.
-    kEventNonBlocking,
-    // All listeners are passive; not cancelable.
-    kListenersNonBlockingPassive,
-    // This value represents a state which would have normally blocking
-    // but was forced to be non-blocking during fling; not cancelable.
-    kListenersForcedNonBlockingDueToFling,
-    kLastDispatchType = kListenersForcedNonBlockingDueToFling,
-  };
+  using DispatchType = mojom::DispatchType;
 
   // The rail mode for a wheel event specifies the axis on which scrolling is
   // expected to stick. If this axis is set to Free, then scrolling is not
@@ -300,27 +185,27 @@ class WebInputEvent {
 
   // Returns true if the WebInputEvent |type| is a mouse event.
   static bool IsMouseEventType(WebInputEvent::Type type) {
-    return kMouseTypeFirst <= type && type <= kMouseTypeLast;
+    return Type::kMouseTypeFirst <= type && type <= Type::kMouseTypeLast;
   }
 
   // Returns true if the WebInputEvent |type| is a keyboard event.
   static bool IsKeyboardEventType(WebInputEvent::Type type) {
-    return kKeyboardTypeFirst <= type && type <= kKeyboardTypeLast;
+    return Type::kKeyboardTypeFirst <= type && type <= Type::kKeyboardTypeLast;
   }
 
   // Returns true if the WebInputEvent |type| is a touch event.
   static bool IsTouchEventType(WebInputEvent::Type type) {
-    return kTouchTypeFirst <= type && type <= kTouchTypeLast;
+    return Type::kTouchTypeFirst <= type && type <= Type::kTouchTypeLast;
   }
 
   // Returns true if the WebInputEvent is a gesture event.
   static bool IsGestureEventType(WebInputEvent::Type type) {
-    return kGestureTypeFirst <= type && type <= kGestureTypeLast;
+    return Type::kGestureTypeFirst <= type && type <= Type::kGestureTypeLast;
   }
 
   // Returns true if the WebInputEvent |type| is a pointer event.
   static bool IsPointerEventType(WebInputEvent::Type type) {
-    return kPointerTypeFirst <= type && type <= kPointerTypeLast;
+    return Type::kPointerTypeFirst <= type && type <= Type::kPointerTypeLast;
   }
 
   bool IsSameEventClass(const WebInputEvent& other) const {
@@ -350,17 +235,19 @@ class WebInputEvent {
 
   // Returns true if the WebInputEvent |type| is a pinch gesture event.
   static bool IsPinchGestureEventType(WebInputEvent::Type type) {
-    return kGesturePinchTypeFirst <= type && type <= kGesturePinchTypeLast;
+    return Type::kGesturePinchTypeFirst <= type &&
+           type <= Type::kGesturePinchTypeLast;
   }
 
   // Returns true if the WebInputEvent |type| is a fling gesture event.
   static bool IsFlingGestureEventType(WebInputEvent::Type type) {
-    return kGestureFlingStart <= type && type <= kGestureFlingCancel;
+    return Type::kGestureFlingStart <= type &&
+           type <= Type::kGestureFlingCancel;
   }
 
   static const char* GetName(WebInputEvent::Type type) {
-#define CASE_TYPE(t)        \
-  case WebInputEvent::k##t: \
+#define CASE_TYPE(t)              \
+  case WebInputEvent::Type::k##t: \
     return #t
     switch (type) {
       CASE_TYPE(Undefined);
@@ -426,63 +313,51 @@ class WebInputEvent {
   base::TimeTicks TimeStamp() const { return time_stamp_; }
   void SetTimeStamp(base::TimeTicks time_stamp) { time_stamp_ = time_stamp; }
 
-  unsigned size() const { return size_; }
-
   void SetTargetFrameMovedRecently() {
     modifiers_ |= kTargetFrameMovedRecently;
   }
 
+  void SetScrollbarManipulationHandledOnCompositorThread() {
+    modifiers_ |= kScrollbarManipulationHandledOnCompositorThread;
+  }
+
+  virtual ~WebInputEvent() = default;
+
+  virtual std::unique_ptr<WebInputEvent> Clone() const = 0;
+
+  // Returns whether the current event can be merged with the provided
+  // |event|.
+  virtual bool CanCoalesce(const blink::WebInputEvent& event) const = 0;
+
+  // Merge the current event with attributes from |event|.
+  virtual void Coalesce(const WebInputEvent& event) = 0;
+
+  // Convert this WebInputEvent::Type to a ui::EventType. Note that this is
+  // not a 1:1 relationship. Multiple blink types convert to the same
+  // ui::EventType and not all types do convert.
+  ui::EventType GetTypeAsUiEventType() const;
+
  protected:
   // The root frame scale.
-  float frame_scale_;
+  float frame_scale_ = 1;
 
   // The root frame translation (applied post scale).
   gfx::Vector2dF frame_translate_;
 
-  WebInputEvent(unsigned size,
-                Type type,
-                int modifiers,
-                base::TimeTicks time_stamp) {
-    // TODO(dtapuska): Remove this memset when we remove the chrome IPC of this
-    // struct.
-    memset(this, 0, size);
-    time_stamp_ = time_stamp;
-    size_ = size;
-    type_ = type;
-    modifiers_ = modifiers;
-#if DCHECK_IS_ON()
-    // If dcheck is on force failures if frame scale is not initialized
-    // correctly by causing DIV0.
-    frame_scale_ = 0;
-#else
-    frame_scale_ = 1;
-#endif
-  }
+  WebInputEvent(Type type, int modifiers, base::TimeTicks time_stamp)
+      : time_stamp_(time_stamp), type_(type), modifiers_(modifiers) {}
 
-  explicit WebInputEvent(unsigned size_param) {
-    // TODO(dtapuska): Remove this memset when we remove the chrome IPC of this
-    // struct.
-    memset(this, 0, size_param);
-    time_stamp_ = base::TimeTicks();
-    size_ = size_param;
-    type_ = kUndefined;
-#if DCHECK_IS_ON()
-    // If dcheck is on force failures if frame scale is not initialized
-    // correctly by causing DIV0.
-    frame_scale_ = 0;
-#else
-    frame_scale_ = 1;
-#endif
-  }
+  WebInputEvent() { time_stamp_ = base::TimeTicks(); }
+
+  static DispatchType MergeDispatchTypes(DispatchType type_1,
+                                         DispatchType type_2);
 
   // Event time since platform start with microsecond resolution.
   base::TimeTicks time_stamp_;
-  // The size of this structure, for serialization.
-  unsigned size_;
-  Type type_;
-  int modifiers_;
+  Type type_ = Type::kUndefined;
+  int modifiers_ = kNoModifiers;
 };
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_INPUT_WEB_INPUT_EVENT_H_

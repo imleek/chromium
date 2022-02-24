@@ -26,9 +26,9 @@ const double kDefaultScreenCastAspectRatio =
 
 void CheckNonResolutionDefaults(const VideoCaptureSettings& result) {
   EXPECT_EQ(kDefaultScreenCastFrameRate, result.FrameRate());
-  EXPECT_EQ(base::Optional<double>(), result.min_frame_rate());
-  EXPECT_EQ(base::Optional<double>(), result.max_frame_rate());
-  EXPECT_EQ(base::Optional<bool>(), result.noise_reduction());
+  EXPECT_EQ(absl::optional<double>(), result.min_frame_rate());
+  EXPECT_EQ(absl::optional<double>(), result.max_frame_rate());
+  EXPECT_EQ(absl::optional<bool>(), result.noise_reduction());
   EXPECT_EQ(std::string(), result.device_id());
   EXPECT_FALSE(result.min_frame_rate().has_value());
 }
@@ -36,28 +36,30 @@ void CheckNonResolutionDefaults(const VideoCaptureSettings& result) {
 void CheckNonFrameRateDefaults(const VideoCaptureSettings& result) {
   EXPECT_EQ(kDefaultScreenCastHeight, result.Height());
   EXPECT_EQ(kDefaultScreenCastWidth, result.Width());
-  EXPECT_EQ(base::Optional<bool>(), result.noise_reduction());
+  EXPECT_EQ(absl::optional<bool>(), result.noise_reduction());
   EXPECT_EQ(std::string(), result.device_id());
 }
 
-void CheckTrackAdapterSettingsEqualsFormat(const VideoCaptureSettings& result) {
+void CheckTrackAdapterSettingsEqualsFormat(const VideoCaptureSettings& result,
+                                           double frame_rate = 0.0) {
   // For content capture, resolution and frame rate should always be the same
   // for source and track.
   EXPECT_TRUE(result.track_adapter_settings().target_size().has_value());
   EXPECT_EQ(result.Width(), result.track_adapter_settings().target_width());
   EXPECT_EQ(result.Height(), result.track_adapter_settings().target_height());
-  EXPECT_EQ(0.0, result.track_adapter_settings().max_frame_rate());
+  EXPECT_EQ(frame_rate, result.track_adapter_settings().max_frame_rate());
 }
 
 void CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(
-    const VideoCaptureSettings& result) {
+    const VideoCaptureSettings& result,
+    double frame_rate = 0.0) {
   EXPECT_EQ(
       static_cast<double>(kMinScreenCastDimension) / kMaxScreenCastDimension,
       result.track_adapter_settings().min_aspect_ratio());
   EXPECT_EQ(
       static_cast<double>(kMaxScreenCastDimension) / kMinScreenCastDimension,
       result.track_adapter_settings().max_aspect_ratio());
-  CheckTrackAdapterSettingsEqualsFormat(result);
+  CheckTrackAdapterSettingsEqualsFormat(result, frame_rate);
 }
 
 }  // namespace
@@ -218,7 +220,7 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, MandatoryDeviceID) {
   EXPECT_EQ(kDefaultScreenCastHeight, result.Height());
   EXPECT_EQ(kDefaultScreenCastWidth, result.Width());
   EXPECT_EQ(kDefaultScreenCastFrameRate, result.FrameRate());
-  EXPECT_EQ(base::Optional<bool>(), result.noise_reduction());
+  EXPECT_EQ(absl::optional<bool>(), result.noise_reduction());
   CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
 }
 
@@ -242,7 +244,7 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, IdealDeviceID) {
   EXPECT_EQ(kDefaultScreenCastHeight, result.Height());
   EXPECT_EQ(kDefaultScreenCastWidth, result.Width());
   EXPECT_EQ(kDefaultScreenCastFrameRate, result.FrameRate());
-  EXPECT_EQ(base::Optional<bool>(), result.noise_reduction());
+  EXPECT_EQ(absl::optional<bool>(), result.noise_reduction());
   CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
 }
 
@@ -1296,7 +1298,7 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, MandatoryExactFrameRate) {
   EXPECT_EQ(kFrameRate, result.min_frame_rate());
   EXPECT_EQ(kFrameRate, result.max_frame_rate());
   CheckNonFrameRateDefaults(result);
-  CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
+  CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result, kFrameRate);
 }
 
 TEST_F(MediaStreamConstraintsUtilVideoContentTest, MandatoryMinFrameRate) {
@@ -1372,10 +1374,11 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, MandatoryMaxFrameRate) {
     EXPECT_TRUE(result.HasValue());
     // If max frame rate is provided, it is used as default.
     EXPECT_EQ(kMaxFrameRate, result.FrameRate());
-    EXPECT_EQ(base::Optional<double>(), result.min_frame_rate());
+    EXPECT_EQ(absl::optional<double>(), result.min_frame_rate());
     EXPECT_EQ(kMaxFrameRate, result.max_frame_rate());
     CheckNonFrameRateDefaults(result);
-    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
+    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result,
+                                                            kMaxFrameRate);
   }
 
   // kMaxFrameRate less than default
@@ -1386,10 +1389,11 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, MandatoryMaxFrameRate) {
     EXPECT_TRUE(result.HasValue());
     // If max frame rate is provided, it is used as default.
     EXPECT_EQ(kMaxFrameRate, result.FrameRate());
-    EXPECT_EQ(base::Optional<double>(), result.min_frame_rate());
+    EXPECT_EQ(absl::optional<double>(), result.min_frame_rate());
     EXPECT_EQ(kMaxFrameRate, result.max_frame_rate());
     CheckNonFrameRateDefaults(result);
-    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
+    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result,
+                                                            kMaxFrameRate);
   }
 
   // kMaxFrameRate greater than the maximum allowed
@@ -1400,8 +1404,8 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, MandatoryMaxFrameRate) {
     EXPECT_TRUE(result.HasValue());
     // Expect the default, since the given maximum is invalid.
     EXPECT_EQ(kDefaultScreenCastFrameRate, result.FrameRate());
-    EXPECT_EQ(base::Optional<double>(), result.min_frame_rate());
-    EXPECT_EQ(base::Optional<double>(), result.max_frame_rate());
+    EXPECT_EQ(absl::optional<double>(), result.min_frame_rate());
+    EXPECT_EQ(absl::optional<double>(), result.max_frame_rate());
     CheckNonFrameRateDefaults(result);
     CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
   }
@@ -1414,10 +1418,11 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, MandatoryMaxFrameRate) {
     EXPECT_TRUE(result.HasValue());
     // If max frame rate is provided, it is used as default.
     EXPECT_EQ(kMaxFrameRate, result.FrameRate());
-    EXPECT_EQ(base::Optional<double>(), result.min_frame_rate());
+    EXPECT_EQ(absl::optional<double>(), result.min_frame_rate());
     EXPECT_EQ(kMaxFrameRate, result.max_frame_rate());
     CheckNonFrameRateDefaults(result);
-    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
+    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result,
+                                                            kMaxFrameRate);
   }
 }
 
@@ -1435,7 +1440,8 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, MandatoryRangeFrameRate) {
     EXPECT_EQ(kMinFrameRate, result.min_frame_rate());
     EXPECT_EQ(kMaxFrameRate, result.max_frame_rate());
     CheckNonFrameRateDefaults(result);
-    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
+    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result,
+                                                            kMaxFrameRate);
   }
 
   {
@@ -1450,7 +1456,8 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, MandatoryRangeFrameRate) {
     EXPECT_EQ(kMinFrameRate, result.min_frame_rate());
     EXPECT_EQ(kMaxFrameRate, result.max_frame_rate());
     CheckNonFrameRateDefaults(result);
-    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
+    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result,
+                                                            kMaxFrameRate);
   }
 
   {
@@ -1465,7 +1472,8 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, MandatoryRangeFrameRate) {
     EXPECT_EQ(kMinFrameRate, result.min_frame_rate());
     EXPECT_EQ(kMaxFrameRate, result.max_frame_rate());
     CheckNonFrameRateDefaults(result);
-    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
+    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result,
+                                                            kMaxFrameRate);
   }
 }
 
@@ -1478,10 +1486,11 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, IdealFrameRate) {
     auto result = SelectSettings();
     EXPECT_TRUE(result.HasValue());
     EXPECT_EQ(kIdealFrameRate, result.FrameRate());
-    EXPECT_EQ(base::Optional<double>(), result.min_frame_rate());
-    EXPECT_EQ(base::Optional<double>(), result.max_frame_rate());
+    EXPECT_EQ(absl::optional<double>(), result.min_frame_rate());
+    EXPECT_EQ(absl::optional<double>(), result.max_frame_rate());
     CheckNonFrameRateDefaults(result);
-    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
+    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result,
+                                                            kIdealFrameRate);
   }
 
   // Ideal greater than maximum.
@@ -1494,10 +1503,11 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, IdealFrameRate) {
     auto result = SelectSettings();
     EXPECT_TRUE(result.HasValue());
     EXPECT_EQ(kMaxFrameRate, result.FrameRate());
-    EXPECT_EQ(base::Optional<double>(), result.min_frame_rate());
+    EXPECT_EQ(absl::optional<double>(), result.min_frame_rate());
     EXPECT_EQ(kMaxFrameRate, result.max_frame_rate());
     CheckNonFrameRateDefaults(result);
-    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
+    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result,
+                                                            kMaxFrameRate);
   }
 
   // Ideal less than minimum.
@@ -1510,9 +1520,10 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, IdealFrameRate) {
     auto result = SelectSettings();
     EXPECT_TRUE(result.HasValue());
     EXPECT_EQ(kMinFrameRate, result.FrameRate());
-    EXPECT_EQ(base::Optional<double>(), result.max_frame_rate());
+    EXPECT_EQ(absl::optional<double>(), result.max_frame_rate());
     CheckNonFrameRateDefaults(result);
-    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
+    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result,
+                                                            kMinFrameRate);
   }
 
   // Ideal within range.
@@ -1530,7 +1541,8 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, IdealFrameRate) {
     EXPECT_EQ(kMinFrameRate, result.min_frame_rate());
     EXPECT_EQ(kMaxFrameRate, result.max_frame_rate());
     CheckNonFrameRateDefaults(result);
-    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
+    CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result,
+                                                            kIdealFrameRate);
   }
 }
 
@@ -1563,7 +1575,8 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, MandatoryResizeMode) {
 TEST_F(MediaStreamConstraintsUtilVideoContentTest,
        AdvancedMinMaxResolutionFrameRate) {
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   advanced1.width.SetMin(2000000000);
   advanced1.height.SetMin(2000000000);
   // The first advanced set cannot be satisfied and is therefore ignored in all
@@ -1576,7 +1589,8 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
   CheckNonResolutionDefaults(result);
   CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
 
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.height.SetMax(400);
   advanced2.width.SetMax(500);
   advanced2.aspect_ratio.SetExact(5.0 / 4.0);
@@ -1589,7 +1603,8 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
   EXPECT_EQ(5.0 / 4.0, result.track_adapter_settings().max_aspect_ratio());
   CheckTrackAdapterSettingsEqualsFormat(result);
 
-  WebMediaTrackConstraintSet& advanced3 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced3 =
+      constraint_factory_.AddAdvanced();
   advanced3.frame_rate.SetMax(10.0);
   result = SelectSettings();
   EXPECT_TRUE(result.HasValue());
@@ -1597,13 +1612,14 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
   EXPECT_EQ(400, result.Height());
   EXPECT_EQ(500, result.Width());
   EXPECT_EQ(10.0, result.FrameRate());
-  EXPECT_EQ(base::Optional<bool>(), result.noise_reduction());
+  EXPECT_EQ(absl::optional<bool>(), result.noise_reduction());
   EXPECT_EQ(std::string(), result.device_id());
   EXPECT_EQ(5.0 / 4.0, result.track_adapter_settings().min_aspect_ratio());
   EXPECT_EQ(5.0 / 4.0, result.track_adapter_settings().max_aspect_ratio());
-  CheckTrackAdapterSettingsEqualsFormat(result);
+  CheckTrackAdapterSettingsEqualsFormat(result, 10.0);
 
-  WebMediaTrackConstraintSet& advanced4 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced4 =
+      constraint_factory_.AddAdvanced();
   advanced4.width.SetExact(1000);
   advanced4.height.SetExact(1000);
   result = SelectSettings();
@@ -1613,11 +1629,11 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
   EXPECT_EQ(400, result.Height());
   EXPECT_EQ(500, result.Width());
   EXPECT_EQ(10.0, result.FrameRate());
-  EXPECT_EQ(base::Optional<bool>(), result.noise_reduction());
+  EXPECT_EQ(absl::optional<bool>(), result.noise_reduction());
   EXPECT_EQ(std::string(), result.device_id());
   EXPECT_EQ(5.0 / 4.0, result.track_adapter_settings().min_aspect_ratio());
   EXPECT_EQ(5.0 / 4.0, result.track_adapter_settings().max_aspect_ratio());
-  CheckTrackAdapterSettingsEqualsFormat(result);
+  CheckTrackAdapterSettingsEqualsFormat(result, 10.0);
 
   constraint_factory_.basic().width.SetIdeal(100);
   constraint_factory_.basic().height.SetIdeal(100);
@@ -1630,11 +1646,11 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
   EXPECT_EQ(std::round(4.0 * 900.0 / 41.0), result.Height());
   EXPECT_EQ(std::round(5.0 * 900.0 / 41.0), result.Width());
   EXPECT_EQ(10.0, result.FrameRate());
-  EXPECT_EQ(base::Optional<bool>(), result.noise_reduction());
+  EXPECT_EQ(absl::optional<bool>(), result.noise_reduction());
   EXPECT_EQ(std::string(), result.device_id());
   EXPECT_EQ(5.0 / 4.0, result.track_adapter_settings().min_aspect_ratio());
   EXPECT_EQ(5.0 / 4.0, result.track_adapter_settings().max_aspect_ratio());
-  CheckTrackAdapterSettingsEqualsFormat(result);
+  CheckTrackAdapterSettingsEqualsFormat(result, 10.0);
 
   constraint_factory_.basic().width.SetIdeal(2000);
   constraint_factory_.basic().height.SetIdeal(1500);
@@ -1646,20 +1662,22 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
   EXPECT_EQ(400, result.Height());
   EXPECT_EQ(500, result.Width());
   EXPECT_EQ(10.0, result.FrameRate());
-  EXPECT_EQ(base::Optional<bool>(), result.noise_reduction());
+  EXPECT_EQ(absl::optional<bool>(), result.noise_reduction());
   EXPECT_EQ(std::string(), result.device_id());
   EXPECT_EQ(5.0 / 4.0, result.track_adapter_settings().min_aspect_ratio());
   EXPECT_EQ(5.0 / 4.0, result.track_adapter_settings().max_aspect_ratio());
-  CheckTrackAdapterSettingsEqualsFormat(result);
+  CheckTrackAdapterSettingsEqualsFormat(result, 10.0);
 }
 
 TEST_F(MediaStreamConstraintsUtilVideoContentTest, AdvancedExactResolution) {
   {
     constraint_factory_.Reset();
-    WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+    MediaTrackConstraintSetPlatform& advanced1 =
+        constraint_factory_.AddAdvanced();
     advanced1.width.SetExact(40000000);
     advanced1.height.SetExact(40000000);
-    WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+    MediaTrackConstraintSetPlatform& advanced2 =
+        constraint_factory_.AddAdvanced();
     advanced2.width.SetExact(300000000);
     advanced2.height.SetExact(300000000);
     auto result = SelectSettings();
@@ -1671,7 +1689,8 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, AdvancedExactResolution) {
     CheckNonResolutionDefaults(result);
     CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
 
-    WebMediaTrackConstraintSet& advanced3 = constraint_factory_.AddAdvanced();
+    MediaTrackConstraintSetPlatform& advanced3 =
+        constraint_factory_.AddAdvanced();
     advanced3.width.SetExact(1920);
     advanced3.height.SetExact(1080);
     result = SelectSettings();
@@ -1685,7 +1704,8 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, AdvancedExactResolution) {
               result.track_adapter_settings().max_aspect_ratio());
     CheckTrackAdapterSettingsEqualsFormat(result);
 
-    WebMediaTrackConstraintSet& advanced4 = constraint_factory_.AddAdvanced();
+    MediaTrackConstraintSetPlatform& advanced4 =
+        constraint_factory_.AddAdvanced();
     advanced4.width.SetExact(640);
     advanced4.height.SetExact(480);
     result = SelectSettings();
@@ -1720,10 +1740,12 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, AdvancedExactResolution) {
 TEST_F(MediaStreamConstraintsUtilVideoContentTest,
        AdvancedResolutionAndFrameRate) {
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   advanced1.width.SetExact(1920);
   advanced1.height.SetExact(1080);
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.frame_rate.SetExact(60.0);
   auto result = SelectSettings();
   EXPECT_TRUE(result.HasValue());
@@ -1734,15 +1756,17 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
             result.track_adapter_settings().min_aspect_ratio());
   EXPECT_EQ(1920.0 / 1080.0,
             result.track_adapter_settings().max_aspect_ratio());
-  CheckTrackAdapterSettingsEqualsFormat(result);
+  CheckTrackAdapterSettingsEqualsFormat(result, 60.0);
 }
 
 TEST_F(MediaStreamConstraintsUtilVideoContentTest, AdvancedNoiseReduction) {
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   advanced1.width.SetMin(640);
   advanced1.height.SetMin(480);
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   const int kMinWidth = 4000;
   const int kMinHeight = 2000;
   advanced2.width.SetMin(kMinWidth);
@@ -1768,11 +1792,13 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, AdvancedNoiseReduction) {
 TEST_F(MediaStreamConstraintsUtilVideoContentTest,
        AdvancedContradictoryNoiseReduction) {
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   advanced1.width.SetExact(640);
   advanced1.height.SetExact(480);
   advanced1.goog_noise_reduction.SetExact(true);
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.width.SetExact(1920);
   advanced2.height.SetExact(1080);
   advanced2.goog_noise_reduction.SetExact(false);
@@ -1789,10 +1815,12 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
 TEST_F(MediaStreamConstraintsUtilVideoContentTest,
        AdvancedContradictoryExactResolution) {
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   advanced1.width.SetExact(640);
   advanced1.height.SetExact(480);
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.width.SetExact(1920);
   advanced2.height.SetExact(1080);
   auto result = SelectSettings();
@@ -1808,10 +1836,12 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
 TEST_F(MediaStreamConstraintsUtilVideoContentTest,
        AdvancedContradictoryMaxMinResolutionFrameRate) {
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   advanced1.width.SetMax(640);
   advanced1.height.SetMax(480);
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.width.SetMin(1920);
   advanced2.height.SetMin(1080);
   advanced2.frame_rate.SetExact(60.0);
@@ -1833,10 +1863,12 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
   const int kMinHeight = 2600;
   const int kMinWidth = 2800;
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   advanced1.width.SetMin(kMinWidth);
   advanced1.height.SetMin(kMinHeight);
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.width.SetMax(640);
   advanced2.height.SetMax(480);
   advanced2.frame_rate.SetExact(60.0);
@@ -1856,10 +1888,12 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
 TEST_F(MediaStreamConstraintsUtilVideoContentTest,
        AdvancedContradictoryExactAspectRatio) {
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   const double kMinAspectRatio = 5.0;
   advanced1.aspect_ratio.SetExact(kMinAspectRatio);
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.aspect_ratio.SetExact(3.0);
   auto result = SelectSettings();
   EXPECT_TRUE(result.HasValue());
@@ -1877,10 +1911,12 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
 TEST_F(MediaStreamConstraintsUtilVideoContentTest,
        AdvancedContradictoryAspectRatioRange) {
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   const double kMinAspectRatio = 5.0;
   advanced1.aspect_ratio.SetMin(kMinAspectRatio);
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.aspect_ratio.SetMax(3.0);
   auto result = SelectSettings();
   EXPECT_TRUE(result.HasValue());
@@ -1899,23 +1935,27 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
 TEST_F(MediaStreamConstraintsUtilVideoContentTest,
        AdvancedContradictoryExactFrameRate) {
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   advanced1.frame_rate.SetExact(40.0);
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.frame_rate.SetExact(45.0);
   auto result = SelectSettings();
   EXPECT_TRUE(result.HasValue());
   EXPECT_EQ(40.0, result.FrameRate());
   CheckNonFrameRateDefaults(result);
-  CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result);
+  CheckTrackAdapterSettingsEqualsFormatDefaultAspectRatio(result, 40.0);
 }
 
 TEST_F(MediaStreamConstraintsUtilVideoContentTest,
        AdvancedContradictoryFrameRateRange) {
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   advanced1.frame_rate.SetMin(40.0);
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.frame_rate.SetMax(35.0);
   auto result = SelectSettings();
   EXPECT_TRUE(result.HasValue());
@@ -1928,12 +1968,15 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
        AdvancedContradictoryWidthFrameRate) {
   const int kMaxWidth = 1920;
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   advanced1.width.SetMax(kMaxWidth);
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.width.SetMin(2000);
   advanced2.frame_rate.SetExact(10.0);
-  WebMediaTrackConstraintSet& advanced3 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced3 =
+      constraint_factory_.AddAdvanced();
   advanced3.frame_rate.SetExact(90.0);
   auto result = SelectSettings();
   EXPECT_TRUE(result.HasValue());
@@ -1946,19 +1989,22 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
       result.track_adapter_settings().min_aspect_ratio());
   EXPECT_EQ(static_cast<double>(kMaxWidth) / kMinScreenCastDimension,
             result.track_adapter_settings().max_aspect_ratio());
-  CheckTrackAdapterSettingsEqualsFormat(result);
+  CheckTrackAdapterSettingsEqualsFormat(result, 90.0);
 }
 
 TEST_F(MediaStreamConstraintsUtilVideoContentTest,
        AdvancedContradictoryHeightFrameRate) {
   const int kMaxHeight = 2000;
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   advanced1.height.SetMax(kMaxHeight);
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.height.SetMin(4500);
   advanced2.frame_rate.SetExact(10.0);
-  WebMediaTrackConstraintSet& advanced3 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced3 =
+      constraint_factory_.AddAdvanced();
   advanced3.frame_rate.SetExact(60.0);
   auto result = SelectSettings();
   EXPECT_TRUE(result.HasValue());
@@ -1971,7 +2017,7 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
   EXPECT_EQ(
       static_cast<double>(kMaxScreenCastDimension) / kMinScreenCastDimension,
       result.track_adapter_settings().max_aspect_ratio());
-  CheckTrackAdapterSettingsEqualsFormat(result);
+  CheckTrackAdapterSettingsEqualsFormat(result, 60.0);
 }
 
 TEST_F(MediaStreamConstraintsUtilVideoContentTest, AdvancedDeviceID) {
@@ -1980,11 +2026,13 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, AdvancedDeviceID) {
   const String kDeviceID3 = "fake_device_3";
   const String kDeviceID4 = "fake_device_4";
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   Vector<String> id_vector1 = {kDeviceID1, kDeviceID2};
   advanced1.device_id.SetExact(id_vector1);
   Vector<String> id_vector2 = {kDeviceID2, kDeviceID3};
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.device_id.SetExact(id_vector2);
   auto result = SelectSettings();
   EXPECT_TRUE(result.HasValue());
@@ -2001,11 +2049,13 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest,
   const String kDeviceID3 = "fake_device_3";
   const String kDeviceID4 = "fake_device_4";
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced1 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced1 =
+      constraint_factory_.AddAdvanced();
   Vector<String> id_vector1 = {kDeviceID1, kDeviceID2};
   advanced1.device_id.SetExact(id_vector1);
   Vector<String> id_vector2 = {kDeviceID3, kDeviceID4};
-  WebMediaTrackConstraintSet& advanced2 = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced2 =
+      constraint_factory_.AddAdvanced();
   advanced2.device_id.SetExact(id_vector2);
   auto result = SelectSettings();
   EXPECT_TRUE(result.HasValue());
@@ -2020,7 +2070,7 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, AdvancedIdealDeviceID) {
   const String kDeviceID2 = "fake_device_2";
   const String kDeviceID3 = "fake_device_3";
   constraint_factory_.Reset();
-  WebMediaTrackConstraintSet& advanced = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced = constraint_factory_.AddAdvanced();
   Vector<String> id_vector1 = {kDeviceID1, kDeviceID2};
   advanced.device_id.SetExact(id_vector1);
 
@@ -2040,7 +2090,7 @@ TEST_F(MediaStreamConstraintsUtilVideoContentTest, AdvancedResizeMode) {
   constraint_factory_.Reset();
   constraint_factory_.basic().width.SetIdeal(kIdealWidth);
   constraint_factory_.basic().height.SetIdeal(kIdealHeight);
-  WebMediaTrackConstraintSet& advanced = constraint_factory_.AddAdvanced();
+  MediaTrackConstraintSetPlatform& advanced = constraint_factory_.AddAdvanced();
   advanced.resize_mode.SetExact("none");
   auto result = SelectSettings();
   EXPECT_TRUE(result.HasValue());

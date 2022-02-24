@@ -2,8 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {NativeEventTarget as EventTarget} from 'chrome://resources/js/cr/event_target.m.js';
+
+import {AsyncUtil} from '../../common/js/async_util.js';
+import {importer} from '../../common/js/importer_common.js';
+import {metrics} from '../../common/js/metrics.js';
+import {ProgressCenterItem, ProgressItemState, ProgressItemType} from '../../common/js/progress_center_common.js';
+import {getFilesAppIconURL} from '../../common/js/url_constants.js';
+import {str, strf, util} from '../../common/js/util.js';
+import {xfm} from '../../common/js/xfm.js';
+import {ProgressCenter} from '../../externs/background/progress_center.js';
+import {VolumeInfo} from '../../externs/volume_info.js';
+import {VolumeManager} from '../../externs/volume_manager.js';
+
+import {volumeManagerFactory} from './volume_manager_factory.js';
+
+
 /** Handler of device event. */
-class DeviceHandler extends cr.EventTarget {
+export class DeviceHandler extends EventTarget {
   /** @param {!ProgressCenter} progressCenter */
   constructor(progressCenter) {
     super();
@@ -22,14 +38,19 @@ class DeviceHandler extends cr.EventTarget {
      */
     this.mountStatus_ = {};
 
-    chrome.fileManagerPrivate.onDeviceChanged.addListener(
-        this.onDeviceChanged_.bind(this));
-    chrome.fileManagerPrivate.onMountCompleted.addListener(
-        this.onMountCompleted_.bind(this));
-    chrome.notifications.onClicked.addListener(
-        this.onNotificationClicked_.bind(this));
-    chrome.notifications.onButtonClicked.addListener(
-        this.onNotificationButtonClicked_.bind(this));
+    // Notifications in a SWA context are handled by the
+    // system_notification_manager.cc and thus we don't want this code
+    // duplicated in the background page.
+    if (!window.isSWA) {
+      chrome.fileManagerPrivate.onDeviceChanged.addListener(
+          this.onDeviceChanged_.bind(this));
+      chrome.fileManagerPrivate.onMountCompleted.addListener(
+          this.onMountCompleted_.bind(this));
+      xfm.notifications.onClicked.addListener(
+          this.onNotificationClicked_.bind(this));
+      xfm.notifications.onButtonClicked.addListener(
+          this.onNotificationButtonClicked_.bind(this));
+    }
   }
 
   /**
@@ -38,6 +59,9 @@ class DeviceHandler extends cr.EventTarget {
    * @private
    */
   onDeviceChanged_(event) {
+    if (util.isSwaEnabled()) {
+      return;
+    }
     util.doIfPrimaryContext(() => {
       this.onDeviceChangedInternal_(event);
     });
@@ -66,6 +90,11 @@ class DeviceHandler extends cr.EventTarget {
       case 'format_success':
       case 'format_fail':
         this.handleFormatEvent_(event);
+        break;
+      case 'partition_start':
+      case 'partition_success':
+      case 'partition_fail':
+        this.handlePartitionEvent_(event);
         break;
       case 'rename_fail':
         DeviceHandler.Notification.RENAME_FAIL.show(event.devicePath);
@@ -122,12 +151,55 @@ class DeviceHandler extends cr.EventTarget {
   }
 
   /**
+   * Handles partition events and displays a notification in the progress
+   * center. As the partitioning is the first part of SinglePartitionFormat
+   * operation, just show errors that would stop the operation. Other part
+   * handled in format event flow.
+   * @param {chrome.fileManagerPrivate.DeviceEvent} event Device event.
+   * @private
+   */
+  handlePartitionEvent_(event) {
+    const item = new ProgressCenterItem();
+    item.id = 'partition:' + event.devicePath;
+    item.type = ProgressItemType.PARTITION;
+    item.itemCount = 1;
+    item.progressMax = 1;
+
+    let notificationType;
+    switch (event.type) {
+      case 'partition_start':
+      case 'partition_success':
+        // No op for start/success.
+        return;
+      case 'partition_fail':
+        item.state = ProgressItemState.ERROR;
+        item.message = strf('FORMAT_FAILURE_MESSAGE', event.deviceLabel);
+        item.progressValue = 0;
+        notificationType = DeviceHandler.Notification.Type.PARTITION_FAIL;
+        break;
+      default:
+        console.error('Unknown partition event type: ' + event.type);
+        break;
+    }
+
+    this.progressCenter_.updateItem(item);
+
+    requestIdleCallback(
+        () => metrics.recordEnum(
+            'Notification.Show', notificationType,
+            DeviceHandler.Notification.TypesForUMA));
+  }
+
+  /**
    * Handles mount completed events to show notifications for removable devices.
    * @param {chrome.fileManagerPrivate.MountCompletedEvent} event Mount
    *     completed event.
    * @private
    */
   onMountCompleted_(event) {
+    if (util.isSwaEnabled()) {
+      return;
+    }
     util.doIfPrimaryContext(() => {
       this.onMountCompletedInternal_(event);
     });
@@ -281,19 +353,8 @@ class DeviceHandler extends cr.EventTarget {
                * @param {!DirectoryEntry} directory
                */
               directory => {
-                return importer.isPhotosAppImportEnabled().then(
-                    /**
-                     * @param {boolean} appEnabled
-                     */
-                    appEnabled => {
-                      // We don't want to auto-open two windows when a user
-                      // inserts a removable device.  Only open Files app if
-                      // auto-import is disabled in Photos app.
-                      if (!appEnabled) {
-                        this.openMediaDirectory_(
-                            metadata.volumeId, null, directory.fullPath);
-                      }
-                    });
+                this.openMediaDirectory_(
+                    metadata.volumeId, null, directory.fullPath);
               })
         .catch(error => {
           if (metadata.deviceType && metadata.devicePath) {
@@ -331,6 +392,9 @@ class DeviceHandler extends cr.EventTarget {
    * @private
    */
   onNotificationClicked_(id) {
+    if (util.isSwaEnabled()) {
+      return;
+    }
     util.doIfPrimaryContext(() => {
       this.onNotificationClickedInternal_(id, -1 /* index */);
     });
@@ -343,6 +407,9 @@ class DeviceHandler extends cr.EventTarget {
    * @private
    */
   onNotificationButtonClicked_(id, index) {
+    if (util.isSwaEnabled()) {
+      return;
+    }
     util.doIfPrimaryContext(() => {
       this.onNotificationClickedInternal_(id, index);
     });
@@ -358,7 +425,7 @@ class DeviceHandler extends cr.EventTarget {
     const prefix = id.substr(0, pos);
     const devicePath = id.substr(pos + 1);
     if (prefix === 'deviceNavigation' || prefix === 'deviceFail') {
-      chrome.notifications.clear(id, () => {});
+      xfm.notifications.clear(id, () => {});
       this.openMediaDirectory_(null, devicePath, null);
       metrics.recordEnum(
           'Notification.UserAction',
@@ -370,7 +437,7 @@ class DeviceHandler extends cr.EventTarget {
       return;
     }
     if (prefix === 'deviceImport') {
-      chrome.notifications.clear(id, () => {});
+      xfm.notifications.clear(id, () => {});
       this.openMediaDirectory_(null, devicePath, 'DCIM');
       metrics.recordEnum(
           'Notification.UserAction',
@@ -379,7 +446,7 @@ class DeviceHandler extends cr.EventTarget {
       return;
     }
     if (prefix === 'deviceNavigationAppAccess') {
-      chrome.notifications.clear(id, () => {});
+      xfm.notifications.clear(id, () => {});
       const secondButtonIndex = 1;
       if (index === secondButtonIndex) {
         chrome.fileManagerPrivate.openSettingsSubpage(
@@ -387,7 +454,7 @@ class DeviceHandler extends cr.EventTarget {
         metrics.recordEnum(
             'Notification.UserAction',
             DeviceHandler.Notification.UserAction
-                .OPEN_EXTERNAL_STORAGE_PREFRENCES,
+                .OPEN_EXTERNAL_STORAGE_PREFERENCES,
             DeviceHandler.Notification.UserActionsForUMA);
       } else {
         this.openMediaDirectory_(null, devicePath, null);
@@ -551,7 +618,7 @@ DeviceHandler.Notification = class {
   showOnce(devicePath) {
     const notificationId = this.makeId_(devicePath);
     this.queue_.run(function(callback) {
-      chrome.notifications.getAll(idList => {
+      xfm.notifications.getAll(idList => {
         if (idList.indexOf(notificationId) !== -1) {
           callback();
           return;
@@ -577,12 +644,12 @@ DeviceHandler.Notification = class {
     }
     const additionalMessage =
         this.additionalMessage ? (' ' + str(this.additionalMessage)) : '';
-    chrome.notifications.create(
+    xfm.notifications.create(
         notificationId, {
           type: 'basic',
           title: str(this.title),
           message: message || (str(this.message) + additionalMessage),
-          iconUrl: chrome.runtime.getURL('/common/images/icon96.png'),
+          iconUrl: getFilesAppIconURL().toString(),
           buttons: buttons,
           isClickable: this.isClickable
         },
@@ -597,7 +664,7 @@ DeviceHandler.Notification = class {
    */
   hide(devicePath) {
     this.queue_.run(callback => {
-      chrome.notifications.clear(this.makeId_(devicePath), callback);
+      xfm.notifications.clear(this.makeId_(devicePath), callback);
     });
   }
 
@@ -632,6 +699,9 @@ DeviceHandler.Notification.Type = {
   FORMAT_SUCCESS: 'format_success',
   FORMAT_FAIL: 'format_fail',
   RENAME_FAIL: 'rename_fail',
+  PARTITION_START: 'partition_start',
+  PARTITION_SUCCESS: 'partition_success',
+  PARTITION_FAIL: 'partition_fail',
 };
 
 /**
@@ -656,6 +726,9 @@ DeviceHandler.Notification.TypesForUMA = Object.freeze([
   DeviceHandler.Notification.Type.FORMAT_SUCCESS,
   DeviceHandler.Notification.Type.FORMAT_FAIL,
   DeviceHandler.Notification.Type.RENAME_FAIL,
+  DeviceHandler.Notification.Type.PARTITION_START,
+  DeviceHandler.Notification.Type.PARTITION_SUCCESS,
+  DeviceHandler.Notification.Type.PARTITION_FAIL,
 ]);
 console.assert(
     Object.keys(DeviceHandler.Notification.Type).length ===
@@ -668,7 +741,7 @@ console.assert(
  * @const
  */
 DeviceHandler.Notification.UserAction = {
-  OPEN_EXTERNAL_STORAGE_PREFRENCES: 'open_external_storage_preferences',
+  OPEN_EXTERNAL_STORAGE_PREFERENCES: 'open_external_storage_preferences',
   OPEM_MEDIA_DEVICE_NAVIGATION: 'open_media_device_navigation',
   OPEN_MEDIA_DEVICE_NAVIGATION_ARC: 'open_media_device_navigation_arc',
   OPEN_MEDIA_DEVICE_FAIL: 'open_media_device_fail',
@@ -683,7 +756,7 @@ DeviceHandler.Notification.UserAction = {
  * @const
  */
 DeviceHandler.Notification.UserActionsForUMA = Object.freeze([
-  DeviceHandler.Notification.UserAction.OPEN_EXTERNAL_STORAGE_PREFRENCES,
+  DeviceHandler.Notification.UserAction.OPEN_EXTERNAL_STORAGE_PREFERENCES,
   DeviceHandler.Notification.UserAction.OPEM_MEDIA_DEVICE_NAVIGATION,
   DeviceHandler.Notification.UserAction.OPEN_MEDIA_DEVICE_NAVIGATION_ARC,
   DeviceHandler.Notification.UserAction.OPEN_MEDIA_DEVICE_FAIL,

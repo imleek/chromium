@@ -9,7 +9,6 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/macros.h"
 #include "build/build_config.h"
 #include "content/public/browser/content_browser_client.h"
 
@@ -19,11 +18,24 @@ namespace content {
 class TestContentBrowserClient : public ContentBrowserClient {
  public:
   TestContentBrowserClient();
+
+  TestContentBrowserClient(const TestContentBrowserClient&) = delete;
+  TestContentBrowserClient& operator=(const TestContentBrowserClient&) = delete;
+
   ~TestContentBrowserClient() override;
+
+  static TestContentBrowserClient* GetInstance();
+
+  void set_application_locale(const std::string& locale) {
+    application_locale_ = locale;
+  }
+
+  // ContentBrowserClient:
   base::FilePath GetDefaultDownloadDirectory() override;
   GeneratedCodeCacheSettings GetGeneratedCodeCacheSettings(
       content::BrowserContext* context) override;
   std::string GetUserAgent() override;
+  std::string GetApplicationLocale() override;
 #if defined(OS_ANDROID)
   void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
@@ -34,8 +46,8 @@ class TestContentBrowserClient : public ContentBrowserClient {
  private:
   // Temporary directory for GetDefaultDownloadDirectory.
   base::ScopedTempDir download_dir_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestContentBrowserClient);
+  std::string application_locale_;
+  static TestContentBrowserClient* instance_;
 };
 
 }  // namespace content

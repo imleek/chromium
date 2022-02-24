@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/flat_set.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
@@ -18,6 +18,7 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "components/favicon/core/favicon_client.h"
 #include "components/favicon/core/favicon_service_impl.h"
 #include "components/favicon/core/favicon_util.h"
@@ -142,7 +143,7 @@ class IconCacherTestBase : public ::testing::Test {
 class IconCacherTestPopularSites : public IconCacherTestBase {
  protected:
   IconCacherTestPopularSites()
-      : site_(base::string16(),  // title, unused
+      : site_(std::u16string(),  // title, unused
               GURL("http://url.google/"),
               GURL("http://url.google/icon.png"),
               GURL("http://url.google/favicon.ico"),
@@ -180,7 +181,7 @@ class IconCacherTestPopularSites : public IconCacherTestBase {
 
     ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
         pak_path.AppendASCII("components_tests_resources.pak"),
-        ui::SCALE_FACTOR_NONE);
+        ui::kScaleFactorNone);
   }
 
   PopularSites::Site site_;

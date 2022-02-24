@@ -12,16 +12,20 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gl/buffer_format_utils.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_enums.h"
+#include "ui/gl/gl_surface.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/scoped_binders.h"
+#include "ui/gl/scoped_make_current.h"
 
 using gfx::BufferFormat;
 
@@ -35,10 +39,11 @@ GLint DataRowLength(size_t stride, gfx::BufferFormat format) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
       return base::checked_cast<GLint>(stride) / 2;
+    case gfx::BufferFormat::RG_1616:
     case gfx::BufferFormat::RGBX_8888:
     case gfx::BufferFormat::RGBA_8888:
     case gfx::BufferFormat::BGRX_8888:
-    case gfx::BufferFormat::BGRX_1010102:
+    case gfx::BufferFormat::BGRA_1010102:
     case gfx::BufferFormat::RGBA_1010102:
     case gfx::BufferFormat::BGRA_8888:
       return base::checked_cast<GLint>(stride) / 4;
@@ -117,7 +122,7 @@ std::vector<uint8_t> GLES2RGB565Data(const gfx::Size& size,
   return gles2_rgb_data;
 }
 
-base::Optional<std::vector<uint8_t>> GLES2Data(const gfx::Size& size,
+absl::optional<std::vector<uint8_t>> GLES2Data(const gfx::Size& size,
                                                gfx::BufferFormat format,
                                                size_t stride,
                                                const uint8_t* data,
@@ -129,7 +134,7 @@ base::Optional<std::vector<uint8_t>> GLES2Data(const gfx::Size& size,
 
   switch (format) {
     case gfx::BufferFormat::RGBX_8888:
-      return base::make_optional(GLES2RGBData(
+      return absl::make_optional(GLES2RGBData(
           size, stride, data,
           [](const uint8_t* src, uint8_t* dst) {
             dst[0] = src[0];
@@ -138,10 +143,10 @@ base::Optional<std::vector<uint8_t>> GLES2Data(const gfx::Size& size,
           },
           data_format, data_type, data_row_length));
     case gfx::BufferFormat::BGR_565:
-      return base::make_optional(GLES2RGB565Data(
+      return absl::make_optional(GLES2RGB565Data(
           size, stride, data, data_format, data_type, data_row_length));
     case gfx::BufferFormat::BGRX_8888:
-      return base::make_optional(GLES2RGBData(
+      return absl::make_optional(GLES2RGBData(
           size, stride, data,
           [](const uint8_t* src, uint8_t* dst) {
             dst[0] = src[2];
@@ -151,18 +156,19 @@ base::Optional<std::vector<uint8_t>> GLES2Data(const gfx::Size& size,
           data_format, data_type, data_row_length));
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBA_8888:
-    case gfx::BufferFormat::BGRX_1010102:
+    case gfx::BufferFormat::BGRA_1010102:
     case gfx::BufferFormat::RGBA_1010102:
     case gfx::BufferFormat::BGRA_8888:
     case gfx::BufferFormat::RGBA_F16:
     case gfx::BufferFormat::R_8:
     case gfx::BufferFormat::R_16:
-    case gfx::BufferFormat::RG_88: {
+    case gfx::BufferFormat::RG_88:
+    case gfx::BufferFormat::RG_1616: {
       size_t gles2_data_stride =
           RowSizeForBufferFormat(size.width(), format, 0);
       if (stride == gles2_data_stride ||
           g_current_gl_driver->ext.b_GL_EXT_unpack_subimage)
-        return base::nullopt;  // No data conversion needed
+        return absl::nullopt;  // No data conversion needed
 
       std::vector<uint8_t> gles2_data(gles2_data_stride * size.height());
       for (int y = 0; y < size.height(); ++y) {
@@ -170,17 +176,17 @@ base::Optional<std::vector<uint8_t>> GLES2Data(const gfx::Size& size,
                gles2_data_stride);
       }
       *data_row_length = size.width();
-      return base::make_optional(gles2_data);
+      return absl::make_optional(gles2_data);
     }
     case gfx::BufferFormat::YVU_420:
     case gfx::BufferFormat::YUV_420_BIPLANAR:
     case gfx::BufferFormat::P010:
       NOTREACHED() << gfx::BufferFormatToString(format);
-      return base::nullopt;
+      return absl::nullopt;
   }
 
   NOTREACHED();
-  return base::nullopt;
+  return absl::nullopt;
 }
 
 void MemcpyTask(const void* src,
@@ -192,8 +198,8 @@ void MemcpyTask(const void* src,
   auto checked_bytes = base::CheckedNumeric<size_t>(bytes);
   size_t start = (checked_bytes * task_index / n_tasks).ValueOrDie();
   size_t end = (checked_bytes * (task_index + 1) / n_tasks).ValueOrDie();
-  CHECK_LE(start, bytes);
-  CHECK_LE(end, bytes);
+  DCHECK_LE(start, bytes);
+  DCHECK_LE(end, bytes);
   memcpy(static_cast<char*>(dst) + start, static_cast<const char*>(src) + start,
          end - start);
   done->Run();
@@ -226,8 +232,11 @@ GLImageMemory::GLImageMemory(const gfx::Size& size)
       stride_(0) {}
 
 GLImageMemory::~GLImageMemory() {
-  if (buffer_)
+  if (buffer_ && original_context_ && original_surface_) {
+    ui::ScopedMakeCurrent make_current(original_context_.get(),
+                                       original_surface_.get());
     glDeleteBuffersARB(1, &buffer_);
+  }
 }
 
 // static
@@ -256,8 +265,13 @@ bool GLImageMemory::Initialize(const unsigned char* memory,
   format_ = format;
   stride_ = stride;
 
+  bool tex_image_from_pbo_is_slow = false;
+#if defined(OS_WIN)
+  tex_image_from_pbo_is_slow = true;
+#endif  // OS_WIN
   GLContext* context = GLContext::GetCurrent();
-  if (SupportsPBO(context) &&
+  DCHECK(context);
+  if (!tex_image_from_pbo_is_slow && SupportsPBO(context) &&
       (SupportsMapBuffer(context) || SupportsMapBufferRange(context))) {
     constexpr size_t kTaskBytes = 1024 * 1024;
     buffer_bytes_ = stride * size_.height();
@@ -268,6 +282,10 @@ bool GLImageMemory::Initialize(const unsigned char* memory,
       ScopedBufferBinder binder(GL_PIXEL_UNPACK_BUFFER, buffer_);
       glBufferData(GL_PIXEL_UNPACK_BUFFER, buffer_bytes_, nullptr,
                    GL_DYNAMIC_DRAW);
+      original_context_ = context->AsWeakPtr();
+      GLSurface* surface = GLSurface::GetCurrent();
+      DCHECK(surface);
+      original_surface_ = surface->AsWeakPtr();
     }
   }
 
@@ -288,7 +306,7 @@ unsigned GLImageMemory::GetDataFormat() {
     case gfx::BufferFormat::RGBA_1010102:
       return GL_RGBA;
     case gfx::BufferFormat::BGRX_8888:
-    case gfx::BufferFormat::BGRX_1010102:
+    case gfx::BufferFormat::BGRA_1010102:
       return GL_BGRA_EXT;
     default:
       break;
@@ -325,15 +343,21 @@ bool GLImageMemory::CopyTexImage(unsigned target) {
   GLenum data_format = GetDataFormat();
   GLenum data_type = GetDataType();
   GLint data_row_length = DataRowLength(stride_, format_);
-  base::Optional<std::vector<uint8_t>> gles2_data;
+  absl::optional<std::vector<uint8_t>> gles2_data;
 
-  if (GLContext::GetCurrent()->GetVersionInfo()->is_es) {
+  GLContext* context = GLContext::GetCurrent();
+  DCHECK(context);
+  if (context->GetVersionInfo()->is_es) {
     gles2_data = GLES2Data(size_, format_, stride_, memory_, &data_format,
                            &data_type, &data_row_length);
   }
 
-  if (data_row_length != size_.width())
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, data_row_length);
+  ScopedPixelStore scoped_unpack_row_length(
+      GL_UNPACK_ROW_LENGTH,
+      data_row_length == size_.width() ? 0 : data_row_length);
+  ScopedPixelStore scoped_unpack_skip_pixels(GL_UNPACK_SKIP_PIXELS, 0);
+  ScopedPixelStore scoped_unpack_skip_rows(GL_UNPACK_SKIP_ROWS, 0);
+  ScopedPixelStore scoped_unpack_alignment(GL_UNPACK_ALIGNMENT, 4);
 
   const void* src;
   size_t size;
@@ -345,17 +369,18 @@ bool GLImageMemory::CopyTexImage(unsigned target) {
     size = buffer_bytes_;
   }
 
-  if (buffer_) {
+  bool uploaded = false;
+  if (buffer_ && original_context_.get() == context) {
     glTexImage2D(target, 0, GetInternalFormat(), size_.width(), size_.height(),
                  0, data_format, data_type, nullptr);
 
     ScopedBufferBinder binder(GL_PIXEL_UNPACK_BUFFER, buffer_);
 
     void* dst = nullptr;
-    if (SupportsMapBuffer(GLContext::GetCurrent())) {
+    if (SupportsMapBuffer(context)) {
       dst = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
     } else {
-      DCHECK(SupportsMapBufferRange(GLContext::GetCurrent()));
+      DCHECK(SupportsMapBufferRange(context));
       dst = glMapBufferRange(GL_PIXEL_UNPACK_BUFFER, 0, size, GL_MAP_WRITE_BIT);
     }
 
@@ -365,8 +390,9 @@ bool GLImageMemory::CopyTexImage(unsigned target) {
           memcpy_tasks_, base::BindOnce(&base::WaitableEvent::Signal,
                                         base::Unretained(&event)));
       for (int i = 1; i < memcpy_tasks_; ++i) {
-        base::PostTask(FROM_HERE, base::BindOnce(&MemcpyTask, src, dst, size, i,
-                                                 memcpy_tasks_, &barrier));
+        base::ThreadPool::PostTask(
+            FROM_HERE, base::BindOnce(&MemcpyTask, src, dst, size, i,
+                                      memcpy_tasks_, &barrier));
       }
       MemcpyTask(src, dst, size, 0, memcpy_tasks_, &barrier);
       event.Wait();
@@ -375,19 +401,17 @@ bool GLImageMemory::CopyTexImage(unsigned target) {
 
       glTexSubImage2D(target, 0, 0, 0, size_.width(), size_.height(),
                       data_format, data_type, 0);
+      uploaded = true;
     } else {
       glDeleteBuffersARB(1, &buffer_);
       buffer_ = 0;
     }
   }
 
-  if (!buffer_) {
+  if (!uploaded) {
     glTexImage2D(target, 0, GetInternalFormat(), size_.width(), size_.height(),
                  0, data_format, data_type, src);
   }
-
-  if (data_row_length != size_.width())
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
   return true;
 }
@@ -410,35 +434,25 @@ bool GLImageMemory::CopyTexSubImage(unsigned target,
   GLenum data_format = GetDataFormat();
   GLenum data_type = GetDataType();
   GLint data_row_length = DataRowLength(stride_, format_);
-  base::Optional<std::vector<uint8_t>> gles2_data;
+  absl::optional<std::vector<uint8_t>> gles2_data;
 
   if (GLContext::GetCurrent()->GetVersionInfo()->is_es) {
     gles2_data = GLES2Data(rect.size(), format_, stride_, data, &data_format,
                            &data_type, &data_row_length);
   }
 
-  if (data_row_length != rect.width())
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, data_row_length);
+  ScopedPixelStore scoped_unpack_row_length(
+      GL_UNPACK_ROW_LENGTH,
+      data_row_length == rect.width() ? 0 : data_row_length);
+  ScopedPixelStore scoped_unpack_skip_pixels(GL_UNPACK_SKIP_PIXELS, 0);
+  ScopedPixelStore scoped_unpack_skip_rows(GL_UNPACK_SKIP_ROWS, 0);
+  ScopedPixelStore scoped_unpack_alignment(GL_UNPACK_ALIGNMENT, 4);
 
   glTexSubImage2D(target, 0, offset.x(), offset.y(), rect.width(),
                   rect.height(), data_format, data_type,
                   gles2_data ? gles2_data->data() : data);
 
-  if (data_row_length != rect.width())
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-
   return true;
-}
-
-bool GLImageMemory::ScheduleOverlayPlane(
-    gfx::AcceleratedWidget widget,
-    int z_order,
-    gfx::OverlayTransform transform,
-    const gfx::Rect& bounds_rect,
-    const gfx::RectF& crop_rect,
-    bool enable_blend,
-    std::unique_ptr<gfx::GpuFence> gpu_fence) {
-  return false;
 }
 
 GLImageMemory::Type GLImageMemory::GetType() const {
@@ -451,12 +465,13 @@ bool GLImageMemory::ValidFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::R_8:
     case gfx::BufferFormat::R_16:
     case gfx::BufferFormat::RG_88:
+    case gfx::BufferFormat::RG_1616:
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
     case gfx::BufferFormat::RGBA_8888:
     case gfx::BufferFormat::BGRX_8888:
-    case gfx::BufferFormat::BGRX_1010102:
+    case gfx::BufferFormat::BGRA_1010102:
     case gfx::BufferFormat::RGBA_1010102:
     case gfx::BufferFormat::BGRA_8888:
     case gfx::BufferFormat::RGBA_F16:

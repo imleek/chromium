@@ -4,7 +4,8 @@
 
 #import "ios/chrome/browser/ui/overlays/overlay_coordinator_factory.h"
 
-#include "base/logging.h"
+#include "base/check.h"
+#include "base/notreached.h"
 #include "ios/chrome/browser/overlays/public/overlay_request_support.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/infobar_banner_supported_overlay_coordinator_classes.h"
 #import "ios/chrome/browser/ui/overlays/infobar_modal/infobar_modal_supported_overlay_coordinator_classes.h"
@@ -32,6 +33,13 @@
   DCHECK(browser);
   NSArray<Class>* supportedCoordinatorClasses = @[];
   switch (modality) {
+    case OverlayModality::kTesting:
+      // Use TestOverlayRequestCoordinatorFactory to create factories for
+      // OverlayModality::kTesting.
+      // TODO(crbug.com/1056837): Remove requirement once modalities are
+      // converted to no longer use enums.
+      NOTREACHED();
+      break;
     case OverlayModality::kWebContentArea:
       supportedCoordinatorClasses =
           web_content_area::GetSupportedOverlayCoordinatorClasses();

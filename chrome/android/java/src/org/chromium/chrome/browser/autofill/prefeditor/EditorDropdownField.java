@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.autofill.prefeditor;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
-import android.support.graphics.drawable.VectorDrawableCompat;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -22,10 +21,11 @@ import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.settings.autofill.AutofillProfileBridge.DropdownKeyValue;
+import org.chromium.chrome.browser.autofill.settings.AutofillProfileBridge.DropdownKeyValue;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 
 import java.util.ArrayList;
@@ -178,6 +178,11 @@ class EditorDropdownField implements EditorFieldView {
     }
 
     @Override
+    public boolean isRequired() {
+        return mFieldModel.isRequired();
+    }
+
+    @Override
     public void updateDisplayedError(boolean showError) {
         View view = mDropdown.getSelectedView();
         if (view != null && view instanceof TextView) {
@@ -188,7 +193,7 @@ class EditorDropdownField implements EditorFieldView {
                         0, 0, drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight());
                 ((TextView) view).setError(mFieldModel.getErrorMessage(), drawable);
                 mUnderline.setBackgroundColor(ApiCompatibilityUtils.getColor(
-                        mContext.getResources(), R.color.error_text_color));
+                        mContext.getResources(), R.color.default_text_color_error));
                 mErrorLabel.setText(mFieldModel.getErrorMessage());
                 mErrorLabel.setVisibility(View.VISIBLE);
             } else {

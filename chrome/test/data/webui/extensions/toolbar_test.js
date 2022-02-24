@@ -7,7 +7,7 @@ import {assert} from 'chrome://resources/js/assert.m.js';
 import {isChromeOS, isMac} from 'chrome://resources/js/cr.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {eventToPromise} from '../test_util.m.js';
+import {eventToPromise} from '../test_util.js';
 
 import {TestService} from './test_service.js';
 import {createExtensionInfo, testVisible} from './test_util.js';
@@ -32,7 +32,7 @@ suite(extension_toolbar_tests.suiteName, function() {
   let toolbar;
 
   setup(function() {
-    PolymerTest.clearBody();
+    document.body.innerHTML = '';
     toolbar = document.createElement('extensions-toolbar');
     document.body.appendChild(toolbar);
     toolbar.inDevMode = false;
@@ -97,7 +97,7 @@ suite(extension_toolbar_tests.suiteName, function() {
   test(assert(extension_toolbar_tests.TestNames.ClickHandlers), function() {
     toolbar.set('inDevMode', true);
     flush();
-
+    const toastManager = getToastManager();
     toolbar.$.devMode.click();
     return mockDelegate.whenCalled('setProfileInDevMode')
         .then(function(arg) {
@@ -108,11 +108,22 @@ suite(extension_toolbar_tests.suiteName, function() {
         })
         .then(function(arg) {
           assertTrue(arg);
+          mockDelegate.setLoadUnpackedSuccess(true);
           toolbar.$.loadUnpacked.click();
-          return mockDelegate.whenCalled('loadUnpacked');
+          return mockDelegate.whenCalled('loadUnpacked').then(() => {
+            assertTrue(toastManager.isToastOpen);
+          });
         })
         .then(function() {
-          const toastManager = getToastManager();
+          // Hide toast since it is open for 3000ms in previous Promise.
+          toastManager.hide();
+          mockDelegate.setLoadUnpackedSuccess(false);
+          toolbar.$.loadUnpacked.click();
+          return mockDelegate.whenCalled('loadUnpacked').then(() => {
+            assertFalse(toastManager.isToastOpen);
+          });
+        })
+        .then(function() {
           assertFalse(toastManager.isToastOpen);
           toolbar.$.updateNow.click();
           // Simulate user rapidly clicking update button multiple times.
@@ -122,10 +133,12 @@ suite(extension_toolbar_tests.suiteName, function() {
         })
         .then(function() {
           assertEquals(1, mockDelegate.getCallCount('updateAllExtensions'));
-          assertFalse(!!toolbar.$$('extensions-pack-dialog'));
+          assertFalse(
+              !!toolbar.shadowRoot.querySelector('extensions-pack-dialog'));
           toolbar.$.packExtensions.click();
           flush();
-          const dialog = toolbar.$$('extensions-pack-dialog');
+          const dialog =
+              toolbar.shadowRoot.querySelector('extensions-pack-dialog');
           assertTrue(!!dialog);
 
           if (!isMac) {

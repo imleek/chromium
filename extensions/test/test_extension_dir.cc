@@ -5,6 +5,7 @@
 #include "extensions/test/test_extension_dir.h"
 
 #include "base/files/file_util.h"
+#include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "extensions/browser/extension_creator.h"
@@ -34,6 +35,15 @@ void TestExtensionDir::WriteFile(const base::FilePath::StringType& filename,
   EXPECT_EQ(base::checked_cast<int>(contents.size()),
             base::WriteFile(dir_.GetPath().Append(filename), contents.data(),
                             contents.size()));
+}
+
+void TestExtensionDir::CopyFileTo(
+    const base::FilePath& from_path,
+    const base::FilePath::StringType& local_filename) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  ASSERT_TRUE(base::PathExists(from_path)) << from_path;
+  EXPECT_TRUE(base::CopyFile(from_path, dir_.GetPath().Append(local_filename)))
+      << "Failed to copy file from " << from_path << " to " << local_filename;
 }
 
 base::FilePath TestExtensionDir::Pack() {

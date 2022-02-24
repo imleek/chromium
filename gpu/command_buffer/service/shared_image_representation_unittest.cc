@@ -27,10 +27,13 @@ class SharedImageRepresentationTest : public ::testing::Test {
     auto format = viz::ResourceFormat::RGBA_8888;
     gfx::Size size(256, 256);
     auto color_space = gfx::ColorSpace::CreateSRGB();
+    auto surface_origin = kTopLeft_GrSurfaceOrigin;
+    auto alpha_type = kPremul_SkAlphaType;
     uint32_t usage = SHARED_IMAGE_USAGE_GLES2;
 
     auto backing = std::make_unique<TestSharedImageBacking>(
-        mailbox_, format, size, color_space, usage, 0 /* estimated_size */);
+        mailbox_, format, size, color_space, surface_origin, alpha_type, usage,
+        0 /* estimated_size */);
     factory_ref_ = manager_.Register(std::move(backing), tracker_.get());
   }
 
@@ -74,13 +77,26 @@ TEST_F(SharedImageRepresentationTest, GLTextureClearing) {
   }
   EXPECT_TRUE(representation->IsCleared());
 
-  // We can now begin accdess with |allow_uncleared| == false.
+  // We can now begin access with |allow_uncleared| == false.
   {
     auto scoped_access = representation->BeginScopedAccess(
         GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM,
         SharedImageRepresentation::AllowUnclearedAccess::kNo);
     EXPECT_TRUE(scoped_access);
   }
+
+  // Reset the representation to uncleared. This should unclear the texture on
+  // BeginAccess.
+  representation->SetClearedRect(gfx::Rect());
+  {
+    auto scoped_access = representation->BeginScopedAccess(
+        GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM,
+        SharedImageRepresentation::AllowUnclearedAccess::kYes);
+    ASSERT_TRUE(scoped_access);
+    EXPECT_FALSE(
+        representation->GetTexture()->IsLevelCleared(GL_TEXTURE_2D, 0));
+  }
+  EXPECT_FALSE(representation->IsCleared());
 }
 
 TEST_F(SharedImageRepresentationTest, GLTexturePassthroughClearing) {
@@ -171,8 +187,8 @@ TEST_F(SharedImageRepresentationTest, SkiaClearing) {
 }
 
 TEST_F(SharedImageRepresentationTest, DawnClearing) {
-  auto representation =
-      manager_.ProduceDawn(mailbox_, tracker_.get(), nullptr /* device */);
+  auto representation = manager_.ProduceDawn(
+      mailbox_, tracker_.get(), nullptr /* device */, WGPUBackendType_Null);
   EXPECT_FALSE(representation->IsCleared());
 
   // We should not be able to begin access with |allow_uncleared| == false.

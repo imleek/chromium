@@ -5,8 +5,8 @@
 #include "android_webview/browser/aw_web_ui_controller_factory.h"
 
 #include "base/memory/ptr_util.h"
-#include "components/safe_browsing/web_ui/constants.h"
-#include "components/safe_browsing/web_ui/safe_browsing_ui.h"
+#include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
+#include "components/safe_browsing/core/common/web_ui_constants.h"
 #include "content/public/browser/web_ui.h"
 #include "url/gurl.h"
 
@@ -70,12 +70,6 @@ bool AwWebUIControllerFactory::UseWebUIForURL(
     content::BrowserContext* browser_context,
     const GURL& url) {
   return GetWebUIType(browser_context, url) != WebUI::kNoWebUI;
-}
-
-bool AwWebUIControllerFactory::UseWebUIBindingsForURL(
-    content::BrowserContext* browser_context,
-    const GURL& url) {
-  return UseWebUIForURL(browser_context, url);
 }
 
 std::unique_ptr<WebUIController>

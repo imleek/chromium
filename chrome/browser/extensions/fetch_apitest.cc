@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/test_extension_dir.h"
@@ -103,7 +104,6 @@ class ExtensionFetchTest : public ExtensionApiTest {
     return browser()->tab_strip_model()->GetActiveWebContents();
   }
 
- private:
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -154,10 +154,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionFetchTest,
                               "example.com", "/extensions/test_file.txt"))));
 }
 
-// TODO(crbug.com/1038156): Test is flaky.
 IN_PROC_BROWSER_TEST_F(
     ExtensionFetchTest,
-    DISABLED_ExtensionCannotFetchHostedResourceWithoutHostPermissions) {
+    ExtensionCannotFetchHostedResourceWithoutHostPermissions) {
   TestExtensionDir dir;
   constexpr char kManifest[] =
       R"({
@@ -301,15 +300,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionFetchTest, OriginOnPostWithPermissions) {
   const Extension* extension = WriteFilesAndLoadTestExtension(&dir);
   ASSERT_TRUE(extension);
 
-  // Extension scripts will have the origin of the destination URL only when
-  // OOR-CORS is enabled.
   GURL destination_url =
       embedded_test_server()->GetURL("example.com", "/echo-origin");
   std::string script = content::JsReplace(kFetchPostScript, destination_url);
-  std::string origin_string =
-      network::features::ShouldEnableOutOfBlinkCorsForTesting()
-          ? url::Origin::Create(destination_url).Serialize()
-          : url::Origin::Create(extension->url()).Serialize();
+  std::string origin_string = url::Origin::Create(extension->url()).Serialize();
   EXPECT_EQ(origin_string,
             ExecuteScriptInBackgroundPage(extension->id(), script));
 }
@@ -331,6 +325,39 @@ IN_PROC_BROWSER_TEST_F(ExtensionFetchTest, OriginOnPostWithoutPermissions) {
       kFetchPostScript,
       embedded_test_server()->GetURL("example.com", "/echo-origin"));
   EXPECT_EQ(url::Origin::Create(extension->url()).Serialize(),
+            ExecuteScriptInBackgroundPage(extension->id(), script));
+}
+
+// An extension background script should be able to fetch resources contained in
+// the extension, and those resources should not be opaque.
+IN_PROC_BROWSER_TEST_F(ExtensionFetchTest, ExtensionResourceShouldNotBeOpaque) {
+  // We use a script to test this feature. Ideally testing with fetch() and
+  // response type is better, but some logic in blink (see the manual
+  // response type handling in blink::FetchManager) would hide potential
+  // breakages, which is why we are using a script.
+  const std::string script = base::StringPrintf(R"(
+      const script = document.createElement('script');
+      window.onerror = (message) => {
+        window.domAutomationController.send('onerror: ' + message);
+      }
+      script.src = 'error.js'
+      document.body.appendChild(script);)");
+  TestExtensionDir dir;
+  dir.WriteManifest(R"JSON(
+     {
+      "background": {"scripts": ["bg.js"]},
+      "manifest_version": 2,
+      "name": "FetchResponseType",
+      "permissions": [],
+      "version": "1"
+     })JSON");
+  dir.WriteFile(FILE_PATH_LITERAL("error.js"), "throw TypeError('hi!')");
+  const Extension* extension = WriteFilesAndLoadTestExtension(&dir);
+  ASSERT_TRUE(extension);
+
+  // We expect that we can read the content of the error here. Otherwise
+  // "onerror: Script error." will be seen.
+  EXPECT_EQ("onerror: Uncaught TypeError: hi!",
             ExecuteScriptInBackgroundPage(extension->id(), script));
 }
 

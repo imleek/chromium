@@ -17,15 +17,6 @@ namespace media {
 // These chromium classes are the corresponding classes in webrtc project.
 // See third_party/webrtc/api/video_codecs/video_encoder.h for the detail.
 
-struct MEDIA_EXPORT ScalingSettings {
-  ScalingSettings();
-  ScalingSettings(int min_qp, int max_qp);
-  ~ScalingSettings();
-
-  int min_qp = 4;
-  int max_qp = 157;
-};
-
 struct MEDIA_EXPORT ResolutionBitrateLimit {
   ResolutionBitrateLimit();
   ResolutionBitrateLimit(const ResolutionBitrateLimit&);
@@ -55,11 +46,14 @@ struct MEDIA_EXPORT VideoEncoderInfo {
   bool is_hardware_accelerated = true;
   bool supports_simulcast = false;
 
-  ScalingSettings scaling_settings;
   std::vector<uint8_t> fps_allocation[kMaxSpatialLayers];
   std::vector<ResolutionBitrateLimit> resolution_bitrate_limits;
 };
 
+MEDIA_EXPORT bool operator==(const ResolutionBitrateLimit& l,
+                             const ResolutionBitrateLimit& r);
+MEDIA_EXPORT bool operator==(const VideoEncoderInfo& l,
+                             const VideoEncoderInfo& r);
 }  // namespace media
 
 #endif  // MEDIA_VIDEO_VIDEO_ENCODER_INFO_H_

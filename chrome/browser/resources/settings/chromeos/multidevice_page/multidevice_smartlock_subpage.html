@@ -3,13 +3,19 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_radio_button/cr_radio_button.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_radio_group/cr_radio_group.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
-<link rel="import" href="../../multidevice_page/multidevice_constants.html">
-<link rel="import" href="../../multidevice_page/multidevice_browser_proxy.html">
+<link rel="import" href="multidevice_browser_proxy.html">
+<link rel="import" href="multidevice_constants.html">
 <link rel="import" href="multidevice_feature_behavior.html">
 <link rel="import" href="multidevice_feature_toggle.html">
 <link rel="import" href="multidevice_radio_button.html">
+<link rel="import" href="../deep_linking_behavior.html">
+<link rel="import" href="../os_route.html">
+<link rel="import" href="../os_settings_routes.html">
+<link rel="import" href="../../router.html">
+<link rel="import" href="../route_observer_behavior.html">
 <link rel="import" href="../../i18n_setup.html">
 <link rel="import" href="../../settings_shared_css.html">
+<link rel="import" href="../metrics_recorder.html">
 
 <dom-module id="settings-multidevice-smartlock-subpage">
   <template>
@@ -27,7 +33,8 @@
       </div>
       <settings-multidevice-feature-toggle
           feature="[[MultiDeviceFeature.SMART_LOCK]]"
-          page-content-data="[[pageContentData]]">
+          page-content-data="[[pageContentData]]"
+          deep-link-focus-id$="[[Setting.kSmartLockOnOff]]">
       </settings-multidevice-feature-toggle>
     </div>
     <iron-collapse opened="[[smartLockEnabled_]]">
@@ -41,7 +48,8 @@
             selected="[[smartLockSignInEnabled_]]"
             selectable-elements="multidevice-radio-button"
             disabled="[[!smartLockSignInAllowed_]]"
-            on-selected-changed="onSmartLockSignInEnabledChanged_">
+            on-selected-changed="onSmartLockSignInEnabledChanged_"
+            deep-link-focus-id$="[[Setting.kSmartLockUnlockOrSignIn]]">
           <multidevice-radio-button
               name="disabled"
               class="list-item underbar"
@@ -57,7 +65,8 @@
     </iron-collapse>
     <template is="dom-if" if="[[showPasswordPromptDialog_]]" restamp>
       <settings-password-prompt-dialog id="smartLockSignInPasswordPrompt"
-          on-close="onEnableSignInDialogClose_" auth-token="{{authToken_}}">
+          on-close="onEnableSignInDialogClose_"
+          on-token-obtained="onTokenObtained_">
       </settings-password-prompt-dialog>
     </template>
   </template>

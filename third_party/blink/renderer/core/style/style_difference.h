@@ -10,7 +10,6 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
-#include "third_party/blink/renderer/platform/wtf/assertions.h"
 
 namespace blink {
 
@@ -23,34 +22,32 @@ class StyleDifference {
     kOpacityChanged = 1 << 1,
     kZIndexChanged = 1 << 2,
     kFilterChanged = 1 << 3,
-    kBackdropFilterChanged = 1 << 4,
-    kCSSClipChanged = 1 << 5,
+    kCSSClipChanged = 1 << 4,
     // The object needs to issue paint invalidations if it is affected by text
     // decorations or properties dependent on color (e.g., border or outline).
-    kTextDecorationOrColorChanged = 1 << 6,
-    kBlendModeChanged = 1 << 7,
-    kMaskChanged = 1 << 8,
+    // TextDecoration changes must also invalidate ink overflow.
+    kTextDecorationOrColorChanged = 1 << 5,
+    kBlendModeChanged = 1 << 6,
+    kMaskChanged = 1 << 7,
     // Whether background-color changed alpha to or from 1.
-    kHasAlphaChanged = 1 << 9,
+    kHasAlphaChanged = 1 << 8,
     // If you add a value here, be sure to update kPropertyDifferenceCount.
   };
 
   StyleDifference()
-      : paint_invalidation_type_(kNoPaintInvalidation),
+      : needs_paint_invalidation_(false),
         layout_type_(kNoLayout),
-        needs_collect_inlines_(false),
         needs_reshape_(false),
         recompute_visual_overflow_(false),
         visual_rect_update_(false),
         property_specific_differences_(0),
         scroll_anchor_disabling_property_changed_(false),
-        compositing_reasons_changed_(false) {}
+        compositing_reasons_changed_(false),
+        compositable_paint_effect_changed_(false) {}
 
   void Merge(StyleDifference other) {
-    paint_invalidation_type_ =
-        std::max(paint_invalidation_type_, other.paint_invalidation_type_);
+    needs_paint_invalidation_ |= other.needs_paint_invalidation_;
     layout_type_ = std::max(layout_type_, other.layout_type_);
-    needs_collect_inlines_ |= other.needs_collect_inlines_;
     needs_reshape_ |= other.needs_reshape_;
     recompute_visual_overflow_ |= other.recompute_visual_overflow_;
     visual_rect_update_ |= other.visual_rect_update_;
@@ -58,42 +55,26 @@ class StyleDifference {
     scroll_anchor_disabling_property_changed_ |=
         other.scroll_anchor_disabling_property_changed_;
     compositing_reasons_changed_ |= other.compositing_reasons_changed_;
+    compositable_paint_effect_changed_ |=
+        other.compositable_paint_effect_changed_;
   }
 
   bool HasDifference() const {
-    return paint_invalidation_type_ || layout_type_ || needs_collect_inlines_ ||
-           needs_reshape_ || property_specific_differences_ ||
-           recompute_visual_overflow_ || visual_rect_update_ ||
-           scroll_anchor_disabling_property_changed_ ||
-           compositing_reasons_changed_;
+    return needs_paint_invalidation_ || layout_type_ || needs_reshape_ ||
+           property_specific_differences_ || recompute_visual_overflow_ ||
+           visual_rect_update_ || scroll_anchor_disabling_property_changed_ ||
+           compositing_reasons_changed_ || compositable_paint_effect_changed_;
   }
 
   bool HasAtMostPropertySpecificDifferences(
       unsigned property_differences) const {
-    return !paint_invalidation_type_ && !layout_type_ &&
+    return !needs_paint_invalidation_ && !layout_type_ &&
+           !compositing_reasons_changed_ &&
            !(property_specific_differences_ & ~property_differences);
   }
 
-  bool NeedsFullPaintInvalidation() const {
-    return paint_invalidation_type_ != kNoPaintInvalidation;
-  }
-
-  // The object just needs to issue paint invalidations.
-  bool NeedsPaintInvalidationObject() const {
-    return paint_invalidation_type_ == kPaintInvalidationObject;
-  }
-  void SetNeedsPaintInvalidationObject() {
-    DCHECK(!NeedsPaintInvalidationSubtree());
-    paint_invalidation_type_ = kPaintInvalidationObject;
-  }
-
-  // The object and its descendants need to issue paint invalidations.
-  bool NeedsPaintInvalidationSubtree() const {
-    return paint_invalidation_type_ == kPaintInvalidationSubtree;
-  }
-  void SetNeedsPaintInvalidationSubtree() {
-    paint_invalidation_type_ = kPaintInvalidationSubtree;
-  }
+  bool NeedsPaintInvalidation() const { return needs_paint_invalidation_; }
+  void SetNeedsPaintInvalidation() { needs_paint_invalidation_ = true; }
 
   bool NeedsLayout() const { return layout_type_ != kNoLayout; }
   void ClearNeedsLayout() { layout_type_ = kNoLayout; }
@@ -109,9 +90,6 @@ class StyleDifference {
 
   bool NeedsFullLayout() const { return layout_type_ == kFullLayout; }
   void SetNeedsFullLayout() { layout_type_ = kFullLayout; }
-
-  bool NeedsCollectInlines() const { return needs_collect_inlines_; }
-  void SetNeedsCollectInlines() { needs_collect_inlines_ = true; }
 
   bool NeedsReshape() const { return needs_reshape_; }
   void SetNeedsReshape() { needs_reshape_ = true; }
@@ -147,13 +125,6 @@ class StyleDifference {
     return property_specific_differences_ & kFilterChanged;
   }
   void SetFilterChanged() { property_specific_differences_ |= kFilterChanged; }
-
-  bool BackdropFilterChanged() const {
-    return property_specific_differences_ & kBackdropFilterChanged;
-  }
-  void SetBackdropFilterChanged() {
-    property_specific_differences_ |= kBackdropFilterChanged;
-  }
 
   bool CssClipChanged() const {
     return property_specific_differences_ & kCSSClipChanged;
@@ -198,29 +169,32 @@ class StyleDifference {
     return compositing_reasons_changed_;
   }
   void SetCompositingReasonsChanged() { compositing_reasons_changed_ = true; }
+  bool CompositablePaintEffectChanged() const {
+    return compositable_paint_effect_changed_;
+  }
+  void SetCompositablePaintEffectChanged() {
+    compositable_paint_effect_changed_ = true;
+  }
 
  private:
-  static constexpr int kPropertyDifferenceCount = 10;
+  static constexpr int kPropertyDifferenceCount = 9;
 
   friend CORE_EXPORT std::ostream& operator<<(std::ostream&,
                                               const StyleDifference&);
 
-  enum PaintInvalidationType {
-    kNoPaintInvalidation,
-    kPaintInvalidationObject,
-    kPaintInvalidationSubtree,
-  };
-  unsigned paint_invalidation_type_ : 2;
+  unsigned needs_paint_invalidation_ : 1;
 
   enum LayoutType { kNoLayout = 0, kPositionedMovement, kFullLayout };
   unsigned layout_type_ : 2;
-  unsigned needs_collect_inlines_ : 1;
   unsigned needs_reshape_ : 1;
   unsigned recompute_visual_overflow_ : 1;
   unsigned visual_rect_update_ : 1;
   unsigned property_specific_differences_ : kPropertyDifferenceCount;
   unsigned scroll_anchor_disabling_property_changed_ : 1;
   unsigned compositing_reasons_changed_ : 1;
+  // Designed for the effects such as background-color, whose animation can be
+  // composited using paint worklet infra.
+  unsigned compositable_paint_effect_changed_ : 1;
 };
 
 CORE_EXPORT std::ostream& operator<<(std::ostream&, const StyleDifference&);

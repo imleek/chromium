@@ -6,14 +6,15 @@ package org.chromium.chrome.browser.autofill.prefeditor;
 
 import android.content.Context;
 import android.content.res.Resources;
-import android.support.v4.view.ViewCompat;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import androidx.core.view.ViewCompat;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ui.widget.TintedDrawable;
+import org.chromium.components.browser_ui.widget.TintedDrawable;
 import org.chromium.ui.UiUtils;
 
 import java.util.List;
@@ -67,8 +68,8 @@ public class HintedDropDownAdapterWithPlusIcon<T> extends HintedDropDownAdapter<
 
             // Create the "+" icon, put it left of the text and add appropriate padding.
             mTextView.setCompoundDrawablesWithIntrinsicBounds(
-                    TintedDrawable.constructTintedDrawable(
-                            getContext(), R.drawable.plus, R.color.default_icon_color_blue),
+                    TintedDrawable.constructTintedDrawable(getContext(), R.drawable.plus,
+                            R.color.default_icon_color_accent1_tint_list),
                     null, null, null);
             Resources resources = getContext().getResources();
             mTextView.setCompoundDrawablePadding(

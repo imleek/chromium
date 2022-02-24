@@ -26,6 +26,7 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
+#include "content/public/test/browser_test.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/test_extension_dir.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -124,8 +125,8 @@ class SettingsResetPromptModelBrowserTest
     ASSERT_TRUE(template_url_service);
 
     TemplateURLData data;
-    data.SetShortName(base::ASCIIToUTF16("default"));
-    data.SetKeyword(base::ASCIIToUTF16("default"));
+    data.SetShortName(u"default");
+    data.SetKeyword(u"default");
     data.SetURL(kDefaultSearchUrl);
 
     TemplateURL* template_url =
@@ -174,7 +175,7 @@ class SettingsResetPromptModelBrowserTest
     // Ensure that the startup url seen in the prefs is same as |startup_url|.
     const base::ListValue* url_list =
         GetPrefs()->GetList(prefs::kURLsToRestoreOnStartup);
-    ASSERT_EQ(url_list->GetSize(), 1U);
+    ASSERT_EQ(url_list->GetList().size(), 1U);
     std::string url_text;
     ASSERT_TRUE(url_list->GetString(0, &url_text));
     ASSERT_EQ(GURL(url_text), GURL(startup_url));

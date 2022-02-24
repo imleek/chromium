@@ -4,27 +4,22 @@
 
 package org.chromium.chrome.browser.touch_to_fill;
 
-import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.FIELD_TRIAL_PARAM_BRANDING_MESSAGE;
-import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.FIELD_TRIAL_PARAM_SHOW_CONFIRMATION_BUTTON;
-
 import android.content.Context;
 import android.content.res.Resources;
-import android.support.annotation.Nullable;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.LinearLayout;
 
-import androidx.annotation.DimenRes;
+import androidx.annotation.Nullable;
 import androidx.annotation.Px;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.base.Callback;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetContent;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetObserver;
-import org.chromium.chrome.browser.widget.bottomsheet.EmptyBottomSheetObserver;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
+import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 
 /**
  * This class is responsible for rendering the bottom sheet which displays the touch to fill
@@ -48,8 +43,8 @@ class TouchToFillView implements BottomSheetContent {
         }
 
         @Override
-        public void onSheetStateChanged(int newState) {
-            super.onSheetStateChanged(newState);
+        public void onSheetStateChanged(int newState, int reason) {
+            super.onSheetStateChanged(newState, reason);
             if (newState != BottomSheetController.SheetState.HIDDEN) return;
             // This is a fail-safe for cases where onSheetClosed isn't triggered.
             mDismissHandler.onResult(BottomSheetController.StateChangeReason.NONE);
@@ -203,35 +198,15 @@ class TouchToFillView implements BottomSheetContent {
         if (hasMultipleCredentials) {
             totalHeight += resources.getDimensionPixelSize(
                     R.dimen.touch_to_fill_sheet_height_second_credential);
-        }
-
-        final boolean hasButton = !hasMultipleCredentials
-                && ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
-                        ChromeFeatureList.TOUCH_TO_FILL_ANDROID,
-                        FIELD_TRIAL_PARAM_SHOW_CONFIRMATION_BUTTON, false);
-        if (hasButton) {
+            totalHeight += resources.getDimensionPixelSize(
+                    R.dimen.touch_to_fill_sheet_bottom_padding_credentials);
+        } else {
             totalHeight +=
                     resources.getDimensionPixelSize(R.dimen.touch_to_fill_sheet_height_button);
+            totalHeight += resources.getDimensionPixelSize(
+                    R.dimen.touch_to_fill_sheet_bottom_padding_button);
         }
 
-        final boolean hasBranding = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
-                                            ChromeFeatureList.TOUCH_TO_FILL_ANDROID,
-                                            FIELD_TRIAL_PARAM_BRANDING_MESSAGE, 0)
-                != 0;
-        if (hasBranding) {
-            totalHeight +=
-                    resources.getDimensionPixelSize(R.dimen.touch_to_fill_sheet_height_branding);
-        }
-
-        return totalHeight + getDesiredBottomPadding(hasButton, hasBranding);
-    }
-
-    private @Px int getDesiredBottomPadding(boolean hasButton, boolean hasBranding) {
-        @DimenRes
-        int bottomPaddingId = R.dimen.touch_to_fill_sheet_bottom_padding_credentials;
-        if (hasButton) bottomPaddingId = R.dimen.touch_to_fill_sheet_bottom_padding_button;
-        if (hasBranding) bottomPaddingId = R.dimen.touch_to_fill_sheet_bottom_padding_branding;
-
-        return mContext.getResources().getDimensionPixelSize(bottomPaddingId);
+        return totalHeight;
     }
 }

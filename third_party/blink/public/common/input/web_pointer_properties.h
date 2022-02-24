@@ -7,6 +7,8 @@
 
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/input/pointer_id.h"
+#include "third_party/blink/public/mojom/input/input_event.mojom-shared.h"
+#include "ui/events/event_constants.h"
 #include "ui/gfx/geometry/point_f.h"
 
 #include <limits>
@@ -20,17 +22,9 @@ namespace blink {
 // crbug.com/508283
 class WebPointerProperties {
  public:
-  enum class Button {
-    kNoButton = -1,
-    kLeft,
-    kMiddle,
-    kRight,
-    kBarrel = kRight,  // Barrel is aliased per pointer event spec
-    kBack,
-    kForward,
-    kEraser,
-    kMaxValue = kEraser  // Must be the last entry in the list
-  };
+  using Button = mojom::Button;
+
+  using PointerType = ui::EventPointerType;
 
   enum class Buttons : unsigned {
     kNoButton = 0,
@@ -42,15 +36,6 @@ class WebPointerProperties {
     kEraser = 1 << 5
   };
 
-  enum class PointerType {
-    kUnknown,
-    kMouse,
-    kPen,
-    kEraser,
-    kTouch,
-    kMaxValue = kTouch  // Must be the last entry in the list
-  };
-
   explicit WebPointerProperties(
       PointerId id_param,
       PointerType pointer_type_param = PointerType::kUnknown,
@@ -60,16 +45,10 @@ class WebPointerProperties {
       int movement_x = 0,
       int movement_y = 0)
       : id(id_param),
-        force(std::numeric_limits<float>::quiet_NaN()),
-        tilt_x(0),
-        tilt_y(0),
-        tangential_pressure(0.0f),
-        twist(0),
         button(button_param),
         pointer_type(pointer_type_param),
         movement_x(movement_x),
         movement_y(movement_y),
-        is_raw_movement_event(false),
         position_in_widget_(position_in_widget),
         position_in_screen_(position_in_screen) {}
 
@@ -96,23 +75,23 @@ class WebPointerProperties {
 
   // The valid range is [0,1], with NaN meaning pressure is not supported by
   // the input device.
-  float force;
+  float force = std::numeric_limits<float>::quiet_NaN();
 
   // Tilt of a pen stylus from surface normal as plane angles in degrees,
   // Values lie in [-90,90]. A positive tiltX is to the right and a positive
   // tiltY is towards the user.
-  int tilt_x;
-  int tilt_y;
+  int tilt_x = 0;
+  int tilt_y = 0;
 
   // The normalized tangential pressure (or barrel pressure), typically set by
   // an additional control of the stylus, which has a range of [-1,1], where 0
   // is the neutral position of the control. Always 0 if the device does not
   // support it.
-  float tangential_pressure;
+  float tangential_pressure = 0.0f;
 
   // The clockwise rotation of a pen stylus around its own major axis, in
   // degrees in the range [0,359]. Always 0 if the device does not support it.
-  int twist;
+  int twist = 0;
 
   // - For pointerup/down events, the button of pointing device that triggered
   // the event.
@@ -128,7 +107,7 @@ class WebPointerProperties {
 
   // True if this event has raw movement value from OS.
   // TODO(crbug.com/982379): Figure out how to avoid using this boolean.
-  bool is_raw_movement_event;
+  bool is_raw_movement_event = false;
 
  protected:
   // Widget coordinate, which is relative to the bound of current RenderWidget
@@ -142,4 +121,4 @@ class WebPointerProperties {
 
 }  // namespace blink
 
-#endif
+#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_INPUT_WEB_POINTER_PROPERTIES_H_
